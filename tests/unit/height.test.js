@@ -183,17 +183,20 @@ describe('jumping and falling', () => {
     expect(maxZ).toBeGreaterThan(LEVEL_PX + 8); // jumped from the ledge height
   });
 
-  it('a jump pressed after coyote time (and too early to be buffered for landing) does nothing', () => {
+  it('a jump pressed after coyote time does not jump again (high up it opens the glider instead, P2.2)', () => {
     const s = createGameState(corridor('ccc00000')); // 3-level ledge: ~20 steps of falling
     let left = -1;
     let maxZ = 0;
+    let glided = false;
     run(s, (i) => {
       if (left < 0 && !s.player.grounded) left = i;
       if (left >= 0) maxZ = Math.max(maxZ, s.player.z);
+      if (s.player.gliding) glided = true;
       return { ...right, jump: left >= 0 && i >= left + 6 && i <= left + 7 };
     }, 120);
-    expect(maxZ).toBeLessThanOrEqual(3 * LEVEL_PX);
-    expect(s.player.z).toBe(0);
+    expect(left).toBeGreaterThan(0);
+    expect(maxZ).toBeLessThanOrEqual(3 * LEVEL_PX); // never went up
+    expect(glided).toBe(true);
   });
 
   it('jump buffer: pressing jump shortly before landing jumps again on landing', () => {

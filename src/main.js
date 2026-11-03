@@ -212,9 +212,9 @@ async function boot() {
       if (skipNextFrame || paused) {
         skipNextFrame = false;
       } else {
-        stats.push(ticker.deltaMS, lastCpu);
+        stats.push(ticker.elapsedMS, lastCpu);
         if (recording) {
-          recording.intervals.push(ticker.deltaMS);
+          recording.intervals.push(ticker.elapsedMS);
           recording.cpu.push(lastCpu);
           recording.draws.push(lastDraws);
           if (now >= recording.endAt) finishRecording();
@@ -239,7 +239,7 @@ async function boot() {
             `表示物 ${objectCount}   テクスチャ ${textureCount()}   負荷 ${bench.count}`,
             `内部 ${resolution.width}×${resolution.height} ×${resolution.scale}  DPR ${window.devicePixelRatio}`,
             `位置 ${p.x.toFixed(0)},${p.y.toFixed(0)} 高さ ${p.z.toFixed(0)}（地面 ${p.groundZ.toFixed(0)}）${p.grounded ? '' : ' 空中'}`,
-            `体力 ${p.hp}/${p.maxHp}  スタミナ ${p.stamina.toFixed(0)}${p.exhausted ? '（疲労）' : ''}${p.climbing ? ' 登攀中' : ''}`,
+            `体力 ${p.hp}/${p.maxHp}  スタミナ ${p.stamina.toFixed(0)}${p.exhausted ? '（疲労）' : ''}${p.climbing ? ' 登攀中' : ''}${p.gliding ? ' 滑空中' : ''}`,
             `${p.facing}${p.dashing ? ' ダッシュ' : ''}  エラー ${errorLog.total}`,
           ].join('\n'),
         );
@@ -254,11 +254,13 @@ async function boot() {
   app.ticker.add((ticker) => {
     if (!paused) {
       const frameInput = input.sample();
-      alpha = loop.advance(ticker.deltaMS, () => stepGame(state, frameInput)).alpha;
+      // Real elapsed time (PixiJS caps ticker.deltaMS at 100ms); the loop applies its own clamp
+      // and accounts for any time it drops (DESIGN.md 1.3).
+      alpha = loop.advance(ticker.elapsedMS, () => stepGame(state, frameInput)).alpha;
     }
-    view.render(state, alpha, performance.now() / 1000, ticker.deltaMS / 1000);
+    view.render(state, alpha, performance.now() / 1000, ticker.elapsedMS / 1000);
     hud.update(state.player.hp, state.player.maxHp);
-    bench.update(ticker.deltaMS / 1000);
+    bench.update(ticker.elapsedMS / 1000);
   });
 
   // Read-only hook for automated E2E tests.
@@ -282,6 +284,7 @@ async function boot() {
         facing: p.facing,
         dashing: p.dashing,
         climbing: p.climbing,
+        gliding: p.gliding,
         stamina: p.stamina,
         exhausted: p.exhausted,
       };
@@ -308,6 +311,13 @@ async function boot() {
     tick: () => state.tick,
     loop: () => ({ totalSteps: loop.totalSteps, droppedMs: loop.droppedMs, elapsedMs: loop.elapsedMs, pendingMs: loop.accumulator }),
     paused: () => paused,
+    /** Test helpers: freeze / unfreeze the game deterministically (same as the pause button). */
+    pause: () => pause(''),
+    resume: () => resume(),
+    /** Test helper: while paused, advance exactly `n` logic steps with the current input. */
+    step: (/** @type {number} */ n = 1) => {
+      for (let i = 0; i < n; i++) stepGame(state, input.sample());
+    },
     resolution: () => ({ ...resolution, target: targetHeight }),
     assets: () => assets.stats(),
   };

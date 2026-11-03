@@ -92,6 +92,7 @@ export function tryGrabWall(p, map, hit, pushing, stepHeight, dt) {
   p.climbPush += dt;
   if (p.grounded && p.climbPush < CLIMB.grabDelay) return false;
   p.climbing = true;
+  p.gliding = false;
   p.climbDir = p.facing;
   p.grounded = false;
   p.vx = p.vy = p.vz = 0;

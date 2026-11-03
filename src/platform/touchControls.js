@@ -82,7 +82,7 @@ export class TouchControls {
 
   sample() {
     const v = normalizeStick(this.rawX, this.rawY);
-    return { moveX: v.x, moveY: v.y, dash: this.dash.held, jump: this.jump.held };
+    return { moveX: v.x, moveY: v.y, dash: this.dash.held, jump: this.jump.consumePress() };
   }
 
   /** Releases everything (e.g. when the app goes to the background mid-touch). */
@@ -108,9 +108,12 @@ class HoldButton {
     root.append(this.el);
     /** @type {Set<number>} */
     this.pointers = new Set();
+    /** Pressed since the last consumePress(): a tap shorter than one frame still counts. */
+    this.latched = false;
     this.el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       this.pointers.add(e.pointerId);
+      this.latched = true;
       this.el.classList.add('active');
       try {
         this.el.setPointerCapture(e.pointerId);
@@ -130,8 +133,16 @@ class HoldButton {
     return this.pointers.size > 0;
   }
 
+  /** Held now, or tapped since the last call. */
+  consumePress() {
+    const v = this.held || this.latched;
+    this.latched = false;
+    return v;
+  }
+
   clear() {
     this.pointers.clear();
+    this.latched = false;
     this.el.classList.remove('active');
   }
 }

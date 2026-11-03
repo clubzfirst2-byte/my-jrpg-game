@@ -15,8 +15,11 @@ export class KeyboardInput {
   constructor(win) {
     /** @type {Set<string>} */
     this.down = new Set();
+    /** A jump pressed (even if already released) since the last sample: quick taps are never lost. */
+    this.jumpLatched = false;
     win.addEventListener('keydown', (e) => {
       if (Object.values(KEYS).some((codes) => codes.includes(e.code))) e.preventDefault();
+      if (!e.repeat && KEYS.jump.includes(e.code)) this.jumpLatched = true;
       this.down.add(e.code);
     });
     win.addEventListener('keyup', (e) => this.down.delete(e.code));
@@ -32,10 +35,13 @@ export class KeyboardInput {
     const x = (this.pressed('right') ? 1 : 0) - (this.pressed('left') ? 1 : 0);
     const y = (this.pressed('down') ? 1 : 0) - (this.pressed('up') ? 1 : 0);
     const len = Math.hypot(x, y) || 1;
-    return { moveX: x / len, moveY: y / len, dash: this.pressed('dash'), jump: this.pressed('jump') };
+    const jump = this.pressed('jump') || this.jumpLatched;
+    this.jumpLatched = false;
+    return { moveX: x / len, moveY: y / len, dash: this.pressed('dash'), jump };
   }
 
   clear() {
     this.down.clear();
+    this.jumpLatched = false;
   }
 }
