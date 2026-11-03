@@ -4,8 +4,8 @@
 // from a character's own z.
 
 export const TILE_SIZE = 16;
-/** One elevation level (段) in pixels. */
-export const LEVEL_PX = 8;
+/** One elevation level (段) in pixels: a cliff face one tile tall reads clearly from above. */
+export const LEVEL_PX = 16;
 /** Height values in map files are written in units of 4px. */
 export const HEIGHT_UNIT_PX = 4;
 

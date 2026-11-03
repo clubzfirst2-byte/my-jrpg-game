@@ -18,7 +18,9 @@ const WALK_CYCLE = [1, 0, 2, 0];
 const WATER_FRAME_SEC = 0.6;
 const EDGE_COLOR = 0x1a1c2c;
 const TREE_FADE_ALPHA = 0.5;
-const CLIFF_SHADOW_PX = 4;
+const CLIFF_SHADOW_PX = 6;
+const EDGE_PX = 2;
+const CLIFF_SHADOW_ALPHA = 0.32;
 
 /**
  * Higher ground is drawn slightly brighter so levels read at a glance (multiplicative tint).
@@ -26,7 +28,7 @@ const CLIFF_SHADOW_PX = 4;
  */
 export function levelTint(heightPx) {
   const level = heightPx / LEVEL_PX;
-  const v = Math.round(255 * Math.min(1, 0.86 + 0.035 * level));
+  const v = Math.round(255 * Math.min(1, 0.8 + 0.07 * level));
   return (v << 16) | (v << 8) | v;
 }
 
@@ -141,7 +143,7 @@ export class GameView {
         if (faceBottom > faceTop) {
           // Contact shadow on the ground at the foot of the cliff.
           const shade = this.edge(x, faceBottom, ts, CLIFF_SHADOW_PX);
-          shade.alpha = 0.22;
+          shade.alpha = CLIFF_SHADOW_ALPHA;
           row.addChild(shade);
         }
 
@@ -150,9 +152,16 @@ export class GameView {
           const lowerEast = inBounds(map, tx + 1, ty) && map.elev[i + 1] < h;
           const lowerWest = inBounds(map, tx - 1, ty) && map.elev[i - 1] < h;
           const lowerNorth = inBounds(map, tx, ty - 1) && southEdgeHeight(map, tx, ty - 1) < h;
-          if (lowerEast) row.addChild(this.edge(x + ts - 1, top, 1, ts));
-          if (lowerWest) row.addChild(this.edge(x, top, 1, ts));
-          if (lowerNorth) row.addChild(this.edge(x, top, ts, 1));
+          if (lowerEast) {
+            row.addChild(this.edge(x + ts - EDGE_PX, top, EDGE_PX, ts));
+            // Light comes from the upper left: cast a shadow onto the lower ground to the east.
+            const eastH = map.elev[i + 1];
+            const shade = this.edge(x + ts, ty * ts - eastH, CLIFF_SHADOW_PX, ts);
+            shade.alpha = CLIFF_SHADOW_ALPHA;
+            row.addChild(shade);
+          }
+          if (lowerWest) row.addChild(this.edge(x, top, EDGE_PX, ts));
+          if (lowerNorth) row.addChild(this.edge(x, top, ts, EDGE_PX));
         }
 
         const extents = this.elevatedRows.get(ty) ?? [];
@@ -176,8 +185,9 @@ export class GameView {
     let y = faceTop;
     let first = true;
     while (remaining > 0) {
-      const seg = remaining >= LEVEL_PX ? 8 : 4;
-      const s = this.makeSprite(`face.${mat}.${first ? 'top' : 'mid'}${seg}`);
+      const seg = remaining >= 8 ? 8 : 4;
+      const last = remaining - seg <= 0;
+      const s = this.makeSprite(`face.${mat}.${first ? 'top' : 'mid'}${last ? '-base' : ''}.${seg}`);
       s.position.set(x, y);
       row.addChild(s);
       y += seg;
@@ -236,7 +246,7 @@ export class GameView {
 
     // Shadow on the ground below; smaller and fainter the higher the player is.
     const above = Math.max(0, z - p.groundZ);
-    const k = Math.max(0.45, 1 - above / 48);
+    const k = Math.max(0.45, 1 - above / 96);
     this.shadow.position.set(sx, Math.round(y - p.groundZ) - 1);
     this.shadow.scale.set(k);
     this.shadow.alpha = 0.35 * k;

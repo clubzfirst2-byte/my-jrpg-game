@@ -226,10 +226,13 @@ export function treeSprite() {
   return toRows(g);
 }
 
-/** Earth cliff face, 16 x h (h = 4 or 8). `top` adds the grass lip that hangs over the edge. */
-export function earthFace(h, top) {
+/**
+ * Earth cliff face segment, 16 x h (h = 4 or 8). Faces are stacked from segments:
+ * `top` adds the grass lip hanging over the edge, `bottom` adds the dark base where it meets the ground.
+ */
+export function earthFace(h, top, bottom = false) {
   const g = grid(16, h, 'E');
-  const rand = rng(31 + h + (top ? 1 : 0));
+  const rand = rng(31 + h * 3 + (top ? 1 : 0) + (bottom ? 2 : 0));
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < 16; x++) {
       const r = rand();
@@ -237,20 +240,25 @@ export function earthFace(h, top) {
       else if (r < 0.24) g[y][x] = 'F';
     }
   }
-  // Strata line and darker base for a sense of depth.
+  // Strata line every 8px for a layered look.
   if (h >= 8) for (let x = 0; x < 16; x++) if ((x + 1) % 5 !== 0) g[5][x] = 'F';
-  for (let x = 0; x < 16; x++) g[h - 1][x] = 'F';
   if (top) {
     for (let x = 0; x < 16; x++) {
       g[0][x] = 'G';
       g[1][x] = x % 3 === 0 ? 'E' : 'd';
     }
   }
+  if (bottom) {
+    for (let x = 0; x < 16; x++) {
+      g[h - 1][x] = 'k';
+      if (h > 2) g[h - 2][x] = 'F';
+    }
+  }
   return toRows(g);
 }
 
 /** Ruin wall face (bricks), 16 x h. `top` adds a light capstone row. */
-export function ruinFace(h, top) {
+export function ruinFace(h, top, bottom = false) {
   const g = grid(16, h, 'B');
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < 16; x++) {
@@ -259,6 +267,7 @@ export function ruinFace(h, top) {
     }
   }
   if (top) for (let x = 0; x < 16; x++) g[0][x] = 'v';
+  if (bottom) for (let x = 0; x < 16; x++) g[h - 1][x] = 'k';
   return toRows(g);
 }
 
@@ -274,10 +283,14 @@ export function ruinFloorTile() {
   return toRows(g);
 }
 
-/** Stone stairs for a north-rising ramp: 16 wide, 24 tall (16 ground + 8 rise). */
-export function rampSprite() {
-  const g = grid(16, 24, 'r');
-  for (let y = 0; y < 24; y++) {
+/**
+ * Stone stairs for a north-rising ramp: 16 wide, 16 + rise tall.
+ * @param {number} rise height gained across the tile (one level)
+ */
+export function rampSprite(rise) {
+  const h = 16 + rise;
+  const g = grid(16, h, 'r');
+  for (let y = 0; y < h; y++) {
     const inStep = y % 6;
     for (let x = 0; x < 16; x++) {
       if (inStep < 2) g[y][x] = 'R'; // tread edge (lit)
