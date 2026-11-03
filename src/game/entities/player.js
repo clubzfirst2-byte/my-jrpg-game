@@ -5,6 +5,7 @@ import { moveAndCollide, groundHeightUnder } from '../physics/collision.js';
 import { LEVEL_PX } from '../world/tilemap.js';
 import { tryGrabWall, updateClimb } from './climbing.js';
 import { GLIDE, canOpenGlider, closeGlider, glideStep, openGlider } from './glider.js';
+import { SWIM, enterWater, isInWater, leaveWater, swimStamina, waterSurfaceUnder } from './swimming.js';
 
 /** Tunable movement values (px, px/s, px/s^2, s). */
 export const PLAYER_MOVE = Object.freeze({
@@ -79,10 +80,14 @@ export const PLAYER_MAX_HP = 12; // 3 hearts x 4 quarters
  * @property {number} climbPush       seconds spent pushing into a climbable wall
  * @property {number} regrabCooldown  seconds until a wall may be grabbed again after letting go
  * @property {boolean} gliding
+ * @property {boolean} swimming
+ * @property {number} safeX   last position standing on dry ground (drowning returns here)
+ * @property {number} safeY
+ * @property {number} safeZ
  * @property {number} spawnX
  * @property {number} spawnY
  * @property {number} spawnZ
- * @property {{ type: 'land', fall: number, damage: number } | { type: 'respawn' } | null} lastEvent
+ * @property {{ type: 'land', fall: number, damage: number } | { type: 'respawn' } | { type: 'drown' } | null} lastEvent
  */
 
 /** @param {number} x @param {number} y @param {number} [z] @returns {Player} */
@@ -120,6 +125,10 @@ export function createPlayer(x, y, z = 0) {
     climbPush: 0,
     regrabCooldown: 0,
     gliding: false,
+    swimming: false,
+    safeX: x,
+    safeY: y,
+    safeZ: z,
     spawnX: x,
     spawnY: y,
     spawnZ: z,
@@ -172,7 +181,7 @@ export function updatePlayer(p, input, map, dt) {
   }
 
   // --- glider (P2.2): jump in mid-air opens it, jump again closes it ---
-  if (p.jumpBuffered > 0 && !p.grounded && !p.climbing) {
+  if (p.jumpBuffered > 0 && !p.grounded && !p.climbing && !p.swimming) {
     if (p.gliding) {
       closeGlider(p);
       p.jumpBuffered = 0;
@@ -186,6 +195,12 @@ export function updatePlayer(p, input, map, dt) {
   p.jumpBuffered = Math.max(0, p.jumpBuffered - dt);
   p.coyote = Math.max(0, p.coyote - dt);
   p.regrabCooldown = Math.max(0, p.regrabCooldown - dt);
+
+  // --- swimming (P2.3) ---
+  if (p.swimming) {
+    updateSwim(p, input, map, dt);
+    return;
+  }
 
   // --- horizontal movement ---
   const mag = Math.min(1, Math.hypot(input.moveX, input.moveY));
@@ -229,6 +244,9 @@ export function updatePlayer(p, input, map, dt) {
   if (p.grounded) {
     if (ground >= p.z - PLAYER_MOVE.stepHeight) {
       p.z = ground; // follow steps and ramps
+      // Walked into water at our own level (not water far below the ledge we stand on).
+      const surface = waterSurfaceUnder(map, p);
+      if (surface !== null && surface >= p.z - PLAYER_MOVE.stepHeight) enterWater(p, surface);
     } else {
       // Walked off a ledge.
       p.grounded = false;
@@ -246,7 +264,10 @@ export function updatePlayer(p, input, map, dt) {
       p.vz -= PLAYER_MOVE.gravity * dt;
       p.fallPeakZ = Math.max(p.fallPeakZ, p.z);
     }
-    if (p.z <= ground) {
+    const surface = waterSurfaceUnder(map, p);
+    if (surface !== null && p.z <= surface) {
+      enterWater(p, surface); // splashing into water never hurts
+    } else if (p.z <= ground) {
       land(p, ground);
     }
   }
@@ -254,7 +275,62 @@ export function updatePlayer(p, input, map, dt) {
   const moved = Math.hypot(p.x - p.prevX, p.y - p.prevY);
   p.moving = p.grounded && moved > 0.01;
   p.walkTime = p.moving ? p.walkTime + dt * (p.dashing ? 1.6 : 1) : 0;
+  if (p.grounded && !p.swimming) {
+    p.safeX = p.x;
+    p.safeY = p.y;
+    p.safeZ = p.z;
+  }
   updateStamina(p, dt);
+}
+
+/**
+ * One step in the water: slow movement, no jumping, stamina drains; walk out onto low shores,
+ * grab climbable banks.
+ * @param {Player} p
+ * @param {import('../input.js').InputFrame} input
+ * @param {import('../world/tilemap.js').TileMap} map
+ * @param {number} dt
+ */
+function updateSwim(p, input, map, dt) {
+  const mag = Math.min(1, Math.hypot(input.moveX, input.moveY));
+  const hasInput = mag > 0;
+  const dash = hasInput && input.dash && !p.exhausted;
+  const speed = dash ? SWIM.dashSpeed : SWIM.speed * mag;
+  let tx = 0;
+  let ty = 0;
+  if (hasInput) {
+    const len = Math.hypot(input.moveX, input.moveY);
+    tx = (input.moveX / len) * speed;
+    ty = (input.moveY / len) * speed;
+    p.facing = facingFrom(input.moveX, input.moveY, p.facing);
+  }
+  p.vx = approach(p.vx, tx, SWIM.accel * dt);
+  p.vy = approach(p.vy, ty, SWIM.accel * dt);
+  // Low shores (up to a step above the surface) can be walked onto.
+  const hit = moveAndCollide(p, map, p.vx * dt, p.vy * dt, p.z + PLAYER_MOVE.stepHeight);
+  if (hit.hitX) p.vx = 0;
+  if (hit.hitY) p.vy = 0;
+
+  const pushing = hasInput && facingFrom(input.moveX, input.moveY, p.facing) === p.facing;
+  if (tryGrabWall(p, map, hit, pushing, PLAYER_MOVE.stepHeight, dt)) {
+    p.moving = false;
+    return;
+  }
+
+  const ground = groundHeightUnder(p, map);
+  p.groundZ = ground;
+  if (!isInWater(map, p)) {
+    leaveWater(p, ground);
+    p.moving = true;
+    return;
+  }
+
+  const moving = Math.hypot(p.x - p.prevX, p.y - p.prevY) > 0.01;
+  p.moving = moving;
+  p.dashing = dash && moving;
+  p.walkTime = p.walkTime + dt;
+  swimStamina(p, moving, p.dashing, dt);
+  if (p.hp === 0) respawn(p);
 }
 
 /**
@@ -305,6 +381,7 @@ function respawn(p) {
   p.exhausted = false;
   p.climbing = false;
   p.gliding = false;
+  p.swimming = false;
   p.grounded = true;
   p.lastEvent = { type: 'respawn' };
 }

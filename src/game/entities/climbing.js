@@ -83,16 +83,19 @@ export function tryGrabWall(p, map, hit, pushing, stepHeight, dt) {
     return false;
   }
   const wall = wallAhead(p, map, p.facing);
-  const tallEnough = p.grounded ? wall.top > p.z + stepHeight : wall.top > p.z;
+  // Standing or swimming: needs a real wall (taller than a step) and a deliberate push.
+  const settled = p.grounded || p.swimming;
+  const tallEnough = settled ? wall.top > p.z + stepHeight : wall.top > p.z;
   if (!wall.climbable || !tallEnough) {
     p.climbPush = 0;
     return false;
   }
   // In the air the grab is immediate; on the ground it needs a short deliberate push.
   p.climbPush += dt;
-  if (p.grounded && p.climbPush < CLIMB.grabDelay) return false;
+  if (settled && p.climbPush < CLIMB.grabDelay) return false;
   p.climbing = true;
   p.gliding = false;
+  p.swimming = false;
   p.climbDir = p.facing;
   p.grounded = false;
   p.vx = p.vy = p.vz = 0;

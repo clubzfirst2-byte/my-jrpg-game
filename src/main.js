@@ -239,7 +239,7 @@ async function boot() {
             `表示物 ${objectCount}   テクスチャ ${textureCount()}   負荷 ${bench.count}`,
             `内部 ${resolution.width}×${resolution.height} ×${resolution.scale}  DPR ${window.devicePixelRatio}`,
             `位置 ${p.x.toFixed(0)},${p.y.toFixed(0)} 高さ ${p.z.toFixed(0)}（地面 ${p.groundZ.toFixed(0)}）${p.grounded ? '' : ' 空中'}`,
-            `体力 ${p.hp}/${p.maxHp}  スタミナ ${p.stamina.toFixed(0)}${p.exhausted ? '（疲労）' : ''}${p.climbing ? ' 登攀中' : ''}${p.gliding ? ' 滑空中' : ''}`,
+            `体力 ${p.hp}/${p.maxHp}  スタミナ ${p.stamina.toFixed(0)}${p.exhausted ? '（疲労）' : ''}${p.climbing ? ' 登攀中' : ''}${p.gliding ? ' 滑空中' : ''}${p.swimming ? ' 水泳中' : ''}`,
             `${p.facing}${p.dashing ? ' ダッシュ' : ''}  エラー ${errorLog.total}`,
           ].join('\n'),
         );
@@ -285,6 +285,7 @@ async function boot() {
         dashing: p.dashing,
         climbing: p.climbing,
         gliding: p.gliding,
+        swimming: p.swimming,
         stamina: p.stamina,
         exhausted: p.exhausted,
       };
@@ -307,6 +308,10 @@ async function boot() {
       return { x: c.x, y: c.y, zoom: c.zoom, origin: c.origin(), viewWidth: c.viewWidth, viewHeight: c.viewHeight, bounds: c.bounds };
     },
     setZoom: (/** @type {number} */ z) => view.camera.setZoom(z),
+    /** Test helper: set stamina (e.g. to check drowning without waiting). */
+    setStamina: (/** @type {number} */ v) => {
+      state.player.stamina = v;
+    },
     rotateHintVisible: () => rotateHint.visible,
     tick: () => state.tick,
     loop: () => ({ totalSteps: loop.totalSteps, droppedMs: loop.droppedMs, elapsedMs: loop.elapsedMs, pendingMs: loop.accumulator }),

@@ -73,8 +73,7 @@ export function parseMap(def) {
           ground[i] = Ground.RUIN;
           break;
         case '~':
-          ground[i] = Ground.WATER;
-          solid[i] = 1; // until swimming (P2.3)
+          ground[i] = Ground.WATER; // swimmable (P2.3); its height is the water surface
           break;
         case 'T':
           ground[i] = Ground.GRASS;
