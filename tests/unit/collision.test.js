@@ -55,7 +55,7 @@ describe('moveAndCollide', () => {
   });
 
   it('stops flush against a wall on the right', () => {
-    const b = body(60, 30); // tile column 3, wall at column 4 (x >= 64)
+    const b = body(58, 30); // tile column 3, wall at column 4 (x >= 64)
     const hit = moveAndCollide(b, map, 20, 0);
     expect(hit.hitX).toBe(true);
     expect(b.x).toBe(64 - 5);
@@ -82,11 +82,17 @@ describe('moveAndCollide', () => {
   });
 
   it('slides along a wall when moving diagonally', () => {
-    const b = body(60, 30);
+    const b = body(58, 30);
     const hit = moveAndCollide(b, map, 10, 4);
     expect(hit.hitX).toBe(true);
     expect(hit.hitY).toBe(false);
     expect(b.y).toBe(34);
+  });
+
+  it('never pushes a body backwards out of a tile it already overlaps', () => {
+    const b = body(60, 30); // overlaps the wall column (e.g. after a teleport)
+    moveAndCollide(b, map, -3, 0);
+    expect(b.x).toBe(57);
   });
 
   it('does not tunnel through a 1-tile wall at high speed', () => {

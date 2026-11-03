@@ -1,0 +1,119 @@
+import { test, expect } from '@playwright/test';
+
+// Uses the height verification map (default map). Tile coordinates refer to
+// src/game/world/maps/heightTest.js.
+
+async function open(page) {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
+  return errors;
+}
+
+const player = (page) => page.evaluate(() => window.__debugApi.player());
+const teleport = (page, tx, ty) => page.evaluate(([x, y]) => window.__debugApi.teleport(x, y), [tx, ty]);
+
+/** Hold keys for a while (game time advances in real time). */
+async function hold(page, keys, ms) {
+  for (const k of keys) await page.keyboard.down(k);
+  await page.waitForTimeout(ms);
+  for (const k of keys) await page.keyboard.up(k);
+}
+
+test('Space jumps and the player lands back on the ground', async ({ page }) => {
+  const errors = await open(page);
+  let maxZ = 0;
+  await page.keyboard.down('Space');
+  for (let i = 0; i < 12; i++) {
+    maxZ = Math.max(maxZ, (await player(page)).z);
+    await page.waitForTimeout(25);
+  }
+  await page.keyboard.up('Space');
+  await page.waitForTimeout(600);
+  expect(maxZ).toBeGreaterThan(4);
+  const p = await player(page);
+  expect(p.grounded).toBe(true);
+  expect(p.z).toBe(0);
+  expect(errors).toEqual([]);
+});
+
+test('a 1-level cliff blocks walking but can be jumped onto', async ({ page }) => {
+  await open(page);
+  await teleport(page, 14, 22); // just south of the floating plateau B (8px high)
+  await hold(page, ['ArrowUp'], 700);
+  let p = await player(page);
+  expect(p.z).toBe(0);
+  expect(p.y).toBeCloseTo(22 * 16 + 6, 0); // stopped at the cliff
+
+  await page.keyboard.down('ArrowUp');
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(700);
+  await page.keyboard.up('Space');
+  await page.keyboard.up('ArrowUp');
+  await page.waitForTimeout(300);
+  p = await player(page);
+  expect(p.grounded).toBe(true);
+  expect(p.z).toBe(8);
+  expect(p.y).toBeLessThan(22 * 16);
+});
+
+test('walking up a ramp reaches the plateau', async ({ page }) => {
+  await open(page);
+  await teleport(page, 7, 24); // on the path south of plateau A's ramp
+  await hold(page, ['ArrowUp'], 1300);
+  const p = await player(page);
+  expect(p.z).toBe(8);
+  expect(p.grounded).toBe(true);
+});
+
+test('jumping off the 4-level tower costs half a heart', async ({ page }, testInfo) => {
+  await open(page);
+  await teleport(page, 27, 5); // east edge of the tower top (32px)
+  expect((await player(page)).z).toBe(32);
+  await expect(page.locator('#hud-hearts')).toHaveAttribute('data-hp', '12');
+  await hold(page, ['ArrowRight'], 1200);
+  const p = await player(page);
+  expect(p.z).toBe(0);
+  expect(p.hp).toBe(10);
+  await expect(page.locator('#hud-hearts')).toHaveAttribute('data-hp', '10');
+  await page.screenshot({ path: testInfo.outputPath('after-fall.png') });
+});
+
+test('a silhouette shows the player hidden behind the tower', async ({ page }, testInfo) => {
+  await open(page);
+  await teleport(page, 24, 3); // ground just north of the tower
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => window.__debugApi.occluded())).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('behind-tower.png') });
+
+  await teleport(page, 24, 5); // on top of the tower: fully visible
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => window.__debugApi.occluded())).toBe(false);
+
+  await teleport(page, 24, 22); // in front (south) of the tower
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => window.__debugApi.occluded())).toBe(false);
+});
+
+test('the touch jump button jumps', async ({ page }) => {
+  await open(page);
+  const btn = page.locator('#jump-button');
+  await expect(btn).toBeVisible();
+  await btn.dispatchEvent('pointerdown', { pointerId: 7 });
+  let maxZ = 0;
+  for (let i = 0; i < 10; i++) {
+    maxZ = Math.max(maxZ, (await player(page)).z);
+    await page.waitForTimeout(25);
+  }
+  await btn.dispatchEvent('pointerup', { pointerId: 7 });
+  expect(maxZ).toBeGreaterThan(4);
+});
+
+test('the flat test field is still available with ?map=field', async ({ page }) => {
+  await page.goto('/?map=field');
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
+  const p = await player(page);
+  expect(p.z).toBe(0);
+  expect(p.x).toBe(5 * 16 + 8);
+});

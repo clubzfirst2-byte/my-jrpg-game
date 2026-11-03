@@ -19,8 +19,10 @@ import { InputManager } from './platform/inputManager.js';
 import { installLifecycle } from './platform/lifecycle.js';
 import { loadSettings, saveSettings } from './platform/settings.js';
 import { PauseOverlay } from './ui/pauseOverlay.js';
+import { HeartsHud } from './ui/hud.js';
 import { FixedStepLoop } from './game/core/fixedStep.js';
-import { createGameState, stepGame } from './game/state.js';
+import { createGameState, stepGame, MAPS } from './game/state.js';
+import { groundHeightUnder } from './game/physics/collision.js';
 import { GAME_TITLE, PHASE } from './game/version.js';
 
 const errorLog = new ErrorLog();
@@ -82,10 +84,12 @@ async function boot() {
   const assets = new AssetManager();
   assets.register('placeholder', buildPlaceholderPack);
   await assets.load('placeholder');
-  const state = createGameState();
+  const mapName = /** @type {keyof typeof MAPS} */ (params.get('map') ?? 'height');
+  const state = createGameState(MAPS[mapName] ?? MAPS.height);
   const view = new GameView(app, assets, state);
   const loop = new FixedStepLoop();
   const input = new InputManager(uiRoot);
+  const hud = new HeartsHud(uiRoot);
   const bench = new Bench(app);
   bench.setCount(intParam('bench', 0));
 
@@ -230,7 +234,8 @@ async function boot() {
             `JS ${s.avgCpuMs.toFixed(2)}ms   描画 ${lastDraws}回${drawCounter.supported ? '' : '(未対応)'}`,
             `表示物 ${objectCount}   テクスチャ ${textureCount()}   負荷 ${bench.count}`,
             `内部 ${resolution.width}×${resolution.height} ×${resolution.scale}  DPR ${window.devicePixelRatio}`,
-            `位置 ${p.x.toFixed(0)},${p.y.toFixed(0)} ${p.facing}${p.dashing ? ' ダッシュ' : ''}  エラー ${errorLog.total}`,
+            `位置 ${p.x.toFixed(0)},${p.y.toFixed(0)} 高さ ${p.z.toFixed(0)}（地面 ${p.groundZ.toFixed(0)}）${p.grounded ? '' : ' 空中'}`,
+            `体力 ${p.hp}/${p.maxHp}  ${p.facing}${p.dashing ? ' ダッシュ' : ''}  エラー ${errorLog.total}`,
           ].join('\n'),
         );
       }
@@ -247,6 +252,7 @@ async function boot() {
       alpha = loop.advance(ticker.deltaMS, () => stepGame(state, frameInput)).alpha;
     }
     view.render(state, alpha, performance.now() / 1000);
+    hud.update(state.player.hp, state.player.maxHp);
     bench.update(ticker.deltaMS / 1000);
   });
 
@@ -259,7 +265,21 @@ async function boot() {
     errors: () => errorLog.total,
     rendererName: () => app.renderer.name,
     lastReport: () => lastReport,
-    player: () => ({ x: state.player.x, y: state.player.y, facing: state.player.facing, dashing: state.player.dashing }),
+    player: () => {
+      const p = state.player;
+      return { x: p.x, y: p.y, z: p.z, groundZ: p.groundZ, grounded: p.grounded, hp: p.hp, facing: p.facing, dashing: p.dashing };
+    },
+    occluded: () => view.playerOccluded,
+    /** Test helper: place the player on tile (tx, ty), standing on the terrain. */
+    teleport: (/** @type {number} */ tx, /** @type {number} */ ty) => {
+      const p = state.player;
+      const ts = state.map.tileSize;
+      p.x = p.prevX = tx * ts + ts / 2;
+      p.y = p.prevY = ty * ts + ts - 2;
+      p.z = p.prevZ = p.groundZ = groundHeightUnder(p, state.map);
+      p.vx = p.vy = p.vz = 0;
+      p.grounded = true;
+    },
     tick: () => state.tick,
     loop: () => ({ totalSteps: loop.totalSteps, droppedMs: loop.droppedMs, elapsedMs: loop.elapsedMs, pendingMs: loop.accumulator }),
     paused: () => paused,

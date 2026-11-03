@@ -1,7 +1,8 @@
 // @ts-check
-// P1 test field (flat, 48x32 tiles). Legend: '.' grass, '=' path, '~' water (solid until P2.3 swimming),
+// P1 test field (flat, 48x32 tiles; no height layer = all height 0). Legend: '.' grass, '=' path, '~' water (solid until P2.3 swimming),
 // 'T' tree (solid), '#' rock (solid), 'P' player spawn (on path).
-export const TEST_FIELD = [
+export const TEST_FIELD = {
+  ground: [
   'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
   'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
   'TTTT.T.TT.TTTTT.TT...T.T.TTTT.T..T.TTT.TT.TT..TT',
@@ -34,4 +35,5 @@ export const TEST_FIELD = [
   'TTT..TTTTT.TTTT......T....TTT.TTTTTTTTTTT..TTTTT',
   'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
   'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
-];
+  ],
+};

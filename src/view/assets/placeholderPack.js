@@ -2,7 +2,20 @@
 // Builds the placeholder art into ONE atlas texture so everything batches into few draw calls.
 // A production pack must provide the same logical names and anchors (DESIGN.md 7.5).
 import { Rectangle, Texture } from 'pixi.js';
-import { PALETTE, grassTile, pathTile, playerFrames, rockSprite, treeSprite, waterTile } from './placeholderArt.js';
+import {
+  PALETTE,
+  earthFace,
+  grassTile,
+  pathTile,
+  playerFrames,
+  rampSprite,
+  rockSprite,
+  ruinFace,
+  ruinFloorTile,
+  shadowSprite,
+  treeSprite,
+  waterTile,
+} from './placeholderArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
 const TOP_LEFT = /** @type {[number, number]} */ ([0, 0]);
@@ -14,6 +27,16 @@ export function placeholderEntries() {
   for (let i = 0; i < 3; i++) entries.push({ key: `tile.grass.${i}`, rows: grassTile(100 + i), anchor: TOP_LEFT });
   entries.push({ key: 'tile.path', rows: pathTile(), anchor: TOP_LEFT });
   for (let i = 0; i < 2; i++) entries.push({ key: `tile.water.${i}`, rows: waterTile(i), anchor: TOP_LEFT });
+  entries.push({ key: 'tile.ruin', rows: ruinFloorTile(), anchor: TOP_LEFT });
+  entries.push({ key: 'tile.ramp', rows: rampSprite(), anchor: TOP_LEFT });
+  for (const [mat, face] of /** @type {const} */ ([['earth', earthFace], ['ruin', ruinFace]])) {
+    entries.push({ key: `face.${mat}.top8`, rows: face(8, true), anchor: TOP_LEFT });
+    entries.push({ key: `face.${mat}.top4`, rows: face(4, true), anchor: TOP_LEFT });
+    entries.push({ key: `face.${mat}.mid8`, rows: face(8, false), anchor: TOP_LEFT });
+    entries.push({ key: `face.${mat}.mid4`, rows: face(4, false), anchor: TOP_LEFT });
+  }
+  entries.push({ key: 'fx.shadow', rows: shadowSprite(), anchor: /** @type {[number, number]} */ ([0.5, 0.5]) });
+  entries.push({ key: 'px', rows: ['XX', 'XX'], anchor: TOP_LEFT });
   entries.push({ key: 'obj.rock', rows: rockSprite(), anchor: FEET });
   entries.push({ key: 'obj.tree', rows: treeSprite(), anchor: FEET });
   return entries;
