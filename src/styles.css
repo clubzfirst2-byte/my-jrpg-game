@@ -221,21 +221,50 @@ body {
   border: 2px solid rgba(255, 255, 255, 0.8);
 }
 
-#ui #dash-button {
+#ui .action-button {
   position: absolute;
-  right: calc(24px + var(--safe-right));
-  bottom: calc(28px + var(--safe-bottom));
-  width: 76px;
-  height: 76px;
   border-radius: 50%;
   background: rgba(36, 54, 74, 0.7);
   border: 2px solid rgba(160, 200, 240, 0.7);
   font-weight: bold;
   touch-action: none;
+  padding: 0;
 }
 
-#ui #dash-button.active {
+#ui .action-button.active {
   background: rgba(95, 179, 255, 0.75);
+}
+
+/* Jump: the main thumb position. Dash: up-left of it, reachable by rolling the thumb. */
+#ui #jump-button {
+  right: calc(20px + var(--safe-right));
+  bottom: calc(24px + var(--safe-bottom));
+  width: 80px;
+  height: 80px;
+}
+
+#ui #dash-button {
+  right: calc(112px + var(--safe-right));
+  bottom: calc(56px + var(--safe-bottom));
+  width: 64px;
+  height: 64px;
+  font-size: 11px;
+}
+
+/* ---- HUD ---- */
+#hud-hearts {
+  position: absolute;
+  top: calc(12px + var(--safe-top));
+  left: calc(60px + var(--safe-left));
+  display: flex;
+  gap: 3px;
+  pointer-events: none;
+}
+
+#hud-hearts svg {
+  width: 22px;
+  height: 20px;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6));
 }
 
 /* ---- pause ---- */

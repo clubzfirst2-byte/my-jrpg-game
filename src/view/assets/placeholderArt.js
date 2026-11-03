@@ -31,6 +31,13 @@ export const PALETTE = Object.freeze({
   y: '#e8b84a', // belt
   n: '#5a4a3a', // trousers
   o: '#3a2a20', // boots
+  E: '#8a5a3c', // earth (cliff face)
+  F: '#5e3b28', // earth dark
+  f: '#a8744c', // earth light
+  B: '#9a9488', // ruin brick
+  Q: '#5f5a52', // ruin grout / dark
+  v: '#c4beb0', // ruin light
+  X: '#ffffff', // white (tinted at runtime)
 });
 
 // Player frames (16x16). Only down / up / right are drawn; left is right mirrored.
@@ -216,5 +223,81 @@ export function treeSprite() {
   g[h - 1][5] = 'k';
   g[h - 1][10] = 'k';
   for (let x = 6; x <= 9; x++) g[h - 1][x] = 'k';
+  return toRows(g);
+}
+
+/** Earth cliff face, 16 x h (h = 4 or 8). `top` adds the grass lip that hangs over the edge. */
+export function earthFace(h, top) {
+  const g = grid(16, h, 'E');
+  const rand = rng(31 + h + (top ? 1 : 0));
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < 16; x++) {
+      const r = rand();
+      if (r < 0.12) g[y][x] = 'f';
+      else if (r < 0.24) g[y][x] = 'F';
+    }
+  }
+  // Strata line and darker base for a sense of depth.
+  if (h >= 8) for (let x = 0; x < 16; x++) if ((x + 1) % 5 !== 0) g[5][x] = 'F';
+  for (let x = 0; x < 16; x++) g[h - 1][x] = 'F';
+  if (top) {
+    for (let x = 0; x < 16; x++) {
+      g[0][x] = 'G';
+      g[1][x] = x % 3 === 0 ? 'E' : 'd';
+    }
+  }
+  return toRows(g);
+}
+
+/** Ruin wall face (bricks), 16 x h. `top` adds a light capstone row. */
+export function ruinFace(h, top) {
+  const g = grid(16, h, 'B');
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < 16; x++) {
+      if (y % 4 === 3) g[y][x] = 'Q';
+      else if ((x + (Math.floor(y / 4) % 2) * 4) % 8 === 7) g[y][x] = 'Q';
+    }
+  }
+  if (top) for (let x = 0; x < 16; x++) g[0][x] = 'v';
+  return toRows(g);
+}
+
+export function ruinFloorTile() {
+  const g = grid(16, 16, 'v');
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      if (y % 8 === 7) g[y][x] = 'Q';
+      else if ((x + (Math.floor(y / 8) % 2) * 8) % 16 === 15) g[y][x] = 'Q';
+      else if ((x * 7 + y * 3) % 23 === 0) g[y][x] = 'B';
+    }
+  }
+  return toRows(g);
+}
+
+/** Stone stairs for a north-rising ramp: 16 wide, 24 tall (16 ground + 8 rise). */
+export function rampSprite() {
+  const g = grid(16, 24, 'r');
+  for (let y = 0; y < 24; y++) {
+    const inStep = y % 6;
+    for (let x = 0; x < 16; x++) {
+      if (inStep < 2) g[y][x] = 'R'; // tread edge (lit)
+      else if (inStep === 5) g[y][x] = 'm'; // riser shadow
+      if (x === 0 || x === 15) g[y][x] = 'k';
+      else if (x === 1 || x === 14) g[y][x] = 'm';
+    }
+  }
+  return toRows(g);
+}
+
+/** Soft oval shadow, drawn with low alpha under characters. */
+export function shadowSprite() {
+  const g = grid(12, 5, '.');
+  for (let y = 0; y < 5; y++) {
+    for (let x = 0; x < 12; x++) {
+      const dx = (x - 5.5) / 6;
+      const dy = (y - 2) / 2.6;
+      if (dx * dx + dy * dy <= 1) g[y][x] = 'k';
+    }
+  }
   return toRows(g);
 }

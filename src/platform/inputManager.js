@@ -20,6 +20,7 @@ export class InputManager {
       moveX: useTouch ? t.moveX : k.moveX,
       moveY: useTouch ? t.moveY : k.moveY,
       dash: k.dash || t.dash,
+      jump: k.jump || t.jump,
     };
   }
 

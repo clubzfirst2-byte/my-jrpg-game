@@ -1,13 +1,36 @@
 // @ts-check
 // Draws the game state. Reads state only; never writes to it (DESIGN.md 1.1).
+//
+// Draw order (DESIGN.md 3.3):
+//   base      ground at height 0 (cached into one texture; re-cached when water animates)
+//   actors    Y-sorted: elevated terrain rows, trees/rocks, shadow, player
+//   overlay   player silhouette when something hides the player
+// Sort keys: characters/objects use their feet y; an elevated terrain row uses its NORTH edge.
+// That one rule puts a character behind a cliff when north of it, on top of it when standing on it,
+// and in front of it when south of it.
 import { Container, Sprite } from 'pixi.js';
-import { Ground } from '../game/world/tilemap.js';
+import { Ground, Shape, LEVEL_PX, inBounds, northEdgeHeight, southEdgeHeight } from '../game/world/tilemap.js';
 import { lerp } from '../game/core/math.js';
 import { cameraOrigin } from './camera.js';
 
 const WALK_FPS = 8;
 const WALK_CYCLE = [1, 0, 2, 0];
 const WATER_FRAME_SEC = 0.6;
+const EDGE_COLOR = 0x1a1c2c;
+const TREE_FADE_ALPHA = 0.5;
+const CLIFF_SHADOW_PX = 4;
+
+/**
+ * Higher ground is drawn slightly brighter so levels read at a glance (multiplicative tint).
+ * @param {number} heightPx
+ */
+export function levelTint(heightPx) {
+  const level = heightPx / LEVEL_PX;
+  const v = Math.round(255 * Math.min(1, 0.86 + 0.035 * level));
+  return (v << 16) | (v << 8) | v;
+}
+
+/** @typedef {{ sprite: Sprite, x0: number, x1: number, y0: number, y1: number, key: number }} Occluder */
 
 export class GameView {
   /**
@@ -18,27 +41,41 @@ export class GameView {
   constructor(app, assets, state) {
     this.app = app;
     this.assets = assets;
+    this.map = state.map;
     this.world = new Container();
     this.world.label = 'world';
-    // Static ground (grass / path) is cached into one texture after building: ~1500 tiles cost
-    // a single quad per frame. Animated water lives in its own uncached layer.
-    this.ground = new Container();
-    this.ground.label = 'ground';
-    this.water = new Container();
-    this.water.label = 'water';
-    // Y-sorted layer: objects and characters ordered by their feet (DESIGN.md 3.3).
+    this.base = new Container();
+    this.base.label = 'base';
     this.actors = new Container();
     this.actors.label = 'actors';
     this.actors.sortableChildren = true;
-    this.world.addChild(this.ground, this.water, this.actors);
+    this.overlay = new Container();
+    this.overlay.label = 'overlay';
+    this.world.addChild(this.base, this.actors, this.overlay);
     app.stage.addChildAt(this.world, 0);
 
     /** @type {Sprite[]} */
     this.waterSprites = [];
-    this.buildMap(state.map);
+    this.waterFrame = -1;
+    /** @type {Occluder[]} trees (faded when they hide the player) */
+    this.trees = [];
+    /** Per row: screen extents of elevated tiles, for silhouette checks. @type {Map<number, { x0: number, x1: number, y0: number, y1: number }[]>} */
+    this.elevatedRows = new Map();
 
+    this.buildTerrain();
+    this.buildObjects();
+
+    this.shadow = this.makeSprite('fx.shadow');
+    this.shadow.alpha = 0.35;
     this.player = this.makeSprite('player.walk.down.0');
-    this.actors.addChild(this.player);
+    this.silhouette = this.makeSprite('player.walk.down.0');
+    this.silhouette.tint = 0x101828;
+    this.silhouette.alpha = 0.55;
+    this.silhouette.visible = false;
+    this.actors.addChild(this.shadow, this.player);
+    this.overlay.addChild(this.silhouette);
+    /** True while the player is hidden behind terrain (exposed for tests). */
+    this.playerOccluded = false;
   }
 
   /** @param {string} key */
@@ -49,33 +86,132 @@ export class GameView {
     return s;
   }
 
-  /** @param {import('../game/world/tilemap.js').TileMap} map */
-  buildMap(map) {
+  /** @param {number} tx @param {number} ty */
+  surfaceKey(tx, ty) {
+    const g = this.map.ground[ty * this.map.width + tx];
+    if (g === Ground.PATH) return 'tile.path';
+    if (g === Ground.WATER) return 'tile.water.0';
+    if (g === Ground.RUIN) return 'tile.ruin';
+    return `tile.grass.${hash(tx, ty) % 3}`;
+  }
+
+  buildTerrain() {
+    const map = this.map;
     const ts = map.tileSize;
+    /** @type {Map<number, Container>} */
+    const rows = new Map();
+    const rowContainer = (/** @type {number} */ ty) => {
+      let c = rows.get(ty);
+      if (!c) {
+        c = new Container();
+        c.label = `terrain-row-${ty}`;
+        c.zIndex = ty * ts + 0.001; // north edge of the row (see header comment)
+        rows.set(ty, c);
+        this.actors.addChild(c);
+      }
+      return c;
+    };
+
     for (let ty = 0; ty < map.height; ty++) {
       for (let tx = 0; tx < map.width; tx++) {
-        const g = map.ground[ty * map.width + tx];
-        let key = 'tile.path';
-        if (g === Ground.GRASS) key = `tile.grass.${hash(tx, ty) % 3}`;
-        else if (g === Ground.WATER) key = 'tile.water.0';
-        const s = this.makeSprite(key);
-        s.position.set(tx * ts, ty * ts);
-        if (g === Ground.WATER) {
-          this.water.addChild(s);
-          this.waterSprites.push(s);
-        } else {
-          this.ground.addChild(s);
+        const i = ty * map.width + tx;
+        const h = map.elev[i];
+        const isRamp = map.shape[i] === Shape.RAMP_N;
+        const x = tx * ts;
+
+        if (h === 0 && !isRamp) {
+          const s = this.makeSprite(this.surfaceKey(tx, ty));
+          s.position.set(x, ty * ts);
+          this.base.addChild(s);
+          if (map.ground[i] === Ground.WATER) this.waterSprites.push(s);
+          continue;
         }
+
+        const row = rowContainer(ty);
+        const top = ty * ts - h;
+        const surface = this.makeSprite(isRamp ? 'tile.ramp' : this.surfaceKey(tx, ty));
+        surface.position.set(x, top);
+        surface.tint = levelTint(isRamp ? h - LEVEL_PX / 2 : h);
+        row.addChild(surface);
+
+        // South face: from this tile's south edge down to the south neighbor's north edge.
+        const faceTop = (ty + 1) * ts - southEdgeHeight(map, tx, ty);
+        const faceBottom = (ty + 1) * ts - northEdgeHeight(map, tx, ty + 1);
+        this.addFace(row, tx, ty, x, faceTop, faceBottom);
+        if (faceBottom > faceTop) {
+          // Contact shadow on the ground at the foot of the cliff.
+          const shade = this.edge(x, faceBottom, ts, CLIFF_SHADOW_PX);
+          shade.alpha = 0.22;
+          row.addChild(shade);
+        }
+
+        // Dark outlines where a neighbor is lower (reads as an edge from above).
+        if (!isRamp) {
+          const lowerEast = inBounds(map, tx + 1, ty) && map.elev[i + 1] < h;
+          const lowerWest = inBounds(map, tx - 1, ty) && map.elev[i - 1] < h;
+          const lowerNorth = inBounds(map, tx, ty - 1) && southEdgeHeight(map, tx, ty - 1) < h;
+          if (lowerEast) row.addChild(this.edge(x + ts - 1, top, 1, ts));
+          if (lowerWest) row.addChild(this.edge(x, top, 1, ts));
+          if (lowerNorth) row.addChild(this.edge(x, top, ts, 1));
+        }
+
+        const extents = this.elevatedRows.get(ty) ?? [];
+        extents.push({ x0: x, x1: x + ts, y0: top, y1: Math.max(faceBottom, faceTop) });
+        this.elevatedRows.set(ty, extents);
       }
     }
-    this.ground.cacheAsTexture({ scaleMode: 'nearest', antialias: false });
+    this.base.tint = levelTint(0);
+    // ~1500 static tiles -> one textured quad per frame.
+    this.base.cacheAsTexture({ scaleMode: 'nearest', antialias: false });
+  }
+
+  /**
+   * @param {Container} row @param {number} tx @param {number} ty
+   * @param {number} x @param {number} faceTop @param {number} faceBottom
+   */
+  addFace(row, tx, ty, x, faceTop, faceBottom) {
+    let remaining = faceBottom - faceTop;
+    if (remaining <= 0) return;
+    const mat = this.map.ground[ty * this.map.width + tx] === Ground.RUIN ? 'ruin' : 'earth';
+    let y = faceTop;
+    let first = true;
+    while (remaining > 0) {
+      const seg = remaining >= LEVEL_PX ? 8 : 4;
+      const s = this.makeSprite(`face.${mat}.${first ? 'top' : 'mid'}${seg}`);
+      s.position.set(x, y);
+      row.addChild(s);
+      y += seg;
+      remaining -= seg;
+      first = false;
+    }
+  }
+
+  /** @param {number} x @param {number} y @param {number} w @param {number} h */
+  edge(x, y, w, h) {
+    const s = this.makeSprite('px');
+    s.position.set(x, y);
+    s.width = w;
+    s.height = h;
+    s.tint = EDGE_COLOR;
+    s.alpha = 0.55;
+    return s;
+  }
+
+  buildObjects() {
+    const map = this.map;
+    const ts = map.tileSize;
     for (const o of map.objects) {
       const s = this.makeSprite(o.type === 'tree' ? 'obj.tree' : 'obj.rock');
       const x = o.tx * ts + ts / 2;
-      const y = o.ty * ts + ts;
-      s.position.set(x, y);
-      s.zIndex = y;
+      const feetY = o.ty * ts + ts;
+      const z = map.elev[o.ty * map.width + o.tx];
+      s.position.set(x, feetY - z);
+      s.zIndex = feetY;
       this.actors.addChild(s);
+      if (o.type === 'tree') {
+        const w = s.width / 2;
+        this.trees.push({ sprite: s, x0: x - w, x1: x + w, y0: feetY - z - s.height, y1: feetY - z, key: feetY });
+      }
     }
   }
 
@@ -88,28 +224,75 @@ export class GameView {
     const p = state.player;
     const x = lerp(p.prevX, p.x, alpha);
     const y = lerp(p.prevY, p.y, alpha);
+    const z = lerp(p.prevZ, p.z, alpha);
+    const sx = Math.round(x);
+    const sy = Math.round(y - z);
 
-    const frame = p.moving ? WALK_CYCLE[Math.floor(p.walkTime * WALK_FPS) % WALK_CYCLE.length] : 0;
-    this.player.texture = this.assets.texture(`player.walk.${p.facing}.${frame}`);
-    this.player.position.set(Math.round(x), Math.round(y));
+    const frame = p.moving ? WALK_CYCLE[Math.floor(p.walkTime * WALK_FPS) % WALK_CYCLE.length] : !p.grounded ? 1 : 0;
+    const tex = this.assets.texture(`player.walk.${p.facing}.${frame}`);
+    this.player.texture = tex;
+    this.player.position.set(sx, sy);
     this.player.zIndex = y;
 
-    const waterKey = `tile.water.${Math.floor(timeSec / WATER_FRAME_SEC) % 2}`;
-    const waterTex = this.assets.texture(waterKey);
-    if (this.waterSprites[0] && this.waterSprites[0].texture !== waterTex) {
-      for (const s of this.waterSprites) s.texture = waterTex;
-    }
+    // Shadow on the ground below; smaller and fainter the higher the player is.
+    const above = Math.max(0, z - p.groundZ);
+    const k = Math.max(0.45, 1 - above / 48);
+    this.shadow.position.set(sx, Math.round(y - p.groundZ) - 1);
+    this.shadow.scale.set(k);
+    this.shadow.alpha = 0.35 * k;
+    this.shadow.zIndex = y - 0.002;
 
-    const map = state.map;
-    const cam = cameraOrigin(
-      x,
-      y - 8, // center on the body, not the feet
-      this.app.screen.width,
-      this.app.screen.height,
-      map.width * map.tileSize,
-      map.height * map.tileSize,
-    );
+    this.updateOcclusion(sx, sy, y, tex);
+    this.animateWater(timeSec);
+
+    const map = this.map;
+    const cam = cameraOrigin(x, y - z - 8, this.app.screen.width, this.app.screen.height, map.width * map.tileSize, map.height * map.tileSize);
     this.world.position.set(-cam.x, -cam.y);
+  }
+
+  /**
+   * Fades trees in front of the player; shows a silhouette when terrain hides the player.
+   * @param {number} sx @param {number} sy @param {number} key @param {import('pixi.js').Texture} tex
+   */
+  updateOcclusion(sx, sy, key, tex) {
+    const px0 = sx - 6;
+    const px1 = sx + 6;
+    const py0 = sy - 15;
+    const py1 = sy - 1;
+    for (const t of this.trees) {
+      const hides = t.key > key && px1 > t.x0 && px0 < t.x1 && py1 > t.y0 && py0 < t.y1;
+      t.sprite.alpha = hides ? TREE_FADE_ALPHA : 1;
+    }
+    let occluded = false;
+    const ts = this.map.tileSize;
+    const firstRow = Math.floor(key / ts);
+    for (let r = firstRow; r < firstRow + 6 && !occluded; r++) {
+      const tiles = this.elevatedRows.get(r);
+      if (!tiles || r * ts + 0.001 <= key) continue; // rows drawn before the player can't hide it
+      for (const e of tiles) {
+        if (px1 > e.x0 && px0 < e.x1 && py1 > e.y0 && py0 < e.y1) {
+          occluded = true;
+          break;
+        }
+      }
+    }
+    this.playerOccluded = occluded;
+    this.silhouette.visible = occluded;
+    if (occluded) {
+      this.silhouette.texture = tex;
+      this.silhouette.position.set(sx, sy);
+    }
+  }
+
+  /** @param {number} timeSec */
+  animateWater(timeSec) {
+    if (this.waterSprites.length === 0) return;
+    const frame = Math.floor(timeSec / WATER_FRAME_SEC) % 2;
+    if (frame === this.waterFrame) return;
+    this.waterFrame = frame;
+    const tex = this.assets.texture(`tile.water.${frame}`);
+    for (const s of this.waterSprites) s.texture = tex;
+    this.base.updateCacheTexture();
   }
 }
 

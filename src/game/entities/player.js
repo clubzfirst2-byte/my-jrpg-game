@@ -1,50 +1,110 @@
 // @ts-check
-// Player movement for P1: walk, dash, facing. Plain object + update function (DESIGN.md 1.2).
+// Player movement: walk, dash, jump, fall (DESIGN.md 3.3, 5.3). Plain object + update function.
 import { approach } from '../core/math.js';
-import { moveAndCollide } from '../physics/collision.js';
+import { moveAndCollide, groundHeightUnder } from '../physics/collision.js';
+import { LEVEL_PX } from '../world/tilemap.js';
 
-/** Tunable movement values (px / s, px / s^2). */
+/** Tunable movement values (px, px/s, px/s^2, s). */
 export const PLAYER_MOVE = Object.freeze({
   walkSpeed: 72,
   dashSpeed: 128,
   accel: 900,
   decel: 1200,
+  airAccel: 420,
+  gravity: 640,
+  /** Apex of a standing jump: enough for a 1-level ledge (8px), not for 2 levels (16px). */
+  jumpHeight: 12,
+  /** Walk up / down height differences up to this without jumping (DESIGN.md 3.2 段差). */
+  stepHeight: 4,
+  /** Jump still allowed this long after walking off a ledge. */
+  coyoteTime: 0.08,
+  /** A jump pressed this long before landing still happens on landing (DESIGN.md 1.3). */
+  jumpBuffer: 0.12,
 });
+
+/** Falls of up to this height are safe (3 levels). */
+export const SAFE_FALL_PX = 3 * LEVEL_PX;
+/** Damage (in quarter hearts) per level fallen beyond the safe height. */
+export const FALL_DAMAGE_PER_LEVEL = 2;
+export const PLAYER_MAX_HP = 12; // 3 hearts x 4 quarters
 
 /** @typedef {'down' | 'up' | 'left' | 'right'} Facing */
 
 /**
  * @typedef {object} Player
- * @property {number} x       feet position
+ * @property {number} x       feet position on the ground plane
  * @property {number} y
- * @property {number} prevX   position at the previous logic step (for render interpolation)
+ * @property {number} z       altitude of the feet in px (terrain height when standing)
+ * @property {number} prevX   previous logic step (for render interpolation)
  * @property {number} prevY
+ * @property {number} prevZ
  * @property {number} vx
  * @property {number} vy
+ * @property {number} vz
  * @property {number} halfWidth
  * @property {number} height
  * @property {Facing} facing
  * @property {boolean} moving
  * @property {boolean} dashing
- * @property {number} walkTime  seconds spent moving (drives walk animation)
+ * @property {boolean} grounded
+ * @property {number} groundZ    terrain height under the feet (for the shadow)
+ * @property {number} walkTime   seconds spent moving (drives walk animation)
+ * @property {number} coyote     seconds left in which a jump is still allowed after leaving ground
+ * @property {number} jumpBuffered seconds left for a buffered jump press
+ * @property {boolean} jumpHeld
+ * @property {number} fallPeakZ  highest z since leaving the ground
+ * @property {number} hp
+ * @property {number} maxHp
+ * @property {number} spawnX
+ * @property {number} spawnY
+ * @property {number} spawnZ
+ * @property {{ type: 'land', fall: number, damage: number } | { type: 'respawn' } | null} lastEvent
  */
 
-/** @param {number} x @param {number} y @returns {Player} */
-export function createPlayer(x, y) {
+/** @param {number} x @param {number} y @param {number} [z] @returns {Player} */
+export function createPlayer(x, y, z = 0) {
   return {
     x,
     y,
+    z,
     prevX: x,
     prevY: y,
+    prevZ: z,
     vx: 0,
     vy: 0,
+    vz: 0,
     halfWidth: 5,
     height: 6,
     facing: 'down',
     moving: false,
     dashing: false,
+    grounded: true,
+    groundZ: z,
     walkTime: 0,
+    coyote: 0,
+    jumpBuffered: 0,
+    jumpHeld: false,
+    fallPeakZ: z,
+    hp: PLAYER_MAX_HP,
+    maxHp: PLAYER_MAX_HP,
+    spawnX: x,
+    spawnY: y,
+    spawnZ: z,
+    lastEvent: null,
   };
+}
+
+export function jumpVelocity() {
+  return Math.sqrt(2 * PLAYER_MOVE.gravity * PLAYER_MOVE.jumpHeight);
+}
+
+/**
+ * Fall damage in quarter hearts for a drop of `fall` px.
+ * @param {number} fall
+ */
+export function fallDamage(fall) {
+  if (fall <= SAFE_FALL_PX + 1e-6) return 0;
+  return Math.ceil((fall - SAFE_FALL_PX) / LEVEL_PX) * FALL_DAMAGE_PER_LEVEL;
 }
 
 /**
@@ -56,12 +116,27 @@ export function createPlayer(x, y) {
 export function updatePlayer(p, input, map, dt) {
   p.prevX = p.x;
   p.prevY = p.y;
+  p.prevZ = p.z;
+  p.lastEvent = null;
 
+  // --- jump input (press detection + buffer) ---
+  if (input.jump && !p.jumpHeld) p.jumpBuffered = PLAYER_MOVE.jumpBuffer;
+  p.jumpHeld = input.jump;
+  if (p.jumpBuffered > 0 && (p.grounded || p.coyote > 0)) {
+    p.vz = jumpVelocity();
+    p.grounded = false;
+    p.coyote = 0;
+    p.jumpBuffered = 0;
+    p.fallPeakZ = p.z;
+  }
+  p.jumpBuffered = Math.max(0, p.jumpBuffered - dt);
+  p.coyote = Math.max(0, p.coyote - dt);
+
+  // --- horizontal movement ---
   const mag = Math.min(1, Math.hypot(input.moveX, input.moveY));
   const hasInput = mag > 0;
-  p.dashing = hasInput && input.dash;
-  const maxSpeed = (p.dashing ? PLAYER_MOVE.dashSpeed : PLAYER_MOVE.walkSpeed) * (p.dashing ? 1 : mag);
-
+  p.dashing = hasInput && input.dash && p.grounded;
+  const maxSpeed = p.dashing ? PLAYER_MOVE.dashSpeed : PLAYER_MOVE.walkSpeed * mag;
   let tx = 0;
   let ty = 0;
   if (hasInput) {
@@ -70,17 +145,75 @@ export function updatePlayer(p, input, map, dt) {
     ty = (input.moveY / len) * maxSpeed;
     p.facing = facingFrom(input.moveX, input.moveY, p.facing);
   }
-  const rate = (hasInput ? PLAYER_MOVE.accel : PLAYER_MOVE.decel) * dt;
-  p.vx = approach(p.vx, tx, rate);
-  p.vy = approach(p.vy, ty, rate);
+  let rate = (hasInput ? PLAYER_MOVE.accel : PLAYER_MOVE.decel) * dt;
+  if (!p.grounded) rate = PLAYER_MOVE.airAccel * dt; // reduced air control keeps jump arcs readable
+  // Keep a dash's momentum through a jump (no instant slow-down when leaving the ground).
+  const keepMomentum = !p.grounded && Math.hypot(p.vx, p.vy) > Math.hypot(tx, ty);
+  if (!keepMomentum) {
+    p.vx = approach(p.vx, tx, rate);
+    p.vy = approach(p.vy, ty, rate);
+  }
 
-  const hit = moveAndCollide(p, map, p.vx * dt, p.vy * dt);
+  const maxHeight = p.grounded ? p.z + PLAYER_MOVE.stepHeight : p.z;
+  const hit = moveAndCollide(p, map, p.vx * dt, p.vy * dt, maxHeight);
   if (hit.hitX) p.vx = 0;
   if (hit.hitY) p.vy = 0;
 
+  // --- vertical movement ---
+  const ground = groundHeightUnder(p, map);
+  p.groundZ = ground;
+  if (p.grounded) {
+    if (ground >= p.z - PLAYER_MOVE.stepHeight) {
+      p.z = ground; // follow steps and ramps
+    } else {
+      // Walked off a ledge.
+      p.grounded = false;
+      p.vz = 0;
+      p.coyote = PLAYER_MOVE.coyoteTime;
+      p.fallPeakZ = p.z;
+    }
+  }
+  if (!p.grounded) {
+    // Exact for constant acceleration, so the jump apex does not depend on the step size.
+    p.z += p.vz * dt - 0.5 * PLAYER_MOVE.gravity * dt * dt;
+    p.vz -= PLAYER_MOVE.gravity * dt;
+    p.fallPeakZ = Math.max(p.fallPeakZ, p.z);
+    if (p.z <= ground) {
+      land(p, ground);
+    }
+  }
+
   const moved = Math.hypot(p.x - p.prevX, p.y - p.prevY);
-  p.moving = moved > 0.01;
+  p.moving = p.grounded && moved > 0.01;
   p.walkTime = p.moving ? p.walkTime + dt * (p.dashing ? 1.6 : 1) : 0;
+}
+
+/** @param {Player} p @param {number} ground */
+function land(p, ground) {
+  const fall = p.fallPeakZ - ground;
+  p.z = ground;
+  p.vz = 0;
+  p.grounded = true;
+  const damage = fallDamage(fall);
+  p.lastEvent = { type: 'land', fall, damage };
+  if (damage > 0) {
+    p.hp = Math.max(0, p.hp - damage);
+    if (p.hp === 0) respawn(p);
+  }
+}
+
+/**
+ * Temporary until P3 (death / game over): return to the spawn point with full health.
+ * @param {Player} p
+ */
+function respawn(p) {
+  p.x = p.prevX = p.spawnX;
+  p.y = p.prevY = p.spawnY;
+  p.z = p.prevZ = p.groundZ = p.spawnZ;
+  p.vx = p.vy = p.vz = 0;
+  p.hp = p.maxHp;
+  p.grounded = true;
+  p.lastEvent = { type: 'respawn' };
 }
 
 /**
@@ -93,7 +226,6 @@ export function facingFrom(x, y, current) {
   const ay = Math.abs(y);
   if (ax === 0 && ay === 0) return current;
   if (Math.abs(ax - ay) < 1e-3) {
-    // Diagonal: keep facing if it already matches one of the two axes.
     const h = x > 0 ? 'right' : 'left';
     const v = y > 0 ? 'down' : 'up';
     return current === h || current === v ? current : v;

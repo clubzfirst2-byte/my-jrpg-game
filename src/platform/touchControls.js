@@ -18,11 +18,9 @@ export class TouchControls {
     this.knob.id = 'stick-knob';
     this.base.appendChild(this.knob);
     this.base.hidden = true;
-    this.dashButton = document.createElement('button');
-    this.dashButton.id = 'dash-button';
-    this.dashButton.type = 'button';
-    this.dashButton.textContent = 'ダッシュ';
-    root.append(this.layer, this.base, this.dashButton);
+    root.append(this.layer, this.base);
+    this.dash = new HoldButton(root, 'dash-button', 'ダッシュ');
+    this.jump = new HoldButton(root, 'jump-button', 'ジャンプ');
 
     /** @type {number | null} */
     this.stickPointer = null;
@@ -30,26 +28,14 @@ export class TouchControls {
     this.originY = 0;
     this.rawX = 0;
     this.rawY = 0;
-    /** @type {Set<number>} */
-    this.dashPointers = new Set();
 
     this.layer.addEventListener('pointerdown', (e) => this.onStickDown(e));
     window.addEventListener('pointermove', (e) => this.onStickMove(e));
     window.addEventListener('pointerup', (e) => this.onPointerEnd(e));
     window.addEventListener('pointercancel', (e) => this.onPointerEnd(e));
 
-    this.dashButton.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      this.dashPointers.add(e.pointerId);
-      this.dashButton.classList.add('active');
-      try {
-        this.dashButton.setPointerCapture(e.pointerId);
-      } catch {
-        // ignore: capture is best-effort
-      }
-    });
     // Prevent long-press menus / text selection on the controls.
-    for (const el of [this.layer, this.base, this.dashButton]) {
+    for (const el of [this.layer, this.base]) {
       el.addEventListener('contextmenu', (e) => e.preventDefault());
     }
   }
@@ -86,9 +72,6 @@ export class TouchControls {
       this.rawY = 0;
       this.base.hidden = true;
     }
-    if (this.dashPointers.delete(e.pointerId) && this.dashPointers.size === 0) {
-      this.dashButton.classList.remove('active');
-    }
   }
 
   updateKnob() {
@@ -99,7 +82,7 @@ export class TouchControls {
 
   sample() {
     const v = normalizeStick(this.rawX, this.rawY);
-    return { moveX: v.x, moveY: v.y, dash: this.dashPointers.size > 0 };
+    return { moveX: v.x, moveY: v.y, dash: this.dash.held, jump: this.jump.held };
   }
 
   /** Releases everything (e.g. when the app goes to the background mid-touch). */
@@ -108,7 +91,47 @@ export class TouchControls {
     this.rawX = 0;
     this.rawY = 0;
     this.base.hidden = true;
-    this.dashPointers.clear();
-    this.dashButton.classList.remove('active');
+    this.dash.clear();
+    this.jump.clear();
+  }
+}
+
+/** A button that reports "held" while any pointer presses it (multi-touch safe). */
+class HoldButton {
+  /** @param {HTMLElement} root @param {string} id @param {string} label */
+  constructor(root, id, label) {
+    this.el = document.createElement('button');
+    this.el.id = id;
+    this.el.type = 'button';
+    this.el.className = 'action-button';
+    this.el.textContent = label;
+    root.append(this.el);
+    /** @type {Set<number>} */
+    this.pointers = new Set();
+    this.el.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.pointers.add(e.pointerId);
+      this.el.classList.add('active');
+      try {
+        this.el.setPointerCapture(e.pointerId);
+      } catch {
+        // capture is best-effort
+      }
+    });
+    const end = (/** @type {PointerEvent} */ e) => {
+      if (this.pointers.delete(e.pointerId) && this.pointers.size === 0) this.el.classList.remove('active');
+    };
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    this.el.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  get held() {
+    return this.pointers.size > 0;
+  }
+
+  clear() {
+    this.pointers.clear();
+    this.el.classList.remove('active');
   }
 }

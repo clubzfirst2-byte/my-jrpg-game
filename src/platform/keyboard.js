@@ -7,6 +7,7 @@ const KEYS = {
   up: ['ArrowUp', 'KeyW'],
   down: ['ArrowDown', 'KeyS'],
   dash: ['ShiftLeft', 'ShiftRight', 'KeyJ'],
+  jump: ['Space', 'KeyK'],
 };
 
 export class KeyboardInput {
@@ -31,7 +32,7 @@ export class KeyboardInput {
     const x = (this.pressed('right') ? 1 : 0) - (this.pressed('left') ? 1 : 0);
     const y = (this.pressed('down') ? 1 : 0) - (this.pressed('up') ? 1 : 0);
     const len = Math.hypot(x, y) || 1;
-    return { moveX: x / len, moveY: y / len, dash: this.pressed('dash') };
+    return { moveX: x / len, moveY: y / len, dash: this.pressed('dash'), jump: this.pressed('jump') };
   }
 
   clear() {

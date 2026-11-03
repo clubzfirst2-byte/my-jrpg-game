@@ -6,12 +6,13 @@
  * @typedef {object} InputFrame
  * @property {number} moveX  -1..1 (analog)
  * @property {number} moveY  -1..1 (analog, +down)
- * @property {boolean} dash
+ * @property {boolean} dash  held
+ * @property {boolean} jump  held (the logic detects presses itself)
  */
 
 /** @returns {InputFrame} */
 export function emptyInput() {
-  return { moveX: 0, moveY: 0, dash: false };
+  return { moveX: 0, moveY: 0, dash: false, jump: false };
 }
 
 /** Analog values below this magnitude are treated as no input. */
