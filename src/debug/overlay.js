@@ -17,13 +17,14 @@ function el(tag, attrs = {}, text = '') {
  * @typedef {object} OverlayHandlers
  * @property {(factor: number) => void} onScaleSprites  multiply bench sprite count (0 = clear)
  * @property {() => void} onStartReport
+ * @property {() => number} onCycleResolution  switches to the next candidate, returns the new target height
  */
 
 /**
  * @param {HTMLElement} root
  * @param {import('./errorLog.js').ErrorLog} errorLog
  * @param {OverlayHandlers} handlers
- * @param {{ open: boolean, reportSec: number }} options
+ * @param {{ open: boolean, reportSec: number, resolution: number }} options
  */
 export function createOverlay(root, errorLog, handlers, options) {
   const toggle = el('button', { id: 'debug-toggle', type: 'button', 'aria-expanded': String(options.open) }, '計測');
@@ -37,7 +38,8 @@ export function createOverlay(root, errorLog, handlers, options) {
   const btnMore = el('button', { type: 'button', 'data-action': 'more' }, '負荷 ×2');
   const btnClear = el('button', { type: 'button', 'data-action': 'clear' }, '負荷 0');
   const btnReport = el('button', { type: 'button', id: 'debug-report-start' }, `計測 ${options.reportSec}秒`);
-  controls.append(btnLess, btnMore, btnClear, btnReport);
+  const btnRes = el('button', { type: 'button', id: 'debug-resolution' }, `解像度 ${options.resolution}`);
+  controls.append(btnRes, btnLess, btnMore, btnClear, btnReport);
   panel.append(statsText, controls);
 
   const modal = el('div', { id: 'debug-modal', hidden: '' });
@@ -60,6 +62,9 @@ export function createOverlay(root, errorLog, handlers, options) {
   btnMore.addEventListener('click', () => handlers.onScaleSprites(2));
   btnClear.addEventListener('click', () => handlers.onScaleSprites(0));
   btnReport.addEventListener('click', () => handlers.onStartReport());
+  btnRes.addEventListener('click', () => {
+    btnRes.textContent = `解像度 ${handlers.onCycleResolution()}`;
+  });
   btnClose.addEventListener('click', () => {
     modal.hidden = true;
   });
