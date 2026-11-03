@@ -13,6 +13,9 @@ export class FixedStepLoop {
   constructor() {
     this.accumulator = 0;
     this.totalSteps = 0;
+    /** Real time received from the display, before clamping. */
+    this.elapsedMs = 0;
+    /** Real time intentionally not simulated (clamped hitches + per-frame step cap). */
     this.droppedMs = 0;
   }
 
@@ -23,7 +26,10 @@ export class FixedStepLoop {
    * @returns {{ steps: number, alpha: number }} alpha = interpolation factor between previous and current state
    */
   advance(frameMs, step) {
-    const dt = Math.min(Math.max(0, frameMs), MAX_FRAME_MS);
+    const raw = Math.max(0, frameMs);
+    const dt = Math.min(raw, MAX_FRAME_MS);
+    this.elapsedMs += raw;
+    this.droppedMs += raw - dt;
     this.accumulator += dt;
     let steps = 0;
     // Small epsilon so 2 x 16.666.. ms reliably yields 2 steps despite float error.
