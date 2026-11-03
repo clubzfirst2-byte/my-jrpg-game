@@ -43,6 +43,15 @@ describe('FixedStepLoop', () => {
     expect(loop.accumulator).toBe(0);
   });
 
+  it('accounts for every millisecond: simulated + dropped + pending == elapsed', () => {
+    const loop = new FixedStepLoop();
+    const frames = [16.7, 33.3, 400, 8, 120, 1000, 16.7, 50];
+    for (const f of frames) loop.advance(f, () => {});
+    const total = frames.reduce((a, b) => a + b, 0);
+    expect(loop.elapsedMs).toBeCloseTo(total, 6);
+    expect(loop.totalSteps * STEP_MS + loop.droppedMs + loop.accumulator).toBeCloseTo(total, 6);
+  });
+
   it('ignores negative deltas', () => {
     const loop = new FixedStepLoop();
     expect(loop.advance(-50, () => {}).steps).toBe(0);
