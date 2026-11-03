@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Camera, CAMERA_DEFAULTS } from '../../src/view/camera.js';
 import { computeResolution, nextCandidate, RESOLUTION_CANDIDATES } from '../../src/view/resolution.js';
-import { PALETTE, playerFrames, grassTile, pathTile, waterTile, rockSprite, treeSprite, mirror } from '../../src/view/assets/placeholderArt.js';
+import { PALETTE, playerFrames, grassTile, pathTile, waterTile, rockSprite, treeSprite, gliderSprite, mirror } from '../../src/view/assets/placeholderArt.js';
 
 function cam(opts = {}) {
   const c = new Camera(opts);
@@ -127,6 +127,7 @@ describe('placeholder art', () => {
     water1: waterTile(1),
     rock: rockSprite(),
     tree: treeSprite(),
+    glider: gliderSprite(),
   };
   for (const [key, rows] of Object.entries(all)) {
     it(`${key}: rectangular and uses only palette colors`, () => {

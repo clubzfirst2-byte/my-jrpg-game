@@ -20,6 +20,7 @@ const EDGE_COLOR = 0x1a1c2c;
 const TREE_FADE_ALPHA = 0.5;
 const CLIFF_SHADOW_PX = 6;
 const EDGE_PX = 2;
+const GLIDER_SHOULDER_Y = 9;
 const STAMINA_OK = 0x7bd46a;
 const STAMINA_LOW = 0xe8c14a;
 const STAMINA_EXHAUSTED = 0xe8505b;
@@ -83,7 +84,9 @@ export class GameView {
     this.silhouette.tint = 0x101828;
     this.silhouette.alpha = 0.55;
     this.silhouette.visible = false;
-    this.actors.addChild(this.shadow, this.player);
+    this.glider = this.makeSprite('fx.glider');
+    this.glider.visible = false;
+    this.actors.addChild(this.shadow, this.player, this.glider);
     // Stamina wheel beside the player (shown only while not full).
     this.staminaWheel = new Graphics();
     this.staminaWheel.visible = false;
@@ -261,6 +264,12 @@ export class GameView {
     this.player.texture = tex;
     this.player.position.set(sx, sy);
     this.player.zIndex = y;
+    // Glider canopy above the player's head; its cords end at the shoulders.
+    this.glider.visible = p.gliding;
+    if (p.gliding) {
+      this.glider.position.set(sx, sy - GLIDER_SHOULDER_Y);
+      this.glider.zIndex = y + 0.001;
+    }
 
     // Shadow on the ground below; smaller and fainter the higher the player is.
     const above = Math.max(0, z - p.groundZ);
@@ -274,10 +283,12 @@ export class GameView {
     this.drawStamina(p, sx, sy, timeSec);
     this.animateWater(timeSec);
 
-    // Follow the ground under the player (not the jump height), so jumping does not bob the
-    // screen; going up or down a level still moves the camera smoothly.
+    // Follow the ground under the player during short jumps (so jumping does not bob the screen),
+    // but the player's real height during long airborne states (gliding, climbing) so they stay
+    // near the center. Smoothing blends the switch.
+    const camZ = p.gliding || p.climbing ? z : p.groundZ;
     this.camera.setViewport(this.app.screen.width, this.app.screen.height);
-    this.camera.follow(x, y - p.groundZ - CAMERA_TARGET_OFFSET_Y, dtSec);
+    this.camera.follow(x, y - camZ - CAMERA_TARGET_OFFSET_Y, dtSec);
     this.applyCamera();
   }
 

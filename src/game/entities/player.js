@@ -4,6 +4,7 @@ import { approach } from '../core/math.js';
 import { moveAndCollide, groundHeightUnder } from '../physics/collision.js';
 import { LEVEL_PX } from '../world/tilemap.js';
 import { tryGrabWall, updateClimb } from './climbing.js';
+import { GLIDE, canOpenGlider, closeGlider, glideStep, openGlider } from './glider.js';
 
 /** Tunable movement values (px, px/s, px/s^2, s). */
 export const PLAYER_MOVE = Object.freeze({
@@ -77,6 +78,7 @@ export const PLAYER_MAX_HP = 12; // 3 hearts x 4 quarters
  * @property {'up' | 'down' | 'left' | 'right' | null} climbDir direction from the player toward the wall
  * @property {number} climbPush       seconds spent pushing into a climbable wall
  * @property {number} regrabCooldown  seconds until a wall may be grabbed again after letting go
+ * @property {boolean} gliding
  * @property {number} spawnX
  * @property {number} spawnY
  * @property {number} spawnZ
@@ -117,6 +119,7 @@ export function createPlayer(x, y, z = 0) {
     climbDir: null,
     climbPush: 0,
     regrabCooldown: 0,
+    gliding: false,
     spawnX: x,
     spawnY: y,
     spawnZ: z,
@@ -168,6 +171,18 @@ export function updatePlayer(p, input, map, dt) {
     // 'released': fall from here using the normal air physics below.
   }
 
+  // --- glider (P2.2): jump in mid-air opens it, jump again closes it ---
+  if (p.jumpBuffered > 0 && !p.grounded && !p.climbing) {
+    if (p.gliding) {
+      closeGlider(p);
+      p.jumpBuffered = 0;
+    } else if (canOpenGlider(p)) {
+      openGlider(p);
+      p.jumpBuffered = 0;
+    }
+    // Too low to open: the press stays buffered and becomes a jump on landing.
+  }
+
   p.jumpBuffered = Math.max(0, p.jumpBuffered - dt);
   p.coyote = Math.max(0, p.coyote - dt);
   p.regrabCooldown = Math.max(0, p.regrabCooldown - dt);
@@ -177,7 +192,7 @@ export function updatePlayer(p, input, map, dt) {
   const hasInput = mag > 0;
   p.dashing = hasInput && input.dash && p.grounded && !p.exhausted && p.stamina > 0;
   const walkSpeed = PLAYER_MOVE.walkSpeed * (p.exhausted ? PLAYER_STAMINA.exhaustedSpeed : 1);
-  const maxSpeed = p.dashing ? PLAYER_MOVE.dashSpeed : walkSpeed * mag;
+  const maxSpeed = p.gliding ? GLIDE.speed * mag : p.dashing ? PLAYER_MOVE.dashSpeed : walkSpeed * mag;
   let tx = 0;
   let ty = 0;
   if (hasInput) {
@@ -188,8 +203,9 @@ export function updatePlayer(p, input, map, dt) {
   }
   let rate = (hasInput ? PLAYER_MOVE.accel : PLAYER_MOVE.decel) * dt;
   if (!p.grounded) rate = PLAYER_MOVE.airAccel * dt; // reduced air control keeps jump arcs readable
+  if (p.gliding) rate = GLIDE.accel * dt;
   // Keep a dash's momentum through a jump (no instant slow-down when leaving the ground).
-  const keepMomentum = !p.grounded && Math.hypot(p.vx, p.vy) > Math.hypot(tx, ty);
+  const keepMomentum = !p.grounded && !p.gliding && Math.hypot(p.vx, p.vy) > Math.hypot(tx, ty);
   if (!keepMomentum) {
     p.vx = approach(p.vx, tx, rate);
     p.vy = approach(p.vy, ty, rate);
@@ -222,10 +238,14 @@ export function updatePlayer(p, input, map, dt) {
     }
   }
   if (!p.grounded) {
-    // Exact for constant acceleration, so the jump apex does not depend on the step size.
-    p.z += p.vz * dt - 0.5 * PLAYER_MOVE.gravity * dt * dt;
-    p.vz -= PLAYER_MOVE.gravity * dt;
-    p.fallPeakZ = Math.max(p.fallPeakZ, p.z);
+    if (p.gliding) {
+      glideStep(p, dt);
+    } else {
+      // Exact for constant acceleration, so the jump apex does not depend on the step size.
+      p.z += p.vz * dt - 0.5 * PLAYER_MOVE.gravity * dt * dt;
+      p.vz -= PLAYER_MOVE.gravity * dt;
+      p.fallPeakZ = Math.max(p.fallPeakZ, p.z);
+    }
     if (p.z <= ground) {
       land(p, ground);
     }
@@ -262,6 +282,7 @@ function land(p, ground) {
   p.z = ground;
   p.vz = 0;
   p.grounded = true;
+  p.gliding = false;
   const damage = fallDamage(fall);
   p.lastEvent = { type: 'land', fall, damage };
   if (damage > 0) {
@@ -283,6 +304,7 @@ function respawn(p) {
   p.stamina = p.maxStamina;
   p.exhausted = false;
   p.climbing = false;
+  p.gliding = false;
   p.grounded = true;
   p.lastEvent = { type: 'respawn' };
 }

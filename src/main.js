@@ -239,7 +239,7 @@ async function boot() {
             `表示物 ${objectCount}   テクスチャ ${textureCount()}   負荷 ${bench.count}`,
             `内部 ${resolution.width}×${resolution.height} ×${resolution.scale}  DPR ${window.devicePixelRatio}`,
             `位置 ${p.x.toFixed(0)},${p.y.toFixed(0)} 高さ ${p.z.toFixed(0)}（地面 ${p.groundZ.toFixed(0)}）${p.grounded ? '' : ' 空中'}`,
-            `体力 ${p.hp}/${p.maxHp}  スタミナ ${p.stamina.toFixed(0)}${p.exhausted ? '（疲労）' : ''}${p.climbing ? ' 登攀中' : ''}`,
+            `体力 ${p.hp}/${p.maxHp}  スタミナ ${p.stamina.toFixed(0)}${p.exhausted ? '（疲労）' : ''}${p.climbing ? ' 登攀中' : ''}${p.gliding ? ' 滑空中' : ''}`,
             `${p.facing}${p.dashing ? ' ダッシュ' : ''}  エラー ${errorLog.total}`,
           ].join('\n'),
         );
@@ -282,6 +282,7 @@ async function boot() {
         facing: p.facing,
         dashing: p.dashing,
         climbing: p.climbing,
+        gliding: p.gliding,
         stamina: p.stamina,
         exhausted: p.exhausted,
       };

@@ -9,6 +9,7 @@ import {
   grassTile,
   pathTile,
   playerFrames,
+  gliderSprite,
   rampSprite,
   rockSprite,
   ruinFace,
@@ -41,6 +42,7 @@ export function placeholderEntries() {
       }
     }
   }
+  entries.push({ key: 'fx.glider', rows: gliderSprite(), anchor: FEET });
   entries.push({ key: 'fx.shadow', rows: shadowSprite(), anchor: /** @type {[number, number]} */ ([0.5, 0.5]) });
   entries.push({ key: 'px', rows: ['XX', 'XX'], anchor: TOP_LEFT });
   entries.push({ key: 'obj.rock', rows: rockSprite(), anchor: FEET });

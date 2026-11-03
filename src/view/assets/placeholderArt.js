@@ -314,3 +314,28 @@ export function shadowSprite() {
   }
   return toRows(g);
 }
+
+/** Glider: a striped cloth canopy with two cords down to the player's shoulders. 22 x 10. */
+export function gliderSprite() {
+  const w = 22;
+  const h = 10;
+  const g = grid(w, h, '.');
+  // Canopy: upper half-ellipse, rows 0..4.
+  for (let y = 0; y < 5; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = (x - 10.5) / 11;
+      const dy = (y - 5) / 5.2;
+      const d = dx * dx + dy * dy;
+      if (d > 1) continue;
+      if (d > 0.72 || y === 4) g[y][x] = 'k';
+      else g[y][x] = Math.floor((x + 1) / 4) % 2 === 0 ? 'y' : 'c';
+    }
+  }
+  // Cords from the canopy edges to the shoulders.
+  const cords = [
+    [3, 5], [4, 6], [5, 7], [6, 8], [7, 9],
+    [18, 5], [17, 6], [16, 7], [15, 8], [14, 9],
+  ];
+  for (const [x, y] of cords) g[y][x] = 'k';
+  return toRows(g);
+}
