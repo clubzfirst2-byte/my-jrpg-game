@@ -32,7 +32,7 @@ const HEIGHT_DIGITS = '0123456789abcdefghijklmnopqrstuv';
  */
 
 /**
- * @typedef {string[] | { ground: string[], height?: string[] }} MapDef
+ * @typedef {string[] | { ground: string[], height?: string[], enemies?: { kind: 'beast' | 'archer', tx: number, ty: number }[] }} MapDef
  */
 
 /**

@@ -1,4 +1,4 @@
 // @ts-check
 
 export const GAME_TITLE = '星脈のワイルズ（仮）';
-export const PHASE = 'P2.3';
+export const PHASE = 'P3';

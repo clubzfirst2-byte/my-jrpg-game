@@ -8,11 +8,15 @@
  * @property {number} moveY  -1..1 (analog, +down)
  * @property {boolean} dash  held
  * @property {boolean} jump  held (the logic detects presses itself)
+ * @property {boolean} [attack] held (P3)
+ * @property {boolean} [dodge]  held (P3)
+ * @property {boolean} [guard]  held (P3)
+ * @property {boolean} [bow]    held while aiming; releasing shoots (P3)
  */
 
 /** @returns {InputFrame} */
 export function emptyInput() {
-  return { moveX: 0, moveY: 0, dash: false, jump: false };
+  return { moveX: 0, moveY: 0, dash: false, jump: false, attack: false, dodge: false, guard: false, bow: false };
 }
 
 /** Analog values below this magnitude are treated as no input. */
