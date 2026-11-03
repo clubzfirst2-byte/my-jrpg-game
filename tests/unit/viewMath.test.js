@@ -1,22 +1,93 @@
 import { describe, it, expect } from 'vitest';
-import { cameraOrigin } from '../../src/view/camera.js';
+import { Camera, CAMERA_DEFAULTS } from '../../src/view/camera.js';
 import { computeResolution, nextCandidate, RESOLUTION_CANDIDATES } from '../../src/view/resolution.js';
 import { PALETTE, playerFrames, grassTile, pathTile, waterTile, rockSprite, treeSprite, mirror } from '../../src/view/assets/placeholderArt.js';
 
-describe('cameraOrigin', () => {
-  it('centers on the target', () => {
-    expect(cameraOrigin(500, 300, 200, 100, 1000, 1000)).toEqual({ x: 400, y: 250 });
+function cam(opts = {}) {
+  const c = new Camera(opts);
+  c.setViewport(200, 100);
+  c.setBounds({ x: 0, y: 0, width: 1000, height: 1000 });
+  return c;
+}
+
+describe('Camera', () => {
+  it('starts on the target and centers it', () => {
+    const c = cam();
+    c.follow(500, 300, 1 / 60);
+    expect(c.origin()).toEqual({ x: 400, y: 250 });
   });
-  it('clamps to world edges', () => {
-    expect(cameraOrigin(10, 10, 200, 100, 1000, 1000)).toEqual({ x: 0, y: 0 });
-    expect(cameraOrigin(990, 990, 200, 100, 1000, 1000)).toEqual({ x: 800, y: 900 });
+
+  it('follows smoothly: closes ~63% of the gap after one smoothTime', () => {
+    const c = cam();
+    c.snapTo(500, 500);
+    for (let i = 0; i < 60; i++) c.follow(600, 500, CAMERA_DEFAULTS.smoothTime / 60);
+    expect(c.x).toBeCloseTo(500 + 100 * (1 - Math.exp(-1)), 6);
   });
-  it('centers a world smaller than the view', () => {
-    expect(cameraOrigin(50, 50, 200, 100, 100, 1000).x).toBe(-50);
+
+  it('is frame-rate independent (30fps and 60fps reach the same point)', () => {
+    const a = cam();
+    const b = cam();
+    a.snapTo(500, 500);
+    b.snapTo(500, 500);
+    for (let i = 0; i < 30; i++) a.follow(700, 400, 1 / 60);
+    for (let i = 0; i < 15; i++) b.follow(700, 400, 1 / 30);
+    expect(b.x).toBeCloseTo(a.x, 9);
+    expect(b.y).toBeCloseTo(a.y, 9);
   });
-  it('returns whole pixels', () => {
-    const c = cameraOrigin(500.4, 300.6, 200, 100, 1000, 1000);
-    expect(Number.isInteger(c.x) && Number.isInteger(c.y)).toBe(true);
+
+  it('never shows outside the bounds', () => {
+    const c = cam();
+    c.snapTo(10, 10);
+    expect(c.origin()).toEqual({ x: 0, y: 0 });
+    c.snapTo(990, 990);
+    expect(c.origin()).toEqual({ x: 800, y: 900 });
+  });
+
+  it('centers an area smaller than the view (small rooms)', () => {
+    const c = cam();
+    c.setBounds({ x: 100, y: 100, width: 120, height: 60 });
+    c.snapTo(130, 120);
+    expect(c.origin()).toEqual({ x: 100 + (120 - 200) / 2, y: 100 + (60 - 100) / 2 });
+  });
+
+  it('bounds can be swapped for rooms, caves and dungeons', () => {
+    const c = cam();
+    c.setBounds({ x: 2000, y: 0, width: 300, height: 300 });
+    c.snapTo(2290, 10);
+    expect(c.origin()).toEqual({ x: 2100, y: 0 });
+  });
+
+  it('cuts instead of gliding across large distances (respawn, area change)', () => {
+    const c = cam();
+    c.snapTo(100, 100);
+    c.follow(900, 900, 1 / 60);
+    expect(c.x).toBe(900);
+    expect(c.y).toBe(900);
+  });
+
+  it('zoom shrinks the visible area and keeps the origin on whole screen pixels', () => {
+    const c = cam({ zoom: 2 });
+    expect(c.viewWidth).toBe(100);
+    expect(c.viewHeight).toBe(50);
+    c.snapTo(500.37, 300.81);
+    const o = c.origin();
+    expect(Number.isInteger(o.x * 2)).toBe(true);
+    expect(Number.isInteger(o.y * 2)).toBe(true);
+  });
+
+  it('returns whole pixels at zoom 1', () => {
+    const c = cam();
+    c.snapTo(500.4, 300.6);
+    const o = c.origin();
+    expect(Number.isInteger(o.x) && Number.isInteger(o.y)).toBe(true);
+  });
+
+  it('clamps zoom to the allowed range', () => {
+    const c = cam();
+    c.setZoom(0.2);
+    expect(c.zoom).toBe(CAMERA_DEFAULTS.minZoom);
+    c.setZoom(99);
+    expect(c.zoom).toBe(CAMERA_DEFAULTS.maxZoom);
   });
 });
 
