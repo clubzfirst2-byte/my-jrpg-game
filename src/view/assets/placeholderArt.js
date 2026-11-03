@@ -45,6 +45,16 @@ export const PALETTE = Object.freeze({
   O: '#c9a2f2', // orb glow
   a: '#d8d2c4', // steel (sword, arrow head)
   A: '#8a8270', // wood / shield rim
+  u: '#e2cf94', // sand
+  U: '#c4ac70', // sand dark
+  V: '#f2e4ba', // sand light
+  Y: '#ffd75e', // gold
+  N: '#8a5a2c', // chest wood
+  K: '#ff8a3c', // fire
+  J: '#ffe27a', // fire light
+  S: '#c8c8d0', // smoke
+  D: '#0e0a12', // cave darkness
+  I: '#7fe8ff', // rune glow
 });
 
 // Player frames (16x16). Only down / up / right are drawn; left is right mirrored.
@@ -446,4 +456,131 @@ export function shieldSprite() {
 /** Bow, vertical (string on the left). 5 x 12. */
 export function bowSprite() {
   return ['..kk.', '.kAk.', 'k.kAk', 'k..kA', 'k..kA', 'k..kA', 'k..kA', 'k..kA', 'k..kA', 'k.kAk', '.kAk.', '..kk.'];
+}
+
+// ---- P3.5 island features ----
+
+export function sandTile() {
+  const g = grid(16, 16, 'u');
+  const rand = rng(23);
+  for (let i = 0; i < 16; i++) {
+    const x = Math.floor(rand() * 16);
+    const y = Math.floor(rand() * 16);
+    g[y][x] = rand() < 0.5 ? 'U' : 'V';
+  }
+  return toRows(g);
+}
+
+/** 16x14 chest, closed or open (lid up, gold inside). @param {boolean} open */
+export function chestSprite(open) {
+  if (open) {
+    return [
+      '..kkkkkkkkkkkk..',
+      '..kNNNNNNNNNNk..',
+      '..kTTTTTTTTTTk..',
+      '..kkkkkkkkkkkk..',
+      '.kDDDDDDDDDDDDk.',
+      '.kNNNNNNNNNNNNk.',
+      '.kNNNNNNNNNNNNk.',
+      '.kYYYYYYYYYYYYk.',
+      '.kNNNNNkkNNNNNk.',
+      '.kNNNNNkkNNNNNk.',
+      '.kNNNNNNNNNNNNk.',
+      '.kTTTTTTTTTTTTk.',
+      '.kkkkkkkkkkkkkk.',
+      '................',
+    ];
+  }
+  return [
+    '................',
+    '................',
+    '...kkkkkkkkkk...',
+    '..kNNNNNNNNNNk..',
+    '.kNNNNNNNNNNNNk.',
+    '.kYYYYYYYYYYYYk.',
+    '.kNNNNNkkNNNNNk.',
+    '.kNNNNkYYkNNNNk.',
+    '.kNNNNNkkNNNNNk.',
+    '.kNNNNNNNNNNNNk.',
+    '.kNNNNNNNNNNNNk.',
+    '.kTTTTTTTTTTTTk.',
+    '.kkkkkkkkkkkkkk.',
+    '................',
+  ];
+}
+
+/** 12x20 standing stone with a rune; lit (glowing) once activated. @param {boolean} lit */
+export function checkpointSprite(lit) {
+  const rune = lit ? 'I' : 'Q';
+  return [
+    '....kkkk....',
+    '...kRRRrk...',
+    '..kRRrrrmk..',
+    '..kRrrrrmk..',
+    `..kRr${rune}${rune}rmk..`,
+    `..kr${rune}rr${rune}mk..`,
+    `..kr${rune}rr${rune}mk..`,
+    `..krr${rune}${rune}rmk..`,
+    '..krrrrrmk..',
+    `..krr${rune}rrmk..`,
+    `..krr${rune}rrmk..`,
+    '..krrrrrmk..',
+    '..krrrrmmk..',
+    '..krrrrmmk..',
+    '..krrrrmmk..',
+    '.kmrrrrmmmk.',
+    '.kmmmmmmmmk.',
+    'kkmmmmmmmmkk',
+    'kmmmmmmmmmmk',
+    'kkkkkkkkkkkk',
+  ];
+}
+
+/** 16x14 campfire frames (logs + flame). */
+export function campfireFrames() {
+  const flame = [
+    ['......kk........', '.....kKk........', '....kKJKk.......', '....kKJJKk......', '...kKJJJKk......', '...kKJJJJKk.....'],
+    ['.......kk.......', '.......kKk......', '......kKJKk.....', '.....kKJJKk.....', '.....kKJJJKk....', '....kKJJJJKk....'],
+  ];
+  const logs = [
+    '...kKJJJJJKk....',
+    '..kkKKJJJKKkk...',
+    '.kNNkKKKKKkNNk..',
+    'kNNNNkkkkkNNNNk.',
+    'kTNNNNNNNNNNNTk.',
+    '.kkTTNNNNNTTkk..',
+    '...kkkkkkkkk....',
+    '................',
+  ];
+  return { 'obj.campfire.0': [...flame[0], ...logs], 'obj.campfire.1': [...flame[1], ...logs] };
+}
+
+/** 6x6 smoke puff (tinted / faded at runtime). */
+export function smokeSprite() {
+  return ['..SS..', '.SSSS.', 'SSSSSS', 'SSSSSS', '.SSSS.', '..SS..'];
+}
+
+/** 16x14 cave mouth drawn on a cliff face. */
+export function caveSprite() {
+  return [
+    '....kkkkkkkk....',
+    '...kFDDDDDDFk...',
+    '..kFDDDDDDDDFk..',
+    '.kFDDDDDDDDDDFk.',
+    '.kFDDDDDDDDDDFk.',
+    'kFDDDDDDDDDDDDFk',
+    'kFDDDDDDDDDDDDFk',
+    'kFDDDDDDDDDDDDFk',
+    'kFDDDDDDDDDDDDFk',
+    'kFDDDDDDDDDDDDFk',
+    'kFDDDDDDDDDDDDFk',
+    'kFDDDDDDDDDDDDFk',
+    'kFDDDDDDDDDDDDFk',
+    'kFDDDDDDDDDDDDFk',
+  ];
+}
+
+/** 7x7 arrow marker pointing right (rotated at runtime) for landmarks off-screen. */
+export function markerSprite() {
+  return ['kk.....', 'kYkk...', 'kYYYkk.', 'kYYYYYk', 'kYYYkk.', 'kYkk...', 'kk.....'];
 }

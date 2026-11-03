@@ -417,3 +417,95 @@ body {
     opacity: 1;
   }
 }
+
+/* ---- title (P3.5) ---- */
+#title-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  background: radial-gradient(ellipse at 50% 40%, #24405a 0%, #101820 75%);
+  pointer-events: auto;
+  z-index: 5;
+}
+
+#title-screen[hidden],
+.title-confirm[hidden],
+.title-buttons[hidden] {
+  display: none;
+}
+
+#title-screen h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: 0.1em;
+  text-shadow: 0 2px 0 #000;
+}
+
+.title-buttons,
+.title-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+#ui .title-buttons button,
+#ui .title-confirm button {
+  min-width: 180px;
+  font-size: 16px;
+  padding: 10px 24px;
+}
+
+.title-confirm p,
+.title-note {
+  max-width: 80vw;
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* ---- toast ---- */
+#toast {
+  position: absolute;
+  top: calc(44px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(520px, 80vw);
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 14px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 4;
+}
+
+#toast[hidden] {
+  display: none;
+}
+
+#toast[data-kind='error'] {
+  background: rgba(90, 20, 20, 0.92);
+  color: #ffd6d6;
+}
+
+/* ---- treasure counter ---- */
+#hud-treasure {
+  position: absolute;
+  top: calc(36px + var(--safe-top));
+  left: calc(60px + var(--safe-left));
+  font-size: 13px;
+  font-weight: bold;
+  color: #ffd75e;
+  text-shadow: 0 1px 0 #000;
+  pointer-events: none;
+}
+
+#hud-treasure[hidden] {
+  display: none;
+}
