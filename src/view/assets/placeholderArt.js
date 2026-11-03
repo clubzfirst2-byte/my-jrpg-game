@@ -339,3 +339,22 @@ export function gliderSprite() {
   for (const [x, y] of cords) g[y][x] = 'k';
   return toRows(g);
 }
+
+/**
+ * Swimming frames: the walk frame's head and shoulders (top 11 rows) above two ripple rows.
+ * 16 x 13, anchored at the water line. 2 frames per direction (ripples shift).
+ * @returns {Record<string, string[]>}
+ */
+export function swimFrames() {
+  const walk = playerFrames();
+  /** @type {Record<string, string[]>} */
+  const frames = {};
+  for (const dir of ['down', 'up', 'left', 'right']) {
+    for (let f = 0; f < 2; f++) {
+      const top = walk[`player.walk.${dir}.0`].slice(0, 11);
+      const ripple = f === 0 ? ['..WW.wwwwww.WW..', '.W..........W...'] : ['.WW.wwwwww.WW...', '..W..........W..'];
+      frames[`player.swim.${dir}.${f}`] = [...top, ...ripple];
+    }
+  }
+  return frames;
+}

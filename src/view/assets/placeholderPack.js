@@ -15,6 +15,7 @@ import {
   ruinFace,
   ruinFloorTile,
   shadowSprite,
+  swimFrames,
   treeSprite,
   waterTile,
 } from './placeholderArt.js';
@@ -26,6 +27,7 @@ const TOP_LEFT = /** @type {[number, number]} */ ([0, 0]);
 export function placeholderEntries() {
   const entries = [];
   for (const [key, rows] of Object.entries(playerFrames())) entries.push({ key, rows, anchor: FEET });
+  for (const [key, rows] of Object.entries(swimFrames())) entries.push({ key, rows, anchor: FEET });
   for (let i = 0; i < 3; i++) entries.push({ key: `tile.grass.${i}`, rows: grassTile(100 + i), anchor: TOP_LEFT });
   entries.push({ key: 'tile.path', rows: pathTile(), anchor: TOP_LEFT });
   for (let i = 0; i < 2; i++) entries.push({ key: `tile.water.${i}`, rows: waterTile(i), anchor: TOP_LEFT });

@@ -14,7 +14,7 @@ describe('parseMap', () => {
     expect(m.height).toBe(2);
     expect(m.ground[1]).toBe(Ground.PATH);
     expect(m.ground[2]).toBe(Ground.WATER);
-    expect(isSolidTile(m, 2, 0)).toBe(true); // water blocks until swimming (P2.3)
+    expect(isSolidTile(m, 2, 0)).toBe(false); // water is swimmable since P2.3
     expect(isSolidTile(m, 0, 1)).toBe(true);
     expect(isSolidTile(m, 1, 1)).toBe(true);
     expect(isSolidTile(m, 0, 0)).toBe(false);

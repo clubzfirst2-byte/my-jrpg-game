@@ -260,7 +260,10 @@ export class GameView {
       : !p.grounded && !p.climbing
         ? 1
         : 0;
-    const tex = this.assets.texture(`player.walk.${p.facing}.${frame}`);
+    // Swimming: head and shoulders above the water line, ripples alternate.
+    const tex = p.swimming
+      ? this.assets.texture(`player.swim.${p.facing}.${Math.floor(p.walkTime * (p.moving ? 6 : 2)) % 2}`)
+      : this.assets.texture(`player.walk.${p.facing}.${frame}`);
     this.player.texture = tex;
     this.player.position.set(sx, sy);
     this.player.zIndex = y;
@@ -274,6 +277,7 @@ export class GameView {
     // Shadow on the ground below; smaller and fainter the higher the player is.
     const above = Math.max(0, z - p.groundZ);
     const k = Math.max(0.45, 1 - above / 96);
+    this.shadow.visible = !p.swimming; // no ground shadow on the water surface
     this.shadow.position.set(sx, Math.round(y - p.groundZ) - 1);
     this.shadow.scale.set(k);
     this.shadow.alpha = 0.35 * k;
