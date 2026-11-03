@@ -3,6 +3,7 @@
 import { approach } from '../core/math.js';
 import { moveAndCollide, groundHeightUnder } from '../physics/collision.js';
 import { LEVEL_PX } from '../world/tilemap.js';
+import { tryGrabWall, updateClimb } from './climbing.js';
 
 /** Tunable movement values (px, px/s, px/s^2, s). */
 export const PLAYER_MOVE = Object.freeze({
@@ -20,6 +21,19 @@ export const PLAYER_MOVE = Object.freeze({
   coyoteTime: 0.08,
   /** A jump pressed this long before landing still happens on landing (DESIGN.md 1.3). */
   jumpBuffer: 0.12,
+});
+
+/** Stamina (DESIGN.md 5.3). One full wheel = 100. */
+export const PLAYER_STAMINA = Object.freeze({
+  max: 100,
+  /** Drain per second while dashing. */
+  dashCost: 20,
+  /** Recovery per second on the ground when not dashing or climbing. */
+  regen: 35,
+  /** Seconds after using stamina before it starts to recover. */
+  regenDelay: 0.5,
+  /** Walk speed multiplier while exhausted (until stamina is full again). */
+  exhaustedSpeed: 0.6,
 });
 
 /** Falls of up to this height are safe (3 levels). */
@@ -55,6 +69,14 @@ export const PLAYER_MAX_HP = 12; // 3 hearts x 4 quarters
  * @property {number} fallPeakZ  highest z since leaving the ground
  * @property {number} hp
  * @property {number} maxHp
+ * @property {number} stamina
+ * @property {number} maxStamina
+ * @property {boolean} exhausted     stamina ran out: no dash / climb, slower walk until full again
+ * @property {number} staminaRestTime seconds since stamina was last used
+ * @property {boolean} climbing
+ * @property {'up' | 'down' | 'left' | 'right' | null} climbDir direction from the player toward the wall
+ * @property {number} climbPush       seconds spent pushing into a climbable wall
+ * @property {number} regrabCooldown  seconds until a wall may be grabbed again after letting go
  * @property {number} spawnX
  * @property {number} spawnY
  * @property {number} spawnZ
@@ -87,6 +109,14 @@ export function createPlayer(x, y, z = 0) {
     fallPeakZ: z,
     hp: PLAYER_MAX_HP,
     maxHp: PLAYER_MAX_HP,
+    stamina: PLAYER_STAMINA.max,
+    maxStamina: PLAYER_STAMINA.max,
+    exhausted: false,
+    staminaRestTime: 0,
+    climbing: false,
+    climbDir: null,
+    climbPush: 0,
+    regrabCooldown: 0,
     spawnX: x,
     spawnY: y,
     spawnZ: z,
@@ -129,14 +159,25 @@ export function updatePlayer(p, input, map, dt) {
     p.jumpBuffered = 0;
     p.fallPeakZ = p.z;
   }
+  // --- climbing (P2.1) ---
+  if (p.climbing) {
+    p.dashing = false;
+    const result = updateClimb(p, input, map, dt);
+    p.jumpBuffered = Math.max(0, p.jumpBuffered - dt);
+    if (result === 'climbing' || result === 'mantled' || result === 'reachedGround') return;
+    // 'released': fall from here using the normal air physics below.
+  }
+
   p.jumpBuffered = Math.max(0, p.jumpBuffered - dt);
   p.coyote = Math.max(0, p.coyote - dt);
+  p.regrabCooldown = Math.max(0, p.regrabCooldown - dt);
 
   // --- horizontal movement ---
   const mag = Math.min(1, Math.hypot(input.moveX, input.moveY));
   const hasInput = mag > 0;
-  p.dashing = hasInput && input.dash && p.grounded;
-  const maxSpeed = p.dashing ? PLAYER_MOVE.dashSpeed : PLAYER_MOVE.walkSpeed * mag;
+  p.dashing = hasInput && input.dash && p.grounded && !p.exhausted && p.stamina > 0;
+  const walkSpeed = PLAYER_MOVE.walkSpeed * (p.exhausted ? PLAYER_STAMINA.exhaustedSpeed : 1);
+  const maxSpeed = p.dashing ? PLAYER_MOVE.dashSpeed : walkSpeed * mag;
   let tx = 0;
   let ty = 0;
   if (hasInput) {
@@ -158,6 +199,13 @@ export function updatePlayer(p, input, map, dt) {
   const hit = moveAndCollide(p, map, p.vx * dt, p.vy * dt, maxHeight);
   if (hit.hitX) p.vx = 0;
   if (hit.hitY) p.vy = 0;
+
+  // Pushing into a climbable wall grabs it.
+  const pushing = hasInput && facingFrom(input.moveX, input.moveY, p.facing) === p.facing;
+  if (tryGrabWall(p, map, hit, pushing, PLAYER_MOVE.stepHeight, dt)) {
+    p.moving = false;
+    return;
+  }
 
   // --- vertical movement ---
   const ground = groundHeightUnder(p, map);
@@ -186,6 +234,26 @@ export function updatePlayer(p, input, map, dt) {
   const moved = Math.hypot(p.x - p.prevX, p.y - p.prevY);
   p.moving = p.grounded && moved > 0.01;
   p.walkTime = p.moving ? p.walkTime + dt * (p.dashing ? 1.6 : 1) : 0;
+  updateStamina(p, dt);
+}
+
+/**
+ * Dash drains stamina; resting on the ground restores it after a short delay.
+ * Running out makes the player exhausted until the wheel is full again.
+ * @param {Player} p @param {number} dt
+ */
+function updateStamina(p, dt) {
+  if (p.dashing && p.moving) {
+    p.stamina = Math.max(0, p.stamina - PLAYER_STAMINA.dashCost * dt);
+    p.staminaRestTime = 0;
+    if (p.stamina <= 0) p.exhausted = true;
+    return;
+  }
+  if (!p.grounded) return;
+  p.staminaRestTime += dt;
+  if (p.staminaRestTime < PLAYER_STAMINA.regenDelay) return;
+  p.stamina = Math.min(p.maxStamina, p.stamina + PLAYER_STAMINA.regen * dt);
+  if (p.stamina >= p.maxStamina) p.exhausted = false;
 }
 
 /** @param {Player} p @param {number} ground */
@@ -212,6 +280,9 @@ function respawn(p) {
   p.z = p.prevZ = p.groundZ = p.spawnZ;
   p.vx = p.vy = p.vz = 0;
   p.hp = p.maxHp;
+  p.stamina = p.maxStamina;
+  p.exhausted = false;
+  p.climbing = false;
   p.grounded = true;
   p.lastEvent = { type: 'respawn' };
 }

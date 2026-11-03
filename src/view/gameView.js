@@ -8,7 +8,7 @@
 // Sort keys: characters/objects use their feet y; an elevated terrain row uses its NORTH edge.
 // That one rule puts a character behind a cliff when north of it, on top of it when standing on it,
 // and in front of it when south of it.
-import { Container, Sprite } from 'pixi.js';
+import { Container, Graphics, Sprite } from 'pixi.js';
 import { Ground, Shape, LEVEL_PX, inBounds, northEdgeHeight, southEdgeHeight } from '../game/world/tilemap.js';
 import { lerp } from '../game/core/math.js';
 import { Camera } from './camera.js';
@@ -20,6 +20,9 @@ const EDGE_COLOR = 0x1a1c2c;
 const TREE_FADE_ALPHA = 0.5;
 const CLIFF_SHADOW_PX = 6;
 const EDGE_PX = 2;
+const STAMINA_OK = 0x7bd46a;
+const STAMINA_LOW = 0xe8c14a;
+const STAMINA_EXHAUSTED = 0xe8505b;
 /** Aim at the body rather than the feet. */
 const CAMERA_TARGET_OFFSET_Y = 8;
 const CLIFF_SHADOW_ALPHA = 0.32;
@@ -81,7 +84,10 @@ export class GameView {
     this.silhouette.alpha = 0.55;
     this.silhouette.visible = false;
     this.actors.addChild(this.shadow, this.player);
-    this.overlay.addChild(this.silhouette);
+    // Stamina wheel beside the player (shown only while not full).
+    this.staminaWheel = new Graphics();
+    this.staminaWheel.visible = false;
+    this.overlay.addChild(this.silhouette, this.staminaWheel);
     /** True while the player is hidden behind terrain (exposed for tests). */
     this.playerOccluded = false;
   }
@@ -245,7 +251,12 @@ export class GameView {
     const sx = Math.round(x);
     const sy = Math.round(y - z);
 
-    const frame = p.moving ? WALK_CYCLE[Math.floor(p.walkTime * WALK_FPS) % WALK_CYCLE.length] : !p.grounded ? 1 : 0;
+    // Climbing reuses the walk frames facing the wall (back view on a north wall).
+    const frame = p.moving
+      ? WALK_CYCLE[Math.floor(p.walkTime * WALK_FPS) % WALK_CYCLE.length]
+      : !p.grounded && !p.climbing
+        ? 1
+        : 0;
     const tex = this.assets.texture(`player.walk.${p.facing}.${frame}`);
     this.player.texture = tex;
     this.player.position.set(sx, sy);
@@ -260,6 +271,7 @@ export class GameView {
     this.shadow.zIndex = y - 0.002;
 
     this.updateOcclusion(sx, sy, y, tex);
+    this.drawStamina(p, sx, sy, timeSec);
     this.animateWater(timeSec);
 
     // Follow the ground under the player (not the jump height), so jumping does not bob the
@@ -319,6 +331,30 @@ export class GameView {
       this.silhouette.texture = tex;
       this.silhouette.position.set(sx, sy);
     }
+  }
+
+  /**
+   * @param {import('../game/entities/player.js').Player} p
+   * @param {number} sx @param {number} sy player screen position (feet) @param {number} timeSec
+   */
+  drawStamina(p, sx, sy, timeSec) {
+    const g = this.staminaWheel;
+    const show = p.stamina < p.maxStamina || p.climbing;
+    g.visible = show;
+    if (!show) return;
+    const cx = sx + 11;
+    const cy = sy - 18;
+    const r = 5;
+    const frac = Math.max(0, Math.min(1, p.stamina / p.maxStamina));
+    // Exhausted: red and pulsing until the wheel is full again.
+    const color = p.exhausted ? STAMINA_EXHAUSTED : frac < 0.3 ? STAMINA_LOW : STAMINA_OK;
+    g.clear();
+    g.circle(cx, cy, r + 1).fill({ color: 0x1a1c2c, alpha: 0.55 });
+    if (frac > 0) {
+      const start = -Math.PI / 2;
+      g.moveTo(cx, cy).arc(cx, cy, r, start, start + frac * Math.PI * 2).lineTo(cx, cy).fill({ color });
+    }
+    g.alpha = p.exhausted ? 0.6 + 0.4 * Math.abs(Math.sin(timeSec * 6)) : 1;
   }
 
   /** @param {number} timeSec */

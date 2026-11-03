@@ -9,12 +9,16 @@ import { HEIGHT_TEST } from '../../src/game/world/maps/heightTest.js';
 const none = { moveX: 0, moveY: 0, dash: false, jump: false };
 const right = { ...none, moveX: 1 };
 
-/** A 1-row corridor (plus wall rows) with the given height row; spawn at the left. */
-function corridor(heights) {
+/**
+ * A 1-row corridor (plus wall rows) with the given height row; spawn at the left.
+ * `ground` optionally gives the ground characters for the corridor ('u' = ruin: a wall that cannot be climbed).
+ */
+function corridor(heights, ground) {
   const w = heights.length + 2;
   const wall = '#'.repeat(w);
+  const floor = ground ?? '.'.repeat(heights.length - 1);
   return {
-    ground: [wall, '#P' + '.'.repeat(w - 3) + '#', wall],
+    ground: [wall, '#P' + floor + '#', wall],
     height: ['0'.repeat(w), '0' + heights + '0', '0'.repeat(w)],
   };
 }
@@ -67,15 +71,15 @@ describe('walking on terrain', () => {
     expect(p.z).toBe(8);
   });
 
-  it('is blocked by a 1-level cliff when walking', () => {
-    const s = createGameState(corridor('00444444'));
+  it('is blocked by a 1-level cliff that cannot be climbed', () => {
+    const s = createGameState(corridor('00444444', '.uuuuuu'));
     const p = run(s, right, 120);
     expect(p.z).toBe(0);
     expect(p.x).toBe(3 * 16 - p.halfWidth);
   });
 
   it('can jump onto a 1-level ledge', () => {
-    const s = createGameState(corridor('00444444'));
+    const s = createGameState(corridor('00444444', '.uuuuuu'));
     // Walk to the wall, then hold jump while still pushing right.
     run(s, right, 60);
     const p = run(s, { ...right, jump: true }, 40);
@@ -84,7 +88,7 @@ describe('walking on terrain', () => {
   });
 
   it('cannot jump onto a 2-level ledge', () => {
-    const s = createGameState(corridor('00888888'));
+    const s = createGameState(corridor('00888888', '.uuuuuu'));
     run(s, right, 60);
     const p = run(s, (i) => ({ ...right, jump: i % 30 < 15 }), 120); // keep trying
     expect(p.x).toBe(3 * 16 - p.halfWidth);

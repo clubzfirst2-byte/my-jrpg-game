@@ -90,16 +90,17 @@ test('dash button makes the player faster', async ({ page }) => {
 for (const fps of [60, 30]) {
   test(`game speed is the same at ${fps}fps (fixed 60Hz logic)`, async ({ page }) => {
     await open(page, `?fps=${fps}`);
-    const loopState = () => page.evaluate(() => window.__debugApi.loop());
+    // Read position, loop counters and time in ONE call so they describe the same moment
+    // (a frame running between separate reads would skew distance vs. step count).
+    const snapshot = () =>
+      page.evaluate(() => ({ p: window.__debugApi.player(), l: window.__debugApi.loop(), t: performance.now() }));
     await page.keyboard.down('ArrowRight');
     await page.waitForTimeout(300);
-    const a = await player(page);
-    const l0 = await loopState();
-    const wall0 = await page.evaluate(() => performance.now());
+    const s0 = await snapshot();
     await page.waitForTimeout(1000);
-    const b = await player(page);
-    const l1 = await loopState();
-    const wallMs = (await page.evaluate(() => performance.now())) - wall0;
+    const s1 = await snapshot();
+    const [a, l0, b, l1] = [s0.p, s0.l, s1.p, s1.l];
+    const wallMs = s1.t - s0.t;
     await page.keyboard.up('ArrowRight');
 
     const STEP = 1000 / 60;
