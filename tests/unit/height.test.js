@@ -31,15 +31,15 @@ describe('terrain height', () => {
   });
 
   it('ramps interpolate from the high north edge to the low south edge', () => {
-    const m = parseMap({ ground: ['.', '.', '.'], height: ['2', '^', '0'] });
+    const m = parseMap({ ground: ['.', '.', '.'], height: ['4', '^', '0'] });
     expect(m.shape[1]).toBe(Shape.RAMP_N);
-    expect(terrainHeightAt(m, 8, 16)).toBe(8); // north edge
-    expect(terrainHeightAt(m, 8, 24)).toBe(4); // middle
+    expect(terrainHeightAt(m, 8, 16)).toBe(16); // north edge
+    expect(terrainHeightAt(m, 8, 24)).toBe(8); // middle
     expect(terrainHeightAt(m, 8, 31.99)).toBeCloseTo(0, 1); // south edge
   });
 
   it('rejects ramps that do not rise exactly one level', () => {
-    expect(() => parseMap({ ground: ['.', '.', '.'], height: ['4', '^', '0'] })).toThrow(/rise exactly/);
+    expect(() => parseMap({ ground: ['.', '.', '.'], height: ['2', '^', '0'] })).toThrow(/rise exactly/);
     expect(() => parseMap({ ground: ['.'], height: ['x'] })).toThrow(/Unknown height/);
   });
 
@@ -48,34 +48,34 @@ describe('terrain height', () => {
     expect(m.width).toBe(40);
     expect(m.height).toBe(30);
     expect(overlapsSolid({ x: m.spawn.x, y: m.spawn.y, halfWidth: 5, height: 6 }, m)).toBe(false);
-    expect(Math.max(...m.elev)).toBe(32);
+    expect(Math.max(...m.elev)).toBe(4 * LEVEL_PX);
   });
 });
 
 describe('walking on terrain', () => {
-  it('walks up 4px steps without jumping', () => {
-    const s = createGameState(corridor('0012300000'));
+  it('walks up half-level (8px) steps without jumping', () => {
+    const s = createGameState(corridor('0024600000'));
     const p = run(s, right, 120);
-    expect(p.z).toBe(0); // walked up to 12 and back down again
+    expect(p.z).toBe(0); // walked up to 24 and back down again
     expect(p.x).toBeGreaterThan(10 * 16);
   });
 
   it('stands on a step: z follows the terrain', () => {
-    const s = createGameState(corridor('00111111'));
+    const s = createGameState(corridor('00222222'));
     const p = run(s, right, 60);
     expect(p.grounded).toBe(true);
-    expect(p.z).toBe(4);
+    expect(p.z).toBe(8);
   });
 
   it('is blocked by a 1-level cliff when walking', () => {
-    const s = createGameState(corridor('00222222'));
+    const s = createGameState(corridor('00444444'));
     const p = run(s, right, 120);
     expect(p.z).toBe(0);
     expect(p.x).toBe(3 * 16 - p.halfWidth);
   });
 
   it('can jump onto a 1-level ledge', () => {
-    const s = createGameState(corridor('00222222'));
+    const s = createGameState(corridor('00444444'));
     // Walk to the wall, then hold jump while still pushing right.
     run(s, right, 60);
     const p = run(s, { ...right, jump: true }, 40);
@@ -84,7 +84,7 @@ describe('walking on terrain', () => {
   });
 
   it('cannot jump onto a 2-level ledge', () => {
-    const s = createGameState(corridor('00444444'));
+    const s = createGameState(corridor('00888888'));
     run(s, right, 60);
     const p = run(s, (i) => ({ ...right, jump: i % 30 < 15 }), 120); // keep trying
     expect(p.x).toBe(3 * 16 - p.halfWidth);
@@ -94,11 +94,11 @@ describe('walking on terrain', () => {
   it('walks up a ramp and onto the plateau above', () => {
     const def = {
       ground: ['#####', '#...#', '#...#', '#.P.#', '#####'],
-      height: ['00000', '02220', '02^20', '00000', '00000'],
+      height: ['00000', '04440', '04^40', '00000', '00000'],
     };
     const s = createGameState(def);
     const p = run(s, { ...none, moveY: -1 }, 60);
-    expect(p.z).toBe(8);
+    expect(p.z).toBe(LEVEL_PX);
     expect(p.grounded).toBe(true);
     expect(p.y).toBeLessThan(2 * 16);
   });
@@ -106,12 +106,12 @@ describe('walking on terrain', () => {
   it('cannot enter the side of a ramp from below where it is too high', () => {
     const def = {
       ground: ['#####', '#...#', '#...#', '#...#', '#####'],
-      height: ['00000', '02220', '00^20', '00000', '00000'],
+      height: ['00000', '04440', '00^40', '00000', '00000'],
     };
     const s = createGameState(def);
     const p = s.player;
     p.x = 16 + 8;
-    p.y = 2 * 16 + 7; // box spans y 33..39: west of the ramp's north half (ramp is ~5..7.5px high there)
+    p.y = 2 * 16 + 7; // box spans y 33..39: west of the ramp's north half (ramp is ~9..15px high there)
     run(s, right, 40);
     expect(p.x).toBe(2 * 16 - p.halfWidth);
   });
@@ -160,14 +160,14 @@ describe('jumping and falling', () => {
   });
 
   it('walking off a ledge falls and lands without damage from 1 level', () => {
-    const s = createGameState(corridor('22222000'));
+    const s = createGameState(corridor('44444000'));
     const p = run(s, right, 90);
     expect(p.z).toBe(0);
     expect(p.hp).toBe(PLAYER_MAX_HP);
   });
 
   it('coyote time: a jump pressed just after leaving the ledge still works', () => {
-    const s = createGameState(corridor('22200000'));
+    const s = createGameState(corridor('44400000'));
     let left = -1;
     let maxZ = 0;
     run(s, (i) => {
@@ -176,11 +176,11 @@ describe('jumping and falling', () => {
       return { ...right, jump: left >= 0 && i >= left + 2 && i <= left + 3 };
     }, 120);
     expect(left).toBeGreaterThan(0);
-    expect(maxZ).toBeGreaterThan(8 + 5); // jumped from the ledge height
+    expect(maxZ).toBeGreaterThan(LEVEL_PX + 8); // jumped from the ledge height
   });
 
   it('a jump pressed after coyote time (and too early to be buffered for landing) does nothing', () => {
-    const s = createGameState(corridor('66600000')); // 3-level ledge: ~16 steps of falling
+    const s = createGameState(corridor('ccc00000')); // 3-level ledge: ~20 steps of falling
     let left = -1;
     let maxZ = 0;
     run(s, (i) => {
@@ -188,7 +188,7 @@ describe('jumping and falling', () => {
       if (left >= 0) maxZ = Math.max(maxZ, s.player.z);
       return { ...right, jump: left >= 0 && i >= left + 6 && i <= left + 7 };
     }, 120);
-    expect(maxZ).toBeLessThanOrEqual(24);
+    expect(maxZ).toBeLessThanOrEqual(3 * LEVEL_PX);
     expect(s.player.z).toBe(0);
   });
 
@@ -212,13 +212,13 @@ describe('fall damage', () => {
   it('is zero up to 3 levels and grows per level beyond', () => {
     expect(fallDamage(SAFE_FALL_PX)).toBe(0);
     expect(fallDamage(SAFE_FALL_PX + 1)).toBe(2);
-    expect(fallDamage(32)).toBe(2);
-    expect(fallDamage(40)).toBe(4);
+    expect(fallDamage(4 * LEVEL_PX)).toBe(2);
+    expect(fallDamage(4 * LEVEL_PX + 1)).toBe(4);
   });
 
   it('falling 4 levels off the tower edge hurts the player', () => {
-    const s = createGameState(corridor('88888000'));
-    expect(s.player.z).toBe(32); // spawns on top of the terrain
+    const s = createGameState(corridor('ggggg000'));
+    expect(s.player.z).toBe(4 * LEVEL_PX); // spawns on top of the terrain
     const p = run(s, right, 120);
     expect(p.z).toBe(0);
     expect(p.hp).toBe(PLAYER_MAX_HP - 2);

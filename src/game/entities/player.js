@@ -11,11 +11,11 @@ export const PLAYER_MOVE = Object.freeze({
   accel: 900,
   decel: 1200,
   airAccel: 420,
-  gravity: 640,
-  /** Apex of a standing jump: enough for a 1-level ledge (8px), not for 2 levels (16px). */
-  jumpHeight: 12,
-  /** Walk up / down height differences up to this without jumping (DESIGN.md 3.2 段差). */
-  stepHeight: 4,
+  gravity: 900,
+  /** Apex of a standing jump: enough for a 1-level ledge (16px), not for 2 levels (32px). */
+  jumpHeight: 20,
+  /** Walk up / down height differences up to this (half a level) without jumping (DESIGN.md 3.2 段差). */
+  stepHeight: 8,
   /** Jump still allowed this long after walking off a ledge. */
   coyoteTime: 0.08,
   /** A jump pressed this long before landing still happens on landing (DESIGN.md 1.3). */

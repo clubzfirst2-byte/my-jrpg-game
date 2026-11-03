@@ -31,7 +31,7 @@ test('Space jumps and the player lands back on the ground', async ({ page }) => 
   }
   await page.keyboard.up('Space');
   await page.waitForTimeout(600);
-  expect(maxZ).toBeGreaterThan(4);
+  expect(maxZ).toBeGreaterThan(8);
   const p = await player(page);
   expect(p.grounded).toBe(true);
   expect(p.z).toBe(0);
@@ -40,7 +40,7 @@ test('Space jumps and the player lands back on the ground', async ({ page }) => 
 
 test('a 1-level cliff blocks walking but can be jumped onto', async ({ page }) => {
   await open(page);
-  await teleport(page, 14, 22); // just south of the floating plateau B (8px high)
+  await teleport(page, 14, 22); // just south of the floating plateau B (1 level = 16px)
   await hold(page, ['ArrowUp'], 700);
   let p = await player(page);
   expect(p.z).toBe(0);
@@ -54,7 +54,7 @@ test('a 1-level cliff blocks walking but can be jumped onto', async ({ page }) =
   await page.waitForTimeout(300);
   p = await player(page);
   expect(p.grounded).toBe(true);
-  expect(p.z).toBe(8);
+  expect(p.z).toBe(16);
   expect(p.y).toBeLessThan(22 * 16);
 });
 
@@ -63,14 +63,14 @@ test('walking up a ramp reaches the plateau', async ({ page }) => {
   await teleport(page, 7, 24); // on the path south of plateau A's ramp
   await hold(page, ['ArrowUp'], 1300);
   const p = await player(page);
-  expect(p.z).toBe(8);
+  expect(p.z).toBe(16);
   expect(p.grounded).toBe(true);
 });
 
 test('jumping off the 4-level tower costs half a heart', async ({ page }, testInfo) => {
   await open(page);
-  await teleport(page, 27, 5); // east edge of the tower top (32px)
-  expect((await player(page)).z).toBe(32);
+  await teleport(page, 27, 5); // east edge of the tower top (4 levels = 64px)
+  expect((await player(page)).z).toBe(64);
   await expect(page.locator('#hud-hearts')).toHaveAttribute('data-hp', '12');
   await hold(page, ['ArrowRight'], 1200);
   const p = await player(page);

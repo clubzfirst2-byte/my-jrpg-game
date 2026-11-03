@@ -2,6 +2,7 @@
 // Builds the placeholder art into ONE atlas texture so everything batches into few draw calls.
 // A production pack must provide the same logical names and anchors (DESIGN.md 7.5).
 import { Rectangle, Texture } from 'pixi.js';
+import { LEVEL_PX } from '../../game/world/tilemap.js';
 import {
   PALETTE,
   earthFace,
@@ -28,12 +29,17 @@ export function placeholderEntries() {
   entries.push({ key: 'tile.path', rows: pathTile(), anchor: TOP_LEFT });
   for (let i = 0; i < 2; i++) entries.push({ key: `tile.water.${i}`, rows: waterTile(i), anchor: TOP_LEFT });
   entries.push({ key: 'tile.ruin', rows: ruinFloorTile(), anchor: TOP_LEFT });
-  entries.push({ key: 'tile.ramp', rows: rampSprite(), anchor: TOP_LEFT });
+  entries.push({ key: 'tile.ramp', rows: rampSprite(LEVEL_PX), anchor: TOP_LEFT });
+  // Cliff face segments: face.<material>.<top|mid><bottom?>.<4|8>
   for (const [mat, face] of /** @type {const} */ ([['earth', earthFace], ['ruin', ruinFace]])) {
-    entries.push({ key: `face.${mat}.top8`, rows: face(8, true), anchor: TOP_LEFT });
-    entries.push({ key: `face.${mat}.top4`, rows: face(4, true), anchor: TOP_LEFT });
-    entries.push({ key: `face.${mat}.mid8`, rows: face(8, false), anchor: TOP_LEFT });
-    entries.push({ key: `face.${mat}.mid4`, rows: face(4, false), anchor: TOP_LEFT });
+    for (const h of [4, 8]) {
+      for (const top of [true, false]) {
+        for (const bottom of [true, false]) {
+          const key = `face.${mat}.${top ? 'top' : 'mid'}${bottom ? '-base' : ''}.${h}`;
+          entries.push({ key, rows: face(h, top, bottom), anchor: TOP_LEFT });
+        }
+      }
+    }
   }
   entries.push({ key: 'fx.shadow', rows: shadowSprite(), anchor: /** @type {[number, number]} */ ([0.5, 0.5]) });
   entries.push({ key: 'px', rows: ['XX', 'XX'], anchor: TOP_LEFT });
