@@ -1,0 +1,111 @@
+// @ts-check
+// Save data format (DESIGN.md 2.6): versioned envelope with a checksum, a migration chain, and the
+// rule for picking which of the two alternating generations (A / B) to load. Pure: unit-tested.
+
+/** Bump when the shape of `data` changes, and add a migration from the previous version. */
+export const SCHEMA_VERSION = 1;
+
+/**
+ * Migrations from version N to N+1, applied in order when loading an older save.
+ * @type {Record<number, (data: any) => any>}
+ */
+export const MIGRATIONS = {};
+
+/**
+ * @typedef {object} Envelope
+ * @property {number} schemaVersion
+ * @property {string} gameVersion
+ * @property {number} savedAt      ms since epoch
+ * @property {number} seq          increases with every save (picks the newer generation)
+ * @property {any} data
+ * @property {string} checksum
+ */
+
+/** FNV-1a (32 bit) over a string, as 8 hex digits. @param {string} s */
+export function fnv1a(s) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+/** @param {Omit<Envelope, 'checksum'>} e */
+function checksumOf(e) {
+  return fnv1a(JSON.stringify([e.schemaVersion, e.gameVersion, e.savedAt, e.seq, e.data]));
+}
+
+/**
+ * @param {any} data @param {string} gameVersion @param {number} seq @param {number} now
+ * @returns {Envelope}
+ */
+export function makeEnvelope(data, gameVersion, seq, now) {
+  const e = { schemaVersion: SCHEMA_VERSION, gameVersion, savedAt: now, seq, data };
+  return { ...e, checksum: checksumOf(e) };
+}
+
+/** @param {any} e @returns {e is Envelope} */
+export function isIntact(e) {
+  return !!e && typeof e === 'object' && typeof e.checksum === 'string' && e.checksum === checksumOf(e);
+}
+
+/**
+ * Brings an intact envelope's data up to the current schema.
+ * @param {Envelope} e @param {Record<number, (data: any) => any>} [migrations]
+ * @returns {{ ok: true, data: any } | { ok: false, reason: 'newer' | 'missingMigration' }}
+ */
+export function migrate(e, migrations = MIGRATIONS) {
+  if (e.schemaVersion > SCHEMA_VERSION) return { ok: false, reason: 'newer' };
+  let data = e.data;
+  for (let v = e.schemaVersion; v < SCHEMA_VERSION; v++) {
+    const step = migrations[v];
+    if (!step) return { ok: false, reason: 'missingMigration' };
+    data = step(data);
+  }
+  return { ok: true, data };
+}
+
+/**
+ * Chooses what to load from the two generations. The newest intact one wins; if the newest is
+ * damaged the other is used and `recovered` is set (the player is told).
+ * @param {any} a @param {any} b
+ * @returns {{ status: 'empty' } | { status: 'ok', data: any, recovered: boolean, envelope: Envelope } |
+ *   { status: 'newer' } | { status: 'corrupt' }}
+ */
+export function chooseSave(a, b) {
+  const present = [a, b].filter((x) => x != null);
+  if (present.length === 0) return { status: 'empty' };
+  const intact = present.filter(isIntact).sort((x, y) => y.seq - x.seq);
+  if (intact.length === 0) return { status: 'corrupt' };
+  const newestSeq = Math.max(...present.map((x) => (typeof x.seq === 'number' ? x.seq : -1)));
+  const best = intact[0];
+  const m = migrate(best);
+  if (m.ok === false) return m.reason === 'newer' ? { status: 'newer' } : { status: 'corrupt' };
+  return { status: 'ok', data: m.data, recovered: best.seq < newestSeq, envelope: best };
+}
+
+/**
+ * Turns a storage error into a user-facing reason (DESIGN.md 2.6: different messages per cause).
+ * @param {unknown} err @returns {'quota' | 'unavailable' | 'unknown'}
+ */
+export function classifyError(err) {
+  const name = err && typeof err === 'object' && 'name' in err ? String(err.name) : '';
+  if (name === 'QuotaExceededError' || /quota/i.test(String(err))) return 'quota';
+  if (name === 'SecurityError' || name === 'InvalidStateError' || name === 'NotAllowedError' || /indexeddb/i.test(String(err))) {
+    return 'unavailable';
+  }
+  return 'unknown';
+}
+
+/** @param {'quota' | 'unavailable' | 'unknown'} reason */
+export function failureMessage(reason) {
+  switch (reason) {
+    case 'quota':
+      return '保存できませんでした：端末の空き容量が足りません。前回の保存データは残っています。';
+    case 'unavailable':
+      return '保存できませんでした：このブラウザの設定（プライベートブラウズなど）では保存できません。';
+    default:
+      return '保存できませんでした。前回の保存データは残っています。次の保存で再試行します。';
+  }
+}

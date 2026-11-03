@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test';
 async function open(page) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/');
+  await page.goto('/?map=height');
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
   await page.evaluate(() => window.__debugApi.clearEnemies());
   return errors;

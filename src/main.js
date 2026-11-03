@@ -21,8 +21,14 @@ import { loadSettings, saveSettings } from './platform/settings.js';
 import { PauseOverlay } from './ui/pauseOverlay.js';
 import { HeartsHud } from './ui/hud.js';
 import { RotateHint } from './ui/rotateHint.js';
+import { TitleScreen } from './ui/title.js';
+import { Toast } from './ui/toast.js';
+import { SaveStore } from './save/saveStore.js';
+import { Autosave } from './save/autosave.js';
+import { failureMessage } from './save/saveFormat.js';
 import { FixedStepLoop } from './game/core/fixedStep.js';
-import { createGameState, stepGame, spawnEnemies, MAPS } from './game/state.js';
+import { createGameState, stepGame, spawnEnemies, respawnPlayer, MAPS } from './game/state.js';
+import { applyProgress, areaAt } from './game/world/features.js';
 import { groundHeightUnder } from './game/physics/collision.js';
 import { GAME_TITLE, PHASE } from './game/version.js';
 
@@ -85,8 +91,12 @@ async function boot() {
   const assets = new AssetManager();
   assets.register('placeholder', buildPlaceholderPack);
   await assets.load('placeholder');
-  const mapName = /** @type {keyof typeof MAPS} */ (params.get('map') ?? 'height');
-  const state = createGameState(MAPS[mapName] ?? MAPS.height);
+  // Without ?map= the game starts at the title on the first island and saves its progress.
+  // ?map=... (tests, height/field test maps) skips the title and never touches the save.
+  const mapParam = params.get('map');
+  const withTitle = mapParam === null;
+  const mapName = /** @type {keyof typeof MAPS} */ (mapParam ?? 'island');
+  const state = createGameState(MAPS[mapName] ?? MAPS.island);
   const view = new GameView(app, assets, state);
   const zoomParam = Number.parseFloat(params.get('zoom') ?? '');
   if (Number.isFinite(zoomParam)) view.camera.setZoom(zoomParam); // e.g. ?zoom=2 (zoom is adjustable later)
@@ -99,6 +109,81 @@ async function boot() {
   deathOverlay.textContent = '力尽きた…';
   deathOverlay.hidden = true;
   uiRoot.append(deathOverlay);
+  const toast = new Toast(uiRoot);
+  const treasureHud = document.createElement('div');
+  treasureHud.id = 'hud-treasure';
+  treasureHud.hidden = true;
+  uiRoot.append(treasureHud);
+  let shownTreasures = -1;
+
+  // --- save (DESIGN.md 2.6) ---
+  const store = new SaveStore(__APP_VERSION__);
+  const autosave = new Autosave(
+    store,
+    () => ({ ...state.progress }),
+    (msg) => toast.show(msg, { kind: 'error', ms: 6000 }),
+  );
+  /** @type {any} */
+  let loaded = { status: 'empty' };
+  let inTitle = withTitle;
+  /** @type {TitleScreen | null} */
+  let title = null;
+  if (withTitle) {
+    loaded = await store.load();
+    const notes = {
+      empty: '',
+      ok: loaded.recovered ? '最新の保存データが壊れていたため、ひとつ前の保存から再開します。' : '',
+      corrupt: '保存データが壊れていて読み込めませんでした。はじめから遊べます。',
+      newer: 'この保存データは新しいバージョンで作られています。ページを再読み込みしてください（データは消しません）。',
+      error: loaded.status === 'error' ? failureMessage(loaded.reason) : '',
+    };
+    title = new TitleScreen(uiRoot, {
+      title: GAME_TITLE,
+      hasSave: loaded.status === 'ok',
+      saveNote: notes[/** @type {keyof typeof notes} */ (loaded.status)] ?? '',
+      onNew: () => startGame(false),
+      onContinue: () => startGame(true),
+    });
+  }
+  /** @param {boolean} fromSave */
+  function startGame(fromSave) {
+    if (fromSave && loaded.status === 'ok') {
+      applyProgress(state, loaded.data);
+      respawnPlayer(state);
+      if (loaded.recovered) toast.show('ひとつ前の保存から再開しました。', { ms: 4000 });
+    }
+    // Never overwrite a save written by a newer version of the game.
+    autosave.enabled = loaded.status !== 'newer';
+    void store.requestPersistence();
+    inTitle = false;
+    input.clear();
+    loop.reset();
+    view.snapCamera(state);
+  }
+  // Save when the app goes to the background (iOS may close it without further notice).
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') void autosave.saveNow();
+  });
+  window.addEventListener('pagehide', () => void autosave.saveNow());
+
+  // Messages for things that happened in the game.
+  let lastEventTick = state.tick;
+  function announceEvents() {
+    for (const e of state.events) {
+      if (e.tick <= lastEventTick) continue;
+      const ev = /** @type {any} */ (e);
+      if (ev.type === 'chest') {
+        toast.show(ev.reward === 'heart' ? 'ハートの器を手に入れた！ 体力が増えた' : `宝物を手に入れた！（${state.progress.treasures}）`);
+      } else if (ev.type === 'checkpoint') {
+        toast.show('記録石に触れた — 倒れてもここから再開できる');
+      } else if (ev.type === 'landmark') {
+        const l = state.landmarks.find((x) => x.id === ev.id);
+        if (l && !l.always) toast.show(`発見：${l.name}`);
+      }
+    }
+    lastEventTick = state.tick;
+  }
+
   const bench = new Bench(app);
   bench.setCount(intParam('bench', 0));
 
@@ -126,6 +211,7 @@ async function boot() {
   installLifecycle(app.canvas, {
     onPause: () => {
       if (!paused) pause('');
+      void autosave.saveNow();
     },
     onContextLost: () => pause('描画が一時的に中断されました。戻らない場合は再読み込みしてください。'),
     onContextRestored: () => pauseOverlay.show('描画が復帰しました。'),
@@ -257,14 +343,23 @@ async function boot() {
   // NORMAL priority: fixed-step logic, then draw the interpolated state.
   let alpha = 0;
   app.ticker.add((ticker) => {
-    if (!paused) {
+    if (!paused && !inTitle) {
       const frameInput = input.sample();
       // Real elapsed time (PixiJS caps ticker.deltaMS at 100ms); the loop applies its own clamp
       // and accounts for any time it drops (DESIGN.md 1.3).
       alpha = loop.advance(ticker.elapsedMS, () => stepGame(state, frameInput)).alpha;
     }
+    if (!paused && !inTitle) {
+      announceEvents();
+      autosave.update(state, ticker.elapsedMS);
+    }
     view.render(state, alpha, performance.now() / 1000, ticker.elapsedMS / 1000);
     hud.update(state.player.hp, state.player.maxHp);
+    if (state.progress.treasures !== shownTreasures) {
+      shownTreasures = state.progress.treasures;
+      treasureHud.hidden = shownTreasures === 0;
+      treasureHud.textContent = `宝物 ${shownTreasures}`;
+    }
     deathOverlay.hidden = state.deathMs < 0;
     bench.update(ticker.elapsedMS / 1000);
   });
@@ -344,6 +439,21 @@ async function boot() {
       state.player.stamina = v;
     },
     rotateHintVisible: () => rotateHint.visible,
+    titleVisible: () => !!title && title.visible,
+    progress: () => JSON.parse(JSON.stringify(state.progress)),
+    area: () => areaAt(state, state.player.x, state.player.y)?.id ?? null,
+    /** Test helper: save immediately; resolves to whether it worked. */
+    saveNow: () => autosave.saveNow(),
+    saveInfo: () => ({ enabled: autosave.enabled, saves: autosave.saves, failures: autosave.failures, loaded: loaded.status }),
+    toasts: () => [...toast.history],
+    markers: () => view.features.visibleMarkers(),
+    /** Test helper: point the player in a direction without moving (for opening chests). */
+    face: (/** @type {'up' | 'down' | 'left' | 'right'} */ dir) => {
+      const v = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir];
+      state.player.facing = dir;
+      state.player.aimX = v[0];
+      state.player.aimY = v[1];
+    },
     tick: () => state.tick,
     loop: () => ({ totalSteps: loop.totalSteps, droppedMs: loop.droppedMs, elapsedMs: loop.elapsedMs, pendingMs: loop.accumulator }),
     paused: () => paused,

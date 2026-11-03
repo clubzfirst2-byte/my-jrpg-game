@@ -14,6 +14,8 @@ import { lerp } from '../game/core/math.js';
 import { Camera } from './camera.js';
 import { windupProgress } from '../game/entities/enemies.js';
 import { COMBAT } from '../game/entities/playerCombat.js';
+import { areaAt } from '../game/world/features.js';
+import { FeatureView } from './featureView.js';
 
 const WALK_FPS = 8;
 const WALK_CYCLE = [1, 0, 2, 0];
@@ -64,9 +66,11 @@ export class GameView {
     this.world.addChild(this.base, this.actors, this.overlay);
     app.stage.addChildAt(this.world, 0);
 
-    // Camera (DESIGN.md 3.5): bounds = the whole map here; rooms / caves / dungeons set their own.
+    // Camera (DESIGN.md 3.5): outdoors = the map (or its outdoor part); areas (caves) set their own.
     this.camera = new Camera();
-    this.camera.setBounds({ x: 0, y: 0, width: this.map.width * this.map.tileSize, height: this.map.height * this.map.tileSize });
+    /** @type {string | null} id of the area whose bounds are applied ('' = outdoors) */
+    this.boundsArea = null;
+    this.applyBounds(state);
 
     /** @type {Sprite[]} */
     this.waterSprites = [];
@@ -78,6 +82,11 @@ export class GameView {
 
     this.buildTerrain();
     this.buildObjects();
+    // Screen-space layer above the world (landmark markers).
+    this.screenLayer = new Container();
+    this.screenLayer.label = 'screen';
+    app.stage.addChild(this.screenLayer);
+    this.features = new FeatureView((key) => this.makeSprite(key), this.actors, this.screenLayer, state);
 
     this.shadow = this.makeSprite('fx.shadow');
     this.shadow.alpha = 0.35;
@@ -130,6 +139,7 @@ export class GameView {
     if (g === Ground.PATH) return 'tile.path';
     if (g === Ground.WATER) return 'tile.water.0';
     if (g === Ground.RUIN) return 'tile.ruin';
+    if (g === Ground.SAND) return 'tile.sand';
     return `tile.grass.${hash(tx, ty) % 3}`;
   }
 
@@ -314,8 +324,35 @@ export class GameView {
     // near the center. Smoothing blends the switch.
     const camZ = p.gliding || p.climbing ? z : p.groundZ;
     this.camera.setViewport(this.app.screen.width, this.app.screen.height);
-    this.camera.follow(x, y - camZ - CAMERA_TARGET_OFFSET_Y, dtSec);
+    // Entering / leaving an area (cave) switches the camera bounds and cuts to the player.
+    if (this.applyBounds(state)) this.camera.snapTo(x, y - camZ - CAMERA_TARGET_OFFSET_Y);
+    else this.camera.follow(x, y - camZ - CAMERA_TARGET_OFFSET_Y, dtSec);
     this.applyCamera();
+    this.features.update(
+      state,
+      (key) => this.assets.texture(key),
+      this.camera.origin(),
+      this.camera.zoom,
+      this.app.screen.width,
+      this.app.screen.height,
+      timeSec,
+      this.boundsArea ? this.camera.bounds : null,
+    );
+  }
+
+  /**
+   * Sets the camera bounds for where the player is. Returns true when they changed.
+   * @param {import('../game/state.js').GameState} state
+   */
+  applyBounds(state) {
+    const area = areaAt(state, state.player.x, state.player.y);
+    const id = area ? area.id : '';
+    if (id === this.boundsArea) return false;
+    this.boundsArea = id;
+    const ts = this.map.tileSize;
+    const r = area ?? state.outdoor ?? { tx: 0, ty: 0, tw: this.map.width, th: this.map.height };
+    this.camera.setBounds({ x: r.tx * ts, y: r.ty * ts, width: r.tw * ts, height: r.th * ts });
+    return true;
   }
 
   /** Positions the world under the camera. Origin is already snapped to whole screen pixels. */
@@ -332,6 +369,7 @@ export class GameView {
    */
   snapCamera(state) {
     const p = state.player;
+    this.applyBounds(state);
     this.camera.snapTo(p.x, p.y - p.groundZ - CAMERA_TARGET_OFFSET_Y);
     this.applyCamera();
   }

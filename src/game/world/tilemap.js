@@ -10,7 +10,7 @@ export const LEVEL_PX = 16;
 export const HEIGHT_UNIT_PX = 4;
 
 /** Ground tile ids (what is drawn underneath, and the cliff material). */
-export const Ground = Object.freeze({ GRASS: 0, PATH: 1, WATER: 2, RUIN: 3 });
+export const Ground = Object.freeze({ GRASS: 0, PATH: 1, WATER: 2, RUIN: 3, SAND: 4 });
 
 /** Tile shapes. RAMP_N rises toward the north by exactly 1 level across the tile. */
 export const Shape = Object.freeze({ FLAT: 0, RAMP_N: 1 });
@@ -32,7 +32,19 @@ const HEIGHT_DIGITS = '0123456789abcdefghijklmnopqrstuv';
  */
 
 /**
- * @typedef {string[] | { ground: string[], height?: string[], enemies?: { kind: 'beast' | 'archer', tx: number, ty: number }[] }} MapDef
+ * @typedef {{ kind: 'beast' | 'archer', tx: number, ty: number }} EnemySpawn
+ * @typedef {object} IslandDef  a map with features (P3.5); every feature list is optional
+ * @property {string[]} ground
+ * @property {string[]} [height]
+ * @property {EnemySpawn[]} [enemies]
+ * @property {import('./features.js').ChestDef[]} [chests]
+ * @property {import('./features.js').CheckpointDef[]} [checkpoints]
+ * @property {{ tx: number, ty: number }[]} [campfires]
+ * @property {import('./features.js').WarpDef[]} [warps]
+ * @property {import('./features.js').AreaDef[]} [areas]
+ * @property {import('./features.js').AreaDef} [outdoor]  camera bounds outside every area (default: the whole map)
+ * @property {import('./features.js').LandmarkDef[]} [landmarks]
+ * @typedef {string[] | IslandDef} MapDef
  */
 
 /**
@@ -71,6 +83,9 @@ export function parseMap(def) {
           break;
         case 'u':
           ground[i] = Ground.RUIN;
+          break;
+        case 's':
+          ground[i] = Ground.SAND;
           break;
         case '~':
           ground[i] = Ground.WATER; // swimmable (P2.3); its height is the water surface

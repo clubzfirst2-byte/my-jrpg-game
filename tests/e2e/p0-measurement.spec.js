@@ -9,7 +9,7 @@ function trackErrors(page) {
 
 test('boots with the WebGL renderer and shows the measurement overlay', async ({ page }, testInfo) => {
   const errors = trackErrors(page);
-  await page.goto('/?debug=1');
+  await page.goto('/?map=height&debug=1');
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
   await expect(page.locator('#game-canvas')).toBeVisible();
   await expect(page.locator('#fatal')).toBeHidden();
@@ -28,7 +28,7 @@ test('boots with the WebGL renderer and shows the measurement overlay', async ({
 });
 
 test('load test controls change the sprite count', async ({ page }) => {
-  await page.goto('/?debug=1&bench=200');
+  await page.goto('/?map=height&debug=1&bench=200');
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
   expect(await page.evaluate(() => window.__debugApi.sprites())).toBe(200);
 
@@ -41,7 +41,7 @@ test('load test controls change the sprite count', async ({ page }) => {
 });
 
 test('timed measurement produces a markdown report', async ({ page }) => {
-  await page.goto('/?debug=1&bench=100&reportSec=2');
+  await page.goto('/?map=height&debug=1&bench=100&reportSec=2');
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
   await page.locator('#debug-report-start').click();
   await expect(page.locator('#debug-modal')).toBeVisible({ timeout: 10_000 });
@@ -52,7 +52,7 @@ test('timed measurement produces a markdown report', async ({ page }) => {
 });
 
 test('runtime errors are shown on screen', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?map=height');
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
   await expect(page.locator('#error-badge')).toBeHidden();
   await page.evaluate(() => setTimeout(() => {
@@ -65,7 +65,7 @@ test('runtime errors are shown on screen', async ({ page }) => {
 });
 
 test('debug panel toggles and is hidden by default', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?map=height');
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
   await expect(page.locator('#debug-panel')).toBeHidden();
   await page.locator('#debug-toggle').click();

@@ -25,6 +25,13 @@ import {
   swimFrames,
   treeSprite,
   waterTile,
+  sandTile,
+  chestSprite,
+  checkpointSprite,
+  campfireFrames,
+  smokeSprite,
+  caveSprite,
+  markerSprite,
 } from './placeholderArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
@@ -63,6 +70,16 @@ export function placeholderEntries() {
   entries.push({ key: 'fx.shield', rows: shieldSprite(), anchor: CENTER });
   entries.push({ key: 'fx.bow', rows: bowSprite(), anchor: CENTER });
   entries.push({ key: 'obj.tree', rows: treeSprite(), anchor: FEET });
+  // P3.5 island features.
+  entries.push({ key: 'tile.sand', rows: sandTile(), anchor: TOP_LEFT });
+  entries.push({ key: 'obj.chest.closed', rows: chestSprite(false), anchor: FEET });
+  entries.push({ key: 'obj.chest.open', rows: chestSprite(true), anchor: FEET });
+  entries.push({ key: 'obj.checkpoint.off', rows: checkpointSprite(false), anchor: FEET });
+  entries.push({ key: 'obj.checkpoint.on', rows: checkpointSprite(true), anchor: FEET });
+  for (const [key, rows] of Object.entries(campfireFrames())) entries.push({ key, rows, anchor: FEET });
+  entries.push({ key: 'fx.smoke', rows: smokeSprite(), anchor: CENTER });
+  entries.push({ key: 'obj.cave', rows: caveSprite(), anchor: FEET });
+  entries.push({ key: 'ui.marker', rows: markerSprite(), anchor: CENTER });
   return entries;
 }
 

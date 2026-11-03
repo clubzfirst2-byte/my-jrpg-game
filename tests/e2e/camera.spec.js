@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 async function open(page, query = '') {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(`/${query}`);
+  await page.goto(`/?map=height${query.replace('?', '&')}`);
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
   // Not a combat test: keep enemies from interfering (P3 added enemies to this map).
   await page.evaluate(() => window.__debugApi.clearEnemies());

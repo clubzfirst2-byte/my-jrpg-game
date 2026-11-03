@@ -6,7 +6,7 @@
 // Contents: half-level 8px steps (walkable), plateau with a ramp, floating plateau (jump up), 4-tier tower with ramps
 // (jump off its east side to test fall damage), ruin block, trees for occlusion, pond.
 // Enemies (P3): a beast on the open ground east of the spawn and an archer further east.
-/** @type {{ ground: string[], height: string[], enemies: { kind: 'beast' | 'archer', tx: number, ty: number }[] }} */
+/** @type {import('../tilemap.js').IslandDef} */
 export const HEIGHT_TEST = {
   ground: [
     'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
