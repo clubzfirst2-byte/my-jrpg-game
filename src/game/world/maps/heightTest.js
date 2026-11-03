@@ -5,6 +5,8 @@
 //                '^' = ramp rising toward the north by exactly 1 level (low = tile to the south, high = tile to the north).
 // Contents: half-level 8px steps (walkable), plateau with a ramp, floating plateau (jump up), 4-tier tower with ramps
 // (jump off its east side to test fall damage), ruin block, trees for occlusion, pond.
+// Enemies (P3): a beast on the open ground east of the spawn and an archer further east.
+/** @type {{ ground: string[], height: string[], enemies: { kind: 'beast' | 'archer', tx: number, ty: number }[] }} */
 export const HEIGHT_TEST = {
   ground: [
     'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
@@ -69,5 +71,9 @@ export const HEIGHT_TEST = {
     '0000000000000000000000000000000000000000',
     '0000000000000000000000000000000000000000',
     '0000000000000000000000000000000000000000',
+  ],
+  enemies: [
+    { kind: 'beast', tx: 24, ty: 26 },
+    { kind: 'archer', tx: 33, ty: 27 },
   ],
 };

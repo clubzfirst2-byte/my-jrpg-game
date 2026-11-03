@@ -38,6 +38,13 @@ export const PALETTE = Object.freeze({
   Q: '#5f5a52', // ruin grout / dark
   v: '#c4beb0', // ruin light
   X: '#ffffff', // white (tinted at runtime)
+  z: '#6a4590', // murk (enemy body)
+  Z: '#3a2552', // murk dark
+  j: '#9b6fc4', // murk light
+  i: '#ff5d5d', // enemy eyes
+  O: '#c9a2f2', // orb glow
+  a: '#d8d2c4', // steel (sword, arrow head)
+  A: '#8a8270', // wood / shield rim
 });
 
 // Player frames (16x16). Only down / up / right are drawn; left is right mirrored.
@@ -357,4 +364,86 @@ export function swimFrames() {
     }
   }
   return frames;
+}
+
+// ---------------------------------------------------------------- P3 combat placeholder art
+
+/** Murk beast: a low, hunched blob with red eyes. 16 x 13, 2 frames. */
+export function beastFrames() {
+  const f0 = [
+    '................',
+    '.....kkkkkk.....',
+    '...kkzzzzzzkk...',
+    '..kzzjjzzjjzzk..',
+    '.kzzjzzzzzzjzzk.',
+    '.kzzziikkiizzzk.',
+    'kzzzziikkiizzzzk',
+    'kzzzzzzzzzzzzzzk',
+    'kZzzzzzzzzzzzzZk',
+    'kZZzzzzzzzzzzZZk',
+    '.kZZZZZZZZZZZZk.',
+    '..kZk.kZZk.kZk..',
+    '..kk...kk...kk..',
+  ];
+  const f1 = [...f0.slice(0, 11), '.kZk..kZZk..kZk.', '.kk....kk....kk.'];
+  return { 'enemy.beast.0': f0, 'enemy.beast.1': f1 };
+}
+
+/** Murk archer: a hooded figure holding a glowing focus. 14 x 16, 2 frames. */
+export function archerFrames() {
+  const f0 = [
+    '.....kkkk.....',
+    '....kzzzzk....',
+    '...kzZZZZzk...',
+    '...kZiZZiZk...',
+    '...kZZZZZZk...',
+    '....kzzzzk....',
+    '...kzjzzjzk...',
+    '..kzzjzzjzzk..',
+    '..kzzzzzzzzkOk',
+    '..kzzzzzzzzkOk',
+    '..kZzzzzzzZk..',
+    '..kZzzzzzzZk..',
+    '..kZZzzzzZZk..',
+    '...kZZZZZZk...',
+    '...kZk..kZk...',
+    '...kk....kk...',
+  ];
+  const f1 = [...f0.slice(0, 14), '..kZk....kZk..', '..kk......kk..'];
+  return { 'enemy.archer.0': f0, 'enemy.archer.1': f1 };
+}
+
+/** Sword slash: a white crescent pointing right (+x); rotated at runtime. 16 x 20. */
+export function slashSprite() {
+  const w = 16;
+  const h = 20;
+  const g = grid(w, h, '.');
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const d1 = Math.hypot(x - 2, y - 9.5);
+      const d2 = Math.hypot(x + 2, y - 9.5);
+      if (d1 < 13 && d2 > 13.5) g[y][x] = d1 > 11 ? 'X' : 'a';
+    }
+  }
+  return toRows(g);
+}
+
+/** Arrow pointing right. 10 x 3. */
+export function arrowSprite() {
+  return ['.........k', 'AAAAAAAaak', '.........k'].map((r, i) => (i === 1 ? 'kAAAAAAaak' : r));
+}
+
+/** Enemy orb. 6 x 6. */
+export function orbSprite() {
+  return ['..kk..', '.kOOk.', 'kOXXOk', 'kOXXOk', '.kOOk.', '..kk..'];
+}
+
+/** Shield seen from the front. 8 x 9. */
+export function shieldSprite() {
+  return ['.kkkkkk.', 'kAAAAAAk', 'kAccccAk', 'kAcyycAk', 'kAcyycAk', 'kAccccAk', '.kAccAk.', '..kAAk..', '...kk...'];
+}
+
+/** Bow, vertical (string on the left). 5 x 12. */
+export function bowSprite() {
+  return ['..kk.', '.kAk.', 'k.kAk', 'k..kA', 'k..kA', 'k..kA', 'k..kA', 'k..kA', 'k..kA', 'k.kAk', '.kAk.', '..kk.'];
 }

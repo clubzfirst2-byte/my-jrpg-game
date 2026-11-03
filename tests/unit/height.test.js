@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseMap, terrainHeightAt, Shape, LEVEL_PX } from '../../src/game/world/tilemap.js';
-import { createGameState, stepGame } from '../../src/game/state.js';
+import { createGameState, stepGame, DEATH_DELAY_MS } from '../../src/game/state.js';
 import { FixedStepLoop } from '../../src/game/core/fixedStep.js';
 import { PLAYER_MOVE, PLAYER_MAX_HP, SAFE_FALL_PX, fallDamage, jumpVelocity } from '../../src/game/entities/player.js';
 import { overlapsSolid } from '../../src/game/physics/collision.js';
@@ -231,16 +231,20 @@ describe('fall damage', () => {
     expect(p.hp).toBe(PLAYER_MAX_HP - 2);
   });
 
-  it('returns to the spawn point with full health when health reaches zero (until P3)', () => {
+  it('a deadly fall starts the death sequence, then the player gets up at the spawn point (P3)', () => {
     const s = createGameState(corridor('vvvvv000'));
     s.player.hp = 2;
-    let respawned = false;
-    run(s, () => {
-      if (s.player.lastEvent?.type === 'respawn') respawned = true;
-      return respawned ? none : right;
-    }, 200);
+    let diedAt = -1;
+    let respawnedAt = -1;
+    run(s, (i) => {
+      if (diedAt < 0 && s.player.dead) diedAt = i;
+      if (respawnedAt < 0 && s.events.some((e) => e.type === 'respawn')) respawnedAt = i;
+      return diedAt >= 0 ? none : right;
+    }, 400);
     const p = s.player;
-    expect(respawned).toBe(true);
+    expect(diedAt).toBeGreaterThan(0);
+    expect(respawnedAt - diedAt).toBeGreaterThanOrEqual(Math.floor((DEATH_DELAY_MS / 1000) * 60) - 1);
+    expect(p.dead).toBe(false);
     expect(p.hp).toBe(PLAYER_MAX_HP);
     expect(p.x).toBe(p.spawnX);
     expect(p.z).toBe(124); // back on top of the spawn tile, not inside it

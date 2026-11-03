@@ -21,6 +21,10 @@ export class InputManager {
       moveY: useTouch ? t.moveY : k.moveY,
       dash: k.dash || t.dash,
       jump: k.jump || t.jump,
+      attack: k.attack || t.attack,
+      dodge: k.dodge || t.dodge,
+      guard: k.guard || t.guard,
+      bow: k.bow || t.bow,
     };
   }
 

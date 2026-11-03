@@ -7,6 +7,8 @@ async function open(page) {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
+  // Not a combat test: keep enemies from interfering (P3 added enemies to this map).
+  await page.evaluate(() => window.__debugApi.clearEnemies());
   return errors;
 }
 

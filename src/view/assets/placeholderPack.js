@@ -5,6 +5,13 @@ import { Rectangle, Texture } from 'pixi.js';
 import { LEVEL_PX } from '../../game/world/tilemap.js';
 import {
   PALETTE,
+  archerFrames,
+  arrowSprite,
+  beastFrames,
+  bowSprite,
+  orbSprite,
+  shieldSprite,
+  slashSprite,
   earthFace,
   grassTile,
   pathTile,
@@ -48,6 +55,13 @@ export function placeholderEntries() {
   entries.push({ key: 'fx.shadow', rows: shadowSprite(), anchor: /** @type {[number, number]} */ ([0.5, 0.5]) });
   entries.push({ key: 'px', rows: ['XX', 'XX'], anchor: TOP_LEFT });
   entries.push({ key: 'obj.rock', rows: rockSprite(), anchor: FEET });
+  const CENTER = /** @type {[number, number]} */ ([0.5, 0.5]);
+  for (const [key, rows] of Object.entries({ ...beastFrames(), ...archerFrames() })) entries.push({ key, rows, anchor: FEET });
+  entries.push({ key: 'fx.slash', rows: slashSprite(), anchor: CENTER });
+  entries.push({ key: 'fx.arrow', rows: arrowSprite(), anchor: CENTER });
+  entries.push({ key: 'fx.orb', rows: orbSprite(), anchor: CENTER });
+  entries.push({ key: 'fx.shield', rows: shieldSprite(), anchor: CENTER });
+  entries.push({ key: 'fx.bow', rows: bowSprite(), anchor: CENTER });
   entries.push({ key: 'obj.tree', rows: treeSprite(), anchor: FEET });
   return entries;
 }

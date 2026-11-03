@@ -19,8 +19,13 @@ export class TouchControls {
     this.base.appendChild(this.knob);
     this.base.hidden = true;
     root.append(this.layer, this.base);
-    this.dash = new HoldButton(root, 'dash-button', 'ダッシュ');
+    // Right-hand cluster (DESIGN.md 5.8): attack is the big main button, the rest arc around it.
+    this.attack = new HoldButton(root, 'attack-button', '攻撃');
     this.jump = new HoldButton(root, 'jump-button', 'ジャンプ');
+    this.dodge = new HoldButton(root, 'dodge-button', '回避');
+    this.bow = new HoldButton(root, 'bow-button', '弓');
+    this.guard = new HoldButton(root, 'guard-button', 'ガード');
+    this.dash = new HoldButton(root, 'dash-button', 'ダッシュ');
 
     /** @type {number | null} */
     this.stickPointer = null;
@@ -82,7 +87,16 @@ export class TouchControls {
 
   sample() {
     const v = normalizeStick(this.rawX, this.rawY);
-    return { moveX: v.x, moveY: v.y, dash: this.dash.held, jump: this.jump.consumePress() };
+    return {
+      moveX: v.x,
+      moveY: v.y,
+      dash: this.dash.held,
+      jump: this.jump.consumePress(),
+      attack: this.attack.consumePress(),
+      dodge: this.dodge.consumePress(),
+      guard: this.guard.held,
+      bow: this.bow.held,
+    };
   }
 
   /** Releases everything (e.g. when the app goes to the background mid-touch). */
@@ -91,8 +105,7 @@ export class TouchControls {
     this.rawX = 0;
     this.rawY = 0;
     this.base.hidden = true;
-    this.dash.clear();
-    this.jump.clear();
+    for (const b of [this.dash, this.jump, this.attack, this.dodge, this.bow, this.guard]) b.clear();
   }
 }
 

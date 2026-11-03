@@ -22,7 +22,7 @@ import { PauseOverlay } from './ui/pauseOverlay.js';
 import { HeartsHud } from './ui/hud.js';
 import { RotateHint } from './ui/rotateHint.js';
 import { FixedStepLoop } from './game/core/fixedStep.js';
-import { createGameState, stepGame, MAPS } from './game/state.js';
+import { createGameState, stepGame, spawnEnemies, MAPS } from './game/state.js';
 import { groundHeightUnder } from './game/physics/collision.js';
 import { GAME_TITLE, PHASE } from './game/version.js';
 
@@ -94,6 +94,11 @@ async function boot() {
   const input = new InputManager(uiRoot);
   const hud = new HeartsHud(uiRoot);
   const rotateHint = new RotateHint(uiRoot);
+  const deathOverlay = document.createElement('div');
+  deathOverlay.id = 'death-overlay';
+  deathOverlay.textContent = '力尽きた…';
+  deathOverlay.hidden = true;
+  uiRoot.append(deathOverlay);
   const bench = new Bench(app);
   bench.setCount(intParam('bench', 0));
 
@@ -260,6 +265,7 @@ async function boot() {
     }
     view.render(state, alpha, performance.now() / 1000, ticker.elapsedMS / 1000);
     hud.update(state.player.hp, state.player.maxHp);
+    deathOverlay.hidden = state.deathMs < 0;
     bench.update(ticker.elapsedMS / 1000);
   });
 
@@ -286,6 +292,10 @@ async function boot() {
         climbing: p.climbing,
         gliding: p.gliding,
         swimming: p.swimming,
+        dead: !!p.dead,
+        action: p.action,
+        guarding: !!p.guarding,
+        invulnMs: p.invulnMs,
         stamina: p.stamina,
         exhausted: p.exhausted,
       };
@@ -308,6 +318,27 @@ async function boot() {
       return { x: c.x, y: c.y, zoom: c.zoom, origin: c.origin(), viewWidth: c.viewWidth, viewHeight: c.viewHeight, bounds: c.bounds };
     },
     setZoom: (/** @type {number} */ z) => view.camera.setZoom(z),
+    /** Test helper: remove all enemies (for tests that are not about combat). */
+    clearEnemies: () => {
+      state.enemySpawns = [];
+      state.enemies = [];
+      state.projectiles = [];
+    },
+    enemies: () => state.enemies.map((e) => ({ id: e.id, kind: e.kind, x: e.x, y: e.y, z: e.z, hp: e.hp, state: e.state })),
+    projectiles: () => state.projectiles.map((pr) => ({ kind: pr.kind, owner: pr.owner, x: pr.x, y: pr.y })),
+    flurry: () => state.flurryMs,
+    /** Test helper: place an enemy next to the player. */
+    spawnEnemy: (/** @type {'beast' | 'archer'} */ kind, /** @type {number} */ tx, /** @type {number} */ ty) => {
+      state.enemySpawns.push({ kind, tx, ty });
+      spawnEnemies(state);
+    },
+    /** Test helper: set health (quarter hearts). */
+    setHp: (/** @type {number} */ v) => {
+      state.player.hp = v;
+    },
+    deathMs: () => state.deathMs,
+    /** Recent game events (last 64): lets tests observe short actions without racing them. */
+    events: () => state.events.map((e) => e.type),
     /** Test helper: set stamina (e.g. to check drowning without waiting). */
     setStamina: (/** @type {number} */ v) => {
       state.player.stamina = v;

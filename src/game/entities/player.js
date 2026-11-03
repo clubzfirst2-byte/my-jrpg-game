@@ -1,10 +1,14 @@
 // @ts-check
 // Player movement: walk, dash, jump, fall (DESIGN.md 3.3, 5.3). Plain object + update function.
 import { approach } from '../core/math.js';
+import { facingFrom } from '../core/facing.js';
+
+export { facingFrom };
 import { moveAndCollide, groundHeightUnder } from '../physics/collision.js';
 import { LEVEL_PX } from '../world/tilemap.js';
 import { tryGrabWall, updateClimb } from './climbing.js';
 import { GLIDE, canOpenGlider, closeGlider, glideStep, openGlider } from './glider.js';
+import { COMBAT } from './playerCombat.js';
 import { SWIM, enterWater, isInWater, leaveWater, swimStamina, waterSurfaceUnder } from './swimming.js';
 
 /** Tunable movement values (px, px/s, px/s^2, s). */
@@ -37,6 +41,8 @@ export const PLAYER_STAMINA = Object.freeze({
   /** Walk speed multiplier while exhausted (until stamina is full again). */
   exhaustedSpeed: 0.6,
 });
+
+const DODGE_SPEED = COMBAT.dodgeSpeed;
 
 /** Falls of up to this height are safe (3 levels). */
 export const SAFE_FALL_PX = 3 * LEVEL_PX;
@@ -81,6 +87,22 @@ export const PLAYER_MAX_HP = 12; // 3 hearts x 4 quarters
  * @property {number} regrabCooldown  seconds until a wall may be grabbed again after letting go
  * @property {boolean} gliding
  * @property {boolean} swimming
+ * @property {'none' | 'attack' | 'dodge' | 'aim'} [action]  combat action (P3, see playerCombat.js)
+ * @property {number} [actionMs]
+ * @property {number} [moveScale]
+ * @property {number} [dodgeX]
+ * @property {number} [dodgeY]
+ * @property {number} [knockX]
+ * @property {number} [knockY]
+ * @property {number} [knockMs]
+ * @property {boolean} [dead]
+ * @property {number} [aimX]
+ * @property {number} [aimY]
+ * @property {boolean} [guarding]
+ * @property {number} [guardMs]
+ * @property {number} [invulnMs]
+ * @property {number} [comboIndex]
+ * @property {number} [attackId]
  * @property {number} safeX   last position standing on dry ground (drowning returns here)
  * @property {number} safeY
  * @property {number} safeZ
@@ -164,7 +186,8 @@ export function updatePlayer(p, input, map, dt) {
   // --- jump input (press detection + buffer) ---
   if (input.jump && !p.jumpHeld) p.jumpBuffered = PLAYER_MOVE.jumpBuffer;
   p.jumpHeld = input.jump;
-  if (p.jumpBuffered > 0 && (p.grounded || p.coyote > 0)) {
+  const busy = p.action !== undefined && p.action !== 'none' && p.action !== 'aim'; // swinging / dodging
+  if (p.jumpBuffered > 0 && (p.grounded || p.coyote > 0) && !busy) {
     p.vz = jumpVelocity();
     p.grounded = false;
     p.coyote = 0;
@@ -207,14 +230,17 @@ export function updatePlayer(p, input, map, dt) {
   const hasInput = mag > 0;
   p.dashing = hasInput && input.dash && p.grounded && !p.exhausted && p.stamina > 0;
   const walkSpeed = PLAYER_MOVE.walkSpeed * (p.exhausted ? PLAYER_STAMINA.exhaustedSpeed : 1);
-  const maxSpeed = p.gliding ? GLIDE.speed * mag : p.dashing ? PLAYER_MOVE.dashSpeed : walkSpeed * mag;
+  if (p.action && p.action !== 'none') p.dashing = false;
+  const scale = p.moveScale ?? 1;
+  const maxSpeed = (p.gliding ? GLIDE.speed * mag : p.dashing ? PLAYER_MOVE.dashSpeed : walkSpeed * mag) * scale;
   let tx = 0;
   let ty = 0;
   if (hasInput) {
     const len = Math.hypot(input.moveX, input.moveY);
     tx = (input.moveX / len) * maxSpeed;
     ty = (input.moveY / len) * maxSpeed;
-    p.facing = facingFrom(input.moveX, input.moveY, p.facing);
+    // While swinging or aiming, combat controls the facing.
+    if (p.action !== 'attack' && p.action !== 'aim') p.facing = facingFrom(input.moveX, input.moveY, p.facing);
   }
   let rate = (hasInput ? PLAYER_MOVE.accel : PLAYER_MOVE.decel) * dt;
   if (!p.grounded) rate = PLAYER_MOVE.airAccel * dt; // reduced air control keeps jump arcs readable
@@ -226,13 +252,21 @@ export function updatePlayer(p, input, map, dt) {
     p.vy = approach(p.vy, ty, rate);
   }
 
+  if (p.action === 'dodge') {
+    // Dodge: a fixed quick hop in the chosen direction (P3).
+    p.vx = p.dodgeX * DODGE_SPEED;
+    p.vy = p.dodgeY * DODGE_SPEED;
+  }
+  // Knockback from hits adds on top of the player's own movement (P3).
+  const kx = p.knockMs > 0 ? p.knockX : 0;
+  const ky = p.knockMs > 0 ? p.knockY : 0;
   const maxHeight = p.grounded ? p.z + PLAYER_MOVE.stepHeight : p.z;
-  const hit = moveAndCollide(p, map, p.vx * dt, p.vy * dt, maxHeight);
+  const hit = moveAndCollide(p, map, (p.vx + kx) * dt, (p.vy + ky) * dt, maxHeight);
   if (hit.hitX) p.vx = 0;
   if (hit.hitY) p.vy = 0;
 
-  // Pushing into a climbable wall grabs it.
-  const pushing = hasInput && facingFrom(input.moveX, input.moveY, p.facing) === p.facing;
+  // Pushing into a climbable wall grabs it (not in the middle of a combat action).
+  const pushing = !busy && hasInput && facingFrom(input.moveX, input.moveY, p.facing) === p.facing;
   if (tryGrabWall(p, map, hit, pushing, PLAYER_MOVE.stepHeight, dt)) {
     p.moving = false;
     return;
@@ -330,7 +364,7 @@ function updateSwim(p, input, map, dt) {
   p.dashing = dash && moving;
   p.walkTime = p.walkTime + dt;
   swimStamina(p, moving, p.dashing, dt);
-  if (p.hp === 0) respawn(p);
+  if (p.hp === 0) p.dead = true;
 }
 
 /**
@@ -363,15 +397,15 @@ function land(p, ground) {
   p.lastEvent = { type: 'land', fall, damage };
   if (damage > 0) {
     p.hp = Math.max(0, p.hp - damage);
-    if (p.hp === 0) respawn(p);
+    if (p.hp === 0) p.dead = true; // the game state runs the death / respawn sequence (P3)
   }
 }
 
 /**
- * Temporary until P3 (death / game over): return to the spawn point with full health.
+ * Back to the spawn point with full health (called by the game state after the death sequence).
  * @param {Player} p
  */
-function respawn(p) {
+export function respawn(p) {
   p.x = p.prevX = p.spawnX;
   p.y = p.prevY = p.spawnY;
   p.z = p.prevZ = p.groundZ = p.spawnZ;
@@ -386,20 +420,3 @@ function respawn(p) {
   p.lastEvent = { type: 'respawn' };
 }
 
-/**
- * 4-way facing from the dominant axis; keeps the current facing on exact diagonals to avoid flicker.
- * @param {number} x @param {number} y @param {Facing} current
- * @returns {Facing}
- */
-export function facingFrom(x, y, current) {
-  const ax = Math.abs(x);
-  const ay = Math.abs(y);
-  if (ax === 0 && ay === 0) return current;
-  if (Math.abs(ax - ay) < 1e-3) {
-    const h = x > 0 ? 'right' : 'left';
-    const v = y > 0 ? 'down' : 'up';
-    return current === h || current === v ? current : v;
-  }
-  if (ax > ay) return x > 0 ? 'right' : 'left';
-  return y > 0 ? 'down' : 'up';
-}

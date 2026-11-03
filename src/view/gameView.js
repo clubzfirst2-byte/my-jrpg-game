@@ -12,6 +12,8 @@ import { Container, Graphics, Sprite } from 'pixi.js';
 import { Ground, Shape, LEVEL_PX, inBounds, northEdgeHeight, southEdgeHeight } from '../game/world/tilemap.js';
 import { lerp } from '../game/core/math.js';
 import { Camera } from './camera.js';
+import { windupProgress } from '../game/entities/enemies.js';
+import { COMBAT } from '../game/entities/playerCombat.js';
 
 const WALK_FPS = 8;
 const WALK_CYCLE = [1, 0, 2, 0];
@@ -91,6 +93,25 @@ export class GameView {
     this.staminaWheel = new Graphics();
     this.staminaWheel.visible = false;
     this.overlay.addChild(this.silhouette, this.staminaWheel);
+
+    // --- P3 combat visuals ---
+    /** @type {Map<number, Sprite>} */
+    this.enemySprites = new Map();
+    /** @type {Sprite[]} */
+    this.projectileSprites = [];
+    this.slash = this.makeSprite('fx.slash');
+    this.slash.visible = false;
+    this.shield = this.makeSprite('fx.shield');
+    this.shield.visible = false;
+    this.bow = this.makeSprite('fx.bow');
+    this.bow.visible = false;
+    this.actors.addChild(this.slash, this.shield, this.bow);
+    this.aimLine = new Graphics();
+    this.overlay.addChild(this.aimLine);
+    // Screen-space tint for slow motion (perfect dodge / bullet time).
+    this.slowTint = new Graphics();
+    this.slowTint.visible = false;
+    app.stage.addChild(this.slowTint);
     /** True while the player is hidden behind terrain (exposed for tests). */
     this.playerOccluded = false;
   }
@@ -285,6 +306,7 @@ export class GameView {
 
     this.updateOcclusion(sx, sy, y, tex);
     this.drawStamina(p, sx, sy, timeSec);
+    this.renderCombat(state, alpha, sx, sy, y, timeSec);
     this.animateWater(timeSec);
 
     // Follow the ground under the player during short jumps (so jumping does not bob the screen),
@@ -370,6 +392,110 @@ export class GameView {
       g.moveTo(cx, cy).arc(cx, cy, r, start, start + frac * Math.PI * 2).lineTo(cx, cy).fill({ color });
     }
     g.alpha = p.exhausted ? 0.6 + 0.4 * Math.abs(Math.sin(timeSec * 6)) : 1;
+  }
+
+  /**
+   * Enemies, projectiles, sword slash, shield, bow, hurt blink, slow-motion tint (P3).
+   * @param {import('../game/state.js').GameState} state @param {number} alpha
+   * @param {number} sx @param {number} sy player screen position @param {number} py player feet y
+   * @param {number} timeSec
+   */
+  renderCombat(state, alpha, sx, sy, py, timeSec) {
+    const p = /** @type {any} */ (state.player);
+
+    // Enemies: create / update / remove sprites by id.
+    const seen = new Set();
+    for (const e of state.enemies) {
+      seen.add(e.id);
+      let spr = this.enemySprites.get(e.id);
+      if (!spr) {
+        spr = this.makeSprite(`enemy.${e.kind}.0`);
+        this.enemySprites.set(e.id, spr);
+        this.actors.addChild(spr);
+      }
+      const ex = lerp(e.prevX, e.x, alpha);
+      const ey = lerp(e.prevY, e.y, alpha);
+      const moving = Math.hypot(e.x - e.prevX, e.y - e.prevY) > 0.01;
+      spr.texture = this.assets.texture(`enemy.${e.kind}.${moving ? Math.floor(timeSec * 6) % 2 : 0}`);
+      spr.position.set(Math.round(ex), Math.round(ey - e.z));
+      spr.zIndex = ey;
+      spr.scale.x = e.faceX < -0.2 ? -1 : 1;
+      // Telegraph: the wind-up pulses red, faster as the attack nears. Stunned: pale blue.
+      if (e.state === 'windup') {
+        const k = windupProgress(e);
+        spr.tint = Math.sin(timeSec * (12 + 24 * k)) > 0 ? 0xff7070 : 0xffffff;
+      } else if (e.state === 'stun') spr.tint = 0xa8b8ff;
+      else spr.tint = 0xffffff;
+      spr.alpha = e.state === 'dead' ? Math.max(0, 1 - e.t / 600) : 1;
+    }
+    for (const [id, spr] of this.enemySprites) {
+      if (!seen.has(id)) {
+        spr.destroy();
+        this.enemySprites.delete(id);
+      }
+    }
+
+    // Projectiles: keep one sprite per projectile.
+    while (this.projectileSprites.length < state.projectiles.length) {
+      const spr = this.makeSprite('fx.arrow');
+      this.actors.addChild(spr);
+      this.projectileSprites.push(spr);
+    }
+    this.projectileSprites.forEach((spr, i) => {
+      const pr = state.projectiles[i];
+      spr.visible = !!pr;
+      if (!pr) return;
+      spr.texture = this.assets.texture(pr.kind === 'arrow' ? 'fx.arrow' : 'fx.orb');
+      spr.position.set(Math.round(pr.x), Math.round(pr.y - pr.z - 6));
+      spr.rotation = pr.kind === 'arrow' ? Math.atan2(pr.vy, pr.vx) : 0;
+      spr.tint = pr.reflected ? 0xfff2a0 : 0xffffff;
+      spr.zIndex = pr.y + 0.5;
+    });
+
+    // Sword slash while the blade is live.
+    const hb = state.hitboxes.find((h) => h.owner === 'player');
+    this.slash.visible = !!hb;
+    if (hb) {
+      this.slash.position.set(Math.round(hb.x), Math.round(hb.y - p.z - 4));
+      this.slash.rotation = Math.atan2(p.aimY, p.aimX);
+      this.slash.alpha = p.comboIndex === 2 ? 1 : 0.85;
+      this.slash.zIndex = py + 0.01;
+    }
+
+    // Shield in front while guarding; bow and aim line while aiming.
+    this.shield.visible = !!p.guarding;
+    if (p.guarding) {
+      this.shield.position.set(Math.round(sx + p.aimX * 7), Math.round(sy - 7 + p.aimY * 4));
+      this.shield.zIndex = p.aimY < 0 ? py - 0.01 : py + 0.01;
+    }
+    const aiming = p.action === 'aim';
+    this.bow.visible = aiming;
+    this.aimLine.clear();
+    if (aiming) {
+      const drawn = p.actionMs >= COMBAT.bowDrawMs;
+      this.bow.position.set(Math.round(sx + p.aimX * 7), Math.round(sy - 8 + p.aimY * 4));
+      this.bow.rotation = Math.atan2(p.aimY, p.aimX);
+      this.bow.zIndex = p.aimY < 0 ? py - 0.01 : py + 0.01;
+      // Dotted aim line, brighter once the draw is full.
+      for (let d = 12; d < 64; d += 6) {
+        this.aimLine.rect(Math.round(sx + p.aimX * d), Math.round(sy - 8 + p.aimY * d), 1, 1);
+      }
+      this.aimLine.fill({ color: drawn ? 0xfff2a0 : 0xffffff, alpha: drawn ? 0.9 : 0.4 });
+    }
+
+    // Hurt: blink while invulnerable. Dodge: a little transparent. Dead: lying faded.
+    const blink = p.invulnMs > 0 && Math.floor(timeSec * 12) % 2 === 0;
+    this.player.alpha = p.dead ? 0.5 : blink ? 0.3 : p.action === 'dodge' ? 0.7 : 1;
+    this.player.rotation = p.dead ? Math.PI / 2 : 0;
+
+    // Slow motion tint (screen space).
+    const slow = state.flurryMs > 0 || state.bulletTime;
+    this.slowTint.visible = slow;
+    if (slow) {
+      this.slowTint.clear();
+      this.slowTint.rect(0, 0, this.app.screen.width, this.app.screen.height);
+      this.slowTint.fill({ color: state.bulletTime ? 0x203860 : 0x401860, alpha: 0.18 });
+    }
   }
 
   /** @param {number} timeSec */
