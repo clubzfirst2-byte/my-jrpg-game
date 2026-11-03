@@ -38,21 +38,26 @@ test('Space jumps and the player lands back on the ground', async ({ page }) => 
   expect(errors).toEqual([]);
 });
 
-test('a 1-level cliff blocks walking but can be jumped onto', async ({ page }) => {
+test('a ruin wall blocks walking (and cannot be climbed)', async ({ page }) => {
+  await open(page);
+  await teleport(page, 33, 23); // just south of the ruin block (2 levels, ruin)
+  await hold(page, ['ArrowUp'], 1000);
+  const p = await player(page);
+  expect(p.z).toBe(0);
+  expect(p.climbing).toBe(false);
+  expect(p.y).toBeCloseTo(23 * 16 + 6, 0); // stopped at the wall
+});
+
+test('a 1-level ledge can be jumped onto', async ({ page }) => {
   await open(page);
   await teleport(page, 14, 22); // just south of the floating plateau B (1 level = 16px)
-  await hold(page, ['ArrowUp'], 700);
-  let p = await player(page);
-  expect(p.z).toBe(0);
-  expect(p.y).toBeCloseTo(22 * 16 + 6, 0); // stopped at the cliff
-
   await page.keyboard.down('ArrowUp');
   await page.keyboard.down('Space');
   await page.waitForTimeout(700);
   await page.keyboard.up('Space');
   await page.keyboard.up('ArrowUp');
   await page.waitForTimeout(300);
-  p = await player(page);
+  const p = await player(page);
   expect(p.grounded).toBe(true);
   expect(p.z).toBe(16);
   expect(p.y).toBeLessThan(22 * 16);

@@ -239,7 +239,8 @@ async function boot() {
             `表示物 ${objectCount}   テクスチャ ${textureCount()}   負荷 ${bench.count}`,
             `内部 ${resolution.width}×${resolution.height} ×${resolution.scale}  DPR ${window.devicePixelRatio}`,
             `位置 ${p.x.toFixed(0)},${p.y.toFixed(0)} 高さ ${p.z.toFixed(0)}（地面 ${p.groundZ.toFixed(0)}）${p.grounded ? '' : ' 空中'}`,
-            `体力 ${p.hp}/${p.maxHp}  ${p.facing}${p.dashing ? ' ダッシュ' : ''}  エラー ${errorLog.total}`,
+            `体力 ${p.hp}/${p.maxHp}  スタミナ ${p.stamina.toFixed(0)}${p.exhausted ? '（疲労）' : ''}${p.climbing ? ' 登攀中' : ''}`,
+            `${p.facing}${p.dashing ? ' ダッシュ' : ''}  エラー ${errorLog.total}`,
           ].join('\n'),
         );
       }
@@ -271,7 +272,19 @@ async function boot() {
     lastReport: () => lastReport,
     player: () => {
       const p = state.player;
-      return { x: p.x, y: p.y, z: p.z, groundZ: p.groundZ, grounded: p.grounded, hp: p.hp, facing: p.facing, dashing: p.dashing };
+      return {
+        x: p.x,
+        y: p.y,
+        z: p.z,
+        groundZ: p.groundZ,
+        grounded: p.grounded,
+        hp: p.hp,
+        facing: p.facing,
+        dashing: p.dashing,
+        climbing: p.climbing,
+        stamina: p.stamina,
+        exhausted: p.exhausted,
+      };
     },
     occluded: () => view.playerOccluded,
     /** Test helper: place the player on tile (tx, ty), standing on the terrain. */
@@ -283,6 +296,7 @@ async function boot() {
       p.z = p.prevZ = p.groundZ = groundHeightUnder(p, state.map);
       p.vx = p.vy = p.vz = 0;
       p.grounded = true;
+      p.climbing = false;
       view.snapCamera(state);
     },
     camera: () => {
