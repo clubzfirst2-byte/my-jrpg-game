@@ -95,20 +95,25 @@ for (const fps of [60, 30]) {
     await page.waitForTimeout(300);
     const a = await player(page);
     const l0 = await loopState();
-    const real0 = await page.evaluate(() => performance.now());
+    const wall0 = await page.evaluate(() => performance.now());
     await page.waitForTimeout(1000);
     const b = await player(page);
     const l1 = await loopState();
-    const realMs = (await page.evaluate(() => performance.now())) - real0;
+    const wallMs = (await page.evaluate(() => performance.now())) - wall0;
     await page.keyboard.up('ArrowRight');
 
+    const STEP = 1000 / 60;
     const steps = l1.totalSteps - l0.totalSteps;
-    const droppedSteps = (l1.droppedMs - l0.droppedMs) / (1000 / 60);
-    // Every millisecond of real time is either simulated at 60 steps/s or deliberately dropped
-    // (only when the machine renders below 15fps, e.g. software WebGL on CI).
-    expect(((steps + droppedSteps) * 1000) / realMs).toBeGreaterThan(54);
-    expect(((steps + droppedSteps) * 1000) / realMs).toBeLessThan(66);
-    // Walk speed 72 px/s = 1.2 px per logic step, regardless of display frame rate.
+    const elapsed = l1.elapsedMs - l0.elapsedMs; // real time as seen by the game's frame clock
+    const accounted = steps * STEP + (l1.droppedMs - l0.droppedMs) + (l1.pendingMs - l0.pendingMs);
+    // The loop simulates every millisecond at 60 steps/s, except time it deliberately drops
+    // (frames slower than 4 steps or hitches > 250ms, e.g. software WebGL on CI).
+    expect(Math.abs(accounted - elapsed)).toBeLessThan(1);
+    // The frame clock follows real time (loose bound: one slow frame of misalignment allowed).
+    expect(elapsed / wallMs).toBeGreaterThan(0.6);
+    expect(elapsed / wallMs).toBeLessThan(1.4);
+    // When the display keeps up (>= 15fps), nothing is dropped and the logic runs at 60 steps/s.
+    if (l1.droppedMs - l0.droppedMs === 0) expect((steps * 1000) / elapsed).toBeCloseTo(60, -1);
     expect((b.x - a.x) / steps).toBeCloseTo(1.2, 1);
   });
 }
