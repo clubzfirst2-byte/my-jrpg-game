@@ -92,8 +92,17 @@ for (const fps of [60, 30]) {
     await open(page, `?fps=${fps}`);
     // Read position, loop counters and time in ONE call so they describe the same moment
     // (a frame running between separate reads would skew distance vs. step count).
+    // Taken inside an animation frame, right after the game's own update for that frame, so the
+    // frame clock and the wall clock line up even when the machine stalls between frames.
     const snapshot = () =>
-      page.evaluate(() => ({ p: window.__debugApi.player(), l: window.__debugApi.loop(), t: performance.now() }));
+      page.evaluate(
+        () =>
+          new Promise((resolve) =>
+            requestAnimationFrame((t) =>
+              resolve({ p: window.__debugApi.player(), l: window.__debugApi.loop(), t }),
+            ),
+          ),
+      );
     await page.keyboard.down('ArrowRight');
     await page.waitForTimeout(300);
     const s0 = await snapshot();

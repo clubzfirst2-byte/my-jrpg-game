@@ -13,14 +13,29 @@ async function open(page) {
 const player = (page) => page.evaluate(() => window.__debugApi.player());
 const teleport = (page, tx, ty) => page.evaluate(([x, y]) => window.__debugApi.teleport(x, y), [tx, ty]);
 
-/** Walk west off the tower top and press jump once airborne. */
+/**
+ * Walk west off the tower top and open the glider. The game is paused and advanced step by step
+ * while the test walks off the edge and presses jump, so the result does not depend on how fast
+ * the machine is.
+ */
 async function jumpOffAndGlide(page, pressJump) {
   await teleport(page, 22, 5); // west edge of the tower top
+  await page.evaluate(() => window.__debugApi.pause());
   await page.keyboard.down('ArrowLeft');
-  await expect.poll(async () => (await player(page)).grounded, { timeout: 3000, intervals: [30] }).toBe(false);
-  await page.waitForTimeout(100);
-  await pressJump();
-  await expect.poll(async () => (await player(page)).gliding, { timeout: 2000, intervals: [30] }).toBe(true);
+  // Step until the player leaves the edge, then past the coyote window (0.08s = 5 steps).
+  const left = await page.evaluate(() => {
+    const api = window.__debugApi;
+    for (let i = 0; i < 120 && api.player().grounded; i++) api.step(1);
+    api.step(8);
+    return api.player();
+  });
+  expect(left.grounded).toBe(false);
+  expect(left.z).toBeGreaterThan(40); // still high above the ground
+  await pressJump(); // latched while paused
+  await page.evaluate(() => window.__debugApi.step(1));
+  expect((await player(page)).gliding).toBe(true);
+  await page.keyboard.down('ArrowLeft'); // pausing released the held keys: hold again before resuming
+  await page.evaluate(() => window.__debugApi.resume());
 }
 
 test('jumping off the tower and opening the glider lands far away without damage', async ({ page }, testInfo) => {

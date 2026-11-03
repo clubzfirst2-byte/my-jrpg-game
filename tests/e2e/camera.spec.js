@@ -15,17 +15,30 @@ const teleport = (page, tx, ty) => page.evaluate(([x, y]) => window.__debugApi.t
 test('camera follows smoothly: lags while moving, settles on the player when stopped', async ({ page }) => {
   await open(page);
   await teleport(page, 14, 13); // open ground in the middle of the map
+  const start = await player(page);
   await page.keyboard.down('ArrowRight');
-  await page.waitForTimeout(400);
-  const moving = await camera(page);
-  const pMoving = await player(page);
+  // Wait until the player is really walking (slow machines can stall for a while).
+  await expect.poll(async () => (await player(page)).x - start.x, { timeout: 5000, intervals: [30] }).toBeGreaterThan(16);
+  // Camera and player read in the same animation frame.
+  const both = await page.evaluate(
+    () => new Promise((r) => requestAnimationFrame(() => r({ c: window.__debugApi.camera(), p: window.__debugApi.player() }))),
+  );
   await page.keyboard.up('ArrowRight');
-  expect(pMoving.x - moving.x).toBeGreaterThan(0.5); // trails behind the player
+  expect(both.p.x - both.c.x).toBeGreaterThan(0.5); // trails behind the player
 
-  await page.waitForTimeout(1200);
-  const settled = await camera(page);
-  const p = await player(page);
-  expect(Math.abs(settled.x - p.x)).toBeLessThan(0.5);
+  // Settles on the player once it stops (waits for frames instead of assuming a fixed time).
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            new Promise((r) =>
+              requestAnimationFrame(() => r(Math.abs(window.__debugApi.camera().x - window.__debugApi.player().x))),
+            ),
+        ),
+      { timeout: 5000, intervals: [50] },
+    )
+    .toBeLessThan(0.5);
 });
 
 test('jumping does not bob the camera', async ({ page }) => {
