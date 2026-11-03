@@ -20,6 +20,7 @@ import { installLifecycle } from './platform/lifecycle.js';
 import { loadSettings, saveSettings } from './platform/settings.js';
 import { PauseOverlay } from './ui/pauseOverlay.js';
 import { HeartsHud } from './ui/hud.js';
+import { RotateHint } from './ui/rotateHint.js';
 import { FixedStepLoop } from './game/core/fixedStep.js';
 import { createGameState, stepGame, MAPS } from './game/state.js';
 import { groundHeightUnder } from './game/physics/collision.js';
@@ -87,9 +88,12 @@ async function boot() {
   const mapName = /** @type {keyof typeof MAPS} */ (params.get('map') ?? 'height');
   const state = createGameState(MAPS[mapName] ?? MAPS.height);
   const view = new GameView(app, assets, state);
+  const zoomParam = Number.parseFloat(params.get('zoom') ?? '');
+  if (Number.isFinite(zoomParam)) view.camera.setZoom(zoomParam); // e.g. ?zoom=2 (zoom is adjustable later)
   const loop = new FixedStepLoop();
   const input = new InputManager(uiRoot);
   const hud = new HeartsHud(uiRoot);
+  const rotateHint = new RotateHint(uiRoot);
   const bench = new Bench(app);
   bench.setCount(intParam('bench', 0));
 
@@ -251,7 +255,7 @@ async function boot() {
       const frameInput = input.sample();
       alpha = loop.advance(ticker.deltaMS, () => stepGame(state, frameInput)).alpha;
     }
-    view.render(state, alpha, performance.now() / 1000);
+    view.render(state, alpha, performance.now() / 1000, ticker.deltaMS / 1000);
     hud.update(state.player.hp, state.player.maxHp);
     bench.update(ticker.deltaMS / 1000);
   });
@@ -279,7 +283,14 @@ async function boot() {
       p.z = p.prevZ = p.groundZ = groundHeightUnder(p, state.map);
       p.vx = p.vy = p.vz = 0;
       p.grounded = true;
+      view.snapCamera(state);
     },
+    camera: () => {
+      const c = view.camera;
+      return { x: c.x, y: c.y, zoom: c.zoom, origin: c.origin(), viewWidth: c.viewWidth, viewHeight: c.viewHeight, bounds: c.bounds };
+    },
+    setZoom: (/** @type {number} */ z) => view.camera.setZoom(z),
+    rotateHintVisible: () => rotateHint.visible,
     tick: () => state.tick,
     loop: () => ({ totalSteps: loop.totalSteps, droppedMs: loop.droppedMs, elapsedMs: loop.elapsedMs, pendingMs: loop.accumulator }),
     paused: () => paused,

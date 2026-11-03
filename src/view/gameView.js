@@ -11,7 +11,7 @@
 import { Container, Sprite } from 'pixi.js';
 import { Ground, Shape, LEVEL_PX, inBounds, northEdgeHeight, southEdgeHeight } from '../game/world/tilemap.js';
 import { lerp } from '../game/core/math.js';
-import { cameraOrigin } from './camera.js';
+import { Camera } from './camera.js';
 
 const WALK_FPS = 8;
 const WALK_CYCLE = [1, 0, 2, 0];
@@ -20,6 +20,8 @@ const EDGE_COLOR = 0x1a1c2c;
 const TREE_FADE_ALPHA = 0.5;
 const CLIFF_SHADOW_PX = 6;
 const EDGE_PX = 2;
+/** Aim at the body rather than the feet. */
+const CAMERA_TARGET_OFFSET_Y = 8;
 const CLIFF_SHADOW_ALPHA = 0.32;
 
 /**
@@ -55,6 +57,10 @@ export class GameView {
     this.overlay.label = 'overlay';
     this.world.addChild(this.base, this.actors, this.overlay);
     app.stage.addChildAt(this.world, 0);
+
+    // Camera (DESIGN.md 3.5): bounds = the whole map here; rooms / caves / dungeons set their own.
+    this.camera = new Camera();
+    this.camera.setBounds({ x: 0, y: 0, width: this.map.width * this.map.tileSize, height: this.map.height * this.map.tileSize });
 
     /** @type {Sprite[]} */
     this.waterSprites = [];
@@ -229,8 +235,9 @@ export class GameView {
    * @param {import('../game/state.js').GameState} state
    * @param {number} alpha interpolation factor from the fixed-step loop
    * @param {number} timeSec real time, for purely visual animation
+   * @param {number} dtSec real time since the previous rendered frame (camera smoothing)
    */
-  render(state, alpha, timeSec) {
+  render(state, alpha, timeSec, dtSec) {
     const p = state.player;
     const x = lerp(p.prevX, p.x, alpha);
     const y = lerp(p.prevY, p.y, alpha);
@@ -255,9 +262,29 @@ export class GameView {
     this.updateOcclusion(sx, sy, y, tex);
     this.animateWater(timeSec);
 
-    const map = this.map;
-    const cam = cameraOrigin(x, y - z - 8, this.app.screen.width, this.app.screen.height, map.width * map.tileSize, map.height * map.tileSize);
-    this.world.position.set(-cam.x, -cam.y);
+    // Follow the ground under the player (not the jump height), so jumping does not bob the
+    // screen; going up or down a level still moves the camera smoothly.
+    this.camera.setViewport(this.app.screen.width, this.app.screen.height);
+    this.camera.follow(x, y - p.groundZ - CAMERA_TARGET_OFFSET_Y, dtSec);
+    this.applyCamera();
+  }
+
+  /** Positions the world under the camera. Origin is already snapped to whole screen pixels. */
+  applyCamera() {
+    const o = this.camera.origin();
+    const zoom = this.camera.zoom;
+    this.world.scale.set(zoom);
+    this.world.position.set(-o.x * zoom, -o.y * zoom);
+  }
+
+  /**
+   * Cuts the camera straight to the player (after teleports, respawn or entering an area).
+   * @param {import('../game/state.js').GameState} state
+   */
+  snapCamera(state) {
+    const p = state.player;
+    this.camera.snapTo(p.x, p.y - p.groundZ - CAMERA_TARGET_OFFSET_Y);
+    this.applyCamera();
   }
 
   /**
