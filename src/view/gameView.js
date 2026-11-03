@@ -20,13 +20,17 @@ export class GameView {
     this.assets = assets;
     this.world = new Container();
     this.world.label = 'world';
+    // Static ground (grass / path) is cached into one texture after building: ~1500 tiles cost
+    // a single quad per frame. Animated water lives in its own uncached layer.
     this.ground = new Container();
     this.ground.label = 'ground';
+    this.water = new Container();
+    this.water.label = 'water';
     // Y-sorted layer: objects and characters ordered by their feet (DESIGN.md 3.3).
     this.actors = new Container();
     this.actors.label = 'actors';
     this.actors.sortableChildren = true;
-    this.world.addChild(this.ground, this.actors);
+    this.world.addChild(this.ground, this.water, this.actors);
     app.stage.addChildAt(this.world, 0);
 
     /** @type {Sprite[]} */
@@ -56,10 +60,15 @@ export class GameView {
         else if (g === Ground.WATER) key = 'tile.water.0';
         const s = this.makeSprite(key);
         s.position.set(tx * ts, ty * ts);
-        this.ground.addChild(s);
-        if (g === Ground.WATER) this.waterSprites.push(s);
+        if (g === Ground.WATER) {
+          this.water.addChild(s);
+          this.waterSprites.push(s);
+        } else {
+          this.ground.addChild(s);
+        }
       }
     }
+    this.ground.cacheAsTexture({ scaleMode: 'nearest', antialias: false });
     for (const o of map.objects) {
       const s = this.makeSprite(o.type === 'tree' ? 'obj.tree' : 'obj.rock');
       const x = o.tx * ts + ts / 2;

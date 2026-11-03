@@ -261,6 +261,7 @@ async function boot() {
     lastReport: () => lastReport,
     player: () => ({ x: state.player.x, y: state.player.y, facing: state.player.facing, dashing: state.player.dashing }),
     tick: () => state.tick,
+    loop: () => ({ totalSteps: loop.totalSteps, droppedMs: loop.droppedMs }),
     paused: () => paused,
     resolution: () => ({ ...resolution, target: targetHeight }),
     assets: () => assets.stats(),

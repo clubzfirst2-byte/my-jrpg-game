@@ -90,21 +90,26 @@ test('dash button makes the player faster', async ({ page }) => {
 for (const fps of [60, 30]) {
   test(`game speed is the same at ${fps}fps (fixed 60Hz logic)`, async ({ page }) => {
     await open(page, `?fps=${fps}`);
+    const loopState = () => page.evaluate(() => window.__debugApi.loop());
     await page.keyboard.down('ArrowRight');
     await page.waitForTimeout(300);
     const a = await player(page);
-    const t0 = await tick(page);
-    const real0 = Date.now();
+    const l0 = await loopState();
+    const real0 = await page.evaluate(() => performance.now());
     await page.waitForTimeout(1000);
     const b = await player(page);
-    const t1 = await tick(page);
-    const realMs = Date.now() - real0;
+    const l1 = await loopState();
+    const realMs = (await page.evaluate(() => performance.now())) - real0;
     await page.keyboard.up('ArrowRight');
-    const ticksPerSec = ((t1 - t0) * 1000) / realMs;
-    expect(ticksPerSec).toBeGreaterThan(50);
-    expect(ticksPerSec).toBeLessThan(66);
-    // Walk speed 72 px/s = 1.2 px per logic tick, regardless of display frame rate.
-    expect((b.x - a.x) / (t1 - t0)).toBeCloseTo(1.2, 1);
+
+    const steps = l1.totalSteps - l0.totalSteps;
+    const droppedSteps = (l1.droppedMs - l0.droppedMs) / (1000 / 60);
+    // Every millisecond of real time is either simulated at 60 steps/s or deliberately dropped
+    // (only when the machine renders below 15fps, e.g. software WebGL on CI).
+    expect(((steps + droppedSteps) * 1000) / realMs).toBeGreaterThan(54);
+    expect(((steps + droppedSteps) * 1000) / realMs).toBeLessThan(66);
+    // Walk speed 72 px/s = 1.2 px per logic step, regardless of display frame rate.
+    expect((b.x - a.x) / steps).toBeCloseTo(1.2, 1);
   });
 }
 
