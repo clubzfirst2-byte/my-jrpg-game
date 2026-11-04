@@ -29,6 +29,7 @@ import { failureMessage } from './save/saveFormat.js';
 import { FixedStepLoop } from './game/core/fixedStep.js';
 import { createGameState, stepGame, spawnEnemies, respawnPlayer, MAPS } from './game/state.js';
 import { applyProgress, areaAt } from './game/world/features.js';
+import { envSummary, ignite, material } from './game/env/envSim.js';
 import { groundHeightUnder } from './game/physics/collision.js';
 import { GAME_TITLE, PHASE } from './game/version.js';
 
@@ -176,6 +177,8 @@ async function boot() {
         toast.show(ev.reward === 'heart' ? 'ハートの器を手に入れた！ 体力が増えた' : `宝物を手に入れた！（${state.progress.treasures}）`);
       } else if (ev.type === 'checkpoint') {
         toast.show('記録石に触れた — 倒れてもここから再開できる');
+      } else if (ev.type === 'gateOpen') {
+        toast.show('どこかで扉が開いた音がする…');
       } else if (ev.type === 'landmark') {
         const l = state.landmarks.find((x) => x.id === ev.id);
         if (l && !l.always) toast.show(`発見：${l.name}`);
@@ -332,6 +335,10 @@ async function boot() {
             `位置 ${p.x.toFixed(0)},${p.y.toFixed(0)} 高さ ${p.z.toFixed(0)}（地面 ${p.groundZ.toFixed(0)}）${p.grounded ? '' : ' 空中'}`,
             `体力 ${p.hp}/${p.maxHp}  スタミナ ${p.stamina.toFixed(0)}${p.exhausted ? '（疲労）' : ''}${p.climbing ? ' 登攀中' : ''}${p.gliding ? ' 滑空中' : ''}${p.swimming ? ' 水泳中' : ''}`,
             `${p.facing}${p.dashing ? ' ダッシュ' : ''}  エラー ${errorLog.total}`,
+            (() => {
+              const e = envSummary(state.env);
+              return `環境 燃焼${e.burning} 計算${e.lastTickCells}/最大${e.maxTickCells} 灰${e.ash} 凍結${state.env.rw * state.env.rh - e.awakeRegions}${e.jobs ? ` 早送り中${e.jobs}` : ''}`;
+            })(),
           ].join('\n'),
         );
       }
@@ -447,6 +454,14 @@ async function boot() {
     saveInfo: () => ({ enabled: autosave.enabled, saves: autosave.saves, failures: autosave.failures, loaded: loaded.status }),
     toasts: () => [...toast.history],
     markers: () => view.features.visibleMarkers(),
+    /** P4 environment: summary, and test helpers to set a tile alight / read a tile. */
+    env: () => envSummary(state.env),
+    envIgnite: (/** @type {number} */ tx, /** @type {number} */ ty) => ignite(state.env, state.map, ty * state.map.width + tx),
+    envTile: (/** @type {number} */ tx, /** @type {number} */ ty) => {
+      const i = ty * state.map.width + tx;
+      return { material: material(state.env, state.map, i), burning: state.env.burning.has(i), solid: state.map.solid[i] === 1 };
+    },
+    envEvents: () => state.events.filter((e) => ['ignite', 'fireArrow', 'discharge', 'douse', 'gateOpen', 'burn', 'cut'].includes(e.type)).map((e) => e.type),
     /** Test helper: point the player in a direction without moving (for opening chests). */
     face: (/** @type {'up' | 'down' | 'left' | 'right'} */ dir) => {
       const v = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir];

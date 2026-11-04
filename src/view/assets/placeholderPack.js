@@ -32,6 +32,15 @@ import {
   smokeSprite,
   caveSprite,
   markerSprite,
+  metalTile,
+  fireFrames,
+  brambleSprite,
+  crystalSprite,
+  jarSprite,
+  receiverSprite,
+  doorSprite,
+  brazierFrames,
+  stumpSprite,
 } from './placeholderArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
@@ -80,6 +89,17 @@ export function placeholderEntries() {
   entries.push({ key: 'fx.smoke', rows: smokeSprite(), anchor: CENTER });
   entries.push({ key: 'obj.cave', rows: caveSprite(), anchor: FEET });
   entries.push({ key: 'ui.marker', rows: markerSprite(), anchor: CENTER });
+  // P4 environment.
+  entries.push({ key: 'tile.metal', rows: metalTile(), anchor: TOP_LEFT });
+  for (const [key, rows] of Object.entries(fireFrames())) entries.push({ key, rows, anchor: FEET });
+  for (const [key, rows] of Object.entries(brazierFrames())) entries.push({ key, rows, anchor: FEET });
+  entries.push({ key: 'obj.bramble', rows: brambleSprite(), anchor: FEET });
+  entries.push({ key: 'obj.crystal', rows: crystalSprite(), anchor: FEET });
+  entries.push({ key: 'obj.jar', rows: jarSprite(), anchor: FEET });
+  entries.push({ key: 'obj.receiver.off', rows: receiverSprite(false), anchor: FEET });
+  entries.push({ key: 'obj.receiver.on', rows: receiverSprite(true), anchor: FEET });
+  entries.push({ key: 'obj.door', rows: doorSprite(), anchor: FEET });
+  entries.push({ key: 'obj.stump', rows: stumpSprite(), anchor: FEET });
   return entries;
 }
 

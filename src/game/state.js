@@ -17,6 +17,8 @@ import {
   discoverLandmarks,
   respawnPoint,
 } from './world/features.js';
+import { createEnv, stepEnv, SOLID_OBJECTS } from './env/envSim.js';
+import { swordHitsObjects, fireDamage } from './env/envActions.js';
 import { ISLAND } from './world/maps/island.js';
 import { TEST_FIELD } from './world/maps/testField.js';
 import { HEIGHT_TEST } from './world/maps/heightTest.js';
@@ -55,6 +57,7 @@ const ENEMY_CORPSE_MS = 600;
  * @property {any[]} landmarks
  * @property {import('./world/features.js').Progress} progress
  * @property {boolean} saveRequested  something worth saving happened (the platform layer saves)
+ * @property {import('./env/envSim.js').Env} env  environment simulation (P4)
  */
 
 /** @param {import('./world/tilemap.js').MapDef} [def] @returns {GameState} */
@@ -87,8 +90,16 @@ export function createGameState(def = HEIGHT_TEST) {
     landmarks: f.landmarks ?? [],
     progress: emptyProgress(),
     saveRequested: false,
+    env: /** @type {any} */ (null),
   };
   placeFeatureSolids(state);
+  // P4: environment objects join the map's objects (the view draws them all the same way).
+  for (const o of f.envObjects ?? []) {
+    map.objects.push({ ...o });
+    if (SOLID_OBJECTS.has(o.type)) map.solid[o.ty * map.width + o.tx] = 1;
+  }
+  const campfires = state.campfires.map((c) => ({ type: 'campfire', tx: c.tx, ty: c.ty }));
+  state.env = createEnv(map, [...map.objects, ...campfires], 1);
   spawnEnemies(state);
   return state;
 }
@@ -112,6 +123,8 @@ export function spawnEnemies(state) {
 export function stepGame(state, input) {
   state.tick++;
   state.hitboxes = [];
+  // The world keeps going while the player is down (fires burn on).
+  stepEnv(state.env, state.map, state.player, STEP_SEC * 1000);
   if (state.events.length > 64) state.events.splice(0, state.events.length - 64);
   const p = state.player;
 
@@ -144,7 +157,10 @@ export function stepGame(state, input) {
     }
   }
 
+  swordHitsObjects(state);
+
   const enemyDt = STEP_SEC * enemyScale;
+  fireDamage(state, enemyDt * 1000);
   for (const e of state.enemies) updateEnemy(e, state, enemyDt);
   state.enemies = state.enemies.filter((e) => !(e.state === 'dead' && e.t > ENEMY_CORPSE_MS));
   pushApart(state);

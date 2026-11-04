@@ -4,6 +4,7 @@
 import { isSolidTile, terrainHeightAt } from '../world/tilemap.js';
 import { overlaps } from '../combat/hitbox.js';
 import { hitEnemy, hitPlayer } from '../combat/damage.js';
+import { arrowEnv, fireArrowHitsEnemy } from '../env/envActions.js';
 
 /**
  * @param {any} state @param {number} dt seconds (already scaled by slow motion)
@@ -18,7 +19,9 @@ export function updateProjectiles(state, dt) {
     const tx = Math.floor(pr.x / map.tileSize);
     const ty = Math.floor(pr.y / map.tileSize);
     const blocked = isSolidTile(map, tx, ty) || terrainHeightAt(map, pr.x, pr.y) > pr.z + 4;
-    if (pr.lifeMs <= 0 || blocked) continue;
+    // P4: arrows light up over fire, set things alight, hit crystals and jars.
+    const env = state.env ? arrowEnv(state, pr, blocked, pr.lifeMs <= 0) : blocked || pr.lifeMs <= 0 ? 'stop' : 'fly';
+    if (env === 'stop') continue;
     if (collide(state, pr)) continue;
     keep.push(pr);
   }
@@ -33,6 +36,7 @@ function collide(state, pr) {
       if (e.state === 'dead') continue;
       if (overlaps(point, { x: e.x, y: e.y - 4, z: e.z, r: 7 })) {
         hitEnemy(state, e, { owner: 'player', id: pr.id, damage: pr.damage, knock: 0.5, from: { x: pr.x - pr.vx, y: pr.y - pr.vy }, kind: 'projectile' });
+        if (state.env) fireArrowHitsEnemy(state, pr, e);
         return true;
       }
     }

@@ -10,7 +10,7 @@ import { direction, fromFront } from './hitbox.js';
  * @property {string} id         one hit per target per id
  * @property {number} damage
  * @property {{ x: number, y: number }} from  where the hit comes from (for guard direction / knockback)
- * @property {'melee' | 'projectile'} kind
+ * @property {'melee' | 'projectile' | 'env'} kind  env = fire / electricity (cannot be guarded)
  * @property {number} [knock]  knockback strength (default 1)
  */
 
@@ -29,7 +29,7 @@ export function hitPlayer(state, hit) {
   }
   if (dodgeInvulnerable(p)) return 'dodged';
   if (p.invulnMs > 0) return 'ignored';
-  if (p.guarding && fromFront(p, { x: p.aimX, y: p.aimY }, hit.from)) {
+  if (hit.kind !== 'env' && p.guarding && fromFront(p, { x: p.aimX, y: p.aimY }, hit.from)) {
     if (p.guardMs <= COMBAT.justGuardMs) {
       state.events.push({ type: 'parry', tick: state.tick, x: p.x, y: p.y });
       return 'parried';
@@ -40,7 +40,7 @@ export function hitPlayer(state, hit) {
   }
   p.hp = Math.max(0, p.hp - hit.damage);
   p.invulnMs = COMBAT.hurtInvulnMs;
-  knockback(p, hit.from, 1);
+  knockback(p, hit.from, hit.knock ?? 1);
   state.events.push({ type: 'hurt', tick: state.tick, x: p.x, y: p.y });
   if (p.hp === 0) p.dead = true;
   return 'hurt';

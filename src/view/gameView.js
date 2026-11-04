@@ -16,6 +16,7 @@ import { windupProgress } from '../game/entities/enemies.js';
 import { COMBAT } from '../game/entities/playerCombat.js';
 import { areaAt } from '../game/world/features.js';
 import { FeatureView } from './featureView.js';
+import { EnvView } from './envView.js';
 
 const WALK_FPS = 8;
 const WALK_CYCLE = [1, 0, 2, 0];
@@ -82,11 +83,24 @@ export class GameView {
 
     this.buildTerrain();
     this.buildObjects();
+    this.hasBraziers = this.map.objects.some((o) => o.type === 'brazier');
     // Screen-space layer above the world (landmark markers).
     this.screenLayer = new Container();
     this.screenLayer.label = 'screen';
     app.stage.addChild(this.screenLayer);
     this.features = new FeatureView((key) => this.makeSprite(key), this.actors, this.screenLayer, state);
+    // Environment (P4): ash / wet ground goes between the cached ground and the actors.
+    this.envGround = new Container();
+    this.envGround.label = 'env-ground';
+    this.world.addChildAt(this.envGround, 1);
+    this.env = new EnvView(
+      (key) => this.makeSprite(key),
+      (key) => this.assets.texture(key),
+      this.envGround,
+      this.actors,
+      state,
+    );
+    this.envVersion = -1;
 
     this.shadow = this.makeSprite('fx.shadow');
     this.shadow.alpha = 0.35;
@@ -140,6 +154,7 @@ export class GameView {
     if (g === Ground.WATER) return 'tile.water.0';
     if (g === Ground.RUIN) return 'tile.ruin';
     if (g === Ground.SAND) return 'tile.sand';
+    if (g === Ground.METAL) return 'tile.metal';
     return `tile.grass.${hash(tx, ty) % 3}`;
   }
 
@@ -253,21 +268,49 @@ export class GameView {
     return s;
   }
 
+  /** Sprite key of a map object in its current state. @param {any} o @param {number} timeSec */
+  objectKey(o, timeSec) {
+    if (o.type === 'receiver') return o.on ? 'obj.receiver.on' : 'obj.receiver.off';
+    if (o.type === 'brazier') return `obj.brazier.${Math.floor(timeSec * 6) % 2}`;
+    return `obj.${o.type}`;
+  }
+
   buildObjects() {
     const map = this.map;
     const ts = map.tileSize;
+    /** @type {{ o: any, sprite: Sprite, occluder: Occluder | null }[]} */
+    this.objectSprites = [];
     for (const o of map.objects) {
-      const s = this.makeSprite(o.type === 'tree' ? 'obj.tree' : 'obj.rock');
+      const s = this.makeSprite(this.objectKey(o, 0));
       const x = o.tx * ts + ts / 2;
       const feetY = o.ty * ts + ts;
       const z = map.elev[o.ty * map.width + o.tx];
       s.position.set(x, feetY - z);
       s.zIndex = feetY;
       this.actors.addChild(s);
+      /** @type {Occluder | null} */
+      let occluder = null;
       if (o.type === 'tree') {
         const w = s.width / 2;
-        this.trees.push({ sprite: s, x0: x - w, x1: x + w, y0: feetY - z - s.height, y1: feetY - z, key: feetY });
+        occluder = { sprite: s, x0: x - w, x1: x + w, y0: feetY - z - s.height, y1: feetY - z, key: feetY };
+        this.trees.push(occluder);
       }
+      this.objectSprites.push({ o, sprite: s, occluder });
+    }
+  }
+
+  /** Objects changed by the environment (burnt, broken, opened, powered). @param {number} timeSec */
+  updateObjects(timeSec) {
+    for (const e of this.objectSprites) {
+      const { o, sprite } = e;
+      sprite.visible = !o.gone;
+      if (o.gone) continue;
+      if (o.type === 'stump' && e.occluder) {
+        this.trees = this.trees.filter((t) => t !== e.occluder);
+        e.occluder = null;
+        sprite.alpha = 1;
+      }
+      sprite.texture = this.assets.texture(this.objectKey(o, timeSec));
     }
   }
 
@@ -328,6 +371,12 @@ export class GameView {
     if (this.applyBounds(state)) this.camera.snapTo(x, y - camZ - CAMERA_TARGET_OFFSET_Y);
     else this.camera.follow(x, y - camZ - CAMERA_TARGET_OFFSET_Y, dtSec);
     this.applyCamera();
+    if (state.env.version !== this.envVersion || this.hasBraziers) {
+      this.envVersion = state.env.version;
+      this.updateObjects(timeSec);
+    }
+    const o = this.camera.origin();
+    this.env.update(state, o, this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom, timeSec);
     this.features.update(
       state,
       (key) => this.assets.texture(key),
