@@ -37,7 +37,7 @@ export const ENV = Object.freeze({
 
 const FLAMMABLE = new Set(['grass', 'tree', 'bramble', 'vine']);
 /** Objects that block movement while they exist. */
-export const SOLID_OBJECTS = new Set(['tree', 'rock', 'bramble', 'crystal', 'jar', 'receiver', 'door', 'brazier', 'campfire', 'anvil', 'crate', 'sconce', 'stone', 'pillar', 'altar']);
+export const SOLID_OBJECTS = new Set(['tree', 'rock', 'bramble', 'crystal', 'jar', 'receiver', 'door', 'brazier', 'campfire', 'anvil', 'crate', 'sconce', 'stone', 'pillar', 'altar', 'cactus']);
 
 /**
  * @typedef {{ burnMs: number, at: number, wetUntil: number, ashUntil: number }} Cell
@@ -66,6 +66,7 @@ export const SOLID_OBJECTS = new Set(['tree', 'rock', 'bramble', 'crystal', 'jar
  * @property {Uint8Array} indoor   tiles under a roof (caves): no rain there
  * @property {{ i: number, atMs: number } | null} strike  a lightning strike about to land (P5)
  * @property {Map<number, { ground: number, untilMs: number }>} vines  P7: vine platforms (the ground they cover)
+ * @property {Uint8Array} dry  P8: tiles in a dry region (no rain)
  */
 
 /**
@@ -104,6 +105,7 @@ export function createEnv(map, objects, seed = 1, now = 0) {
     indoor: new Uint8Array(map.width * map.height),
     strike: null,
     vines: new Map(),
+    dry: new Uint8Array(map.width * map.height),
   };
 }
 
@@ -114,9 +116,12 @@ export function setWorldTime(env, ms) {
   env.clock.fill(ms);
 }
 
-/** @param {Env} env @param {number} [t] */
-export function weatherNow(env, t = env.now) {
-  return weatherAt(env.seed, t, env.weatherOverride);
+/**
+ * The weather at a time, at a tile (its region's climate; P8). Without a tile: a temperate region.
+ * @param {Env} env @param {number} [t] @param {number} [i]
+ */
+export function weatherNow(env, t = env.now, i = -1) {
+  return weatherAt(env.seed, t, env.weatherOverride, i >= 0 && env.dry[i] ? 'dry' : 'temperate');
 }
 
 export { roll };
@@ -151,7 +156,7 @@ export function material(env, map, i, t = env.now) {
 export function canIgnite(env, map, i, t) {
   if (env.burning.has(i)) return false;
   if (!FLAMMABLE.has(material(env, map, i, t))) return false;
-  if (!env.indoor[i] && rainWetAt(env.seed, t, env.weatherOverride)) return false; // rained on (P5)
+  if (!env.indoor[i] && rainWetAt(env.seed, t, env.weatherOverride, env.dry[i] ? 'dry' : 'temperate')) return false; // rained on (P5)
   const c = env.cells.get(i);
   return !c || c.wetUntil <= t;
 }
@@ -324,7 +329,7 @@ export function runCatchUp(env, map, budget) {
       c.burnMs -= dt;
       c.at = T;
       // It rained there in the meantime (DESIGN.md 4.4): the fire may have gone out.
-      if (rain && !env.indoor[i] && roll(env.seed, i, Math.floor(T / ENV.stepMs), 3) < 1 - Math.pow(1 - WEATHER.rainDouse, dt / ENV.tickMs)) {
+      if (rain && !env.indoor[i] && !env.dry[i] && roll(env.seed, i, Math.floor(T / ENV.stepMs), 3) < 1 - Math.pow(1 - WEATHER.rainDouse, dt / ENV.tickMs)) {
         douseCell(env, i, T);
         continue;
       }
@@ -386,7 +391,7 @@ function tick(env, map) {
     const c = /** @type {Cell} */ (env.cells.get(i));
     c.burnMs -= ENV.tickMs;
     c.at = t;
-    if (rain && !env.indoor[i] && roll(env.seed, i, k, 3) < WEATHER.rainDouse) {
+    if (rain && !env.indoor[i] && !env.dry[i] && roll(env.seed, i, k, 3) < WEATHER.rainDouse) {
       douseCell(env, i, t); // the rain puts it out
       continue;
     }

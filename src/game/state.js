@@ -26,11 +26,13 @@ import { stepSwitches } from './puzzles/switches.js';
 import { useAbility, stepAbilities, grantAbility } from './puzzles/abilities.js';
 import { areaAt } from './world/features.js';
 import { ISLAND } from './world/maps/island.js';
+import { WORLD } from './world/world.js';
+import { objectBaseline } from './world/worldDiff.js';
 import { TEST_FIELD } from './world/maps/testField.js';
 import { HEIGHT_TEST } from './world/maps/heightTest.js';
 
 /** Maps selectable with ?map=... (P3.5 default: the first island). */
-export const MAPS = Object.freeze({ island: ISLAND, height: HEIGHT_TEST, field: TEST_FIELD });
+export const MAPS = Object.freeze({ world: WORLD, island: ISLAND, height: HEIGHT_TEST, field: TEST_FIELD });
 
 /** Landmarks within this distance count as seen (about half a screen). */
 const SIGHT_PX = 200;
@@ -77,6 +79,8 @@ const ENEMY_CORPSE_MS = 600;
  * @property {{ x: number, y: number, startMs: number } | null} pulse  共鳴
  * @property {number} abilityReadyAt
  * @property {boolean} abilityHeld
+ * @property {import('./world/world.js').RegionInfo[]} regions  P8
+ * @property {any[]} objectBaseline  P8: objects as the map made them (for saving differences)
  */
 
 /** @param {import('./world/tilemap.js').MapDef} [def] @returns {GameState} */
@@ -123,6 +127,8 @@ export function createGameState(def = HEIGHT_TEST) {
     pulse: null,
     abilityReadyAt: 0,
     abilityHeld: false,
+    regions: f.regions ?? [],
+    objectBaseline: [],
   };
   placeFeatureSolids(state);
   // P4: environment objects join the map's objects (the view draws them all the same way).
@@ -130,8 +136,14 @@ export function createGameState(def = HEIGHT_TEST) {
     map.objects.push({ ...o });
     if (SOLID_OBJECTS.has(o.type)) map.solid[o.ty * map.width + o.tx] = 1;
   }
+  state.objectBaseline = objectBaseline(map.objects);
   const campfires = state.campfires.map((c) => ({ type: 'campfire', tx: c.tx, ty: c.ty }));
   state.env = createEnv(map, [...map.objects, ...campfires], 1, CLOCK.startHour * CLOCK.hourMs);
+  // P8: dry regions (the desert) never get rain.
+  for (const r of f.regions ?? []) {
+    if (r.climate !== 'dry') continue;
+    for (let ty = r.ty; ty < r.ty + r.th; ty++) for (let tx = r.tx; tx < r.tx + r.tw; tx++) state.env.dry[ty * map.width + tx] = 1;
+  }
   // Caves are under a roof: no rain, no wind, no lightning.
   for (const a of state.areas) {
     for (let ty = a.ty; ty < a.ty + a.th; ty++) for (let tx = a.tx; tx < a.tx + a.tw; tx++) state.env.indoor[ty * map.width + tx] = 1;

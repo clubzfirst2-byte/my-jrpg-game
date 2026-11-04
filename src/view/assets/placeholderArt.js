@@ -984,3 +984,61 @@ export function sensorSprite(on) {
 export function lightOrbSprite() {
   return ['..kkkk..', '.kYYYYk.', 'kYXXXXYk', 'kYXXXXYk', 'kYXXXXYk', 'kYXXXXYk', '.kYYYYk.', '..kkkk..'];
 }
+
+// ---- P8 region bundles ----
+
+/** Red desert sand. @param {number} seed */
+export function desertSandTile(seed) {
+  const g = grid(16, 16, 'q');
+  const rand = rng(300 + seed);
+  // Wind ripples.
+  for (let y = 2 + seed; y < 16; y += 5) {
+    for (let x = 0; x < 16; x++) if ((x + y * 2 + seed) % 7 < 4) g[y][x] = 'p';
+  }
+  for (let i = 0; i < 8; i++) g[Math.floor(rand() * 16)][Math.floor(rand() * 16)] = rand() < 0.5 ? 'P' : 'V';
+  return toRows(g);
+}
+
+/** Plains grass with flowers. @param {number} seed */
+export function plainsGrassTile(seed) {
+  const g = grid(16, 16, 'G');
+  const rand = rng(400 + seed);
+  for (let i = 0; i < 12; i++) {
+    const x = Math.floor(rand() * 15);
+    const y = Math.floor(rand() * 15) + 1;
+    g[y][x] = 'g';
+    if (rand() < 0.6) g[y - 1][x] = 'h';
+  }
+  for (let i = 0; i < seed; i++) {
+    const x = 1 + Math.floor(rand() * 14);
+    const y = 1 + Math.floor(rand() * 14);
+    g[y][x] = ['i', 'Y', 'X'][i % 3];
+  }
+  return toRows(g);
+}
+
+/** 12x20 cactus. */
+export function cactusSprite() {
+  return [
+    '....kkk.....',
+    '...kdGdk....',
+    '...kdGdk.kk.',
+    '.kkkdGdk.kGk',
+    'kGdkdGdk.kGk',
+    'kGdkdGdkkkGk',
+    'kGdddGdddGdk',
+    '.kkddGddddk.',
+    '...kdGdkkk..',
+    '...kdGdk....',
+    '...kdGdk....',
+    '...kdGdk....',
+    '...kdGdk....',
+    '...kdGdk....',
+    '...kdGdk....',
+    '..kkdGdkk...',
+    '.kPPPPPPPk..',
+    'kPqqqqqqqPk.',
+    'kkkkkkkkkkk.',
+    '............',
+  ];
+}

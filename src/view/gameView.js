@@ -20,6 +20,16 @@ import { EnvView } from './envView.js';
 import { WeatherView } from './weatherView.js';
 import { ItemView } from './itemView.js';
 import { PuzzleView } from './puzzleView.js';
+import { regionAt } from '../game/world/world.js';
+
+/** Chunk size in tiles (P8). */
+export const CHUNK = 32;
+
+/**
+ * @typedef {import('../game/world/world.js').RegionInfo} RegionInfo
+ * @typedef {{ cx: number, cy: number, base: Container, rows: Map<number, Container>, water: Sprite[],
+ *   extents: Map<number, { x0: number, x1: number, y0: number, y1: number }[]>, bundles: string[] }} Chunk
+ */
 
 const WALK_FPS = 8;
 const WALK_CYCLE = [1, 0, 2, 0];
@@ -76,16 +86,21 @@ export class GameView {
     this.boundsArea = null;
     this.applyBounds(state);
 
-    /** @type {Sprite[]} */
-    this.waterSprites = [];
     this.waterFrame = -1;
-    /** @type {Occluder[]} trees (faded when they hide the player) */
-    this.trees = [];
-    /** Per row: screen extents of elevated tiles, for silhouette checks. @type {Map<number, { x0: number, x1: number, y0: number, y1: number }[]>} */
-    this.elevatedRows = new Map();
-
-    this.buildTerrain();
-    this.buildObjects();
+    // P8: the terrain and objects are built in chunks around the camera and freed behind it.
+    /** @type {Map<string, Chunk>} */
+    this.chunks = new Map();
+    /** @type {Map<any, { o: any, sprite: Sprite, occluder: Occluder | null }>} object -> its sprite (loaded chunks only) */
+    this.objectSprites = new Map();
+    /** @type {RegionInfo[]} */
+    this.regions = state.regions ?? [];
+    /** Bundles being loaded (async). @type {Set<string>} */
+    this.bundlesLoading = new Set();
+    /** Bundles loaded ahead of their chunks (one reference held here). @type {Set<string>} */
+    this.preloaded = new Set();
+    /** Load every chunk at once (?chunks=all: for comparing against streaming). */
+    this.loadAll = false;
+    this.chunkStats = { built: 0, freed: 0 };
     this.hasBraziers = this.map.objects.some((o) => o.type === 'brazier');
     // Screen-space layer above the world (landmark markers).
     this.screenLayer = new Container();
@@ -165,6 +180,10 @@ export class GameView {
   /** @param {number} tx @param {number} ty */
   surfaceKey(tx, ty) {
     const g = this.map.ground[ty * this.map.width + tx];
+    // P8: each region dresses the same ground in its own art (its asset bundle).
+    const region = regionAt(this.regions, tx, ty);
+    if (region?.id === 'desert' && g === Ground.SAND) return `desert.sand.${hash(tx, ty) % 3}`;
+    if (region?.id === 'plains' && g === Ground.GRASS) return `plains.grass.${hash(tx, ty) % 4}`;
     if (g === Ground.PATH) return 'tile.path';
     if (g === Ground.WATER) return 'tile.water.0';
     if (g === Ground.RUIN) return 'tile.ruin';
@@ -174,25 +193,54 @@ export class GameView {
     return `tile.grass.${hash(tx, ty) % 3}`;
   }
 
-  buildTerrain() {
+  /** @param {number} cx @param {number} cy */
+  chunkKey(cx, cy) {
+    return `${cx},${cy}`;
+  }
+
+  /** Bundles a chunk's art needs (its regions'). @param {number} cx @param {number} cy @returns {string[]} */
+  chunkBundles(cx, cy) {
+    const x0 = cx * CHUNK;
+    const y0 = cy * CHUNK;
+    return this.regions
+      .filter((r) => r.bundle && r.tx < x0 + CHUNK && r.tx + r.tw > x0 && r.ty < y0 + CHUNK && r.ty + r.th > y0)
+      .map((r) => /** @type {string} */ (r.bundle));
+  }
+
+  /**
+   * Builds the terrain and objects of one chunk (CHUNK x CHUNK tiles). Flat ground goes into one
+   * cached texture per chunk; raised rows are Y-sorted with the actors as before (DESIGN.md 3.3).
+   * @param {number} cx @param {number} cy
+   * @returns {Chunk}
+   */
+  buildChunk(cx, cy) {
     const map = this.map;
     const ts = map.tileSize;
+    const base = new Container();
+    base.label = `chunk-${cx},${cy}`;
+    /** @type {Sprite[]} */
+    const water = [];
     /** @type {Map<number, Container>} */
     const rows = new Map();
+    /** @type {Map<number, { x0: number, x1: number, y0: number, y1: number }[]>} */
+    const extents = new Map();
     const rowContainer = (/** @type {number} */ ty) => {
       let c = rows.get(ty);
       if (!c) {
         c = new Container();
-        c.label = `terrain-row-${ty}`;
-        c.zIndex = ty * ts + 0.001; // north edge of the row (see header comment)
+        c.label = `terrain-row-${ty}-${cx}`;
+        // North edge of the row (see header comment); chunks to the east draw after (same as the
+        // tile order of one big map, so chunk borders look exactly the same).
+        c.zIndex = ty * ts + 0.001 + cx * 1e-5;
         rows.set(ty, c);
         this.actors.addChild(c);
       }
       return c;
     };
-
-    for (let ty = 0; ty < map.height; ty++) {
-      for (let tx = 0; tx < map.width; tx++) {
+    const x1 = Math.min(map.width, (cx + 1) * CHUNK);
+    const y1 = Math.min(map.height, (cy + 1) * CHUNK);
+    for (let ty = cy * CHUNK; ty < y1; ty++) {
+      for (let tx = cx * CHUNK; tx < x1; tx++) {
         const i = ty * map.width + tx;
         const h = map.elev[i];
         const isRamp = map.shape[i] === Shape.RAMP_N;
@@ -201,8 +249,11 @@ export class GameView {
         if (h === 0 && !isRamp) {
           const s = this.makeSprite(this.surfaceKey(tx, ty));
           s.position.set(x, ty * ts);
-          this.base.addChild(s);
-          if (map.ground[i] === Ground.WATER) this.waterSprites.push(s);
+          base.addChild(s);
+          if (map.ground[i] === Ground.WATER) {
+            if (this.waterFrame >= 0) s.texture = this.assets.texture(`tile.water.${this.waterFrame}`);
+            water.push(s);
+          }
           continue;
         }
 
@@ -241,14 +292,121 @@ export class GameView {
           if (lowerNorth) row.addChild(this.edge(x, top, ts, EDGE_PX));
         }
 
-        const extents = this.elevatedRows.get(ty) ?? [];
-        extents.push({ x0: x, x1: x + ts, y0: top, y1: Math.max(faceBottom, faceTop) });
-        this.elevatedRows.set(ty, extents);
+        const list = extents.get(ty) ?? [];
+        list.push({ x0: x, x1: x + ts, y0: top, y1: Math.max(faceBottom, faceTop) });
+        extents.set(ty, list);
       }
     }
-    this.base.tint = levelTint(0);
-    // ~1500 static tiles -> one textured quad per frame.
-    this.base.cacheAsTexture({ scaleMode: 'nearest', antialias: false });
+    base.tint = levelTint(0);
+    this.base.addChild(base);
+    // A chunk's flat ground -> one textured quad per frame.
+    base.cacheAsTexture({ scaleMode: 'nearest', antialias: false });
+
+    // Objects standing in this chunk now.
+    for (const o of map.objects) {
+      if (o.tx < cx * CHUNK || o.tx >= x1 || o.ty < cy * CHUNK || o.ty >= y1 || this.objectSprites.has(o)) continue;
+      this.addObjectSprite(o);
+    }
+    this.chunkStats.built++;
+    return { cx, cy, base, rows, water, extents, bundles: this.chunkBundles(cx, cy) };
+  }
+
+  /** @param {Chunk} c */
+  destroyChunk(c) {
+    const map = this.map;
+    c.base.cacheAsTexture(false);
+    c.base.destroy({ children: true });
+    for (const r of c.rows.values()) r.destroy({ children: true });
+    const inChunk = (/** @type {number} */ tx, /** @type {number} */ ty) => Math.floor(tx / CHUNK) === c.cx && Math.floor(ty / CHUNK) === c.cy;
+    for (const [o, e] of this.objectSprites) {
+      const home = this.chunks.get(this.chunkKey(Math.floor(o.tx / CHUNK), Math.floor(o.ty / CHUNK)));
+      if (inChunk(o.tx, o.ty) || !home || home === c) {
+        e.sprite.destroy();
+        this.objectSprites.delete(o);
+      }
+    }
+    for (const b of c.bundles) this.assets.unload(b);
+    this.chunkStats.freed++;
+    void map;
+  }
+
+  /**
+   * Loads the chunks around the view and frees the far ones (P8). A chunk whose region art is not
+   * loaded yet waits for its bundle (loaded in the background, released with the last chunk).
+   * @param {{ x: number, y: number }} origin @param {number} viewW @param {number} viewH world px
+   */
+  updateChunks(origin, viewW, viewH) {
+    const ts = this.map.tileSize;
+    const size = CHUNK * ts;
+    const ncx = Math.ceil(this.map.width / CHUNK);
+    const ncy = Math.ceil(this.map.height / CHUNK);
+    const range = (/** @type {number} */ margin) => ({
+      x0: this.loadAll ? 0 : Math.max(0, Math.floor((origin.x - margin) / size)),
+      x1: this.loadAll ? ncx - 1 : Math.min(ncx - 1, Math.floor((origin.x + viewW + margin) / size)),
+      y0: this.loadAll ? 0 : Math.max(0, Math.floor((origin.y - margin) / size)),
+      y1: this.loadAll ? ncy - 1 : Math.min(ncy - 1, Math.floor((origin.y + viewH + margin + 64) / size)),
+    });
+    const want = range(ts * 4); // a little beyond the screen (raised ground draws up to 4 tiles higher)
+    const keep = range(size); // hysteresis: freed only once well out of view
+    for (let cy = want.y0; cy <= want.y1; cy++) {
+      for (let cx = want.x0; cx <= want.x1; cx++) {
+        const key = this.chunkKey(cx, cy);
+        if (this.chunks.has(key)) continue;
+        const bundles = this.chunkBundles(cx, cy);
+        const missing = bundles.filter((b) => !this.assets.isLoaded(b));
+        if (missing.length > 0) {
+          for (const b of missing) this.requestBundle(b);
+          continue;
+        }
+        for (const b of bundles) this.assets.retain(b);
+        this.chunks.set(key, this.buildChunk(cx, cy));
+      }
+    }
+    for (const [key, c] of this.chunks) {
+      if (c.cx < keep.x0 || c.cx > keep.x1 || c.cy < keep.y0 || c.cy > keep.y1) {
+        this.destroyChunk(c);
+        this.chunks.delete(key);
+      }
+    }
+    // A bundle loaded for chunks that were left behind before being built: let it go.
+    for (const b of this.preloaded) {
+      const used = [...this.chunks.values()].some((c) => c.bundles.includes(b));
+      if (used) {
+        this.assets.unload(b); // the chunks hold their own references now
+        this.preloaded.delete(b);
+      } else if (!this.bundlesLoading.has(b)) {
+        const stillWanted = this.regions.some((r) => r.bundle === b && this.regionNear(r, origin, viewW, viewH));
+        if (!stillWanted) {
+          this.assets.unload(b);
+          this.preloaded.delete(b);
+        }
+      }
+    }
+  }
+
+  /** @param {RegionInfo} r @param {{ x: number, y: number }} o @param {number} w @param {number} h */
+  regionNear(r, o, w, h) {
+    const ts = this.map.tileSize;
+    const m = CHUNK * ts;
+    return r.tx * ts < o.x + w + m && (r.tx + r.tw) * ts > o.x - m && r.ty * ts < o.y + h + m && (r.ty + r.th) * ts > o.y - m;
+  }
+
+  /** @param {string} name */
+  requestBundle(name) {
+    if (this.bundlesLoading.has(name) || this.assets.isLoaded(name)) return;
+    this.bundlesLoading.add(name);
+    this.assets.load(name).then(
+      () => {
+        this.bundlesLoading.delete(name);
+        this.preloaded.add(name);
+      },
+      () => this.bundlesLoading.delete(name),
+    );
+  }
+
+  /** Chunk / bundle numbers for the debug overlay and tests. */
+  streamStats() {
+    return { chunks: this.chunks.size, built: this.chunkStats.built, freed: this.chunkStats.freed, objects: this.objectSprites.size, bundles: this.assets.stats().bundles };
   }
 
   /**
@@ -293,34 +451,31 @@ export class GameView {
     return `obj.${o.type}`;
   }
 
-  buildObjects() {
+  /** @param {any} o */
+  addObjectSprite(o) {
     const map = this.map;
     const ts = map.tileSize;
-    /** @type {{ o: any, sprite: Sprite, occluder: Occluder | null }[]} */
-    this.objectSprites = [];
-    for (const o of map.objects) {
-      const s = this.makeSprite(this.objectKey(o, 0));
-      const x = o.tx * ts + ts / 2;
-      const feetY = o.ty * ts + ts;
-      const z = map.elev[o.ty * map.width + o.tx];
-      s.position.set(x, feetY - z);
-      s.zIndex = feetY;
-      this.actors.addChild(s);
-      /** @type {Occluder | null} */
-      let occluder = null;
-      if (o.type === 'tree') {
-        const w = s.width / 2;
-        occluder = { sprite: s, x0: x - w, x1: x + w, y0: feetY - z - s.height, y1: feetY - z, key: feetY };
-        this.trees.push(occluder);
-      }
-      this.objectSprites.push({ o, sprite: s, occluder });
+    const s = this.makeSprite(this.objectKey(o, 0));
+    const x = o.tx * ts + ts / 2;
+    const feetY = o.ty * ts + ts;
+    const z = map.elev[o.ty * map.width + o.tx];
+    s.position.set(x, feetY - z);
+    s.zIndex = feetY;
+    s.visible = !o.gone;
+    this.actors.addChild(s);
+    /** @type {Occluder | null} */
+    let occluder = null;
+    if (o.type === 'tree') {
+      const w = s.width / 2;
+      occluder = { sprite: s, x0: x - w, x1: x + w, y0: feetY - z - s.height, y1: feetY - z, key: feetY };
     }
+    this.objectSprites.set(o, { o, sprite: s, occluder });
   }
 
   /** Objects changed by the environment (burnt, broken, opened, powered). @param {number} timeSec */
   updateObjects(timeSec, now = 0) {
     const ts = this.map.tileSize;
-    for (const e of this.objectSprites) {
+    for (const e of this.objectSprites.values()) {
       const { o, sprite } = e;
       sprite.visible = !o.gone;
       if (o.gone) continue;
@@ -334,7 +489,6 @@ export class GameView {
         sprite.zIndex = feetY;
       }
       if (o.type === 'stump' && e.occluder) {
-        this.trees = this.trees.filter((t) => t !== e.occluder);
         e.occluder = null;
         sprite.alpha = 1;
       }
@@ -399,6 +553,7 @@ export class GameView {
     if (this.applyBounds(state)) this.camera.snapTo(x, y - camZ - CAMERA_TARGET_OFFSET_Y);
     else this.camera.follow(x, y - camZ - CAMERA_TARGET_OFFSET_Y, dtSec);
     this.applyCamera();
+    this.updateChunks(this.camera.origin(), this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom);
     if (state.env.version !== this.envVersion || this.hasBraziers) {
       this.envVersion = state.env.version;
       // Resonance stones glow while their switch is active.
@@ -469,7 +624,8 @@ export class GameView {
     const px1 = sx + 6;
     const py0 = sy - 15;
     const py1 = sy - 1;
-    for (const t of this.trees) {
+    for (const { occluder: t } of this.objectSprites.values()) {
+      if (!t) continue;
       const hides = t.key > key && px1 > t.x0 && px0 < t.x1 && py1 > t.y0 && py0 < t.y1;
       t.sprite.alpha = hides ? TREE_FADE_ALPHA : 1;
     }
@@ -477,8 +633,9 @@ export class GameView {
     const ts = this.map.tileSize;
     const firstRow = Math.floor(key / ts);
     for (let r = firstRow; r < firstRow + 6 && !occluded; r++) {
-      const tiles = this.elevatedRows.get(r);
-      if (!tiles || r * ts + 0.001 <= key) continue; // rows drawn before the player can't hide it
+      if (r * ts + 0.001 <= key) continue; // rows drawn before the player can't hide it
+      const tiles = [];
+      for (const c of this.chunks.values()) tiles.push(...(c.extents.get(r) ?? []));
       for (const e of tiles) {
         if (px1 > e.x0 && px0 < e.x1 && py1 > e.y0 && py0 < e.y1) {
           occluded = true;
@@ -624,13 +781,15 @@ export class GameView {
 
   /** @param {number} timeSec */
   animateWater(timeSec) {
-    if (this.waterSprites.length === 0) return;
     const frame = Math.floor(timeSec / WATER_FRAME_SEC) % 2;
     if (frame === this.waterFrame) return;
     this.waterFrame = frame;
     const tex = this.assets.texture(`tile.water.${frame}`);
-    for (const s of this.waterSprites) s.texture = tex;
-    this.base.updateCacheTexture();
+    for (const c of this.chunks.values()) {
+      if (c.water.length === 0) continue;
+      for (const s of c.water) s.texture = tex;
+      c.base.updateCacheTexture();
+    }
   }
 }
 

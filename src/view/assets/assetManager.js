@@ -54,6 +54,18 @@ export class AssetManager {
     }
   }
 
+  /** @param {string} name */
+  isLoaded(name) {
+    return this.loaded.has(name);
+  }
+
+  /** One more reference to an already loaded bundle (P8: a chunk using its art). @param {string} name */
+  retain(name) {
+    const entry = this.loaded.get(name);
+    if (!entry) throw new Error(`Asset bundle "${name}" is not loaded`);
+    entry.refs++;
+  }
+
   /** @param {string} key logical name, e.g. "player.walk.down.0" */
   texture(key) {
     for (const { bundle } of this.loaded.values()) {

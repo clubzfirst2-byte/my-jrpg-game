@@ -46,6 +46,7 @@ const HEIGHT_DIGITS = '0123456789abcdefghijklmnopqrstuv';
  * @property {{ type: string, tx: number, ty: number, link?: string }[]} [envObjects]  P4: crystals, jars, brambles, braziers, receivers, doors; P6: anvil
  * @property {{ id: string, item: string, tx: number, ty: number, count?: number }[]} [pickups]  P6: items lying in the world
  * @property {import('../puzzles/switches.js').SwitchDef[]} [switches]  P7: plates, sensors, sconces, stones
+ * @property {import('./world.js').RegionInfo[]} [regions]  P8: the regions of the world (climate, art bundle)
  * @property {import('./features.js').LandmarkDef[]} [landmarks]
  * @typedef {string[] | IslandDef} MapDef
  */

@@ -18,6 +18,7 @@ function el(tag, attrs = {}, text = '') {
  * @property {(factor: number) => void} onScaleSprites  multiply bench sprite count (0 = clear)
  * @property {() => void} onStartReport
  * @property {() => number} onCycleResolution  switches to the next candidate, returns the new target height
+ * @property {() => boolean} [onToggleTour]  P8: starts / stops the 60-minute auto tour; returns whether it runs
  */
 
 /**
@@ -39,7 +40,8 @@ export function createOverlay(root, errorLog, handlers, options) {
   const btnClear = el('button', { type: 'button', 'data-action': 'clear' }, '負荷 0');
   const btnReport = el('button', { type: 'button', id: 'debug-report-start' }, `計測 ${options.reportSec}秒`);
   const btnRes = el('button', { type: 'button', id: 'debug-resolution' }, `解像度 ${options.resolution}`);
-  controls.append(btnRes, btnLess, btnMore, btnClear, btnReport);
+  const btnTour = el('button', { type: 'button', id: 'debug-tour' }, '自動巡回 60分');
+  controls.append(btnRes, btnLess, btnMore, btnClear, btnReport, btnTour);
   panel.append(statsText, controls);
 
   const modal = el('div', { id: 'debug-modal', hidden: '' });
@@ -62,6 +64,10 @@ export function createOverlay(root, errorLog, handlers, options) {
   btnMore.addEventListener('click', () => handlers.onScaleSprites(2));
   btnClear.addEventListener('click', () => handlers.onScaleSprites(0));
   btnReport.addEventListener('click', () => handlers.onStartReport());
+  btnTour.addEventListener('click', () => {
+    const running = handlers.onToggleTour ? handlers.onToggleTour() : false;
+    btnTour.textContent = running ? '巡回をやめる' : '自動巡回 60分';
+  });
   btnRes.addEventListener('click', () => {
     btnRes.textContent = `解像度 ${handlers.onCycleResolution()}`;
   });
