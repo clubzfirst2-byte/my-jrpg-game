@@ -51,8 +51,10 @@ test('cooking at the camp fire: a recipe is discovered', async ({ page }, testIn
   await api(page, 'give', 'beast_meat', 1);
   await api(page, 'give', 'ember_pepper', 1);
   await api(page, 'teleport', 77, 42); // just south of the camp fire
+  await expect.poll(() => api(page, 'nearby')).toBe('cook');
   await expect(page.locator('#use-button')).toHaveText('料理する');
   await page.click('#use-button');
+  await expect(page.locator('#inv-tab-cook')).toHaveClass(/active/);
   await page.click('#inv-add-beast_meat');
   await page.click('#inv-add-ember_pepper');
   await page.click('#inv-cook');

@@ -50,7 +50,11 @@ export class InventoryMenu {
     this.pot = [];
 
     this.bagButton = button('bag-button', '持ち物', () => this.open());
-    this.useButton = button('use-button', '', () => this.open(this.useTab));
+    // The station (fire / anvil) is decided when the button is pressed: the game is paused while the
+    // menu is open, so the player is still there.
+    this.useButton = button('use-button', '', () => this.open(this.useTab, true));
+    /** @type {Tab | null} cooking / forge tab available in this opening of the menu */
+    this.station = null;
     this.useButton.hidden = true;
     /** @type {Tab} */
     this.useTab = 'cook';
@@ -85,11 +89,12 @@ export class InventoryMenu {
     }
   }
 
-  /** @param {Tab} [tab] */
-  open(tab) {
+  /** @param {Tab} [tab] @param {boolean} [atStation] opened from the "料理する / 鍛冶" button */
+  open(tab, atStation = false) {
     const s = this.hooks.getState();
+    this.station = atStation && tab ? tab : s.nearby;
     if (tab) this.tab = tab;
-    if ((this.tab === 'cook' && s.nearby !== 'cook') || (this.tab === 'forge' && s.nearby !== 'forge')) this.tab = 'weapon';
+    if ((this.tab === 'cook' || this.tab === 'forge') && this.station !== this.tab) this.tab = 'weapon';
     this.pot = [];
     this.el.hidden = false;
     this.useButton.hidden = true;
@@ -113,8 +118,8 @@ export class InventoryMenu {
     this.money.textContent = `★ ${inv.money} 星貨`;
     /** @type {Tab[]} */
     const tabs = ['weapon', 'bow', 'armor', 'material', 'food'];
-    if (s.nearby === 'cook') tabs.push('cook');
-    if (s.nearby === 'forge') tabs.push('forge');
+    if (this.station === 'cook') tabs.push('cook');
+    if (this.station === 'forge') tabs.push('forge');
     this.tabs.replaceChildren(
       ...tabs.map((t) => {
         const b = button(`inv-tab-${t}`, TAB_NAMES[t], () => {
