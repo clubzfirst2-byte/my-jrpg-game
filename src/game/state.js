@@ -22,6 +22,9 @@ import { swordHitsObjects, fireDamage } from './env/envActions.js';
 import { applyWeatherToPlayer, stormStep } from './env/weatherActions.js';
 import { CLOCK } from './env/weather.js';
 import { applyGear, itemStep, placePickups } from './items/itemSystem.js';
+import { stepSwitches } from './puzzles/switches.js';
+import { useAbility, stepAbilities, grantAbility } from './puzzles/abilities.js';
+import { areaAt } from './world/features.js';
 import { ISLAND } from './world/maps/island.js';
 import { TEST_FIELD } from './world/maps/testField.js';
 import { HEIGHT_TEST } from './world/maps/heightTest.js';
@@ -67,6 +70,13 @@ const ENEMY_CORPSE_MS = 600;
  * @property {'cook' | 'forge' | null} nearby  something to use in reach
  * @property {number} respawns
  * @property {boolean} [pickupsStale]
+ * @property {import('./puzzles/switches.js').SwitchDef[]} switches  P7
+ * @property {Record<string, number>} switchUntil  stones: active until (world ms)
+ * @property {Record<string, boolean>} switchActive  for the view and tests
+ * @property {{ x: number, y: number, z: number, untilMs: number } | null} orb   灯火
+ * @property {{ x: number, y: number, startMs: number } | null} pulse  共鳴
+ * @property {number} abilityReadyAt
+ * @property {boolean} abilityHeld
  */
 
 /** @param {import('./world/tilemap.js').MapDef} [def] @returns {GameState} */
@@ -106,6 +116,13 @@ export function createGameState(def = HEIGHT_TEST) {
     nearby: null,
     respawns: 0,
     pickupsStale: true,
+    switches: f.switches ?? [],
+    switchUntil: {},
+    switchActive: {},
+    orb: null,
+    pulse: null,
+    abilityReadyAt: 0,
+    abilityHeld: false,
   };
   placeFeatureSolids(state);
   // P4: environment objects join the map's objects (the view draws them all the same way).
@@ -152,6 +169,9 @@ export function stepGame(state, input) {
     placePickups(state);
   }
   state.landedHits = [];
+  // P7: the ability button (on the press, not while held).
+  if (input.ability && !state.abilityHeld && !state.player.dead) useAbility(state);
+  state.abilityHeld = !!input.ability;
   if (state.events.length > 64) state.events.splice(0, state.events.length - 64);
   const p = state.player;
 
@@ -193,6 +213,26 @@ export function stepGame(state, input) {
   pushApart(state);
   updateProjectiles(state, enemyDt);
   itemStep(state);
+  stepAbilities(state);
+  stepSwitches(state);
+  learnAbilities(state);
+}
+
+/**
+ * Entering a trial teaches its ability; touching the tower altar teaches resonance (P7).
+ * @param {GameState} state
+ */
+function learnAbilities(state) {
+  const p = state.player;
+  const area = areaAt(state, p.x, p.y);
+  if (area?.grants) grantAbility(state, area.grants);
+  const ts = state.map.tileSize;
+  for (const [i, o] of state.env.objectAt) {
+    if (o.type !== 'altar') continue;
+    const ax = (i % state.map.width) * ts + ts / 2;
+    const ay = Math.floor(i / state.map.width) * ts + ts / 2;
+    if (Math.hypot(ax - p.x, ay - (p.y - 4)) <= 22 && Math.abs(state.map.elev[i] - p.z) < 12) grantAbility(state, 'resonance');
+  }
 }
 
 /** Keeps the player and enemies from standing inside each other. @param {GameState} state */
@@ -222,6 +262,7 @@ export function respawnPlayer(state) {
   p.spawnY = at.y;
   p.spawnZ = groundHeightUnder({ x: at.x, y: at.y, halfWidth: 5, height: 6 }, state.map);
   p.maxHp = state.progress.maxHp;
+  p.maxStamina = state.progress.maxStamina ?? 100;
   respawn(p);
   initCombat(p);
   state.deathMs = -1;

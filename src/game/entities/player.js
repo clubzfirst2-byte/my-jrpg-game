@@ -5,7 +5,7 @@ import { facingFrom } from '../core/facing.js';
 
 export { facingFrom };
 import { moveAndCollide, groundHeightUnder } from '../physics/collision.js';
-import { LEVEL_PX } from '../world/tilemap.js';
+import { LEVEL_PX, Ground } from '../world/tilemap.js';
 import { tryGrabWall, updateClimb } from './climbing.js';
 import { GLIDE, canOpenGlider, closeGlider, glideStep, openGlider } from './glider.js';
 import { COMBAT } from './playerCombat.js';
@@ -317,7 +317,9 @@ export function updatePlayer(p, input, map, dt) {
   const moved = Math.hypot(p.x - p.prevX, p.y - p.prevY);
   p.moving = p.grounded && moved > 0.01;
   p.walkTime = p.moving ? p.walkTime + dt * (p.dashing ? 1.6 : 1) : 0;
-  if (p.grounded && !p.swimming) {
+  // Last safe ground (drowning and pits return here). A pit is never safe (P7).
+  const under = map.ground[Math.floor(p.y / map.tileSize) * map.width + Math.floor(p.x / map.tileSize)];
+  if (p.grounded && !p.swimming && under !== Ground.PIT) {
     p.safeX = p.x;
     p.safeY = p.y;
     p.safeZ = p.z;

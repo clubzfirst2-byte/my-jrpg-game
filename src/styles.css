@@ -655,3 +655,29 @@ body {
   margin: 4px;
   color: var(--muted);
 }
+
+/* ---- 星環 ability (P7) ---- */
+#ui #ability-button {
+  right: calc(176px + var(--safe-right));
+  bottom: calc(158px + var(--safe-bottom));
+  width: 52px;
+  height: 52px;
+  font-size: 11px;
+  background: rgba(30, 80, 100, 0.75);
+  border-color: rgba(127, 232, 255, 0.85);
+}
+
+#ui #ability-button[hidden],
+#ui #ability-next[hidden] {
+  display: none;
+}
+
+#ui #ability-next {
+  position: absolute;
+  right: calc(150px + var(--safe-right));
+  bottom: calc(196px + var(--safe-bottom));
+  min-height: 26px;
+  padding: 2px 6px;
+  font-size: 12px;
+  border-radius: 13px;
+}

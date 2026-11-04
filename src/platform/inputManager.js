@@ -25,6 +25,7 @@ export class InputManager {
       dodge: k.dodge || t.dodge,
       guard: k.guard || t.guard,
       bow: k.bow || t.bow,
+      ability: k.ability || t.ability,
     };
   }
 

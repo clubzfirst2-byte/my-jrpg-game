@@ -3,6 +3,7 @@
 // Both telegraph their attacks (a visible wind-up) so a perfect dodge / guard is readable.
 import { moveAndCollide, groundHeightUnder } from '../physics/collision.js';
 import { waterSurfaceUnder } from './swimming.js';
+import { Ground } from '../world/tilemap.js';
 import { direction, overlaps } from '../combat/hitbox.js';
 import { hitPlayer } from '../combat/damage.js';
 
@@ -176,7 +177,8 @@ function walk(e, map, dx, dy) {
   const before = { x: e.x, y: e.y };
   moveAndCollide(e, map, dx, dy, e.z + STEP);
   const ground = groundHeightUnder(e, map);
-  if (waterSurfaceUnder(map, e) !== null || ground < e.z - STEP) {
+  const pit = map.ground[Math.floor(e.y / map.tileSize) * map.width + Math.floor(e.x / map.tileSize)] === Ground.PIT;
+  if (pit || waterSurfaceUnder(map, e) !== null || ground < e.z - STEP) {
     e.x = before.x; // stay out of water and away from ledges
     e.y = before.y;
     return;

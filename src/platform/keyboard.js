@@ -12,10 +12,11 @@ const KEYS = {
   dodge: ['KeyL'],
   guard: ['KeyI'],
   bow: ['KeyU'],
+  ability: ['KeyQ'],
 };
 
 /** Tap-type actions: a press is latched until the next sample so quick taps are never lost. */
-const TAP_ACTIONS = /** @type {const} */ (['jump', 'attack', 'dodge']);
+const TAP_ACTIONS = /** @type {const} */ (['jump', 'attack', 'dodge', 'ability']);
 
 export class KeyboardInput {
   /** @param {Window} win */
@@ -65,6 +66,7 @@ export class KeyboardInput {
       dodge: this.tap('dodge'),
       guard: this.pressed('guard'),
       bow: this.pressed('bow'),
+      ability: this.tap('ability'),
     };
   }
 

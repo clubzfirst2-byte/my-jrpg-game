@@ -4,6 +4,8 @@
 // and electricity. Pure logic.
 import { ENV, material, ignite, wet, openDoors, envNeighbours, regionOf } from './envSim.js';
 import { hitPlayer, hitEnemy } from '../combat/damage.js';
+import { lightSconce } from '../puzzles/switches.js';
+import { slideCrate } from '../puzzles/abilities.js';
 
 export const ENV_COMBAT = Object.freeze({
   /** Fire: half a heart per touch (the 800 ms invulnerability paces it); enemies 4 per second. */
@@ -45,7 +47,7 @@ export function isFireTile(state, i) {
 /**
  * Something hit the object / tile `i`: a sword swing or an arrow.
  * @param {any} state @param {number} i
- * @param {{ kind: 'sword' | 'arrow', id: string, fire?: boolean }} by
+ * @param {{ kind: 'sword' | 'arrow', id: string, fire?: boolean, dx?: number, dy?: number }} by
  * @returns {boolean} whether the hit did something
  */
 export function hitTile(state, i, by) {
@@ -60,6 +62,12 @@ export function hitTile(state, i, by) {
   const mat = material(env, map, i);
   if (o && !o.gone) {
     if (o.type === 'crystal') return discharge(state, i);
+    // P7: a sconce takes fire; a crate is shoved one tile by the sword.
+    if (o.type === 'sconce' && by.fire) {
+      lightSconce(state, o);
+      return true;
+    }
+    if (o.type === 'crate' && by.kind === 'sword' && (by.dx || by.dy)) return slideCrate(state, o, by.dx ?? 0, by.dy ?? 0, 1) > 0;
     if (o.type === 'jar') {
       o.gone = true;
       map.solid[i] = 0;
@@ -139,7 +147,7 @@ export function conductorsFrom(state, from) {
   const map = state.map;
   const conductive = (/** @type {number} */ i) => {
     const m = material(env, map, i);
-    return m === 'water' || m === 'metal';
+    return m === 'water' || m === 'metal' || m === 'crate'; // P7: crates are iron
   };
   /** @type {number[]} */
   const out = [];
@@ -209,7 +217,8 @@ export function swordHitsObjects(state) {
         const i = ty * map.width + tx;
         const o = state.env.objectAt.get(i);
         if (!o || o.gone || Math.abs(hb.z - map.elev[i]) > 16) continue;
-        hitTile(state, i, { kind: 'sword', id: hb.id });
+        const d = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[/** @type {'up'} */ (state.player.facing)];
+        hitTile(state, i, { kind: 'sword', id: hb.id, fire: hb.element === 'fire', dx: d[0], dy: d[1] });
       }
     }
   }

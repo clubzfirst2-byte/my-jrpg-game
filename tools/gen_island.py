@@ -160,7 +160,7 @@ for (x, y) in [(56, 60), (57, 60), (40, 58), (64, 52), (30, 62), (70, 60)]:
 # --- P4: environment (DESIGN.md 4.3) ---
 ENV_OBJECTS = []
 def env_obj(t, x, y, **kw):
-    assert g[y][x] in '.s=Tm' and (x, y) not in ramps, ('env object on', t, x, y, g[y][x])
+    assert g[y][x] in '.s=Tmu' and (x, y) not in ramps, ('env object on', t, x, y, g[y][x])
     g[y][x] = '.' if g[y][x] == 'T' else g[y][x]
     ENV_OBJECTS.append({'type': t, 'tx': x, 'ty': y, **kw})
 # Forest pocket: brambles close the gap; a brazier lights arrows shot north through it.
@@ -202,6 +202,29 @@ for y in range(15, 18):
 for x in range(99, 110):
     g[15][x] = '#'
 for (x, y) in [(102, 7), (106, 10), (101, 12)]:
+    g[y][x] = '#'
+
+# --- P7: three trials (試練の洞), rooms below the cave in the east strip ---
+# Same shape as the cave: floor cols 99-109, rows y0+1..y0+12, a line of rocks closes the south.
+TRIALS = {'trial_light': 20, 'trial_weight': 38, 'trial_chasm': 56}
+for tid, y0 in TRIALS.items():
+    for y in range(y0 + 1, min(H, y0 + 16)):
+        for x in range(99, 110):
+            h[y][x] = 0
+    for x in range(99, 110):
+        g[y0 + 13][x] = '#'
+# Inner partitions are rocks (low, so they never hide the player in the 3/4 view).
+for tid in ('trial_light', 'trial_weight'):
+    y0 = TRIALS[tid]
+    for x in range(99, 110):
+        if x != 104: g[y0 + 4][x] = '#'
+# The chasm: a 2-row pit across the room (falling in puts you back at the edge).
+y0 = TRIALS['trial_chasm']
+for y in (y0 + 6, y0 + 7):
+    for x in range(99, 110):
+        g[y][x] = '_'
+# The chasm's prize sits in a ring of rune doors on the near side.
+for (x, y) in [(100, y0 + 9), (102, y0 + 9), (100, y0 + 11), (102, y0 + 11)]:
     g[y][x] = '#'
 
 # --- spawn ---
@@ -313,6 +336,59 @@ pickup('travel_sword', 'travel_sword', 36, 60)
 pickup('hunter_bow', 'hunter_bow', 47, 11, lvl=48)
 features['pickups'] = PICKUPS
 
+# --- P7: trials. Glowing pillars on the island lead in; each room teaches an ability. ---
+SWITCHES = []
+def gate_near(x0, y0):
+    # A pillar with two free tiles south of it on the same level (the doorway and the arrival).
+    for d in range(0, 8):
+        for y in range(y0 - d, y0 + d + 1):
+            for x in range(x0 - d, x0 + d + 1):
+                if all(free(x, y + k, h[y][x]) and (x, y + k) not in taken and g[y + k][x] != '=' for k in range(3)):
+                    for k in range(3): taken.add((x, y + k))
+                    return x, y
+    raise AssertionError(('no gate spot', x0, y0))
+GATES = {'trial_light': gate_near(17, 34), 'trial_weight': gate_near(64, 50), 'trial_chasm': gate_near(70, 57)}
+GRANTS = {'trial_light': 'light', 'trial_weight': 'telekinesis', 'trial_chasm': 'vine'}
+NAMES = {'trial_light': '灯りの試練', 'trial_weight': '重さの試練', 'trial_chasm': '奈落の試練'}
+for tid, (gx, gy) in GATES.items():
+    y0 = TRIALS[tid]
+    env_obj('pillar', gx, gy)
+    features['warps'].append({'id': f'{tid}-in', 'tx': gx, 'ty': gy + 1, 'facing': 'up', 'toTx': 104, 'toTy': y0 + 11})
+    features['warps'].append({'id': f'{tid}-back', 'tx': 104, 'ty': y0 + 12, 'facing': 'down', 'toTx': gx, 'toTy': gy + 2})
+    features['areas'].append({'id': tid, 'tx': 98, 'ty': y0, 'tw': 13, 'th': 14, 'grants': GRANTS[tid], 'name': NAMES[tid], **({'dark': True} if tid == 'trial_light' else {})})
+    features['landmarks'].append({'id': tid, 'name': f'光る石柱（{NAMES[tid]}）', 'tx': gx, 'ty': gy, 'always': False})
+    features['chests'].append({'id': tid, 'tx': 104, 'ty': y0 + 2, 'reward': 'item', 'item': 'star_shard'} if tid != 'trial_chasm' else {'id': tid, 'tx': 101, 'ty': y0 + 10, 'reward': 'item', 'item': 'star_shard'})
+
+# Light: a sensor by the door. Ways: a light orb (灯火) / light the sconce next to it with a fire
+# arrow shot through the brazier / with the ember sword.
+y0 = TRIALS['trial_light']
+env_obj('door', 104, y0 + 4, link='trial_light')
+env_obj('sconce', 107, y0 + 7)
+env_obj('brazier', 100, y0 + 7)
+SWITCHES.append({'id': 'light-sensor', 'kind': 'sensor', 'tx': 105, 'ty': y0 + 6, 'link': 'trial_light', 'group': 'a', 'accepts': ['light']})
+# Weight: two plates at once. Ways: slide the metal crate onto the west plate with 念動 / push it
+# there with sword hits / an enemy standing on it. The player stands on the other one.
+y0 = TRIALS['trial_weight']
+env_obj('door', 104, y0 + 4, link='trial_weight')
+env_obj('crate', 104, y0 + 9)
+SWITCHES.append({'id': 'plate-west', 'kind': 'plate', 'tx': 99, 'ty': y0 + 9, 'link': 'trial_weight', 'group': 'a', 'accepts': ['weight']})
+SWITCHES.append({'id': 'plate-east', 'kind': 'plate', 'tx': 109, 'ty': y0 + 7, 'link': 'trial_weight', 'group': 'a', 'accepts': ['weight']})
+# Chasm: the switches are across the pit; any one opens the doors around the prize. Ways: a fire
+# arrow through the brazier onto the sconce / a vine bridge (蔓結び) to the plate / resonance (共鳴).
+y0 = TRIALS['trial_chasm']
+for (x, y) in [(101, y0 + 9), (101, y0 + 11), (100, y0 + 10), (102, y0 + 10)]:
+    env_obj('door', x, y, link='trial_chasm')
+env_obj('brazier', 106, y0 + 10)
+env_obj('sconce', 106, y0 + 3)
+SWITCHES.append({'id': 'chasm-sconce', 'kind': 'sconce', 'tx': 106, 'ty': y0 + 3, 'link': 'trial_chasm', 'group': 'fire', 'accepts': ['fire']})
+SWITCHES.append({'id': 'chasm-plate', 'kind': 'plate', 'tx': 103, 'ty': y0 + 3, 'link': 'trial_chasm', 'group': 'weight', 'accepts': ['weight']})
+env_obj('stone', 109, y0 + 2)
+SWITCHES.append({'id': 'chasm-stone', 'kind': 'stone', 'tx': 109, 'ty': y0 + 2, 'link': 'trial_chasm', 'group': 'resonance', 'accepts': ['resonance', 'shock']})
+features['switches'] = SWITCHES
+# The tower top: the 星環 altar teaches resonance (共鳴).
+alx, aly = near_free(47, 19, 96)
+env_obj('altar', alx, aly)
+
 # warps: trigger tiles and arrival tiles must be walkable
 for w in features['warps']:
     assert free(w['tx'], w['ty']), ('warp tile blocked', w)
@@ -321,6 +397,8 @@ for w in features['warps']:
 for c in features['chests'] + features['checkpoints'] + features['campfires']:
     ch = g[c['ty']][c['tx']]
     assert ch in '.=sum', (c, ch)
+for sw in SWITCHES:
+    assert g[sw['ty']][sw['tx']] in '.=sum', ('switch on', sw, g[sw['ty']][sw['tx']])
 features['envObjects'] = ENV_OBJECTS
 # enemies must not stand on environment objects
 for e in features['enemies']:
@@ -329,7 +407,7 @@ for e in features['enemies']:
 fmt = lambda rows: ',\n'.join("    '" + r + "'" for r in rows)
 out = f"""// @ts-check
 // The first island (P3.5, DESIGN.md 5.9). GENERATED by tools/gen_island.py: edit the script, not this file.
-// Ground legend: '.' grass, 's' sand, '=' path, '~' water, 'u' ruin, 'm' metal floor, 'T' tree, '#' rock, 'P' spawn.
+// Ground legend: '.' grass, 's' sand, '=' path, '~' water, 'u' ruin, 'm' metal floor, '_' pit, 'T' tree, '#' rock, 'P' spawn.
 // Height legend: base-32 digit = height in 4px units ('4' = 1 level), '^' = ramp rising north by 1 level.
 
 /** @type {{import('../tilemap.js').IslandDef}} */

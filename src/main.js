@@ -25,6 +25,7 @@ import { TitleScreen } from './ui/title.js';
 import { InventoryMenu } from './ui/inventoryMenu.js';
 import { itemName } from './game/items/itemSystem.js';
 import { equippedWeapon, itemDef, addItem } from './game/items/inventory.js';
+import { ABILITY_NAMES, cycleAbility, grantAbility } from './game/puzzles/abilities.js';
 import { Toast } from './ui/toast.js';
 import { SaveStore } from './save/saveStore.js';
 import { Autosave } from './save/autosave.js';
@@ -126,6 +127,16 @@ async function boot() {
   treasureHud.hidden = true;
   uiRoot.append(treasureHud);
   let shownTreasures = '';
+  const abilityButton = /** @type {HTMLButtonElement} */ (document.getElementById('ability-button'));
+  abilityButton.hidden = true;
+  const abilityNext = document.createElement('button');
+  abilityNext.type = 'button';
+  abilityNext.id = 'ability-next';
+  abilityNext.textContent = '⇄';
+  abilityNext.setAttribute('aria-label', '能力を切り替える');
+  abilityNext.hidden = true;
+  abilityNext.addEventListener('click', () => cycleAbility(state));
+  uiRoot.append(abilityNext);
   treasureHud.hidden = false;
   const clockHud = document.createElement('div');
   clockHud.id = 'hud-clock';
@@ -163,6 +174,7 @@ async function boot() {
       if (menu.isOpen) menu.close();
       else menu.open(state.nearby ?? undefined);
     } else if (e.code === 'Escape' && menu.isOpen) menu.close();
+    else if (e.code === 'KeyR' && !inTitle && !menu.isOpen) cycleAbility(state);
   });
   /** @type {TitleScreen | null} */
   let title = null;
@@ -228,6 +240,14 @@ async function boot() {
         toast.show('矢がない', { ms: 1200 });
       } else if (ev.type === 'noBow') {
         toast.show('弓を持っていない', { ms: 1200 });
+      } else if (ev.type === 'ability') {
+        toast.show(`星環の力「${ABILITY_NAMES[ev.id]}」を手に入れた！ 右の「能力」ボタンで使える`, { ms: 4000 });
+      } else if (ev.type === 'noAbility') {
+        toast.show('星環の力をまだ持っていない', { ms: 1200 });
+      } else if (ev.type === 'noTarget') {
+        toast.show(ev.id === 'vine' ? '前に水か穴がない' : '前に動かせる箱がない', { ms: 1200 });
+      } else if (ev.type === 'fell') {
+        toast.show('穴に落ちた…', { ms: 1200 });
       } else if (ev.type === 'checkpoint') {
         toast.show('記録石に触れた — 倒れてもここから再開できる');
       } else if (ev.type === 'gateOpen') {
@@ -428,6 +448,13 @@ async function boot() {
       treasureHud.textContent = shownTreasures;
     }
     menu.setNearby(inTitle ? null : state.nearby);
+    // The ability button shows the selected 星環 power (hidden until the first one is learned).
+    const abilityLabel = state.progress.ability ? ABILITY_NAMES[state.progress.ability] : '';
+    if (abilityButton.textContent !== abilityLabel) abilityButton.textContent = abilityLabel;
+    const showAbility = !!state.progress.ability && !inTitle;
+    if (abilityButton.hidden === showAbility) abilityButton.hidden = !showAbility;
+    const showNext = showAbility && state.progress.abilities.length > 1;
+    if (abilityNext.hidden === showNext) abilityNext.hidden = !showNext;
     deathOverlay.hidden = state.deathMs < 0;
     bench.update(ticker.elapsedMS / 1000);
   });
@@ -513,6 +540,14 @@ async function boot() {
     inventory: () => JSON.parse(JSON.stringify(state.progress.inv)),
     pickups: () => state.pickups.map((p) => ({ key: p.key, item: p.item, count: p.count, tx: Math.floor(p.x / 16), ty: Math.floor(p.y / 16) })),
     nearby: () => state.nearby,
+    /** P7: abilities and switches. */
+    abilities: () => ({ owned: [...state.progress.abilities], selected: state.progress.ability }),
+    grantAbility: (/** @type {string} */ id) => grantAbility(state, id),
+    selectAbility: (/** @type {string} */ id) => {
+      state.progress.ability = id;
+    },
+    switches: () => ({ ...state.switchActive }),
+    gates: () => [...state.progress.gates],
     menuOpen: () => menu.isOpen,
     /** Test helper: put items into the bag. */
     give: (/** @type {string} */ id, /** @type {number} */ n = 1) => addItem(state.progress.inv, id, n),

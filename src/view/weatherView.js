@@ -84,10 +84,11 @@ export class WeatherView {
   /**
    * @param {import('../game/state.js').GameState} state
    * @param {{ x: number, y: number }} origin @param {number} zoom
-   * @param {boolean} indoor the player is in a cave
+   * @param {{ dark?: boolean } | null} area the cave / trial the player is in (null outdoors)
    * @param {number} timeSec @param {number} dtSec
    */
-  update(state, origin, zoom, indoor, timeSec, dtSec) {
+  update(state, origin, zoom, area, timeSec, dtSec) {
+    const indoor = !!area;
     const env = state.env;
     const w = weatherNow(env);
     const sw = this.app.screen.width;
@@ -120,7 +121,8 @@ export class WeatherView {
 
     // --- light map ---
     const t0 = performance.now();
-    const amb = indoor ? { r: 0.55, g: 0.55, b: 0.65 } : ambientAt(env.now, w.kind);
+    // Indoors is dim; a dark trial room is nearly black until something gives light (P7).
+    const amb = area?.dark ? { r: 0.1, g: 0.1, b: 0.16 } : indoor ? { r: 0.55, g: 0.55, b: 0.65 } : ambientAt(env.now, w.kind);
     const white = amb.r >= 0.999 && amb.g >= 0.999 && amb.b >= 0.999;
     this.lightOn = this.enabled && !white;
     this.overlay.visible = this.lightOn;
@@ -178,10 +180,13 @@ export class WeatherView {
       if (ob.gone) continue;
       const x = (i % map.width) * ts + ts / 2;
       const y = ((i / map.width) | 0) * ts + ts / 2 - map.elev[i];
-      if (ob.type === 'campfire' || ob.type === 'brazier') add(x, y - 6, 64 * flicker(i), 0xffb070);
+      if (ob.type === 'campfire' || ob.type === 'brazier' || (ob.type === 'sconce' && ob.lit)) add(x, y - 6, 64 * flicker(i), 0xffb070);
+      else if (ob.type === 'stone' && ob.glow) add(x, y - 8, 30, 0x7fe8ff);
+      else if (ob.type === 'pillar' || ob.type === 'altar') add(x, y - 10, 30, 0x7fe8ff);
       else if (ob.type === 'crystal') add(x, y - 8, 26, 0x60d8ff);
       else if (ob.type === 'receiver' && ob.on) add(x, y - 8, 22, 0x60d8ff);
     }
+    if (state.orb) add(state.orb.x, state.orb.y - state.orb.z, 80, 0xfff0c8); // 灯火
     if (env.sparks) for (const i of env.sparks.cells) add((i % map.width) * ts + ts / 2, ((i / map.width) | 0) * ts + ts / 2, 20, 0xfff27a);
     return n;
   }
