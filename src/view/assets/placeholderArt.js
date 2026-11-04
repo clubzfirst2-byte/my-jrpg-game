@@ -815,3 +815,172 @@ export function itemIcons() {
     'icon.food': ['..........', '..k.k.k...', '..........', '.kkkkkkkk.', 'kvvvvvvvvk', 'kKyKyKyKvk', 'kvyKyKyvvk', '.kvvvvvvk.', '..kkkkkk..', '..........'],
   };
 }
+
+// ---- P7 puzzles ----
+
+export function pitTile() {
+  const g = grid(16, 16, 'D');
+  for (let x = 0; x < 16; x++) {
+    g[0][x] = 'F';
+    g[1][x] = x % 3 === 0 ? 'F' : 'k';
+    g[2][x] = 'k';
+  }
+  const rand = rng(77);
+  for (let i = 0; i < 6; i++) g[4 + Math.floor(rand() * 11)][Math.floor(rand() * 16)] = 'Z';
+  return toRows(g);
+}
+
+/** Vine platform drawn over water / a pit. */
+export function vineTile() {
+  return [
+    '..kk......kk....',
+    '.kLLk..kkkLLk...',
+    'kLhLLkkLLhLLLk..',
+    'kLLLLLLLLLLLLLk.',
+    '.kLLhLLLLLhLLLLk',
+    '.kLLLLtttLLLLLk.',
+    'kLLhLttTttLLhLLk',
+    'kLLLttTTTttLLLLk',
+    'kLLLLttTttLLLLk.',
+    '.kLLhLtttLLhLLk.',
+    'kLLLLLLLLLLLLLLk',
+    'kLhLLLLhLLLLLhLk',
+    '.kLLLkkLLLLkLLk.',
+    '..kLk..kLLk.kk..',
+    '...k....kk......',
+    '................',
+  ];
+}
+
+/** 12x24 glowing pillar (trial entrance). */
+export function pillarSprite() {
+  const rows = [
+    '...kkkkkk...',
+    '..kvvvvvvk..',
+    '..kBIBBIBk..',
+    '..kBBBBBBk..',
+  ];
+  for (let i = 0; i < 16; i++) rows.push(i % 5 === 2 ? '..kBBIIBBk..' : i % 5 === 3 ? '..kBIBBIBk..' : '..kBBBBBQk..');
+  rows.push('.kvvvvvvvvk.', 'kBBBBBBBBBBk', 'kQQQQQQQQQQk', 'kkkkkkkkkkkk');
+  return rows;
+}
+
+/** 16x14 星環 altar. */
+export function altarSprite() {
+  return [
+    '.....kkkkkk.....',
+    '....kIIIIIIk....',
+    '...kIkkkkkkIk...',
+    '...kIk....kIk...',
+    '...kIkkkkkkIk...',
+    '....kIIIIIIk....',
+    '.....kkkkkk.....',
+    '..kkkkkkkkkkkk..',
+    '.kvvvvvvvvvvvvk.',
+    'kBBBBBBBBBBBBBBk',
+    'kBBQBBBBBBBBQBBk',
+    'kBBBBBBBBBBBBBBk',
+    'kQQQQQQQQQQQQQQk',
+    'kkkkkkkkkkkkkkkk',
+  ];
+}
+
+/** 16x16 iron crate. */
+export function crateSprite() {
+  return [
+    'kkkkkkkkkkkkkkkk',
+    'kRRRRRRRRRRRRRRk',
+    'kRmmmmmmmmmmmmRk',
+    'kRmrrrrrrrrrrmRk',
+    'kRmrkrrrrrrkrmRk',
+    'kRmrrkrrrrkrrmRk',
+    'kRmrrrkrrkrrrmRk',
+    'kRmrrrrkkrrrrmRk',
+    'kRmrrrrkkrrrrmRk',
+    'kRmrrrkrrkrrrmRk',
+    'kRmrrkrrrrkrrmRk',
+    'kRmrkrrrrrrkrmRk',
+    'kRmrrrrrrrrrrmRk',
+    'kRmmmmmmmmmmmmRk',
+    'kmmmmmmmmmmmmmmk',
+    'kkkkkkkkkkkkkkkk',
+  ];
+}
+
+/** 10x18 sconce (torch stand), unlit or burning. @param {boolean} lit */
+export function sconceSprite(lit) {
+  const top = lit
+    ? ['...kk.....', '..kKk..k..', '..kKJk.kk.', '.kKJJkkKk.', '.kKJXJKKk.', '.kKJXXJKk.']
+    : ['..........', '..........', '..........', '..........', '..........', '..........'];
+  return [
+    ...top,
+    'kkkkkkkkkk',
+    'kAAAAAAAAk',
+    '.kAAAAAAk.',
+    '..kmrrmk..',
+    '...kmrk...',
+    '...kmrk...',
+    '...kmrk...',
+    '...kmrk...',
+    '...kmrk...',
+    '..kmmrrk..',
+    '.kmmmrrrk.',
+    'kkkkkkkkkk',
+  ];
+}
+
+/** 12x16 resonance stone (glows while active). @param {boolean} on */
+export function stoneSprite(on) {
+  const r = on ? 'I' : 'Q';
+  return [
+    '....kkkk....',
+    '..kkRRRRkk..',
+    '.kRRrrrrrmk.',
+    '.kRr' + r + r + r + r + 'rmk.',
+    'kRr' + r + 'rrrr' + r + 'rmk',
+    'kRr' + r + 'r' + r + r + 'r' + r + 'rmk',
+    'kRr' + r + 'r' + r + r + 'r' + r + 'rmk',
+    'kRr' + r + 'rrrr' + r + 'rmk',
+    '.kr' + r + r + r + r + 'rrmk.',
+    '.krrrrrrrmk.',
+    '.krrrrrrmmk.',
+    'kkmrrrrrmmkk',
+    'kmmmmmmmmmmk',
+    'kmmmmmmmmmmk',
+    'kkkkkkkkkkkk',
+    '............',
+  ];
+}
+
+/** 14x10 pressure plate, raised or pressed. @param {boolean} down */
+export function plateSprite(down) {
+  return down
+    ? ['..............', '..............', '..............', '.kkkkkkkkkkkk.', 'kQBBBBBBBBBBQk', 'kQBBIIIIIIBBQk', 'kQBBBBBBBBBBQk', 'kQQQQQQQQQQQQk', 'kkkkkkkkkkkkkk', '..............']
+    : ['..............', '.kkkkkkkkkkkk.', 'kvvvvvvvvvvvvk', 'kBBBBBBBBBBBBk', 'kBBBQQQQQQBBBk', 'kBBBBBBBBBBBBk', 'kQQQQQQQQQQQQk', 'kQQQQQQQQQQQQk', 'kkkkkkkkkkkkkk', '..............'];
+}
+
+/** 12x14 light sensor (an eye in a stone). @param {boolean} on */
+export function sensorSprite(on) {
+  const e = on ? 'Y' : 'Q';
+  return [
+    '...kkkkkk...',
+    '..kvvvvvvk..',
+    '.kBBBBBBBBk.',
+    '.kBBkkkkBBk.',
+    '.kBk' + e + e + e + e + 'kBk.',
+    '.kBk' + e + 'XX' + e + 'kBk.',
+    '.kBk' + e + e + e + e + 'kBk.',
+    '.kBBkkkkBBk.',
+    '.kBBBBBBBBk.',
+    '.kBBBBBBBQk.',
+    'kBBBBBBBBBQk',
+    'kQQQQQQQQQQk',
+    'kQQQQQQQQQQk',
+    'kkkkkkkkkkkk',
+  ];
+}
+
+/** 8x8 light orb. */
+export function lightOrbSprite() {
+  return ['..kkkk..', '.kYYYYk.', 'kYXXXXYk', 'kYXXXXYk', 'kYXXXXYk', 'kYXXXXYk', '.kYYYYk.', '..kkkk..'];
+}

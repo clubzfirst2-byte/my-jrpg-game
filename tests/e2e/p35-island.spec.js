@@ -163,7 +163,7 @@ test('the secret cave: in through the cliff opening, out onto the high ledge', a
 test('discovered landmarks off-screen get an edge marker', async ({ page }) => {
   await startNew(page);
   await api(page, 'teleport', 48, 35); // high ground: the camp smoke and the big tree are spotted
-  await expect.poll(async () => (await api(page, 'progress')).landmarks.length).toBe(3);
+  await expect.poll(async () => (await api(page, 'progress')).landmarks).toEqual(expect.arrayContaining(['tower', 'smoke', 'bigtree']));
   await api(page, 'teleport', 20, 64);
   await expect.poll(() => api(page, 'markers')).toEqual(expect.arrayContaining(['smoke', 'tower']));
 });

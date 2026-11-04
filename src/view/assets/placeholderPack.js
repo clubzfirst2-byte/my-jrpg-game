@@ -43,6 +43,16 @@ import {
   stumpSprite,
   anvilSprite,
   itemIcons,
+  pitTile,
+  vineTile,
+  pillarSprite,
+  altarSprite,
+  crateSprite,
+  sconceSprite,
+  stoneSprite,
+  plateSprite,
+  sensorSprite,
+  lightOrbSprite,
 } from './placeholderArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
@@ -105,6 +115,21 @@ export function placeholderEntries() {
   // P6 items.
   entries.push({ key: 'obj.anvil', rows: anvilSprite(), anchor: FEET });
   for (const [key, rows] of Object.entries(itemIcons())) entries.push({ key, rows, anchor: FEET });
+  // P7 puzzles.
+  entries.push({ key: 'tile.pit', rows: pitTile(), anchor: TOP_LEFT });
+  entries.push({ key: 'tile.vine', rows: vineTile(), anchor: TOP_LEFT });
+  entries.push({ key: 'obj.pillar', rows: pillarSprite(), anchor: FEET });
+  entries.push({ key: 'obj.altar', rows: altarSprite(), anchor: FEET });
+  entries.push({ key: 'obj.crate', rows: crateSprite(), anchor: FEET });
+  entries.push({ key: 'obj.sconce.off', rows: sconceSprite(false), anchor: FEET });
+  entries.push({ key: 'obj.sconce.on', rows: sconceSprite(true), anchor: FEET });
+  entries.push({ key: 'obj.stone.off', rows: stoneSprite(false), anchor: FEET });
+  entries.push({ key: 'obj.stone.on', rows: stoneSprite(true), anchor: FEET });
+  entries.push({ key: 'sw.plate.off', rows: plateSprite(false), anchor: FEET });
+  entries.push({ key: 'sw.plate.on', rows: plateSprite(true), anchor: FEET });
+  entries.push({ key: 'sw.sensor.off', rows: sensorSprite(false), anchor: FEET });
+  entries.push({ key: 'sw.sensor.on', rows: sensorSprite(true), anchor: FEET });
+  entries.push({ key: 'fx.light', rows: lightOrbSprite(), anchor: CENTER });
   return entries;
 }
 

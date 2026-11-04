@@ -10,7 +10,7 @@ export const LEVEL_PX = 16;
 export const HEIGHT_UNIT_PX = 4;
 
 /** Ground tile ids (what is drawn underneath, and the cliff material). */
-export const Ground = Object.freeze({ GRASS: 0, PATH: 1, WATER: 2, RUIN: 3, SAND: 4, METAL: 5 });
+export const Ground = Object.freeze({ GRASS: 0, PATH: 1, WATER: 2, RUIN: 3, SAND: 4, METAL: 5, PIT: 6, VINE: 7 });
 
 /** Tile shapes. RAMP_N rises toward the north by exactly 1 level across the tile. */
 export const Shape = Object.freeze({ FLAT: 0, RAMP_N: 1 });
@@ -45,6 +45,7 @@ const HEIGHT_DIGITS = '0123456789abcdefghijklmnopqrstuv';
  * @property {import('./features.js').AreaDef} [outdoor]  camera bounds outside every area (default: the whole map)
  * @property {{ type: string, tx: number, ty: number, link?: string }[]} [envObjects]  P4: crystals, jars, brambles, braziers, receivers, doors; P6: anvil
  * @property {{ id: string, item: string, tx: number, ty: number, count?: number }[]} [pickups]  P6: items lying in the world
+ * @property {import('../puzzles/switches.js').SwitchDef[]} [switches]  P7: plates, sensors, sconces, stones
  * @property {import('./features.js').LandmarkDef[]} [landmarks]
  * @typedef {string[] | IslandDef} MapDef
  */
@@ -91,6 +92,9 @@ export function parseMap(def) {
           break;
         case 'm':
           ground[i] = Ground.METAL; // walkable; conducts electricity (P4)
+          break;
+        case '_':
+          ground[i] = Ground.PIT; // a drop into the dark: stepping in puts you back at the edge (P7)
           break;
         case '~':
           ground[i] = Ground.WATER; // swimmable (P2.3); its height is the water surface

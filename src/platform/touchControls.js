@@ -26,6 +26,8 @@ export class TouchControls {
     this.bow = new HoldButton(root, 'bow-button', '弓');
     this.guard = new HoldButton(root, 'guard-button', 'ガード');
     this.dash = new HoldButton(root, 'dash-button', 'ダッシュ');
+    // P7: the selected 星環 ability (its label shows which one).
+    this.ability = new HoldButton(root, 'ability-button', '能力');
 
     /** @type {number | null} */
     this.stickPointer = null;
@@ -96,6 +98,7 @@ export class TouchControls {
       dodge: this.dodge.consumePress(),
       guard: this.guard.held,
       bow: this.bow.held,
+      ability: this.ability.consumePress(),
     };
   }
 
@@ -105,7 +108,7 @@ export class TouchControls {
     this.rawX = 0;
     this.rawY = 0;
     this.base.hidden = true;
-    for (const b of [this.dash, this.jump, this.attack, this.dodge, this.bow, this.guard]) b.clear();
+    for (const b of [this.dash, this.jump, this.attack, this.dodge, this.bow, this.guard, this.ability]) b.clear();
   }
 }
 

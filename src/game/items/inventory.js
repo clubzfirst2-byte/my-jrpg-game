@@ -318,6 +318,32 @@ export function dropsFor(kind, r) {
   return list.filter((/** @type {any} */ d, /** @type {number} */ k) => r(k) < d.chance).map((/** @type {any} */ d) => ({ item: d.item, count: d.count }));
 }
 
+/** Each 星の欠片 gives one heart or 20 stamina (P7, DESIGN.md 5.6). */
+export const SHARD = Object.freeze({ heartQuarters: 4, maxHearts: 10, stamina: 20, maxStamina: 200 });
+
+/**
+ * Uses a star shard on the player's health or stamina.
+ * @param {any} progress @param {any} player @param {'heart' | 'stamina'} kind
+ * @returns {boolean}
+ */
+export function useShard(progress, player, kind) {
+  const inv = progress.inv;
+  if (countOf(inv, 'star_shard') === 0) return false;
+  if (kind === 'heart' && progress.maxHp >= SHARD.maxHearts * 4) return false;
+  if (kind === 'stamina' && progress.maxStamina >= SHARD.maxStamina) return false;
+  removeItem(inv, 'star_shard');
+  if (kind === 'heart') {
+    progress.maxHp += SHARD.heartQuarters;
+    player.maxHp = progress.maxHp;
+    player.hp = progress.maxHp;
+  } else {
+    progress.maxStamina += SHARD.stamina;
+    player.maxStamina = progress.maxStamina;
+    player.stamina = progress.maxStamina;
+  }
+  return true;
+}
+
 /** A copy safe to save / restore (and to merge into old saves). @param {any} saved @returns {Inventory} */
 export function normalizeInventory(saved) {
   const base = createInventory();

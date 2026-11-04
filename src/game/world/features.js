@@ -14,7 +14,7 @@ const OPEN_RANGE = 20;
  * @typedef {{ id: string, tx: number, ty: number, reward: 'heart' | 'money' | 'item', money?: number, item?: string, count?: number }} ChestDef
  * @typedef {{ id: string, tx: number, ty: number }} CheckpointDef
  * @typedef {{ id: string, tx: number, ty: number, facing: 'up' | 'down' | 'left' | 'right', toTx: number, toTy: number, reveal?: boolean }} WarpDef  reveal: draw a cave opening on the cliff above
- * @typedef {{ id: string, tx: number, ty: number, tw: number, th: number }} AreaDef
+ * @typedef {{ id: string, tx: number, ty: number, tw: number, th: number, grants?: string, name?: string, dark?: boolean }} AreaDef  P7: trials grant an ability; dark rooms
  * @typedef {{ id: string, name: string, tx: number, ty: number, always: boolean }} LandmarkDef
  *
  * @typedef {object} Progress  what is saved (DESIGN.md 2.6)
@@ -27,11 +27,14 @@ const OPEN_RANGE = 20;
  * @property {number} maxHp             quarter hearts
  * @property {string[]} gates           doors opened by powering their receiver (P4)
  * @property {number} [worldMs]         world time (time of day, weather) when saved (P5)
+ * @property {string[]} abilities       P7: 星環 abilities learned
+ * @property {string | null} ability    the selected one
+ * @property {number} maxStamina
  */
 
 /** @returns {Progress} */
 export function emptyProgress() {
-  return { openedChests: [], checkpoints: [], checkpoint: null, landmarks: [], maxHp: 12, gates: [], inv: createInventory(), picked: {} };
+  return { openedChests: [], checkpoints: [], checkpoint: null, landmarks: [], maxHp: 12, gates: [], inv: createInventory(), picked: {}, abilities: [], ability: null, maxStamina: 100 };
 }
 
 /** Feet position at the center-bottom of a tile. @param {any} map @param {number} tx @param {number} ty */
@@ -195,6 +198,7 @@ export function applyProgress(state, saved) {
   pr.checkpoints = [...pr.checkpoints];
   pr.landmarks = [...pr.landmarks];
   pr.gates = [...pr.gates];
+  pr.abilities = [...pr.abilities];
   pr.inv = normalizeInventory(saved.inv);
   pr.picked = { ...(saved.picked ?? {}) };
   state.progress = pr;
@@ -205,4 +209,6 @@ export function applyProgress(state, saved) {
   }
   state.player.maxHp = pr.maxHp;
   state.player.hp = pr.maxHp;
+  state.player.maxStamina = pr.maxStamina;
+  state.player.stamina = pr.maxStamina;
 }

@@ -16,9 +16,13 @@ import {
   repairCost,
   canAfford,
   ITEMS,
+  useShard,
+  countOf,
+  SHARD,
 } from '../game/items/inventory.js';
+import { ABILITY_NAMES } from '../game/puzzles/abilities.js';
 
-/** @typedef {'weapon' | 'bow' | 'armor' | 'material' | 'food' | 'cook' | 'forge'} Tab */
+/** @typedef {'weapon' | 'bow' | 'armor' | 'material' | 'food' | 'power' | 'cook' | 'forge'} Tab */
 
 const TAB_NAMES = /** @type {Record<Tab, string>} */ ({
   weapon: '武器',
@@ -26,6 +30,7 @@ const TAB_NAMES = /** @type {Record<Tab, string>} */ ({
   armor: '防具',
   material: '素材',
   food: '料理',
+  power: '能力',
   cook: '鍋',
   forge: '鍛冶',
 });
@@ -119,7 +124,7 @@ export class InventoryMenu {
     const inv = s.progress.inv;
     this.money.textContent = `★ ${inv.money} 星貨`;
     /** @type {Tab[]} */
-    const tabs = ['weapon', 'bow', 'armor', 'material', 'food'];
+    const tabs = ['weapon', 'bow', 'armor', 'material', 'food', 'power'];
     if (this.station === 'cook') tabs.push('cook');
     if (this.station === 'forge') tabs.push('forge');
     this.tabs.replaceChildren(
@@ -194,6 +199,9 @@ export class InventoryMenu {
         }
         break;
       }
+      case 'power':
+        this.renderPower(list, s);
+        break;
       case 'cook':
         this.renderCook(list, inv);
         break;
@@ -211,6 +219,46 @@ export class InventoryMenu {
     const r = eatStack(s.progress.inv, id, s.player, s.env.now);
     if (r) this.hooks.toast(`${name}を食べた${r.heal ? `（${r.heal / 4} ハート回復）` : ''}${r.effect ? `  ${EFFECT_NAMES[r.effect]}` : ''}`);
     this.render();
+  }
+
+  /** 星環 abilities (choose the one for the button) and star shards (P7). @param {HTMLElement} list @param {any} s */
+  renderPower(list, s) {
+    const pr = s.progress;
+    const DESC = /** @type {Record<string, string>} */ ({
+      light: '光の玉を浮かべる。暗い所を照らし、光で動く仕掛けを動かす',
+      telekinesis: '前にある鉄の箱を、ぶつかるまで滑らせる',
+      vine: '前の水や穴に蔓の足場を作る（6 つまで・燃える）',
+      resonance: '周りの共鳴石を響かせる（壁ごしでも届く）',
+    });
+    if (pr.abilities.length === 0) {
+      const p = document.createElement('p');
+      p.className = 'inv-empty';
+      p.textContent = '星環の力をまだ持っていない（光る石柱の試練や、塔の上の祭壇で得られる）';
+      list.append(p);
+    }
+    for (const id of pr.abilities) {
+      const on = pr.ability === id;
+      list.append(
+        row(`inv-power-${id}`, `${on ? '◆ ' : ''}${ABILITY_NAMES[id]}`, DESC[id] ?? '', on, () => {
+          pr.ability = id;
+          this.render();
+        }),
+      );
+    }
+    const n = countOf(pr.inv, 'star_shard');
+    const line = row('inv-shards', `星の欠片 ×${n}`, `1 つで ハート +1（最大 ${SHARD.maxHearts}）か がんばり +${SHARD.stamina}（最大 ${SHARD.maxStamina}）`, false, null);
+    const actions = document.createElement('div');
+    actions.className = 'inv-actions';
+    for (const [kind, label] of /** @type {const} */ ([['heart', 'ハート +1'], ['stamina', 'がんばり +']])) {
+      const b = button(`inv-shard-${kind}`, label, () => {
+        if (useShard(pr, s.player, kind)) this.hooks.toast(kind === 'heart' ? 'ハートが 1 つ増えた！' : 'がんばりが増えた！');
+        this.render();
+      });
+      b.disabled = n === 0;
+      actions.append(b);
+    }
+    line.append(actions);
+    list.append(line);
   }
 
   /** @param {HTMLElement} list @param {any} inv */

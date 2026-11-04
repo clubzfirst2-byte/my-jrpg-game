@@ -19,6 +19,7 @@ import { FeatureView } from './featureView.js';
 import { EnvView } from './envView.js';
 import { WeatherView } from './weatherView.js';
 import { ItemView } from './itemView.js';
+import { PuzzleView } from './puzzleView.js';
 
 const WALK_FPS = 8;
 const WALK_CYCLE = [1, 0, 2, 0];
@@ -104,6 +105,14 @@ export class GameView {
     );
     this.envVersion = -1;
     this.items = new ItemView((key) => this.makeSprite(key), this.actors);
+    this.puzzles = new PuzzleView(
+      (key) => this.makeSprite(key),
+      (key) => this.assets.texture(key),
+      this.envGround,
+      this.actors,
+      this.overlay,
+      state,
+    );
     // Time of day and weather (P5): light map, rain, lightning, above the world.
     this.weather = new WeatherView(app, (key) => this.makeSprite(key), this.actors);
     this.weather.attach(app.stage, app.stage.getChildIndex(this.world) + 1);
@@ -161,6 +170,7 @@ export class GameView {
     if (g === Ground.RUIN) return 'tile.ruin';
     if (g === Ground.SAND) return 'tile.sand';
     if (g === Ground.METAL) return 'tile.metal';
+    if (g === Ground.PIT) return 'tile.pit';
     return `tile.grass.${hash(tx, ty) % 3}`;
   }
 
@@ -278,6 +288,8 @@ export class GameView {
   objectKey(o, timeSec) {
     if (o.type === 'receiver') return o.on ? 'obj.receiver.on' : 'obj.receiver.off';
     if (o.type === 'brazier') return `obj.brazier.${Math.floor(timeSec * 6) % 2}`;
+    if (o.type === 'sconce') return o.lit ? 'obj.sconce.on' : 'obj.sconce.off';
+    if (o.type === 'stone') return o.glow ? 'obj.stone.on' : 'obj.stone.off';
     return `obj.${o.type}`;
   }
 
@@ -306,11 +318,21 @@ export class GameView {
   }
 
   /** Objects changed by the environment (burnt, broken, opened, powered). @param {number} timeSec */
-  updateObjects(timeSec) {
+  updateObjects(timeSec, now = 0) {
+    const ts = this.map.tileSize;
     for (const e of this.objectSprites) {
       const { o, sprite } = e;
       sprite.visible = !o.gone;
       if (o.gone) continue;
+      if (o.type === 'crate') {
+        // Crates move (P7): slide from the old tile over 0.2 s.
+        const k = o.movedAt === undefined ? 1 : Math.min(1, (now - o.movedAt) / 200);
+        const tx = o.fromTx === undefined ? o.tx : o.fromTx + (o.tx - o.fromTx) * k;
+        const ty = o.fromTy === undefined ? o.ty : o.fromTy + (o.ty - o.fromTy) * k;
+        const feetY = ty * ts + ts;
+        sprite.position.set(Math.round(tx * ts + ts / 2), Math.round(feetY - this.map.elev[o.ty * this.map.width + o.tx]));
+        sprite.zIndex = feetY;
+      }
       if (o.type === 'stump' && e.occluder) {
         this.trees = this.trees.filter((t) => t !== e.occluder);
         e.occluder = null;
@@ -379,12 +401,19 @@ export class GameView {
     this.applyCamera();
     if (state.env.version !== this.envVersion || this.hasBraziers) {
       this.envVersion = state.env.version;
-      this.updateObjects(timeSec);
+      // Resonance stones glow while their switch is active.
+      for (const sw of state.switches) {
+        if (sw.kind !== 'stone') continue;
+        const o = state.env.objectAt.get(sw.ty * this.map.width + sw.tx);
+        if (o) o.glow = !!state.switchActive[sw.id];
+      }
+      this.updateObjects(timeSec, state.env.now);
     }
     const o = this.camera.origin();
     this.env.update(state, o, this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom, timeSec);
-    this.weather.update(state, o, this.camera.zoom, !!this.boundsArea, timeSec, dtSec);
+    this.weather.update(state, o, this.camera.zoom, this.boundsArea ? areaAt(state, state.player.x, state.player.y) : null, timeSec, dtSec);
     this.items.update(state, timeSec);
+    this.puzzles.update(state, timeSec);
     this.features.update(
       state,
       (key) => this.assets.texture(key),

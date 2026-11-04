@@ -12,11 +12,12 @@
  * @property {boolean} [dodge]  held (P3)
  * @property {boolean} [guard]  held (P3)
  * @property {boolean} [bow]    held while aiming; releasing shoots (P3)
+ * @property {boolean} [ability] P7: use the selected 星環 ability (the logic detects presses)
  */
 
 /** @returns {InputFrame} */
 export function emptyInput() {
-  return { moveX: 0, moveY: 0, dash: false, jump: false, attack: false, dodge: false, guard: false, bow: false };
+  return { moveX: 0, moveY: 0, dash: false, jump: false, attack: false, dodge: false, guard: false, bow: false, ability: false };
 }
 
 /** Analog values below this magnitude are treated as no input. */

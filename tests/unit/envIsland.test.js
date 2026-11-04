@@ -108,7 +108,7 @@ describe('electricity', () => {
   it('the islet crystal powers the receiver through the sea and opens the vault (saved)', () => {
     const s = island();
     const c = obj(s, 'crystal', (o) => o.tx > 80);
-    const doors = ISLAND.envObjects.filter((o) => o.type === 'door');
+    const doors = ISLAND.envObjects.filter((o) => o.type === 'door' && o.link === 'vault');
     for (const d of doors) expect(s.map.solid[idx(s, d.tx, d.ty)]).toBe(1);
     place(s, c.tx + 1, c.ty, 'left');
     stepGame(s, { ...none, attack: true });

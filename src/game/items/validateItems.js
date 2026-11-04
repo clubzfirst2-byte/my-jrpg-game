@@ -2,7 +2,7 @@
 // Integrity check of the item data (P6, DESIGN.md roadmap: "データの整合性チェック"). Used by the unit
 // tests and by `npm run check:data` (CI). Returns a list of problems; empty means valid.
 
-const TYPES = ['weapon', 'bow', 'ammo', 'armor', 'material', 'food'];
+const TYPES = ['weapon', 'bow', 'ammo', 'armor', 'material', 'food', 'key'];
 const SLOTS = ['head', 'body', 'legs'];
 const TRAITS = ['shockproof', 'grip', 'fireproof'];
 const EFFECTS = ['stamina', 'attackUp', 'defenseUp', 'fireproof'];

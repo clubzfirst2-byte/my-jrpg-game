@@ -1,63 +1,410 @@
 {
   "version": 1,
-  "currency": { "id": "star", "name": "星貨" },
-  "limits": { "weapons": 6, "bows": 3, "stack": 99 },
+  "currency": {
+    "id": "star",
+    "name": "星貨"
+  },
+  "limits": {
+    "weapons": 6,
+    "bows": 3,
+    "stack": 99
+  },
   "items": [
-    { "id": "wood_sword", "name": "木の剣", "type": "weapon", "damage": 1.0, "reach": 0, "speed": 1.0, "durability": 25, "price": 10, "desc": "軽くて振りやすいが、すぐに傷む。" },
-    { "id": "travel_sword", "name": "旅人の剣", "type": "weapon", "damage": 1.5, "reach": 0, "speed": 1.0, "durability": 35, "price": 40, "desc": "よく手入れされた片手剣。" },
-    { "id": "guard_spear", "name": "見張りの槍", "type": "weapon", "damage": 1.25, "reach": 6, "speed": 0.9, "durability": 30, "price": 40, "desc": "長い。離れた敵に届く。" },
-    { "id": "rusty_greatsword", "name": "錆びた大剣", "type": "weapon", "damage": 2.25, "reach": 2, "speed": 1.45, "durability": 28, "price": 60, "desc": "重く遅いが、一撃が大きい。" },
-    { "id": "ember_sword", "name": "灯火の剣", "type": "weapon", "damage": 1.5, "reach": 0, "speed": 1.0, "durability": 22, "element": "fire", "price": 120, "desc": "刃が熱を帯びている。斬った草木に火がつく。" },
-    { "id": "wood_bow", "name": "木の弓", "type": "bow", "damage": 1.0, "durability": 30, "price": 15, "desc": "素朴な弓。" },
-    { "id": "hunter_bow", "name": "狩人の弓", "type": "bow", "damage": 1.5, "durability": 45, "price": 60, "desc": "張りが強く、矢が重く当たる。" },
-    { "id": "arrow", "name": "矢", "type": "ammo", "price": 2, "desc": "弓で撃つ。" },
-    { "id": "bark_vest", "name": "樹皮の胴当て", "type": "armor", "slot": "body", "defense": 2, "price": 40, "desc": "厚い樹皮を重ねた胴当て。" },
-    { "id": "insulated_cap", "name": "雷よけの帽子", "type": "armor", "slot": "head", "defense": 1, "trait": "shockproof", "price": 60, "desc": "電気を通さない。" },
-    { "id": "grip_boots", "name": "岩登りの靴", "type": "armor", "slot": "legs", "defense": 1, "trait": "grip", "price": 60, "desc": "濡れた崖でも滑らない。" },
-    { "id": "mushroom", "name": "森きのこ", "type": "material", "heal": 2, "tags": ["veg"], "price": 4, "desc": "森の木陰に生える。" },
-    { "id": "red_berry", "name": "赤い実", "type": "material", "heal": 2, "tags": ["fruit"], "price": 3, "desc": "甘酸っぱい木の実。" },
-    { "id": "swift_herb", "name": "疾風草", "type": "material", "heal": 1, "tags": ["veg"], "effect": { "kind": "stamina", "ms": 0 }, "price": 6, "desc": "かじると息が整う。" },
-    { "id": "ember_pepper", "name": "火照りの実", "type": "material", "heal": 1, "tags": ["fruit"], "effect": { "kind": "fireproof", "ms": 60000 }, "price": 8, "desc": "体の芯が熱くなる。" },
-    { "id": "beast_meat", "name": "獣の肉", "type": "material", "heal": 4, "tags": ["meat"], "price": 8, "desc": "焼くとおいしい。" },
-    { "id": "beast_fang", "name": "獣の牙", "type": "material", "tags": ["part"], "price": 10, "desc": "鋭い牙。鍛冶に使う。" },
-    { "id": "murk_crystal", "name": "澱の結晶", "type": "material", "tags": ["part"], "price": 15, "desc": "澱の射手が落とす。鍛冶に使う。" },
-    { "id": "grilled_meat", "name": "焼き肉", "type": "food", "heal": 10, "price": 15, "desc": "香ばしい。" },
-    { "id": "mushroom_skewer", "name": "きのこ串", "type": "food", "heal": 6, "price": 10, "desc": "素朴な味。" },
-    { "id": "berry_jam", "name": "木の実のジャム", "type": "food", "heal": 6, "effect": { "kind": "stamina", "ms": 0 }, "price": 10, "desc": "甘くて元気が出る。" },
-    { "id": "hunter_stew", "name": "狩人の煮込み", "type": "food", "heal": 16, "effect": { "kind": "attackUp", "ms": 120000 }, "price": 40, "desc": "力がみなぎる。しばらく攻撃力が上がる。" },
-    { "id": "ember_soup", "name": "火照りのスープ", "type": "food", "heal": 8, "effect": { "kind": "fireproof", "ms": 180000 }, "price": 30, "desc": "しばらく炎に焼かれない。" },
-    { "id": "hearty_skewer", "name": "がっつり串", "type": "food", "heal": 12, "effect": { "kind": "defenseUp", "ms": 120000 }, "price": 30, "desc": "しばらく受けるダメージが減る。" },
-    { "id": "mixed_stew", "name": "ごった煮", "type": "food", "heal": 0, "price": 5, "desc": "何でも入れて煮た。回復量は材料しだい。" },
-    { "id": "dubious_food", "name": "あやしい料理", "type": "food", "heal": 1, "price": 1, "desc": "食べられなくはない。" }
+    {
+      "id": "wood_sword",
+      "name": "木の剣",
+      "type": "weapon",
+      "damage": 1.0,
+      "reach": 0,
+      "speed": 1.0,
+      "durability": 25,
+      "price": 10,
+      "desc": "軽くて振りやすいが、すぐに傷む。"
+    },
+    {
+      "id": "travel_sword",
+      "name": "旅人の剣",
+      "type": "weapon",
+      "damage": 1.5,
+      "reach": 0,
+      "speed": 1.0,
+      "durability": 35,
+      "price": 40,
+      "desc": "よく手入れされた片手剣。"
+    },
+    {
+      "id": "guard_spear",
+      "name": "見張りの槍",
+      "type": "weapon",
+      "damage": 1.25,
+      "reach": 6,
+      "speed": 0.9,
+      "durability": 30,
+      "price": 40,
+      "desc": "長い。離れた敵に届く。"
+    },
+    {
+      "id": "rusty_greatsword",
+      "name": "錆びた大剣",
+      "type": "weapon",
+      "damage": 2.25,
+      "reach": 2,
+      "speed": 1.45,
+      "durability": 28,
+      "price": 60,
+      "desc": "重く遅いが、一撃が大きい。"
+    },
+    {
+      "id": "ember_sword",
+      "name": "灯火の剣",
+      "type": "weapon",
+      "damage": 1.5,
+      "reach": 0,
+      "speed": 1.0,
+      "durability": 22,
+      "element": "fire",
+      "price": 120,
+      "desc": "刃が熱を帯びている。斬った草木に火がつく。"
+    },
+    {
+      "id": "wood_bow",
+      "name": "木の弓",
+      "type": "bow",
+      "damage": 1.0,
+      "durability": 30,
+      "price": 15,
+      "desc": "素朴な弓。"
+    },
+    {
+      "id": "hunter_bow",
+      "name": "狩人の弓",
+      "type": "bow",
+      "damage": 1.5,
+      "durability": 45,
+      "price": 60,
+      "desc": "張りが強く、矢が重く当たる。"
+    },
+    {
+      "id": "arrow",
+      "name": "矢",
+      "type": "ammo",
+      "price": 2,
+      "desc": "弓で撃つ。"
+    },
+    {
+      "id": "bark_vest",
+      "name": "樹皮の胴当て",
+      "type": "armor",
+      "slot": "body",
+      "defense": 2,
+      "price": 40,
+      "desc": "厚い樹皮を重ねた胴当て。"
+    },
+    {
+      "id": "insulated_cap",
+      "name": "雷よけの帽子",
+      "type": "armor",
+      "slot": "head",
+      "defense": 1,
+      "trait": "shockproof",
+      "price": 60,
+      "desc": "電気を通さない。"
+    },
+    {
+      "id": "grip_boots",
+      "name": "岩登りの靴",
+      "type": "armor",
+      "slot": "legs",
+      "defense": 1,
+      "trait": "grip",
+      "price": 60,
+      "desc": "濡れた崖でも滑らない。"
+    },
+    {
+      "id": "mushroom",
+      "name": "森きのこ",
+      "type": "material",
+      "heal": 2,
+      "tags": [
+        "veg"
+      ],
+      "price": 4,
+      "desc": "森の木陰に生える。"
+    },
+    {
+      "id": "red_berry",
+      "name": "赤い実",
+      "type": "material",
+      "heal": 2,
+      "tags": [
+        "fruit"
+      ],
+      "price": 3,
+      "desc": "甘酸っぱい木の実。"
+    },
+    {
+      "id": "swift_herb",
+      "name": "疾風草",
+      "type": "material",
+      "heal": 1,
+      "tags": [
+        "veg"
+      ],
+      "effect": {
+        "kind": "stamina",
+        "ms": 0
+      },
+      "price": 6,
+      "desc": "かじると息が整う。"
+    },
+    {
+      "id": "ember_pepper",
+      "name": "火照りの実",
+      "type": "material",
+      "heal": 1,
+      "tags": [
+        "fruit"
+      ],
+      "effect": {
+        "kind": "fireproof",
+        "ms": 60000
+      },
+      "price": 8,
+      "desc": "体の芯が熱くなる。"
+    },
+    {
+      "id": "beast_meat",
+      "name": "獣の肉",
+      "type": "material",
+      "heal": 4,
+      "tags": [
+        "meat"
+      ],
+      "price": 8,
+      "desc": "焼くとおいしい。"
+    },
+    {
+      "id": "beast_fang",
+      "name": "獣の牙",
+      "type": "material",
+      "tags": [
+        "part"
+      ],
+      "price": 10,
+      "desc": "鋭い牙。鍛冶に使う。"
+    },
+    {
+      "id": "murk_crystal",
+      "name": "澱の結晶",
+      "type": "material",
+      "tags": [
+        "part"
+      ],
+      "price": 15,
+      "desc": "澱の射手が落とす。鍛冶に使う。"
+    },
+    {
+      "id": "grilled_meat",
+      "name": "焼き肉",
+      "type": "food",
+      "heal": 10,
+      "price": 15,
+      "desc": "香ばしい。"
+    },
+    {
+      "id": "mushroom_skewer",
+      "name": "きのこ串",
+      "type": "food",
+      "heal": 6,
+      "price": 10,
+      "desc": "素朴な味。"
+    },
+    {
+      "id": "berry_jam",
+      "name": "木の実のジャム",
+      "type": "food",
+      "heal": 6,
+      "effect": {
+        "kind": "stamina",
+        "ms": 0
+      },
+      "price": 10,
+      "desc": "甘くて元気が出る。"
+    },
+    {
+      "id": "hunter_stew",
+      "name": "狩人の煮込み",
+      "type": "food",
+      "heal": 16,
+      "effect": {
+        "kind": "attackUp",
+        "ms": 120000
+      },
+      "price": 40,
+      "desc": "力がみなぎる。しばらく攻撃力が上がる。"
+    },
+    {
+      "id": "ember_soup",
+      "name": "火照りのスープ",
+      "type": "food",
+      "heal": 8,
+      "effect": {
+        "kind": "fireproof",
+        "ms": 180000
+      },
+      "price": 30,
+      "desc": "しばらく炎に焼かれない。"
+    },
+    {
+      "id": "hearty_skewer",
+      "name": "がっつり串",
+      "type": "food",
+      "heal": 12,
+      "effect": {
+        "kind": "defenseUp",
+        "ms": 120000
+      },
+      "price": 30,
+      "desc": "しばらく受けるダメージが減る。"
+    },
+    {
+      "id": "mixed_stew",
+      "name": "ごった煮",
+      "type": "food",
+      "heal": 0,
+      "price": 5,
+      "desc": "何でも入れて煮た。回復量は材料しだい。"
+    },
+    {
+      "id": "dubious_food",
+      "name": "あやしい料理",
+      "type": "food",
+      "heal": 1,
+      "price": 1,
+      "desc": "食べられなくはない。"
+    },
+    {
+      "id": "star_shard",
+      "name": "星の欠片",
+      "type": "key",
+      "price": 0,
+      "desc": "試練を越えた証。星環にかざすと、体力かがんばりが増える（持ち物の「能力」から）。"
+    }
   ],
   "recipes": [
-    { "result": "grilled_meat", "ingredients": ["beast_meat"] },
-    { "result": "mushroom_skewer", "ingredients": ["mushroom"] },
-    { "result": "berry_jam", "ingredients": ["red_berry", "red_berry"] },
-    { "result": "hunter_stew", "ingredients": ["beast_meat", "mushroom", "swift_herb"] },
-    { "result": "ember_soup", "ingredients": ["beast_meat", "ember_pepper"] },
-    { "result": "hearty_skewer", "ingredients": ["beast_meat", "beast_meat", "mushroom"] }
+    {
+      "result": "grilled_meat",
+      "ingredients": [
+        "beast_meat"
+      ]
+    },
+    {
+      "result": "mushroom_skewer",
+      "ingredients": [
+        "mushroom"
+      ]
+    },
+    {
+      "result": "berry_jam",
+      "ingredients": [
+        "red_berry",
+        "red_berry"
+      ]
+    },
+    {
+      "result": "hunter_stew",
+      "ingredients": [
+        "beast_meat",
+        "mushroom",
+        "swift_herb"
+      ]
+    },
+    {
+      "result": "ember_soup",
+      "ingredients": [
+        "beast_meat",
+        "ember_pepper"
+      ]
+    },
+    {
+      "result": "hearty_skewer",
+      "ingredients": [
+        "beast_meat",
+        "beast_meat",
+        "mushroom"
+      ]
+    }
   ],
   "forge": {
     "maxLevel": 3,
     "damagePerLevel": 0.2,
     "upgrades": [
-      { "level": 1, "money": 30, "materials": { "beast_fang": 1 } },
-      { "level": 2, "money": 60, "materials": { "beast_fang": 2, "murk_crystal": 1 } },
-      { "level": 3, "money": 120, "materials": { "murk_crystal": 3 } }
+      {
+        "level": 1,
+        "money": 30,
+        "materials": {
+          "beast_fang": 1
+        }
+      },
+      {
+        "level": 2,
+        "money": 60,
+        "materials": {
+          "beast_fang": 2,
+          "murk_crystal": 1
+        }
+      },
+      {
+        "level": 3,
+        "money": 120,
+        "materials": {
+          "murk_crystal": 3
+        }
+      }
     ],
     "repairMoneyPerPoint": 1
   },
   "drops": {
     "beast": [
-      { "item": "beast_meat", "count": 1, "chance": 1 },
-      { "item": "beast_fang", "count": 1, "chance": 0.5 }
+      {
+        "item": "beast_meat",
+        "count": 1,
+        "chance": 1
+      },
+      {
+        "item": "beast_fang",
+        "count": 1,
+        "chance": 0.5
+      }
     ],
     "archer": [
-      { "item": "murk_crystal", "count": 1, "chance": 1 },
-      { "item": "arrow", "count": 3, "chance": 1 }
+      {
+        "item": "murk_crystal",
+        "count": 1,
+        "chance": 1
+      },
+      {
+        "item": "arrow",
+        "count": 3,
+        "chance": 1
+      }
     ]
   },
-  "start": { "weapons": ["wood_sword"], "bows": ["wood_bow"], "items": { "arrow": 15 }, "money": 0 },
-  "fists": { "damage": 0.25, "reach": -5, "speed": 0.8 }
+  "start": {
+    "weapons": [
+      "wood_sword"
+    ],
+    "bows": [
+      "wood_bow"
+    ],
+    "items": {
+      "arrow": 15
+    },
+    "money": 0
+  },
+  "fists": {
+    "damage": 0.25,
+    "reach": -5,
+    "speed": 0.8
+  }
 }

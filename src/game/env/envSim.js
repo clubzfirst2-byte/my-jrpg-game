@@ -32,17 +32,17 @@ export const ENV = Object.freeze({
   wetMs: 20_000,
   regrowMs: 120_000,
   /** Burn time (ms) by material. */
-  fuel: /** @type {Record<string, number>} */ ({ grass: 3000, tree: 12000, bramble: 2000 }),
+  fuel: /** @type {Record<string, number>} */ ({ grass: 3000, tree: 12000, bramble: 2000, vine: 1500 }),
 });
 
-const FLAMMABLE = new Set(['grass', 'tree', 'bramble']);
+const FLAMMABLE = new Set(['grass', 'tree', 'bramble', 'vine']);
 /** Objects that block movement while they exist. */
-export const SOLID_OBJECTS = new Set(['tree', 'rock', 'bramble', 'crystal', 'jar', 'receiver', 'door', 'brazier', 'campfire', 'anvil']);
+export const SOLID_OBJECTS = new Set(['tree', 'rock', 'bramble', 'crystal', 'jar', 'receiver', 'door', 'brazier', 'campfire', 'anvil', 'crate', 'sconce', 'stone', 'pillar', 'altar']);
 
 /**
  * @typedef {{ burnMs: number, at: number, wetUntil: number, ashUntil: number }} Cell
  *   burnMs > 0 while burning; `at` = the time burnMs refers to (fast-forward bookkeeping)
- * @typedef {{ type: string, tx: number, ty: number, gone?: boolean, link?: string, hp?: number, on?: boolean, cooldownUntil?: number }} EnvObject
+ * @typedef {{ type: string, tx: number, ty: number, gone?: boolean, link?: string, hp?: number, on?: boolean, cooldownUntil?: number, lit?: boolean, glow?: boolean, fromTx?: number, fromTy?: number, movedAt?: number }} EnvObject
  *
  * @typedef {object} Env
  * @property {number} seed
@@ -65,6 +65,7 @@ export const SOLID_OBJECTS = new Set(['tree', 'rock', 'bramble', 'crystal', 'jar
  * @property {import('./weather.js').WeatherKind | null} weatherOverride  forced weather (tests / ?weather=)
  * @property {Uint8Array} indoor   tiles under a roof (caves): no rain there
  * @property {{ i: number, atMs: number } | null} strike  a lightning strike about to land (P5)
+ * @property {Map<number, { ground: number, untilMs: number }>} vines  P7: vine platforms (the ground they cover)
  */
 
 /**
@@ -102,6 +103,7 @@ export function createEnv(map, objects, seed = 1, now = 0) {
     weatherOverride: null,
     indoor: new Uint8Array(map.width * map.height),
     strike: null,
+    vines: new Map(),
   };
 }
 
@@ -135,6 +137,7 @@ export function material(env, map, i, t = env.now) {
   const o = env.objectAt.get(i);
   if (o && !o.gone) return o.type;
   const g = map.ground[i];
+  if (g === Ground.VINE) return 'vine';
   if (g === Ground.WATER) return 'water';
   if (g === Ground.METAL) return 'metal';
   if (g === Ground.GRASS) {
@@ -217,6 +220,13 @@ function burnOut(env, map, i, t) {
   const c = cell(env, i);
   c.burnMs = 0;
   c.ashUntil = t + ENV.regrowMs;
+  // A burnt vine platform is gone: the water / pit is back (P7).
+  const vine = env.vines.get(i);
+  if (vine) {
+    map.ground[i] = vine.ground;
+    env.vines.delete(i);
+    c.ashUntil = 0;
+  }
   const o = env.objectAt.get(i);
   if (o && !o.gone) {
     if (o.type === 'tree') o.type = 'stump'; // a burnt tree leaves a stump you can walk past
