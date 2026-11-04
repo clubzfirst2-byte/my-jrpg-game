@@ -82,11 +82,13 @@ export class InventoryMenu {
 
   /** Shows the "料理する / 鍛冶" button when something usable is in reach. @param {'cook' | 'forge' | null} nearby */
   setNearby(nearby) {
-    this.useButton.hidden = !nearby || this.isOpen;
-    if (nearby) {
-      this.useTab = nearby;
-      this.useButton.textContent = nearby === 'cook' ? '料理する' : '鍛冶';
-    }
+    // Called every frame: touch the DOM only when something changes. Rewriting the label every
+    // frame replaces its text node, and WebKit (iPhone Safari) can then drop a tap on the button.
+    const hidden = !nearby || this.isOpen;
+    if (this.useButton.hidden !== hidden) this.useButton.hidden = hidden;
+    if (nearby && nearby !== this.useTab) this.useTab = nearby;
+    const label = this.useTab === 'cook' ? '料理する' : '鍛冶';
+    if (this.useButton.textContent !== label) this.useButton.textContent = label;
   }
 
   /** @param {Tab} [tab] @param {boolean} [atStation] opened from the "料理する / 鍛冶" button */

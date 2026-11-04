@@ -54,6 +54,7 @@ test('cooking at the camp fire: a recipe is discovered', async ({ page }, testIn
   await expect.poll(() => api(page, 'nearby')).toBe('cook');
   await expect(page.locator('#use-button')).toHaveText('料理する');
   await page.click('#use-button');
+  await expect.poll(() => api(page, 'menuOpen'), { message: 'tapping 料理する opens the menu' }).toBe(true);
   await expect(page.locator('#inv-tab-cook')).toHaveClass(/active/);
   await page.click('#inv-add-beast_meat');
   await page.click('#inv-add-ember_pepper');
