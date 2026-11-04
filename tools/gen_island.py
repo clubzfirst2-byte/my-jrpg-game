@@ -45,6 +45,13 @@ for y in range(H):
         if ((x - 87) / 3.6) ** 2 + ((y - 63) / 2.8) ** 2 < 1:
             g[y][x] = 's'
 
+# P8: a sand causeway leaves the south beach toward the regions below (tools/gen_world.py).
+CAUSEWAY = range(45, 51)
+for y in range(64, H):
+    for x in CAUSEWAY:
+        if g[y][x] == '~':
+            g[y][x] = 's'
+
 def is_land(x, y):
     return g[y][x] in '.s='
 

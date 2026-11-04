@@ -12,7 +12,7 @@ import { createOverlay } from './debug/overlay.js';
 import { createRenderer, resizeRenderer } from './view/renderer.js';
 import { RESOLUTION_CANDIDATES, DEFAULT_TARGET_HEIGHT, nextCandidate } from './view/resolution.js';
 import { AssetManager } from './view/assets/assetManager.js';
-import { buildPlaceholderPack } from './view/assets/placeholderPack.js';
+import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES } from './view/assets/placeholderPack.js';
 import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
 import { InputManager } from './platform/inputManager.js';
@@ -33,7 +33,11 @@ import { failureMessage } from './save/saveFormat.js';
 import { FixedStepLoop } from './game/core/fixedStep.js';
 import { createGameState, stepGame, spawnEnemies, respawnPlayer, MAPS } from './game/state.js';
 import { applyProgress, areaAt } from './game/world/features.js';
-import { envSummary, ignite, material, weatherNow, setWorldTime } from './game/env/envSim.js';
+import { envSummary, ignite, material, setWorldTime } from './game/env/envSim.js';
+import { playerWeather } from './game/env/weatherActions.js';
+import { regionAt } from './game/world/world.js';
+import { computeWorldDiff } from './game/world/worldDiff.js';
+import { TOUR, TOUR_STOPS, tourReport } from './debug/tour.js';
 import { clockText, CLOCK } from './game/env/weather.js';
 import { groundHeightUnder } from './game/physics/collision.js';
 import { GAME_TITLE, PHASE } from './game/version.js';
@@ -95,14 +99,17 @@ async function boot() {
 
   // --- assets / logic / view ---
   const assets = new AssetManager();
-  assets.register('placeholder', buildPlaceholderPack);
+  assets.register('placeholder', () => buildPlaceholderPack());
+  // P8: each region's art is its own bundle, loaded by the view near the region.
+  for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name));
   await assets.load('placeholder');
   // Without ?map= the game starts at the title on the first island and saves its progress.
   // ?map=... (tests, height/field test maps) skips the title and never touches the save.
   const mapParam = params.get('map');
   const withTitle = mapParam === null;
-  const mapName = /** @type {keyof typeof MAPS} */ (mapParam ?? 'island');
-  const state = createGameState(MAPS[mapName] ?? MAPS.island);
+  // P8: a new game is the whole world (the island and the regions south of it).
+  const mapName = /** @type {keyof typeof MAPS} */ (mapParam ?? 'world');
+  const state = createGameState(MAPS[mapName] ?? MAPS.world);
   const view = new GameView(app, assets, state);
   // Test / check helpers: ?time=20 (hour) and ?weather=rain|storm|cloudy|clear.
   const timeParam = Number.parseFloat(params.get('time') ?? '');
@@ -110,6 +117,7 @@ async function boot() {
   const weatherParam = params.get('weather');
   if (weatherParam && ['clear', 'cloudy', 'rain', 'storm'].includes(weatherParam)) state.env.weatherOverride = /** @type {any} */ (weatherParam);
   if (params.get('light') === '0') view.weather.enabled = false;
+  if (params.get('chunks') === 'all') view.loadAll = true; // P8: draw the whole map at once (comparison)
   const zoomParam = Number.parseFloat(params.get('zoom') ?? '');
   if (Number.isFinite(zoomParam)) view.camera.setZoom(zoomParam); // e.g. ?zoom=2 (zoom is adjustable later)
   const loop = new FixedStepLoop();
@@ -148,7 +156,7 @@ async function boot() {
   const store = new SaveStore(__APP_VERSION__);
   const autosave = new Autosave(
     store,
-    () => ({ ...state.progress, worldMs: Math.round(state.env.now) }),
+    () => ({ ...state.progress, worldMs: Math.round(state.env.now), worldDiff: computeWorldDiff(state) }),
     (msg) => toast.show(msg, { kind: 'error', ms: 6000 }),
   );
   /** @type {any} */
@@ -315,7 +323,8 @@ async function boot() {
   /** @type {null | { endAt: number, intervals: number[], cpu: number[], draws: number[], errorsAtStart: number }} */
   let recording = null;
   let lastReport = '';
-  const textureCount = () => renderer.texture?.managedTextures?.length ?? 0;
+  // Pixi leaves empty (null) slots for freed textures: count only the live ones.
+  const textureCount = () => (renderer.texture?.managedTextures ?? []).filter(Boolean).length;
   let skipNextFrame = true;
 
   const overlay = createOverlay(
@@ -331,6 +340,14 @@ async function boot() {
         stats.reset();
         recording = { endAt: performance.now() + reportSec * 1000, intervals: [], cpu: [], draws: [], errorsAtStart: errorLog.total };
       },
+      onToggleTour() {
+        if (tour) {
+          finishTour();
+          return false;
+        }
+        startTour(intParam('tour', 60) || 60);
+        return true;
+      },
       onCycleResolution() {
         targetHeight = nextCandidate(targetHeight);
         settings.resolution = targetHeight;
@@ -342,6 +359,61 @@ async function boot() {
     },
     { open: params.get('debug') === '1', reportSec, resolution: targetHeight },
   );
+
+  // --- P8: 自動巡回 (long-play measurement) ---
+  /** @type {null | { minutes: number, startMs: number, nextStopMs: number, nextSampleMs: number, stop: number, samples: import('./debug/tour.js').TourSample[] }} */
+  let tour = null;
+  /** @param {number} minutes */
+  function startTour(minutes) {
+    const now = performance.now();
+    stats.reset();
+    tour = { minutes, startMs: now, nextStopMs: now, nextSampleMs: now + TOUR.sampleSec * 1000, stop: 0, samples: [] };
+    state.enemySpawns = []; // nothing attacks the tourist
+    state.enemies = [];
+  }
+  function sampleTour(/** @type {number} */ now) {
+    if (!tour) return;
+    const s = stats.summary();
+    const mem = /** @type {any} */ (performance).memory;
+    tour.samples.push({
+      tSec: (now - tour.startMs) / 1000,
+      fps: s.fps,
+      p95Ms: s.p95Ms,
+      textures: textureCount(),
+      displayObjects: countDisplayObjects(app.stage),
+      chunks: view.chunks.size,
+      bundles: assets.stats().bundles,
+      heapMb: mem ? mem.usedJSHeapSize / 1048576 : null,
+    });
+  }
+  function finishTour() {
+    if (!tour) return;
+    sampleTour(performance.now());
+    lastReport = tourReport(tour.samples, {
+      minutes: Math.round((performance.now() - tour.startMs) / 60000),
+      version: `${__APP_VERSION__} (${__COMMIT__})`,
+      device: collectDeviceInfo(gl, app.renderer.name),
+    });
+    tourResult = tour.samples;
+    tour = null;
+    overlay.showReport(lastReport);
+  }
+  /** @type {import('./debug/tour.js').TourSample[] | null} */
+  let tourResult = null;
+  function stepTour(/** @type {number} */ now) {
+    if (!tour || paused || inMenu || inTitle) return;
+    if (now >= tour.nextStopMs) {
+      const [tx, ty] = TOUR_STOPS[tour.stop % TOUR_STOPS.length];
+      tour.stop++;
+      api.teleport(tx, ty);
+      tour.nextStopMs = now + TOUR.stopSec * 1000;
+    }
+    if (now >= tour.nextSampleMs) {
+      sampleTour(now);
+      tour.nextSampleMs = now + TOUR.sampleSec * 1000;
+    }
+    if (now - tour.startMs >= tour.minutes * 60_000) finishTour();
+  }
 
   function finishRecording() {
     if (!recording) return;
@@ -367,6 +439,8 @@ async function boot() {
     overlay.showReport(lastReport);
   }
 
+  /** Test helper: a fixed clock for purely visual animation (water, flames, bobbing items). @type {number | null} */
+  let visualTime = null;
   let objectCount = 0;
   let lastObjectCount = 0;
   let lastOverlay = 0;
@@ -389,6 +463,7 @@ async function boot() {
         }
       }
       frameStart = now;
+      stepTour(now);
 
       if (now - lastObjectCount > 500) {
         objectCount = countDisplayObjects(app.stage);
@@ -410,7 +485,7 @@ async function boot() {
             `${p.facing}${p.dashing ? ' ダッシュ' : ''}  エラー ${errorLog.total}`,
             (() => {
               const e = envSummary(state.env);
-              return `環境 燃焼${e.burning} 計算${e.lastTickCells}/最大${e.maxTickCells} 灰${e.ash} 凍結${state.env.rw * state.env.rh - e.awakeRegions}${e.jobs ? ` 早送り中${e.jobs}` : ''}\nライト ${view.weather.lightOn ? `${view.weather.lightMs.toFixed(2)}ms` : 'なし'}  ${shownClock}`;
+              return `環境 燃焼${e.burning} 計算${e.lastTickCells}/最大${e.maxTickCells} 灰${e.ash} 凍結${state.env.rw * state.env.rh - e.awakeRegions}${e.jobs ? ` 早送り中${e.jobs}` : ''}\nチャンク ${view.chunks.size}（作成${view.chunkStats.built}/解放${view.chunkStats.freed}） 素材の束 ${assets.stats().bundles}\nライト ${view.weather.lightOn ? `${view.weather.lightMs.toFixed(2)}ms` : 'なし'}  ${shownClock}`;
             })(),
           ].join('\n'),
         );
@@ -433,9 +508,9 @@ async function boot() {
       announceEvents();
       autosave.update(state, ticker.elapsedMS);
     }
-    view.render(state, alpha, performance.now() / 1000, ticker.elapsedMS / 1000);
+    view.render(state, alpha, visualTime ?? performance.now() / 1000, ticker.elapsedMS / 1000);
     hud.update(state.player.hp, state.player.maxHp);
-    const clock = `${clockText(state.env.now)} ${WEATHER_NAMES[weatherNow(state.env).kind]}`;
+    const clock = `${clockText(state.env.now)} ${WEATHER_NAMES[playerWeather(state).kind]}`;
     if (clock !== shownClock) {
       shownClock = clock;
       clockHud.textContent = clock;
@@ -460,7 +535,7 @@ async function boot() {
   });
 
   // Read-only hook for automated E2E tests.
-  /** @type {any} */ (window).__debugApi = {
+  const api = {
     summary: () => stats.summary(),
     sprites: () => bench.count,
     setSprites: (/** @type {number} */ n) => bench.setCount(n),
@@ -540,6 +615,10 @@ async function boot() {
     inventory: () => JSON.parse(JSON.stringify(state.progress.inv)),
     pickups: () => state.pickups.map((p) => ({ key: p.key, item: p.item, count: p.count, tx: Math.floor(p.x / 16), ty: Math.floor(p.y / 16) })),
     nearby: () => state.nearby,
+    /** P8: streaming numbers (chunks, bundles, textures, display objects). */
+    /** GPU textures by size (find leaks). */
+    textureList: () => (renderer.texture?.managedTextures ?? []).filter(Boolean).map((/** @type {any} */ t) => `${t.label ?? ''}:${t.pixelWidth ?? t.width}x${t.pixelHeight ?? t.height}`),
+    stream: () => ({ ...view.streamStats(), bundleNames: [...assets.loaded.keys()], textures: textureCount(), displayObjects: countDisplayObjects(app.stage), region: regionAt(state.regions, Math.floor(state.player.x / 16), Math.floor(state.player.y / 16))?.id ?? null }),
     /** P7: abilities and switches. */
     abilities: () => ({ owned: [...state.progress.abilities], selected: state.progress.ability }),
     grantAbility: (/** @type {string} */ id) => grantAbility(state, id),
@@ -568,7 +647,7 @@ async function boot() {
       return { material: material(state.env, state.map, i), burning: state.env.burning.has(i), solid: state.map.solid[i] === 1 };
     },
     /** P5: time of day and weather. */
-    weather: () => ({ ...weatherNow(state.env), clock: clockText(state.env.now), lightOn: view.weather.lightOn, lightMs: view.weather.lightMs, rainVisible: view.weather.rain.visible }),
+    weather: () => ({ ...playerWeather(state), clock: clockText(state.env.now), lightOn: view.weather.lightOn, lightMs: view.weather.lightMs, rainVisible: view.weather.rain.visible }),
     setHour: (/** @type {number} */ h) => setWorldTime(state.env, Math.floor(state.env.now / CLOCK.dayMs) * CLOCK.dayMs + h * CLOCK.hourMs),
     setWeather: (/** @type {any} */ kind) => {
       state.env.weatherOverride = kind;
@@ -597,8 +676,20 @@ async function boot() {
       for (let i = 0; i < n; i++) stepGame(state, input.sample());
     },
     resolution: () => ({ ...resolution, target: targetHeight }),
+    /** P8: the auto tour (minutes may be fractional in tests). */
+    startTour: (/** @type {number} */ minutes) => startTour(minutes),
+    stopTour: () => finishTour(),
+    tourRunning: () => !!tour,
+    tourResult: () => tourResult,
+    /** Test helper: freeze visual animation at a time (seconds), or null to follow the clock. */
+    setVisualTime: (/** @type {number | null} */ t) => {
+      visualTime = t;
+    },
     assets: () => assets.stats(),
   };
+  /** @type {any} */ (window).__debugApi = api;
+  // ?tour=60 starts the auto tour right away (with ?map=..., which skips the title).
+  if (params.get('tour') && !withTitle) startTour(Number.parseFloat(params.get('tour') ?? '') || 60);
   document.body.dataset.ready = 'true';
 }
 

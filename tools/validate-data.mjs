@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { validateItems } from '../src/game/items/validateItems.js';
-import { ISLAND } from '../src/game/world/maps/island.js';
+import { WORLD } from '../src/game/world/world.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 let data;
@@ -14,10 +14,10 @@ try {
   console.error(`data/items.json: cannot read or parse (${err.message})`);
   process.exit(1);
 }
-const errors = validateItems(data, ISLAND);
+const errors = validateItems(data, WORLD);
 if (errors.length > 0) {
   console.error(`data/items.json: ${errors.length} problem(s)`);
   for (const e of errors) console.error(`  - ${e}`);
   process.exit(1);
 }
-console.log(`data/items.json OK: ${data.items.length} items, ${data.recipes.length} recipes, island references checked`);
+console.log(`data/items.json OK: ${data.items.length} items, ${data.recipes.length} recipes, world references checked`);

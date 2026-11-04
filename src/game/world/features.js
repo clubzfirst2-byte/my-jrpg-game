@@ -3,6 +3,7 @@
 // areas (camera bounds for interiors), landmarks, and the player's progress that is saved.
 // Pure logic: no DOM, no PixiJS.
 import { openDoors, setWorldTime } from '../env/envSim.js';
+import { applyWorldDiff } from './worldDiff.js';
 import { createInventory, normalizeInventory, addItem } from '../items/inventory.js';
 
 export const MAX_HEARTS = 6;
@@ -30,6 +31,7 @@ const OPEN_RANGE = 20;
  * @property {string[]} abilities       P7: 星環 abilities learned
  * @property {string | null} ability    the selected one
  * @property {number} maxStamina
+ * @property {Record<string, Record<string, any>>} [worldDiff]  P8: changed objects, by chunk
  */
 
 /** @returns {Progress} */
@@ -206,6 +208,7 @@ export function applyProgress(state, saved) {
   if (state.env) {
     for (const link of pr.gates) openDoors(state.env, state.map, link);
     if (typeof pr.worldMs === 'number') setWorldTime(state.env, pr.worldMs);
+    if (saved.worldDiff && state.objectBaseline) applyWorldDiff(state, saved.worldDiff);
   }
   state.player.maxHp = pr.maxHp;
   state.player.hp = pr.maxHp;

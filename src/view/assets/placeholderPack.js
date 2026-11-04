@@ -53,6 +53,9 @@ import {
   plateSprite,
   sensorSprite,
   lightOrbSprite,
+  desertSandTile,
+  plainsGrassTile,
+  cactusSprite,
 } from './placeholderArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
@@ -133,10 +136,30 @@ export function placeholderEntries() {
   return entries;
 }
 
-/** @returns {import('./assetManager.js').BuiltBundle} */
-export function buildPlaceholderPack() {
-  const entries = placeholderEntries();
-  const ATLAS = 256;
+/**
+ * Region bundles (P8): each region's own art, loaded near it and released away from it.
+ * @type {Record<string, () => { key: string, rows: string[], anchor: [number, number] }[]>}
+ */
+export const REGION_ENTRIES = {
+  'region:desert': () => [
+    ...[0, 1, 2].map((i) => ({ key: `desert.sand.${i}`, rows: desertSandTile(i), anchor: TOP_LEFT })),
+    { key: 'obj.cactus', rows: cactusSprite(), anchor: FEET },
+  ],
+  'region:plains': () => [0, 1, 2, 3].map((i) => ({ key: `plains.grass.${i}`, rows: plainsGrassTile(i), anchor: TOP_LEFT })),
+};
+
+/** @param {string} name */
+export function buildRegionPack(name) {
+  return buildPlaceholderPack(REGION_ENTRIES[name](), 64);
+}
+
+/**
+ * @param {{ key: string, rows: string[], anchor: [number, number] }[]} [entries]
+ * @param {number} [atlasSize]
+ * @returns {import('./assetManager.js').BuiltBundle}
+ */
+export function buildPlaceholderPack(entries = placeholderEntries(), atlasSize = 256) {
+  const ATLAS = atlasSize;
   const PAD = 1;
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS;

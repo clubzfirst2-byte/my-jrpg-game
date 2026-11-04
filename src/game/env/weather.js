@@ -49,11 +49,13 @@ export function clockText(worldMs) {
 }
 
 /**
- * The weather at a moment (deterministic).
+ * The weather at a moment (deterministic). A dry region (P8: the desert) gets the same skies
+ * without the rain: rain becomes clear, a storm becomes cloudy.
  * @param {number} seed @param {number} worldMs @param {WeatherKind | null} [override]
+ * @param {'temperate' | 'dry'} [climate]
  * @returns {Weather}
  */
-export function weatherAt(seed, worldMs, override = null) {
+export function weatherAt(seed, worldMs, override = null, climate = 'temperate') {
   const slot = Math.floor(worldMs / WEATHER.slotMs);
   /** @type {WeatherKind} */
   let kind = 'clear';
@@ -64,9 +66,12 @@ export function weatherAt(seed, worldMs, override = null) {
   else if (r < c.storm + c.rain + c.cloudy) kind = 'cloudy';
   if (worldMs < WEATHER.clearUntilMs) kind = 'clear';
   if (override) kind = override;
+  // The wind belongs to the sky (the same everywhere); a dry region only loses the rain.
   const angle = roll(seed, slot, 1, 11) * Math.PI * 2;
   const base = { clear: 0.2, cloudy: 0.4, rain: 0.6, storm: 0.9 }[kind];
   const wind = Math.min(1, base + roll(seed, slot, 2, 11) * 0.2);
+  if (climate === 'dry' && kind === 'rain') kind = 'clear';
+  if (climate === 'dry' && kind === 'storm') kind = 'cloudy';
   return { kind, windX: Math.cos(angle) * wind, windY: Math.sin(angle) * wind, wind };
 }
 
@@ -77,8 +82,8 @@ export const isRaining = (w) => w.kind === 'rain' || w.kind === 'storm';
  * Wet from rain at t: raining now or within the last WEATHER.wetAfterMs.
  * @param {number} seed @param {number} t @param {WeatherKind | null} [override]
  */
-export function rainWetAt(seed, t, override = null) {
-  return isRaining(weatherAt(seed, t, override)) || isRaining(weatherAt(seed, t - WEATHER.wetAfterMs, override));
+export function rainWetAt(seed, t, override = null, climate = /** @type {'temperate' | 'dry'} */ ('temperate')) {
+  return isRaining(weatherAt(seed, t, override, climate)) || isRaining(weatherAt(seed, t - WEATHER.wetAfterMs, override, climate));
 }
 
 /**

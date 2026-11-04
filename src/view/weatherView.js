@@ -7,7 +7,7 @@
 // render-to-texture at the internal resolution (lightMs is measured for the debug overlay).
 import { Container, Graphics, RenderTexture, Sprite, Texture } from 'pixi.js';
 import { ambientAt, isDark, isRaining } from '../game/env/weather.js';
-import { weatherNow } from '../game/env/envSim.js';
+import { playerWeather } from '../game/env/weatherActions.js';
 
 const RAIN_SPEED = 320; // px/s on screen
 const RAIN_WIND = 120;
@@ -90,7 +90,7 @@ export class WeatherView {
   update(state, origin, zoom, area, timeSec, dtSec) {
     const indoor = !!area;
     const env = state.env;
-    const w = weatherNow(env);
+    const w = playerWeather(state);
     const sw = this.app.screen.width;
     const sh = this.app.screen.height;
     const nowMs = timeSec * 1000;

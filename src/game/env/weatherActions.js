@@ -18,6 +18,11 @@ export const STORM = Object.freeze({
   sparkMs: 500,
 });
 
+/** The weather where the player stands (its region's climate). @param {any} state */
+export function playerWeather(state) {
+  return weatherNow(state.env, state.env.now, tileIndexAt(state, state.player.x, state.player.y));
+}
+
 /**
  * Sets the weather inputs the player physics reads this step.
  * @param {any} state
@@ -26,8 +31,8 @@ export function applyWeatherToPlayer(state) {
   const env = state.env;
   const p = state.player;
   const map = state.map;
-  const w = weatherNow(env);
   const i = tileIndexAt(state, p.x, p.y);
+  const w = weatherNow(env, env.now, i);
   const indoor = i >= 0 && env.indoor[i] === 1;
   // Clear days are calm for the glider; from cloudy weather on, the wind carries it.
   const drift = indoor || w.kind === 'clear' ? 0 : WEATHER.glideDrift;
@@ -63,9 +68,9 @@ export function stormStep(state, dtMs) {
     env.strike = null;
   }
   if (env.strike || p.dead) return;
-  const w = weatherNow(env);
-  if (w.kind !== 'storm') return;
   const pi = tileIndexAt(state, p.x, p.y);
+  const w = weatherNow(env, env.now, pi);
+  if (w.kind !== 'storm') return;
   if (pi < 0 || env.indoor[pi]) return; // no lightning in the cave
   if (roll(env.seed, state.tick, 0, 21) >= (WEATHER.strikesPerSec * dtMs) / 1000) return;
   const span = STORM.maxTiles - STORM.minTiles;
