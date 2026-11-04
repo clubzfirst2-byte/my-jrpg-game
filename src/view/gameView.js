@@ -17,6 +17,7 @@ import { COMBAT } from '../game/entities/playerCombat.js';
 import { areaAt } from '../game/world/features.js';
 import { FeatureView } from './featureView.js';
 import { EnvView } from './envView.js';
+import { WeatherView } from './weatherView.js';
 
 const WALK_FPS = 8;
 const WALK_CYCLE = [1, 0, 2, 0];
@@ -101,6 +102,9 @@ export class GameView {
       state,
     );
     this.envVersion = -1;
+    // Time of day and weather (P5): light map, rain, lightning, above the world.
+    this.weather = new WeatherView(app, (key) => this.makeSprite(key), this.actors);
+    this.weather.attach(app.stage, app.stage.getChildIndex(this.world) + 1);
 
     this.shadow = this.makeSprite('fx.shadow');
     this.shadow.alpha = 0.35;
@@ -377,6 +381,7 @@ export class GameView {
     }
     const o = this.camera.origin();
     this.env.update(state, o, this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom, timeSec);
+    this.weather.update(state, o, this.camera.zoom, !!this.boundsArea, timeSec, dtSec);
     this.features.update(
       state,
       (key) => this.assets.texture(key),

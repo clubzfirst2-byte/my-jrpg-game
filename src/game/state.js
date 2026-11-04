@@ -19,6 +19,8 @@ import {
 } from './world/features.js';
 import { createEnv, stepEnv, SOLID_OBJECTS } from './env/envSim.js';
 import { swordHitsObjects, fireDamage } from './env/envActions.js';
+import { applyWeatherToPlayer, stormStep } from './env/weatherActions.js';
+import { CLOCK } from './env/weather.js';
 import { ISLAND } from './world/maps/island.js';
 import { TEST_FIELD } from './world/maps/testField.js';
 import { HEIGHT_TEST } from './world/maps/heightTest.js';
@@ -99,7 +101,11 @@ export function createGameState(def = HEIGHT_TEST) {
     if (SOLID_OBJECTS.has(o.type)) map.solid[o.ty * map.width + o.tx] = 1;
   }
   const campfires = state.campfires.map((c) => ({ type: 'campfire', tx: c.tx, ty: c.ty }));
-  state.env = createEnv(map, [...map.objects, ...campfires], 1);
+  state.env = createEnv(map, [...map.objects, ...campfires], 1, CLOCK.startHour * CLOCK.hourMs);
+  // Caves are under a roof: no rain, no wind, no lightning.
+  for (const a of state.areas) {
+    for (let ty = a.ty; ty < a.ty + a.th; ty++) for (let tx = a.tx; tx < a.tx + a.tw; tx++) state.env.indoor[ty * map.width + tx] = 1;
+  }
   spawnEnemies(state);
   return state;
 }
@@ -125,6 +131,8 @@ export function stepGame(state, input) {
   state.hitboxes = [];
   // The world keeps going while the player is down (fires burn on).
   stepEnv(state.env, state.map, state.player, STEP_SEC * 1000);
+  stormStep(state, STEP_SEC * 1000);
+  applyWeatherToPlayer(state);
   if (state.events.length > 64) state.events.splice(0, state.events.length - 64);
   const p = state.player;
 

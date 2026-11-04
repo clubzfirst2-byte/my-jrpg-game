@@ -109,7 +109,12 @@ export const PLAYER_MAX_HP = 12; // 3 hearts x 4 quarters
  * @property {number} spawnX
  * @property {number} spawnY
  * @property {number} spawnZ
- * @property {{ type: 'land', fall: number, damage: number } | { type: 'respawn' } | { type: 'drown' } | null} lastEvent
+ * @property {{ type: 'land', fall: number, damage: number } | { type: 'respawn' } | { type: 'drown' } | { type: 'slip' } | null} lastEvent
+ * @property {number} [windX]   P5: wind drift while gliding (px/s), set by the game each step
+ * @property {number} [windY]
+ * @property {boolean} [updraft] P5: rising air over a fire under the player
+ * @property {boolean} [rainOn]  P5: rain is falling on the player (slippery walls)
+ * @property {number} [slipTime]
  */
 
 /** @param {number} x @param {number} y @param {number} [z] @returns {Player} */
@@ -261,7 +266,10 @@ export function updatePlayer(p, input, map, dt) {
   const kx = p.knockMs > 0 ? p.knockX : 0;
   const ky = p.knockMs > 0 ? p.knockY : 0;
   const maxHeight = p.grounded ? p.z + PLAYER_MOVE.stepHeight : p.z;
-  const hit = moveAndCollide(p, map, (p.vx + kx) * dt, (p.vy + ky) * dt, maxHeight);
+  // The wind carries a glider (P5).
+  const wx = p.gliding ? (p.windX ?? 0) : 0;
+  const wy = p.gliding ? (p.windY ?? 0) : 0;
+  const hit = moveAndCollide(p, map, (p.vx + kx + wx) * dt, (p.vy + ky + wy) * dt, maxHeight);
   if (hit.hitX) p.vx = 0;
   if (hit.hitY) p.vy = 0;
 
