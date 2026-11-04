@@ -29,7 +29,8 @@ import { failureMessage } from './save/saveFormat.js';
 import { FixedStepLoop } from './game/core/fixedStep.js';
 import { createGameState, stepGame, spawnEnemies, respawnPlayer, MAPS } from './game/state.js';
 import { applyProgress, areaAt } from './game/world/features.js';
-import { envSummary, ignite, material } from './game/env/envSim.js';
+import { envSummary, ignite, material, weatherNow, setWorldTime } from './game/env/envSim.js';
+import { clockText, CLOCK } from './game/env/weather.js';
 import { groundHeightUnder } from './game/physics/collision.js';
 import { GAME_TITLE, PHASE } from './game/version.js';
 
@@ -99,6 +100,12 @@ async function boot() {
   const mapName = /** @type {keyof typeof MAPS} */ (mapParam ?? 'island');
   const state = createGameState(MAPS[mapName] ?? MAPS.island);
   const view = new GameView(app, assets, state);
+  // Test / check helpers: ?time=20 (hour) and ?weather=rain|storm|cloudy|clear.
+  const timeParam = Number.parseFloat(params.get('time') ?? '');
+  if (Number.isFinite(timeParam)) setWorldTime(state.env, timeParam * CLOCK.hourMs);
+  const weatherParam = params.get('weather');
+  if (weatherParam && ['clear', 'cloudy', 'rain', 'storm'].includes(weatherParam)) state.env.weatherOverride = /** @type {any} */ (weatherParam);
+  if (params.get('light') === '0') view.weather.enabled = false;
   const zoomParam = Number.parseFloat(params.get('zoom') ?? '');
   if (Number.isFinite(zoomParam)) view.camera.setZoom(zoomParam); // e.g. ?zoom=2 (zoom is adjustable later)
   const loop = new FixedStepLoop();
@@ -116,12 +123,17 @@ async function boot() {
   treasureHud.hidden = true;
   uiRoot.append(treasureHud);
   let shownTreasures = -1;
+  const clockHud = document.createElement('div');
+  clockHud.id = 'hud-clock';
+  uiRoot.append(clockHud);
+  let shownClock = '';
+  const WEATHER_NAMES = { clear: '晴れ', cloudy: 'くもり', rain: '雨', storm: '雷雨' };
 
   // --- save (DESIGN.md 2.6) ---
   const store = new SaveStore(__APP_VERSION__);
   const autosave = new Autosave(
     store,
-    () => ({ ...state.progress }),
+    () => ({ ...state.progress, worldMs: Math.round(state.env.now) }),
     (msg) => toast.show(msg, { kind: 'error', ms: 6000 }),
   );
   /** @type {any} */
@@ -337,7 +349,7 @@ async function boot() {
             `${p.facing}${p.dashing ? ' ダッシュ' : ''}  エラー ${errorLog.total}`,
             (() => {
               const e = envSummary(state.env);
-              return `環境 燃焼${e.burning} 計算${e.lastTickCells}/最大${e.maxTickCells} 灰${e.ash} 凍結${state.env.rw * state.env.rh - e.awakeRegions}${e.jobs ? ` 早送り中${e.jobs}` : ''}`;
+              return `環境 燃焼${e.burning} 計算${e.lastTickCells}/最大${e.maxTickCells} 灰${e.ash} 凍結${state.env.rw * state.env.rh - e.awakeRegions}${e.jobs ? ` 早送り中${e.jobs}` : ''}\nライト ${view.weather.lightOn ? `${view.weather.lightMs.toFixed(2)}ms` : 'なし'}  ${shownClock}`;
             })(),
           ].join('\n'),
         );
@@ -362,6 +374,11 @@ async function boot() {
     }
     view.render(state, alpha, performance.now() / 1000, ticker.elapsedMS / 1000);
     hud.update(state.player.hp, state.player.maxHp);
+    const clock = `${clockText(state.env.now)} ${WEATHER_NAMES[weatherNow(state.env).kind]}`;
+    if (clock !== shownClock) {
+      shownClock = clock;
+      clockHud.textContent = clock;
+    }
     if (state.progress.treasures !== shownTreasures) {
       shownTreasures = state.progress.treasures;
       treasureHud.hidden = shownTreasures === 0;
@@ -461,6 +478,17 @@ async function boot() {
       const i = ty * state.map.width + tx;
       return { material: material(state.env, state.map, i), burning: state.env.burning.has(i), solid: state.map.solid[i] === 1 };
     },
+    /** P5: time of day and weather. */
+    weather: () => ({ ...weatherNow(state.env), clock: clockText(state.env.now), lightOn: view.weather.lightOn, lightMs: view.weather.lightMs, rainVisible: view.weather.rain.visible }),
+    setHour: (/** @type {number} */ h) => setWorldTime(state.env, Math.floor(state.env.now / CLOCK.dayMs) * CLOCK.dayMs + h * CLOCK.hourMs),
+    setWeather: (/** @type {any} */ kind) => {
+      state.env.weatherOverride = kind;
+    },
+    /** Test helper: a lightning strike on tile (tx, ty) after the usual warning. */
+    forceStrike: (/** @type {number} */ tx, /** @type {number} */ ty) => {
+      state.env.strike = { i: ty * state.map.width + tx, atMs: state.env.now + 900 };
+    },
+    strikePending: () => !!state.env.strike,
     envEvents: () => state.events.filter((e) => ['ignite', 'fireArrow', 'discharge', 'douse', 'gateOpen', 'burn', 'cut'].includes(e.type)).map((e) => e.type),
     /** Test helper: point the player in a direction without moving (for opening chests). */
     face: (/** @type {'up' | 'down' | 'left' | 'right'} */ dir) => {

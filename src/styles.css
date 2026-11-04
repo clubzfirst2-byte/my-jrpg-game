@@ -497,7 +497,7 @@ body {
 /* ---- treasure counter ---- */
 #hud-treasure {
   position: absolute;
-  top: calc(36px + var(--safe-top));
+  top: calc(54px + var(--safe-top));
   left: calc(60px + var(--safe-left));
   font-size: 13px;
   font-weight: bold;
@@ -508,4 +508,16 @@ body {
 
 #hud-treasure[hidden] {
   display: none;
+}
+
+/* ---- clock (P5) ---- */
+#hud-clock {
+  position: absolute;
+  top: calc(36px + var(--safe-top));
+  left: calc(60px + var(--safe-left));
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--text);
+  text-shadow: 0 1px 0 #000;
+  pointer-events: none;
 }

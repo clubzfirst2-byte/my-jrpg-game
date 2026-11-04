@@ -2,7 +2,7 @@
 // Island features (P3.5, DESIGN.md 5.9): chests, checkpoints (respawn stones), warps (cave doorways),
 // areas (camera bounds for interiors), landmarks, and the player's progress that is saved.
 // Pure logic: no DOM, no PixiJS.
-import { openDoors } from '../env/envSim.js';
+import { openDoors, setWorldTime } from '../env/envSim.js';
 
 export const MAX_HEARTS = 6;
 /** How close (px) the player must be to touch a checkpoint / open a chest. */
@@ -24,6 +24,7 @@ const OPEN_RANGE = 20;
  * @property {number} treasures
  * @property {number} maxHp             quarter hearts
  * @property {string[]} gates           doors opened by powering their receiver (P4)
+ * @property {number} [worldMs]         world time (time of day, weather) when saved (P5)
  */
 
 /** @returns {Progress} */
@@ -187,7 +188,10 @@ export function applyProgress(state, saved) {
   pr.landmarks = [...pr.landmarks];
   pr.gates = [...pr.gates];
   state.progress = pr;
-  if (state.env) for (const link of pr.gates) openDoors(state.env, state.map, link);
+  if (state.env) {
+    for (const link of pr.gates) openDoors(state.env, state.map, link);
+    if (typeof pr.worldMs === 'number') setWorldTime(state.env, pr.worldMs);
+  }
   state.player.maxHp = pr.maxHp;
   state.player.hp = pr.maxHp;
 }

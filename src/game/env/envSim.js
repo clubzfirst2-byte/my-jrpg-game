@@ -12,6 +12,8 @@
 //   gives the same island.
 // Pure logic: no DOM, no PixiJS.
 import { Ground } from '../world/tilemap.js';
+import { roll } from '../core/hashRandom.js';
+import { WEATHER, weatherAt, rainWetAt, isRaining } from './weather.js';
 
 export const ENV = Object.freeze({
   tickMs: 100,
@@ -60,15 +62,19 @@ export const SOLID_OBJECTS = new Set(['tree', 'rock', 'bramble', 'crystal', 'jar
  * @property {{ lastTickCells: number, maxTickCells: number, deferred: number, catchUpSteps: number, catchUpCells: number }} stats
  * @property {{ cells: number[], untilMs: number } | null} sparks
  * @property {Map<number, string>} lastHit  tile -> last sword swing id that hit it
+ * @property {import('./weather.js').WeatherKind | null} weatherOverride  forced weather (tests / ?weather=)
+ * @property {Uint8Array} indoor   tiles under a roof (caves): no rain there
+ * @property {{ i: number, atMs: number } | null} strike  a lightning strike about to land (P5)
  */
 
 /**
  * @param {import('../world/tilemap.js').TileMap} map
  * @param {EnvObject[]} objects  every object on the map (trees, rocks, crystals, ...)
  * @param {number} [seed]
+ * @param {number} [now] world time to start at (P5: the time of day)
  * @returns {Env}
  */
-export function createEnv(map, objects, seed = 1) {
+export function createEnv(map, objects, seed = 1, now = 0) {
   const rw = Math.ceil(map.width / ENV.regionTiles);
   const rh = Math.ceil(map.height / ENV.regionTiles);
   /** @type {Map<number, EnvObject>} */
@@ -76,13 +82,13 @@ export function createEnv(map, objects, seed = 1) {
   for (const o of objects) objectAt.set(o.ty * map.width + o.tx, o);
   return {
     seed,
-    now: 0,
-    nextTickMs: ENV.tickMs,
+    now,
+    nextTickMs: now + ENV.tickMs,
     cells: new Map(),
     burning: new Set(),
     rw,
     rh,
-    clock: new Float64Array(rw * rh),
+    clock: new Float64Array(rw * rh).fill(now),
     awake: new Uint8Array(rw * rh),
     pending: new Uint8Array(rw * rh),
     jobs: [],
@@ -93,22 +99,25 @@ export function createEnv(map, objects, seed = 1) {
     stats: { lastTickCells: 0, maxTickCells: 0, deferred: 0, catchUpSteps: 0, catchUpCells: 0 },
     sparks: null,
     lastHit: new Map(),
+    weatherOverride: null,
+    indoor: new Uint8Array(map.width * map.height),
+    strike: null,
   };
 }
 
-/** Deterministic number in [0, 1) from integers. */
-export function roll(/** @type {number} */ seed, /** @type {number} */ a, /** @type {number} */ b, /** @type {number} */ c) {
-  let h = Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) >>> 0;
-  for (const v of [a, b, c]) {
-    h = Math.imul(h ^ (v | 0), 0xcc9e2d51) >>> 0;
-    h = ((h << 15) | (h >>> 17)) >>> 0;
-    h = Math.imul(h, 0x1b873593) >>> 0;
-  }
-  h ^= h >>> 16;
-  h = Math.imul(h, 0x85ebca6b) >>> 0;
-  h ^= h >>> 13;
-  return (h >>> 0) / 4294967296;
+/** Moves the world clock (loading a save). Nothing is burning yet, so only the clocks move. @param {Env} env @param {number} ms */
+export function setWorldTime(env, ms) {
+  env.now = ms;
+  env.nextTickMs = ms + ENV.tickMs;
+  env.clock.fill(ms);
 }
+
+/** @param {Env} env @param {number} [t] */
+export function weatherNow(env, t = env.now) {
+  return weatherAt(env.seed, t, env.weatherOverride);
+}
+
+export { roll };
 
 /** @param {Env} env @param {any} map @param {number} i */
 export function regionOf(env, map, i) {
@@ -139,8 +148,21 @@ export function material(env, map, i, t = env.now) {
 export function canIgnite(env, map, i, t) {
   if (env.burning.has(i)) return false;
   if (!FLAMMABLE.has(material(env, map, i, t))) return false;
+  if (!env.indoor[i] && rainWetAt(env.seed, t, env.weatherOverride)) return false; // rained on (P5)
   const c = env.cells.get(i);
   return !c || c.wetUntil <= t;
+}
+
+/**
+ * Chance that fire spreads from tile `from` to its neighbour `to`, with the wind (P5).
+ * @param {any} map @param {number} from @param {number} to @param {import('./weather.js').Weather} w @param {number} base
+ */
+export function spreadChanceWith(map, from, to, w, base) {
+  const d = to - from;
+  const dx = d === 1 ? 1 : d === -1 ? -1 : 0;
+  const dy = d === map.width ? 1 : d === -map.width ? -1 : 0;
+  const along = dx * w.windX + dy * w.windY; // -1 (upwind) .. 1 (downwind)
+  return base * Math.max(0.15, 1 + WEATHER.windBias * along);
 }
 
 /** @param {Env} env @param {number} i */
@@ -177,6 +199,15 @@ export function wet(env, map, i) {
   const c = cell(env, i);
   if (env.burning.delete(i)) c.burnMs = 0;
   c.wetUntil = env.now + ENV.wetMs;
+  env.version++;
+}
+
+/** Rain puts out a burning tile. @param {Env} env @param {number} i @param {number} t */
+function douseCell(env, i, t) {
+  env.burning.delete(i);
+  const c = cell(env, i);
+  c.burnMs = 0;
+  c.wetUntil = Math.max(c.wetUntil, t + WEATHER.wetAfterMs);
   env.version++;
 }
 
@@ -272,6 +303,8 @@ export function runCatchUp(env, map, budget) {
     const T = job.T;
     const inJob = new Set(job.regions);
     const list = [...env.burning].filter((i) => inJob.has(regionOf(env, map, i))).sort((a, b) => a - b);
+    const w = weatherNow(env, T);
+    const rain = isRaining(w);
     for (const i of list) {
       const c = /** @type {Cell} */ (env.cells.get(i));
       const r = regionOf(env, map, i);
@@ -280,8 +313,13 @@ export function runCatchUp(env, map, budget) {
       if (dt <= 0) continue;
       c.burnMs -= dt;
       c.at = T;
+      // It rained there in the meantime (DESIGN.md 4.4): the fire may have gone out.
+      if (rain && !env.indoor[i] && roll(env.seed, i, Math.floor(T / ENV.stepMs), 3) < 1 - Math.pow(1 - WEATHER.rainDouse, dt / ENV.tickMs)) {
+        douseCell(env, i, T);
+        continue;
+      }
       for (const n of neighbours(map, i)) {
-        if (roll(env.seed, n, Math.floor(T / ENV.stepMs), 1) >= p * (dt / ENV.stepMs)) continue;
+        if (roll(env.seed, n, Math.floor(T / ENV.stepMs), 1) >= spreadChanceWith(map, i, n, w, p) * (dt / ENV.stepMs)) continue;
         // Outside the fast-forward the world may be moving at its own pace: hold the ignition
         // until the fast-forward ends, so the result does not depend on how it was split.
         if (!inJob.has(regionOf(env, map, n))) env.heldIgnitions.add(n);
@@ -331,13 +369,19 @@ function tick(env, map) {
   env.stats.deferred = all.length - n;
   env.cursor += n;
   const k = Math.floor(t / ENV.tickMs);
+  const w = weatherNow(env, t);
+  const rain = isRaining(w);
   for (let j = 0; j < n; j++) {
     const i = all[(startAt + j) % all.length];
     const c = /** @type {Cell} */ (env.cells.get(i));
     c.burnMs -= ENV.tickMs;
     c.at = t;
+    if (rain && !env.indoor[i] && roll(env.seed, i, k, 3) < WEATHER.rainDouse) {
+      douseCell(env, i, t); // the rain puts it out
+      continue;
+    }
     for (const nb of neighbours(map, i)) {
-      if (roll(env.seed, nb, k, 0) >= ENV.spreadChance) continue;
+      if (roll(env.seed, nb, k, 0) >= spreadChanceWith(map, i, nb, w, ENV.spreadChance)) continue;
       if (env.pending[regionOf(env, map, nb)]) env.heldIgnitions.add(nb); // that region is being fast-forwarded
       else if (canIgnite(env, map, nb, t)) ignite(env, map, nb, t);
     }

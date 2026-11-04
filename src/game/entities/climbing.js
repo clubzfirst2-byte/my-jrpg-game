@@ -21,6 +21,9 @@ export const CLIMB = Object.freeze({
   mantleDistance: 8,
   /** After letting go, the wall cannot be grabbed again for this long (no instant re-grab mid-fall). */
   regrabCooldown: 0.4,
+  /** Rain (P5): walls are slippery. Climbing up, the player slides back down this far every so often. */
+  slipEvery: 1.2,
+  slipDistance: 10,
 });
 
 /** @typedef {'up' | 'down' | 'left' | 'right'} Dir */
@@ -145,6 +148,17 @@ export function updateClimb(p, input, map, dt) {
   if (Math.abs(toward) > 0.01) {
     p.z += toward * CLIMB.speed * dt;
     moving = true;
+  }
+  // Rain: going up, the hands slip now and then (BotW-like; the way up takes longer and more stamina).
+  if (p.rainOn && toward > 0.01) {
+    p.slipTime = (p.slipTime ?? 0) + dt;
+    if (p.slipTime >= CLIMB.slipEvery) {
+      p.slipTime = 0;
+      p.z -= CLIMB.slipDistance;
+      p.lastEvent = { type: 'slip' };
+    }
+  } else {
+    p.slipTime = 0;
   }
 
   const ground = groundHeightUnder(p, map);

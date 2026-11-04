@@ -1,0 +1,237 @@
+// @ts-check
+// Time of day and weather on screen (P5): the ambient light (a light map multiplied over the world,
+// with fires, campfires and crystals glowing at night), rain streaks blown by the wind, and
+// lightning (a warning flicker on the target, then a bolt and a flash). Reads state only.
+//
+// Cost: by day in clear weather the light map is skipped entirely. Otherwise it is one small
+// render-to-texture at the internal resolution (lightMs is measured for the debug overlay).
+import { Container, Graphics, RenderTexture, Sprite, Texture } from 'pixi.js';
+import { ambientAt, isDark, isRaining } from '../game/env/weather.js';
+import { weatherNow } from '../game/env/envSim.js';
+
+const RAIN_SPEED = 320; // px/s on screen
+const RAIN_WIND = 120;
+const FLASH_MS = 260;
+
+/** A soft white disc (radial falloff) for lights. */
+function lightTexture() {
+  const size = 64;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
+  const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.45, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, size, size);
+  return Texture.from(c);
+}
+
+/** @param {{ r: number, g: number, b: number }} c */
+const toHex = (c) => (Math.round(Math.min(1, c.r) * 255) << 16) | (Math.round(Math.min(1, c.g) * 255) << 8) | Math.round(Math.min(1, c.b) * 255);
+
+export class WeatherView {
+  /**
+   * @param {import('pixi.js').Application} app
+   * @param {(key: string) => Sprite} makeSprite
+   * @param {Container} actors world layer for the strike warning
+   */
+  constructor(app, makeSprite, actors) {
+    this.app = app;
+    this.renderer = app.renderer;
+    this.makeSprite = makeSprite;
+    // Light map.
+    this.lightTex = lightTexture();
+    this.lightScene = new Container();
+    this.ambientFill = new Sprite(Texture.WHITE);
+    this.lightScene.addChild(this.ambientFill);
+    /** @type {Sprite[]} */
+    this.lights = [];
+    this.rt = RenderTexture.create({ width: 8, height: 8 });
+    this.overlay = new Sprite(this.rt);
+    this.overlay.blendMode = 'multiply';
+    this.overlay.label = 'light-map';
+    // Rain (screen space).
+    this.rain = new Container();
+    this.rain.label = 'rain';
+    /** @type {{ s: Sprite, x: number, y: number }[]} */
+    this.drops = [];
+    // Lightning.
+    this.bolt = new Graphics();
+    this.flash = new Graphics();
+    this.warn = makeSprite('px');
+    this.warn.visible = false;
+    this.warn.width = 16;
+    this.warn.height = 16;
+    actors.addChild(this.warn);
+    this.flashUntil = 0;
+    this.lastBoltTick = -1;
+    /** Milliseconds spent on the light map last frame (debug overlay). */
+    this.lightMs = 0;
+    this.lightOn = false;
+    this.enabled = true;
+  }
+
+  /** Adds the screen-space layers in order: light map, rain, bolt, flash. @param {Container} stage @param {number} index */
+  attach(stage, index) {
+    stage.addChildAt(this.overlay, index);
+    stage.addChildAt(this.rain, index + 1);
+    stage.addChildAt(this.bolt, index + 2);
+    stage.addChildAt(this.flash, index + 3);
+  }
+
+  /**
+   * @param {import('../game/state.js').GameState} state
+   * @param {{ x: number, y: number }} origin @param {number} zoom
+   * @param {boolean} indoor the player is in a cave
+   * @param {number} timeSec @param {number} dtSec
+   */
+  update(state, origin, zoom, indoor, timeSec, dtSec) {
+    const env = state.env;
+    const w = weatherNow(env);
+    const sw = this.app.screen.width;
+    const sh = this.app.screen.height;
+    const nowMs = timeSec * 1000;
+
+    // --- lightning ---
+    const bolt = [...state.events].reverse().find((e) => e.type === 'lightning');
+    if (bolt && bolt.tick !== this.lastBoltTick) {
+      this.lastBoltTick = bolt.tick;
+      this.flashUntil = nowMs + FLASH_MS;
+      this.drawBolt(/** @type {number} */ (bolt.x), /** @type {number} */ (bolt.y), origin, zoom);
+    }
+    const flashing = nowMs < this.flashUntil;
+    const k = flashing ? (this.flashUntil - nowMs) / FLASH_MS : 0;
+    this.flash.clear();
+    this.bolt.alpha = k;
+    if (flashing && !indoor) this.flash.rect(0, 0, sw, sh).fill({ color: 0xffffff, alpha: 0.45 * k });
+    const st = env.strike;
+    this.warn.visible = !!st;
+    if (st) {
+      const ts = state.map.tileSize;
+      const tx = st.i % state.map.width;
+      const ty = (st.i / state.map.width) | 0;
+      this.warn.position.set(tx * ts, ty * ts - state.map.elev[st.i]);
+      this.warn.zIndex = ty * ts + 0.003;
+      this.warn.tint = 0xfff6a0;
+      this.warn.alpha = Math.floor(timeSec * 16) % 2 ? 0.6 : 0.15;
+    }
+
+    // --- light map ---
+    const t0 = performance.now();
+    const amb = indoor ? { r: 0.55, g: 0.55, b: 0.65 } : ambientAt(env.now, w.kind);
+    const white = amb.r >= 0.999 && amb.g >= 0.999 && amb.b >= 0.999;
+    this.lightOn = this.enabled && !white;
+    this.overlay.visible = this.lightOn;
+    if (this.lightOn) {
+      if (this.rt.width !== sw || this.rt.height !== sh) this.rt.resize(sw, sh);
+      this.ambientFill.width = sw;
+      this.ambientFill.height = sh;
+      this.ambientFill.tint = toHex(amb);
+      let n = 0;
+      if (isDark(amb) || indoor) n = this.placeLights(state, origin, zoom, timeSec, sw, sh);
+      for (let j = n; j < this.lights.length; j++) this.lights[j].visible = false;
+      this.renderer.render({ container: this.lightScene, target: this.rt, clear: true });
+    }
+    this.lightMs = performance.now() - t0;
+
+    // --- rain ---
+    const raining = isRaining(w) && !indoor;
+    this.rain.visible = raining;
+    if (raining) this.updateRain(w, sw, sh, dtSec, w.kind === 'storm' ? 1 : 0.6);
+  }
+
+  /** @returns {number} lights used */
+  placeLights(/** @type {any} */ state, /** @type {{ x: number, y: number }} */ o, /** @type {number} */ zoom, /** @type {number} */ timeSec, /** @type {number} */ sw, /** @type {number} */ sh) {
+    const env = state.env;
+    const map = state.map;
+    const ts = map.tileSize;
+    let n = 0;
+    const add = (/** @type {number} */ wx, /** @type {number} */ wy, /** @type {number} */ radius, /** @type {number} */ color) => {
+      const x = (wx - o.x) * zoom;
+      const y = (wy - o.y) * zoom;
+      const r = radius * zoom;
+      if (x < -r || y < -r || x > sw + r || y > sh + r) return;
+      let s = this.lights[n];
+      if (!s) {
+        s = new Sprite(this.lightTex);
+        s.anchor.set(0.5);
+        s.blendMode = 'add';
+        this.lightScene.addChild(s);
+        this.lights.push(s);
+      }
+      n++;
+      s.visible = true;
+      s.position.set(x, y);
+      s.width = s.height = r * 2;
+      s.tint = color;
+    };
+    const flicker = (/** @type {number} */ i) => 1 + 0.08 * Math.sin(timeSec * 9 + i);
+    // The player's own small glow, so night is dark but playable.
+    const p = state.player;
+    add(p.x, p.y - p.z - 8, 44, 0x8a7a60);
+    for (const i of env.burning) {
+      add((i % map.width) * ts + ts / 2, ((i / map.width) | 0) * ts + ts / 2 - map.elev[i], 34 * flicker(i), 0xffb060);
+    }
+    for (const [i, ob] of env.objectAt) {
+      if (ob.gone) continue;
+      const x = (i % map.width) * ts + ts / 2;
+      const y = ((i / map.width) | 0) * ts + ts / 2 - map.elev[i];
+      if (ob.type === 'campfire' || ob.type === 'brazier') add(x, y - 6, 64 * flicker(i), 0xffb070);
+      else if (ob.type === 'crystal') add(x, y - 8, 26, 0x60d8ff);
+      else if (ob.type === 'receiver' && ob.on) add(x, y - 8, 22, 0x60d8ff);
+    }
+    if (env.sparks) for (const i of env.sparks.cells) add((i % map.width) * ts + ts / 2, ((i / map.width) | 0) * ts + ts / 2, 20, 0xfff27a);
+    return n;
+  }
+
+  /** @param {import('../game/env/weather.js').Weather} w @param {number} sw @param {number} sh @param {number} dt @param {number} density */
+  updateRain(w, sw, sh, dt, density) {
+    const want = Math.round(((sw * sh) / 900) * density);
+    while (this.drops.length < want) {
+      const s = this.makeSprite('px');
+      s.width = 1;
+      s.height = 5;
+      s.tint = 0xb8d0ff;
+      s.alpha = 0.55;
+      this.rain.addChild(s);
+      this.drops.push({ s, x: Math.random() * sw, y: Math.random() * sh });
+    }
+    const vx = w.windX * RAIN_WIND;
+    const vy = RAIN_SPEED;
+    const angle = Math.atan2(vx, vy);
+    this.drops.forEach((d, j) => {
+      d.s.visible = j < want;
+      if (j >= want) return;
+      d.x += vx * dt;
+      d.y += vy * dt;
+      if (d.y > sh) {
+        d.y -= sh + 8;
+        d.x = Math.random() * sw;
+      }
+      if (d.x < 0) d.x += sw;
+      if (d.x > sw) d.x -= sw;
+      d.s.position.set(Math.round(d.x), Math.round(d.y));
+      d.s.rotation = -angle;
+    });
+  }
+
+  /** A zigzag bolt from the top of the screen to the strike. */
+  drawBolt(/** @type {number} */ wx, /** @type {number} */ wy, /** @type {{ x: number, y: number }} */ o, /** @type {number} */ zoom) {
+    const x = (wx - o.x) * zoom;
+    const y = (wy - o.y) * zoom;
+    const g = this.bolt;
+    g.clear();
+    let px = x + (Math.random() - 0.5) * 30;
+    let py = 0;
+    g.moveTo(px, py);
+    const segs = 7;
+    for (let k = 1; k <= segs; k++) {
+      py = (y * k) / segs;
+      px = k === segs ? x : x + (Math.random() - 0.5) * 18;
+      g.lineTo(px, py);
+    }
+    g.stroke({ width: 2, color: 0xfffbe0 });
+  }
+}
