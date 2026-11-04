@@ -41,6 +41,8 @@ import {
   doorSprite,
   brazierFrames,
   stumpSprite,
+  anvilSprite,
+  itemIcons,
 } from './placeholderArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
@@ -100,6 +102,9 @@ export function placeholderEntries() {
   entries.push({ key: 'obj.receiver.on', rows: receiverSprite(true), anchor: FEET });
   entries.push({ key: 'obj.door', rows: doorSprite(), anchor: FEET });
   entries.push({ key: 'obj.stump', rows: stumpSprite(), anchor: FEET });
+  // P6 items.
+  entries.push({ key: 'obj.anvil', rows: anvilSprite(), anchor: FEET });
+  for (const [key, rows] of Object.entries(itemIcons())) entries.push({ key, rows, anchor: FEET });
   return entries;
 }
 

@@ -240,11 +240,12 @@ features = {
     'chests': [
         {'id': 'ledge', 'tx': 49, 'ty': 10, 'reward': 'heart'},
         {'id': 'tower', 'tx': 50, 'ty': 18, 'reward': 'heart'},
-        {'id': 'cave', 'tx': 107, 'ty': 5, 'reward': 'treasure'},
-        {'id': 'camp', 'tx': 86, 'ty': 44, 'reward': 'treasure'},
-        {'id': 'islet', 'tx': 87, 'ty': 63, 'reward': 'treasure'},
-        {'id': 'vault', 'tx': VX, 'ty': VY, 'reward': 'treasure'},
-        {'id': 'forest', 'tx': PX, 'ty': PY, 'reward': 'treasure'},
+        # P6: chests hold equipment or money (星貨), not abstract "treasure".
+        {'id': 'cave', 'tx': 107, 'ty': 5, 'reward': 'item', 'item': 'ember_sword'},
+        {'id': 'camp', 'tx': 86, 'ty': 44, 'reward': 'item', 'item': 'grip_boots'},
+        {'id': 'islet', 'tx': 87, 'ty': 63, 'reward': 'money', 'money': 100},
+        {'id': 'vault', 'tx': VX, 'ty': VY, 'reward': 'item', 'item': 'insulated_cap'},
+        {'id': 'forest', 'tx': PX, 'ty': PY, 'reward': 'item', 'item': 'bark_vest'},
     ],
     'checkpoints': [
         {'id': 'beach', 'tx': 51, 'ty': 64},
@@ -280,6 +281,38 @@ for e in features['enemies']:
     best = min(((abs(x - x0) + abs(y - y0), x, y) for y in range(max(0, y0 - 4), min(H, y0 + 5)) for x in range(max(0, x0 - 4), min(W, x0 + 5)) if free(x, y, lvl)), default=None)
     assert best, ('no free tile near enemy', e)
     e['tx'], e['ty'] = best[1], best[2]
+# --- P6: items lying in the world, and the forge (anvil) by the hill stone ---
+taken = {(c['tx'], c['ty']) for c in features['chests'] + features['checkpoints'] + features['campfires']}
+taken |= {(e['tx'], e['ty']) for e in features['enemies']}
+def near_free(x0, y0, lvl=None):
+    best = min(((abs(x - x0) + abs(y - y0), x, y) for y in range(max(0, y0 - 6), min(H, y0 + 7)) for x in range(max(0, x0 - 6), min(ISLAND_W, x0 + 7))
+                if free(x, y, lvl) and (x, y) not in taken and g[y][x] != '='), default=None)
+    assert best, ('no free tile near', x0, y0)
+    taken.add((best[1], best[2]))
+    return best[1], best[2]
+hx, hy = features['checkpoints'][1]['tx'], features['checkpoints'][1]['ty']
+ax, ay = near_free(hx + 2, hy, h[hy][hx])
+env_obj('anvil', ax, ay)
+PICKUPS = []
+def pickup(pid, item, x, y, count=1, lvl=None):
+    px_, py_ = near_free(x, y, lvl)
+    PICKUPS.append({'id': pid, 'item': item, 'tx': px_, 'ty': py_, **({'count': count} if count != 1 else {})})
+for k, (x, y) in enumerate([(9, 40), (11, 48), (17, 38), (14, 44)]):
+    pickup(f'mushroom{k}', 'mushroom', x, y)
+for k, (x, y) in enumerate([(29, 50), (59, 50), (66, 46), (63, 58)]):
+    pickup(f'berry{k}', 'red_berry', x, y)
+for k, (x, y) in enumerate([(40, 36), (57, 37), (48, 26)]):
+    pickup(f'herb{k}', 'swift_herb', x, y)
+for k, (x, y) in enumerate([(75, 36), (70, 45)]):
+    pickup(f'pepper{k}', 'ember_pepper', x, y)
+for k, (x, y) in enumerate([(44, 58), (66, 40), (30, 44)]):
+    pickup(f'arrows{k}', 'arrow', x, y, count=5)
+pickup('spear', 'guard_spear', 52, 31)
+pickup('greatsword', 'rusty_greatsword', 82, 38, lvl=16)
+pickup('travel_sword', 'travel_sword', 36, 60)
+pickup('hunter_bow', 'hunter_bow', 47, 11, lvl=48)
+features['pickups'] = PICKUPS
+
 # warps: trigger tiles and arrival tiles must be walkable
 for w in features['warps']:
     assert free(w['tx'], w['ty']), ('warp tile blocked', w)

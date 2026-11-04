@@ -3,13 +3,19 @@
 // rule for picking which of the two alternating generations (A / B) to load. Pure: unit-tested.
 
 /** Bump when the shape of `data` changes, and add a migration from the previous version. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /**
  * Migrations from version N to N+1, applied in order when loading an older save.
  * @type {Record<number, (data: any) => any>}
  */
-export const MIGRATIONS = {};
+export const MIGRATIONS = {
+  // v1 -> v2 (P6): "treasures" became money (星貨) and an inventory. Each old treasure is worth 50.
+  1: (data) => {
+    const { treasures = 0, ...rest } = data ?? {};
+    return { ...rest, inv: { ...(rest.inv ?? {}), money: (rest.inv?.money ?? 0) + treasures * 50 } };
+  },
+};
 
 /**
  * @typedef {object} Envelope

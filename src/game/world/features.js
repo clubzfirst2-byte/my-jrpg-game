@@ -3,6 +3,7 @@
 // areas (camera bounds for interiors), landmarks, and the player's progress that is saved.
 // Pure logic: no DOM, no PixiJS.
 import { openDoors, setWorldTime } from '../env/envSim.js';
+import { createInventory, normalizeInventory, addItem } from '../items/inventory.js';
 
 export const MAX_HEARTS = 6;
 /** How close (px) the player must be to touch a checkpoint / open a chest. */
@@ -10,7 +11,7 @@ const TOUCH_RANGE = 14;
 const OPEN_RANGE = 20;
 
 /**
- * @typedef {{ id: string, tx: number, ty: number, reward: 'heart' | 'treasure' }} ChestDef
+ * @typedef {{ id: string, tx: number, ty: number, reward: 'heart' | 'money' | 'item', money?: number, item?: string, count?: number }} ChestDef
  * @typedef {{ id: string, tx: number, ty: number }} CheckpointDef
  * @typedef {{ id: string, tx: number, ty: number, facing: 'up' | 'down' | 'left' | 'right', toTx: number, toTy: number, reveal?: boolean }} WarpDef  reveal: draw a cave opening on the cliff above
  * @typedef {{ id: string, tx: number, ty: number, tw: number, th: number }} AreaDef
@@ -21,7 +22,8 @@ const OPEN_RANGE = 20;
  * @property {string[]} checkpoints     activated checkpoint ids
  * @property {string | null} checkpoint the one the player respawns at
  * @property {string[]} landmarks       discovered landmark ids
- * @property {number} treasures
+ * @property {import('../items/inventory.js').Inventory} inv   items, money, equipment (P6)
+ * @property {Record<string, number>} [picked]  map items taken, with the world time (they come back a day later)
  * @property {number} maxHp             quarter hearts
  * @property {string[]} gates           doors opened by powering their receiver (P4)
  * @property {number} [worldMs]         world time (time of day, weather) when saved (P5)
@@ -29,7 +31,7 @@ const OPEN_RANGE = 20;
 
 /** @returns {Progress} */
 export function emptyProgress() {
-  return { openedChests: [], checkpoints: [], checkpoint: null, landmarks: [], treasures: 0, maxHp: 12, gates: [] };
+  return { openedChests: [], checkpoints: [], checkpoint: null, landmarks: [], maxHp: 12, gates: [], inv: createInventory(), picked: {} };
 }
 
 /** Feet position at the center-bottom of a tile. @param {any} map @param {number} tx @param {number} ty */
@@ -79,15 +81,21 @@ export function chestInReach(state) {
 export function openChest(state, c) {
   const pr = state.progress;
   if (pr.openedChests.includes(c.id)) return;
-  pr.openedChests.push(c.id);
-  if (c.reward === 'heart') {
+  if (c.reward === 'item' && c.item) {
+    // Full (weapon slots, stack): the chest stays closed until there is room (P6).
+    if (addItem(pr.inv, c.item, c.count ?? 1) === 0) {
+      state.events.push({ type: 'full', tick: state.tick, item: c.item });
+      return;
+    }
+  } else if (c.reward === 'money') {
+    pr.inv.money += c.money ?? 0;
+  } else {
     pr.maxHp = Math.min(MAX_HEARTS * 4, pr.maxHp + 4);
     state.player.maxHp = pr.maxHp;
     state.player.hp = pr.maxHp; // a new heart container also refills
-  } else {
-    pr.treasures += 1;
   }
-  state.events.push({ type: 'chest', tick: state.tick, reward: c.reward, id: c.id });
+  pr.openedChests.push(c.id);
+  state.events.push({ type: 'chest', tick: state.tick, reward: c.reward, id: c.id, item: c.item, count: c.count ?? 1, money: c.money });
   state.saveRequested = true;
 }
 
@@ -187,7 +195,10 @@ export function applyProgress(state, saved) {
   pr.checkpoints = [...pr.checkpoints];
   pr.landmarks = [...pr.landmarks];
   pr.gates = [...pr.gates];
+  pr.inv = normalizeInventory(saved.inv);
+  pr.picked = { ...(saved.picked ?? {}) };
   state.progress = pr;
+  state.pickupsStale = true; // placed again on the next step (taken ones stay away for a day)
   if (state.env) {
     for (const link of pr.gates) openDoors(state.env, state.map, link);
     if (typeof pr.worldMs === 'number') setWorldTime(state.env, pr.worldMs);

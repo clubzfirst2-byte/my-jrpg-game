@@ -21,6 +21,7 @@ import { createEnv, stepEnv, SOLID_OBJECTS } from './env/envSim.js';
 import { swordHitsObjects, fireDamage } from './env/envActions.js';
 import { applyWeatherToPlayer, stormStep } from './env/weatherActions.js';
 import { CLOCK } from './env/weather.js';
+import { applyGear, itemStep, placePickups } from './items/itemSystem.js';
 import { ISLAND } from './world/maps/island.js';
 import { TEST_FIELD } from './world/maps/testField.js';
 import { HEIGHT_TEST } from './world/maps/heightTest.js';
@@ -60,6 +61,12 @@ const ENEMY_CORPSE_MS = 600;
  * @property {import('./world/features.js').Progress} progress
  * @property {boolean} saveRequested  something worth saving happened (the platform layer saves)
  * @property {import('./env/envSim.js').Env} env  environment simulation (P4)
+ * @property {any[]} pickupDefs   items placed by the map (P6)
+ * @property {import('./items/itemSystem.js').Pickup[]} pickups  items lying in the world now
+ * @property {any[]} landedHits   player sword hits that landed this step
+ * @property {'cook' | 'forge' | null} nearby  something to use in reach
+ * @property {number} respawns
+ * @property {boolean} [pickupsStale]
  */
 
 /** @param {import('./world/tilemap.js').MapDef} [def] @returns {GameState} */
@@ -93,6 +100,12 @@ export function createGameState(def = HEIGHT_TEST) {
     progress: emptyProgress(),
     saveRequested: false,
     env: /** @type {any} */ (null),
+    pickupDefs: f.pickups ?? [],
+    pickups: [],
+    landedHits: [],
+    nearby: null,
+    respawns: 0,
+    pickupsStale: true,
   };
   placeFeatureSolids(state);
   // P4: environment objects join the map's objects (the view draws them all the same way).
@@ -132,7 +145,13 @@ export function stepGame(state, input) {
   // The world keeps going while the player is down (fires burn on).
   stepEnv(state.env, state.map, state.player, STEP_SEC * 1000);
   stormStep(state, STEP_SEC * 1000);
+  applyGear(state);
   applyWeatherToPlayer(state);
+  if (state.pickupsStale) {
+    state.pickupsStale = false;
+    placePickups(state);
+  }
+  state.landedHits = [];
   if (state.events.length > 64) state.events.splice(0, state.events.length - 64);
   const p = state.player;
 
@@ -161,7 +180,7 @@ export function stepGame(state, input) {
   // Player sword hits.
   for (const hb of state.hitboxes) {
     for (const e of state.enemies) {
-      if (e.state !== 'dead' && overlaps(hb, { x: e.x, y: e.y - 3, z: e.z, r: 6 })) hitEnemy(state, e, hb);
+      if (e.state !== 'dead' && overlaps(hb, { x: e.x, y: e.y - 3, z: e.z, r: 6 }) && hitEnemy(state, e, hb)) state.landedHits.push(hb);
     }
   }
 
@@ -173,6 +192,7 @@ export function stepGame(state, input) {
   state.enemies = state.enemies.filter((e) => !(e.state === 'dead' && e.t > ENEMY_CORPSE_MS));
   pushApart(state);
   updateProjectiles(state, enemyDt);
+  itemStep(state);
 }
 
 /** Keeps the player and enemies from standing inside each other. @param {GameState} state */
@@ -209,4 +229,5 @@ export function respawnPlayer(state) {
   state.projectiles = [];
   spawnEnemies(state);
   state.events.push({ type: 'respawn', tick: state.tick });
+  state.respawns += 1;
 }

@@ -43,7 +43,8 @@ const HEIGHT_DIGITS = '0123456789abcdefghijklmnopqrstuv';
  * @property {import('./features.js').WarpDef[]} [warps]
  * @property {import('./features.js').AreaDef[]} [areas]
  * @property {import('./features.js').AreaDef} [outdoor]  camera bounds outside every area (default: the whole map)
- * @property {{ type: string, tx: number, ty: number, link?: string }[]} [envObjects]  P4: crystals, jars, brambles, braziers, receivers, doors
+ * @property {{ type: string, tx: number, ty: number, link?: string }[]} [envObjects]  P4: crystals, jars, brambles, braziers, receivers, doors; P6: anvil
+ * @property {{ id: string, item: string, tx: number, ty: number, count?: number }[]} [pickups]  P6: items lying in the world
  * @property {import('./features.js').LandmarkDef[]} [landmarks]
  * @typedef {string[] | IslandDef} MapDef
  */

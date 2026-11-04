@@ -482,7 +482,7 @@ body {
   font-size: 14px;
   text-align: center;
   pointer-events: none;
-  z-index: 4;
+  z-index: 7; /* above the inventory menu */
 }
 
 #toast[hidden] {
@@ -520,4 +520,138 @@ body {
   color: var(--text);
   text-shadow: 0 1px 0 #000;
   pointer-events: none;
+}
+
+/* ---- items (P6) ---- */
+#ui #bag-button {
+  position: absolute;
+  top: calc(52px + var(--safe-top));
+  left: calc(8px + var(--safe-left));
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+#ui #use-button {
+  position: absolute;
+  left: 50%;
+  bottom: calc(18px + var(--safe-bottom));
+  transform: translateX(-50%);
+  font-size: 15px;
+  font-weight: bold;
+  padding: 8px 18px;
+  background: rgba(200, 120, 40, 0.85);
+  border-color: #ffd28a;
+}
+
+#ui #use-button[hidden],
+#inv-menu[hidden] {
+  display: none;
+}
+
+#inv-menu {
+  position: absolute;
+  inset: calc(8px + var(--safe-top)) calc(8px + var(--safe-right)) calc(8px + var(--safe-bottom)) calc(8px + var(--safe-left));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(12, 16, 24, 0.94);
+  pointer-events: auto;
+  z-index: 6;
+}
+
+.inv-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inv-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1;
+}
+
+#ui .inv-tabs button.active {
+  background: #3d6a96;
+  border-color: #8cc4ff;
+}
+
+.inv-money {
+  color: #ffd75e;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.inv-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.inv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.inv-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(40, 56, 76, 0.6);
+}
+
+.inv-row.clickable {
+  cursor: pointer;
+}
+
+.inv-row.clickable:active {
+  background: rgba(70, 100, 140, 0.8);
+}
+
+.inv-row.active {
+  outline: 1px solid #8cc4ff;
+}
+
+.inv-row-title {
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.inv-row-detail {
+  flex: 1;
+  min-width: 50%;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.inv-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.inv-pot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 6px;
+  background: rgba(90, 60, 30, 0.5);
+}
+
+.inv-hint {
+  color: #ffd28a;
+}
+
+.inv-empty {
+  margin: 4px;
+  color: var(--muted);
 }

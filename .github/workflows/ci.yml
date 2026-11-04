@@ -25,6 +25,8 @@ jobs:
         run: npm run lint
       - name: Type check
         run: npm run typecheck
+      - name: Data integrity (items.json)
+        run: npm run check:data
       - name: Unit tests
         run: npx vitest run --reporter=default --reporter=json --outputFile.json=reports/unit.json
       - name: Build

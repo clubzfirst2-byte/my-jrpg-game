@@ -170,9 +170,14 @@ export function combatStep(p, input, state, dt) {
           state.events.push({ type: 'swing', tick: state.tick });
         }
       } else if (input.bow && !p.guarding && !p.bowHeld) {
-        p.action = 'aim';
-        p.actionMs = 0;
         p.bowHeld = true;
+        // P6: a bow in hand and an arrow to shoot.
+        if (p.bow && p.arrows > 0) {
+          p.action = 'aim';
+          p.actionMs = 0;
+        } else {
+          state.events.push({ type: p.bow ? 'noArrows' : 'noBow', tick: state.tick });
+        }
       }
   }
   if (!input.bow) p.bowHeld = false;
@@ -199,7 +204,17 @@ function startSwing(p, index) {
 
 /** @param {any} p @param {boolean} pressed @param {any} state @param {number} ms */
 function stepAttack(p, pressed, state, ms) {
-  const sw = SWORD[p.comboIndex];
+  // The weapon in hand (P6) scales the swing: damage, reach and speed (slower = longer timings).
+  const w = p.weapon ?? { damage: 1, reach: 0, speed: 1, element: null };
+  const base = SWORD[p.comboIndex];
+  const sw = {
+    ...base,
+    startupMs: base.startupMs * w.speed,
+    activeMs: base.activeMs * w.speed,
+    recoveryMs: base.recoveryMs * w.speed,
+    reach: base.reach + w.reach,
+    damage: Math.max(1, Math.round(base.damage * w.damage * (p.attackUp ? 1.25 : 1))),
+  };
   const total = sw.startupMs + sw.activeMs + sw.recoveryMs;
   if (pressed && p.comboIndex < SWORD.length - 1 && total - p.actionMs <= sw.recoveryMs + COMBAT.attackBufferMs) {
     p.comboQueued = true;
@@ -218,6 +233,7 @@ function stepAttack(p, pressed, state, ms) {
       knock: sw.knock,
       from: { x: p.x, y: p.y },
       kind: 'melee',
+      element: w.element,
     });
   }
   // A queued press cancels the recovery into the next swing.
@@ -269,7 +285,7 @@ function stepAim(p, input, state, ms, dt) {
       vx: p.aimX * COMBAT.arrowSpeed,
       vy: p.aimY * COMBAT.arrowSpeed,
       lifeMs: COMBAT.arrowLifeMs,
-      damage: COMBAT.arrowDamage,
+      damage: Math.max(1, Math.round(COMBAT.arrowDamage * (p.bow?.damage ?? 1) * (p.attackUp ? 1.25 : 1))),
     });
     state.events.push({ type: 'shoot', tick: state.tick });
   }

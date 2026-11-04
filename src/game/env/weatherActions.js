@@ -33,7 +33,7 @@ export function applyWeatherToPlayer(state) {
   const drift = indoor || w.kind === 'clear' ? 0 : WEATHER.glideDrift;
   p.windX = w.windX * drift;
   p.windY = w.windY * drift;
-  p.rainOn = !indoor && isRaining(w);
+  p.rainOn = !indoor && isRaining(w) && !p.grip; // grip boots (P6) do not slip
   // Rising air over fire: any burning tile in the 3x3 under the player.
   let hot = false;
   if (p.gliding && i >= 0) {
@@ -103,7 +103,7 @@ export function strike(state, i) {
   };
   const p = state.player;
   if (!p.dead && near(p)) {
-    hitPlayer(state, { owner: 'enemy', id: `bolt${state.tick}`, damage: STORM.playerDamage, from: { x: cx, y: cy }, kind: 'env', knock: 0.6 });
+    hitPlayer(state, { owner: 'enemy', id: `bolt${state.tick}`, damage: STORM.playerDamage, from: { x: cx, y: cy }, kind: 'env', knock: 0.6, element: 'shock' });
   }
   for (const e of state.enemies) {
     if (e.state !== 'dead' && near(e)) {
