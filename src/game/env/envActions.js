@@ -116,7 +116,7 @@ export function discharge(state, crystal) {
   const p = state.player;
   const pi = tileIndexAt(state, p.x, p.y);
   if (!p.dead && set.has(pi) && touchesSurface(state, p, pi)) {
-    hitPlayer(state, { owner: 'enemy', id: `shock${state.tick}`, damage: ENV_COMBAT.shockPlayerDamage, from: { x: p.x, y: p.y + 1 }, kind: 'env', knock: 0.2 });
+    hitPlayer(state, { owner: 'enemy', id: `shock${state.tick}`, damage: ENV_COMBAT.shockPlayerDamage, from: { x: p.x, y: p.y + 1 }, kind: 'env', knock: 0.2, element: 'shock' });
   }
   for (const e of state.enemies) {
     if (e.state === 'dead') continue;
@@ -223,7 +223,7 @@ export function fireDamage(state, dtMs) {
   const p = state.player;
   const pi = tileIndexAt(state, p.x, p.y);
   if (!p.dead && !p.swimming && env.burning.has(pi) && p.z - state.map.elev[pi] <= 8) {
-    const r = hitPlayer(state, { owner: 'enemy', id: `fire${state.tick}`, damage: ENV_COMBAT.firePlayerDamage, from: { x: p.x, y: p.y + 1 }, kind: 'env', knock: 0.3 });
+    const r = hitPlayer(state, { owner: 'enemy', id: `fire${state.tick}`, damage: ENV_COMBAT.firePlayerDamage, from: { x: p.x, y: p.y + 1 }, kind: 'env', knock: 0.3, element: 'fire' });
     if (r === 'hurt') state.events.push({ type: 'burn', tick: state.tick });
   }
   for (const e of state.enemies) {

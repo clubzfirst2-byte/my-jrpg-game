@@ -109,20 +109,24 @@ test('a big fire stays within the per-tick cell limit', async ({ page }, testInf
 
 test('a fire far away freezes, and catches up when the player comes back', async ({ page }) => {
   const errors = await open(page);
+  // Game time is advanced step by step (paused), so the time away is exact on any machine.
+  await api(page, 'pause');
   await api(page, 'teleport', 30, 60); // south-west meadow
   expect(await api(page, 'envIgnite', 32, 58)).toBe(true);
   await api(page, 'teleport', 80, 30); // far east: the west of the island is frozen
-  await page.waitForTimeout(200);
+  await api(page, 'step', 12);
   const frozen = await api(page, 'env');
-  await page.waitForTimeout(3000);
+  await api(page, 'step', 240); // 4 s away
   const still = await api(page, 'env');
   expect(still.burning).toBe(frozen.burning); // nothing computed over there
   expect(still.ash).toBe(frozen.ash);
   await api(page, 'teleport', 30, 60); // back
-  // Fast-forwarded by the time away (about 3 coarse 1 s steps), then back to normal.
-  await expect.poll(async () => (await api(page, 'env')).catchUpSteps, { timeout: 5_000 }).toBeGreaterThanOrEqual(2);
-  await expect.poll(async () => (await api(page, 'env')).pendingRegions, { timeout: 5_000 }).toBe(0);
+  await api(page, 'step', 30);
+  // Fast-forwarded by the time away (4 coarse 1 s steps), then back to normal.
   const after = await api(page, 'env');
+  expect(after.catchUpSteps).toBeGreaterThanOrEqual(4);
+  expect(after.pendingRegions).toBe(0);
   expect(after.ash + after.burning).toBeGreaterThan(1);
+  await api(page, 'resume');
   expect(errors).toEqual([]);
 });

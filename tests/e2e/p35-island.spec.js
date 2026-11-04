@@ -54,14 +54,13 @@ test('the title screen starts a new game on the island', async ({ page }, testIn
   expect(errors).toEqual([]);
 });
 
-test('opening a chest gives a treasure, shows it, and saves', async ({ page }, testInfo) => {
+test('opening a chest gives its item, shows it, and saves', async ({ page }, testInfo) => {
   const errors = await startNew(page);
   await openChest(page, 'camp'); // the camp chest
   const pr = await api(page, 'progress');
   expect(pr.openedChests).toEqual(['camp']);
-  expect(pr.treasures).toBe(1);
-  await expect(page.locator('#hud-treasure')).toHaveText('宝物 1');
-  await expect.poll(async () => (await api(page, 'toasts')).join('|')).toContain('宝物を手に入れた');
+  expect(pr.inv.items.grip_boots).toBe(1); // P6: the camp chest holds climbing boots
+  await expect.poll(async () => (await api(page, 'toasts')).join('|')).toContain('岩登りの靴を手に入れた');
   await expect.poll(async () => (await api(page, 'saveInfo')).saves).toBeGreaterThan(0);
   await page.screenshot({ path: testInfo.outputPath('chest-open.png') });
   expect(errors).toEqual([]);
@@ -85,7 +84,7 @@ test('progress survives a reload: つづきから restores chests and the checkp
   const p = await api(page, 'player');
   expect(Math.floor(p.x / 16)).toBe(72);
   expect(Math.floor(p.y / 16)).toBe(48);
-  await expect(page.locator('#hud-treasure')).toHaveText('宝物 1');
+  expect(pr.inv.items.grip_boots).toBe(1);
   expect(errors).toEqual([]);
 });
 
@@ -108,9 +107,9 @@ test('はじめから over an existing save asks first', async ({ page }) => {
 test('a damaged latest save falls back to the previous one', async ({ page }) => {
   await startNew(page);
   await openChest(page, 'camp');
-  expect(await api(page, 'saveNow')).toBe(true); // a generation with 1 treasure
+  expect(await api(page, 'saveNow')).toBe(true); // a generation without the islet money
   const before = (await api(page, 'saveInfo')).saves;
-  await openChest(page, 'islet'); // the chest triggers exactly one autosave: 2 treasures
+  await openChest(page, 'islet'); // the chest triggers exactly one autosave: with the money
   await expect.poll(async () => (await api(page, 'saveInfo')).saves).toBe(before + 1);
   // Damage the latest generation directly in IndexedDB.
   await page.evaluate(
@@ -124,7 +123,7 @@ test('a damaged latest save falls back to the previous one', async ({ page }) =>
           meta.onsuccess = () => {
             const key = `slot1${meta.result.latest}`;
             const g = store.get(key);
-            g.onsuccess = () => store.put({ ...g.result, data: { ...g.result.data, treasures: 999 } }, key);
+            g.onsuccess = () => store.put({ ...g.result, data: { ...g.result.data, maxHp: 999 } }, key);
           };
           tx.oncomplete = () => resolve(undefined);
           tx.onerror = () => reject(tx.error);
@@ -135,7 +134,7 @@ test('a damaged latest save falls back to the previous one', async ({ page }) =>
   await expect(page.locator('.title-note')).toContainText('ひとつ前');
   await page.click('#title-continue');
   const pr = await api(page, 'progress');
-  expect(pr.treasures).toBe(1); // the previous generation (the damaged one had 2)
+  expect(pr.inv.money).toBe(0); // the previous generation (the damaged one had the islet money)
   expect(pr.openedChests).toEqual(['camp']);
 });
 

@@ -22,6 +22,9 @@ import { PauseOverlay } from './ui/pauseOverlay.js';
 import { HeartsHud } from './ui/hud.js';
 import { RotateHint } from './ui/rotateHint.js';
 import { TitleScreen } from './ui/title.js';
+import { InventoryMenu } from './ui/inventoryMenu.js';
+import { itemName } from './game/items/itemSystem.js';
+import { equippedWeapon, itemDef, addItem } from './game/items/inventory.js';
 import { Toast } from './ui/toast.js';
 import { SaveStore } from './save/saveStore.js';
 import { Autosave } from './save/autosave.js';
@@ -122,7 +125,8 @@ async function boot() {
   treasureHud.id = 'hud-treasure';
   treasureHud.hidden = true;
   uiRoot.append(treasureHud);
-  let shownTreasures = -1;
+  let shownTreasures = '';
+  treasureHud.hidden = false;
   const clockHud = document.createElement('div');
   clockHud.id = 'hud-clock';
   uiRoot.append(clockHud);
@@ -139,6 +143,27 @@ async function boot() {
   /** @type {any} */
   let loaded = { status: 'empty' };
   let inTitle = withTitle;
+  let inMenu = false;
+  const menu = new InventoryMenu(uiRoot, {
+    getState: () => state,
+    onOpen: () => {
+      inMenu = true;
+      input.clear();
+    },
+    onClose: () => {
+      inMenu = false;
+      input.clear();
+      loop.reset();
+    },
+    toast: (msg) => toast.show(msg),
+  });
+  window.addEventListener('keydown', (e) => {
+    if ((e.code === 'KeyE' || e.code === 'Tab') && !inTitle && !paused) {
+      e.preventDefault();
+      if (menu.isOpen) menu.close();
+      else menu.open(state.nearby ?? undefined);
+    } else if (e.code === 'Escape' && menu.isOpen) menu.close();
+  });
   /** @type {TitleScreen | null} */
   let title = null;
   if (withTitle) {
@@ -186,7 +211,23 @@ async function boot() {
       if (e.tick <= lastEventTick) continue;
       const ev = /** @type {any} */ (e);
       if (ev.type === 'chest') {
-        toast.show(ev.reward === 'heart' ? 'ハートの器を手に入れた！ 体力が増えた' : `宝物を手に入れた！（${state.progress.treasures}）`);
+        toast.show(
+          ev.reward === 'heart'
+            ? 'ハートの器を手に入れた！ 体力が増えた'
+            : ev.reward === 'money'
+              ? `${ev.money} 星貨を手に入れた！`
+              : `${itemName(ev.item)}を手に入れた！`,
+        );
+      } else if (ev.type === 'pickup') {
+        toast.show(`${itemName(ev.item)}${ev.count > 1 ? ` ×${ev.count}` : ''}を手に入れた`, { ms: 1500 });
+      } else if (ev.type === 'full') {
+        toast.show(`${itemName(ev.item)}：これ以上持てない`);
+      } else if (ev.type === 'broke') {
+        toast.show(`${ev.name}が壊れた！`);
+      } else if (ev.type === 'noArrows') {
+        toast.show('矢がない', { ms: 1200 });
+      } else if (ev.type === 'noBow') {
+        toast.show('弓を持っていない', { ms: 1200 });
       } else if (ev.type === 'checkpoint') {
         toast.show('記録石に触れた — 倒れてもここから再開できる');
       } else if (ev.type === 'gateOpen') {
@@ -362,13 +403,13 @@ async function boot() {
   // NORMAL priority: fixed-step logic, then draw the interpolated state.
   let alpha = 0;
   app.ticker.add((ticker) => {
-    if (!paused && !inTitle) {
+    if (!paused && !inTitle && !inMenu) {
       const frameInput = input.sample();
       // Real elapsed time (PixiJS caps ticker.deltaMS at 100ms); the loop applies its own clamp
       // and accounts for any time it drops (DESIGN.md 1.3).
       alpha = loop.advance(ticker.elapsedMS, () => stepGame(state, frameInput)).alpha;
     }
-    if (!paused && !inTitle) {
+    if (!paused && !inTitle && !inMenu) {
       announceEvents();
       autosave.update(state, ticker.elapsedMS);
     }
@@ -379,11 +420,14 @@ async function boot() {
       shownClock = clock;
       clockHud.textContent = clock;
     }
-    if (state.progress.treasures !== shownTreasures) {
-      shownTreasures = state.progress.treasures;
-      treasureHud.hidden = shownTreasures === 0;
-      treasureHud.textContent = `宝物 ${shownTreasures}`;
+    const inv = state.progress.inv;
+    const w = equippedWeapon(inv);
+    const gearText = `★${inv.money}  ${w ? `${itemDef(w.id).name}${w.lvl ? `+${w.lvl}` : ''} ${w.dur}` : '素手'}  矢${inv.items.arrow ?? 0}`;
+    if (gearText !== shownTreasures) {
+      shownTreasures = gearText;
+      treasureHud.textContent = shownTreasures;
     }
+    menu.setNearby(inTitle ? null : state.nearby);
     deathOverlay.hidden = state.deathMs < 0;
     bench.update(ticker.elapsedMS / 1000);
   });
@@ -465,6 +509,16 @@ async function boot() {
     rotateHintVisible: () => rotateHint.visible,
     titleVisible: () => !!title && title.visible,
     progress: () => JSON.parse(JSON.stringify(state.progress)),
+    /** P6: inventory, pickups and the menu. */
+    inventory: () => JSON.parse(JSON.stringify(state.progress.inv)),
+    pickups: () => state.pickups.map((p) => ({ key: p.key, item: p.item, count: p.count, tx: Math.floor(p.x / 16), ty: Math.floor(p.y / 16) })),
+    nearby: () => state.nearby,
+    menuOpen: () => menu.isOpen,
+    /** Test helper: put items into the bag. */
+    give: (/** @type {string} */ id, /** @type {number} */ n = 1) => addItem(state.progress.inv, id, n),
+    addMoney: (/** @type {number} */ n) => {
+      state.progress.inv.money += n;
+    },
     area: () => areaAt(state, state.player.x, state.player.y)?.id ?? null,
     /** Test helper: save immediately; resolves to whether it worked. */
     saveNow: () => autosave.saveNow(),

@@ -12,6 +12,7 @@ import { direction, fromFront } from './hitbox.js';
  * @property {{ x: number, y: number }} from  where the hit comes from (for guard direction / knockback)
  * @property {'melee' | 'projectile' | 'env'} kind  env = fire / electricity (cannot be guarded)
  * @property {number} [knock]  knockback strength (default 1)
+ * @property {'fire' | 'shock'} [element]  P6: fire / electricity (armor traits and buffs can stop them)
  */
 
 /**
@@ -29,6 +30,8 @@ export function hitPlayer(state, hit) {
   }
   if (dodgeInvulnerable(p)) return 'dodged';
   if (p.invulnMs > 0) return 'ignored';
+  // P6: protective gear and dishes.
+  if ((hit.element === 'fire' && p.fireproof) || (hit.element === 'shock' && p.shockproof)) return 'ignored';
   if (hit.kind !== 'env' && p.guarding && fromFront(p, { x: p.aimX, y: p.aimY }, hit.from)) {
     if (p.guardMs <= COMBAT.justGuardMs) {
       state.events.push({ type: 'parry', tick: state.tick, x: p.x, y: p.y });
@@ -38,7 +41,9 @@ export function hitPlayer(state, hit) {
     state.events.push({ type: 'block', tick: state.tick, x: p.x, y: p.y });
     return 'blocked';
   }
-  p.hp = Math.max(0, p.hp - hit.damage);
+  // Armor: half its defense (rounded down) off every hit, one more with a defense dish; never below 1.
+  const cut = Math.floor((p.defense ?? 0) / 2) + (p.defenseUp ? 1 : 0);
+  p.hp = Math.max(0, p.hp - Math.max(1, hit.damage - cut));
   p.invulnMs = COMBAT.hurtInvulnMs;
   knockback(p, hit.from, hit.knock ?? 1);
   state.events.push({ type: 'hurt', tick: state.tick, x: p.x, y: p.y });

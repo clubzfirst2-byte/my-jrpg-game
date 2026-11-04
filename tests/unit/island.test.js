@@ -79,11 +79,11 @@ describe('chests', () => {
     place(s, c.tx, c.ty + 1, 'up');
     stepGame(s, { ...none, attack: true });
     expect(s.progress.openedChests).toContain('camp');
-    expect(s.progress.treasures).toBe(1);
+    expect(s.progress.inv.items[c.item]).toBe(1); // P6: chests hold equipment or money
     expect(s.player.action).toBe('none'); // no swing
     run(s, none, 2);
     stepGame(s, { ...none, attack: true });
-    expect(s.progress.treasures).toBe(1); // already open: now it is just a swing
+    expect(s.progress.inv.items[c.item]).toBe(1); // already open: now it is just a swing
     expect(s.player.action).toBe('attack');
   });
 
@@ -179,7 +179,7 @@ describe('landmarks and progress', () => {
 
   it('saved progress is applied to a new game', () => {
     const s = island();
-    applyProgress(s, { ...emptyProgress(), openedChests: ['cave'], treasures: 1, maxHp: 20, checkpoint: 'hill', checkpoints: ['hill'] });
+    applyProgress(s, { ...emptyProgress(), openedChests: ['cave'], maxHp: 20, checkpoint: 'hill', checkpoints: ['hill'] });
     expect(s.player.maxHp).toBe(20);
     expect(s.progress.openedChests).toEqual(['cave']);
     respawnPlayer(s);

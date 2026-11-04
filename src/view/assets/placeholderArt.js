@@ -777,3 +777,41 @@ export function stumpSprite() {
     '.kk..kkkk..kk.',
   ];
 }
+
+// ---- P6 items ----
+
+/** 16x12 anvil. */
+export function anvilSprite() {
+  return [
+    '.kkkkkkkkkkkkkk.',
+    'kmRRRRRRRRRRRRmk',
+    '.kmmrrrrrrrrrmk.',
+    '...kkmrrrrmkk...',
+    '.....kmrrmk.....',
+    '.....kmrrmk.....',
+    '....kmrrrrmk....',
+    '...kmrrrrrrmk...',
+    '..kTTTTTTTTTTk..',
+    '..kTNNNNNNNNTk..',
+    '..kTTTTTTTTTTk..',
+    '..kkkkkkkkkkkk..',
+  ];
+}
+
+/** 10x10 item icons lying on the ground. */
+export function itemIcons() {
+  return {
+    'icon.sword': ['.......kk.', '......kak.', '.....kak..', '....kak...', '...kak....', 'k.kak.....', 'kkak......', '.kyk......', 'kyk.k.....', 'kk........'],
+    'icon.bow': ['...kkk....', '..kAAk....', '.kAk.kX...', '.kAk..kX..', 'kAk....kX.', 'kAk....kX.', '.kAk..kX..', '.kAk.kX...', '..kAAk....', '...kkk....'],
+    'icon.armor': ['.kk....kk.', 'kNNk..kNNk', 'kNNNkkNNNk', '.kNNNNNNk.', '.kNfNNNNk.', '.kNNNNNNk.', '.kNNfNNNk.', '.kNNNNNNk.', '.kTTTTTTk.', '..kkkkkk..'],
+    'icon.mushroom': ['..kkkkkk..', '.kiiXiiik.', 'kiXiiiXiik', 'kiiiiiiiik', '.kkkkkkkk.', '...kssk...', '...kssk...', '...kssk...', '..kssssk..', '..kkkkkk..'],
+    'icon.berry': ['....kk....', '...kLk....', '..kkLkk...', '.kiikiik..', 'kiXiikXiik', 'kiiikiiiik', 'kiiik.kiik', '.kiik..kk.', '..kk......', '..........'],
+    'icon.herb': ['....k.....', '...khk..k.', '..khLk.khk', '..khLkkhLk', '.k.kLkhLk.', 'khk.kLLk..', 'khLkkLk...', '.kLLLk....', '...kLk....', '...kkk....'],
+    'icon.pepper': ['.....kk...', '....kLk...', '...kkkk...', '..kKKKKk..', '.kKJKKKKk.', '.kKJKKKKk.', '.kKKKKKKk.', '..kKKKKk..', '...kKKk...', '....kk....'],
+    'icon.meat': ['..kkkkk...', '.kiiiiik..', 'kiiXiiiik.', 'kiiiiiiik.', 'kiiiiiiikk', '.kiiiiikXk', '..kkkkkkXk', '.......kXk', '........kk', '..........'],
+    'icon.fang': ['k.........', 'kXk.......', 'kXXk......', '.kXXk.....', '.kXXXk....', '..kXXXk...', '..kXXXXk..', '...kXXXXk.', '....kkkkk.', '..........'],
+    'icon.shard': ['....kk....', '...kjjk...', '..kjXjjk..', '..kjXjjk..', '.kjjjjzjk.', '.kjjjzzjk.', '..kjjzjk..', '..kjzzjk..', '...kzzk...', '....kk....'],
+    'icon.arrows': ['k.........', '.kak......', '.kaak.....', '..kAk.....', '...kAk.k..', '....kAkak.', '.....kAak.', '.....kAAk.', '......kXXk', '.......kkk'],
+    'icon.food': ['..........', '..k.k.k...', '..........', '.kkkkkkkk.', 'kvvvvvvvvk', 'kKyKyKyKvk', 'kvyKyKyvvk', '.kvvvvvvk.', '..kkkkkk..', '..........'],
+  };
+}
