@@ -2,6 +2,7 @@
 // Island features (P3.5, DESIGN.md 5.9): chests, checkpoints (respawn stones), warps (cave doorways),
 // areas (camera bounds for interiors), landmarks, and the player's progress that is saved.
 // Pure logic: no DOM, no PixiJS.
+import { openDoors } from '../env/envSim.js';
 
 export const MAX_HEARTS = 6;
 /** How close (px) the player must be to touch a checkpoint / open a chest. */
@@ -22,11 +23,12 @@ const OPEN_RANGE = 20;
  * @property {string[]} landmarks       discovered landmark ids
  * @property {number} treasures
  * @property {number} maxHp             quarter hearts
+ * @property {string[]} gates           doors opened by powering their receiver (P4)
  */
 
 /** @returns {Progress} */
 export function emptyProgress() {
-  return { openedChests: [], checkpoints: [], checkpoint: null, landmarks: [], treasures: 0, maxHp: 12 };
+  return { openedChests: [], checkpoints: [], checkpoint: null, landmarks: [], treasures: 0, maxHp: 12, gates: [] };
 }
 
 /** Feet position at the center-bottom of a tile. @param {any} map @param {number} tx @param {number} ty */
@@ -183,7 +185,9 @@ export function applyProgress(state, saved) {
   pr.openedChests = [...pr.openedChests];
   pr.checkpoints = [...pr.checkpoints];
   pr.landmarks = [...pr.landmarks];
+  pr.gates = [...pr.gates];
   state.progress = pr;
+  if (state.env) for (const link of pr.gates) openDoors(state.env, state.map, link);
   state.player.maxHp = pr.maxHp;
   state.player.hp = pr.maxHp;
 }

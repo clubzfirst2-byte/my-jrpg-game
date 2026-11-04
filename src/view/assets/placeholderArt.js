@@ -584,3 +584,196 @@ export function caveSprite() {
 export function markerSprite() {
   return ['kk.....', 'kYkk...', 'kYYYkk.', 'kYYYYYk', 'kYYYkk.', 'kYkk...', 'kk.....'];
 }
+
+// ---- P4 environment ----
+
+export function metalTile() {
+  const g = grid(16, 16, 'r');
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      if (x % 8 === 0 || y % 8 === 0) g[y][x] = 'm';
+      else if ((x + y) % 8 === 2) g[y][x] = 'R';
+    }
+  }
+  for (const [x, y] of [[2, 2], [10, 2], [2, 10], [10, 10]]) g[y][x] = 'k';
+  return toRows(g);
+}
+
+/** 12x14 flame frames. */
+export function fireFrames() {
+  return {
+    'fx.fire.0': [
+      '.....kk.....',
+      '....kKk.....',
+      '....kKKk..k.',
+      '...kKJKk.kKk',
+      '..kKJJKkkKKk',
+      '..kKJJJKKJKk',
+      '.kKJJXJJJJKk',
+      '.kKJXXXJJJKk',
+      'kKJJXXXXJJKk',
+      'kKJJXXXXJJKk',
+      'kKKJJXXJJKKk',
+      '.kKKJJJJKKk.',
+      '..kkKKKKkk..',
+      '....kkkk....',
+    ],
+    'fx.fire.1': [
+      '......kk....',
+      '.k...kKk....',
+      'kKk..kKKk...',
+      'kKk.kKJKk...',
+      'kKKkKJJKKk..',
+      'kKJKKJJJKk..',
+      'kKJJJJXJJKk.',
+      'kKJJJXXXJKk.',
+      'kKJJXXXXJJKk',
+      'kKJJXXXXJJKk',
+      'kKKJJXXJJKKk',
+      '.kKKJJJJKKk.',
+      '..kkKKKKkk..',
+      '....kkkk....',
+    ],
+  };
+}
+
+/** 16x12 thorny bush. */
+export function brambleSprite() {
+  return [
+    '....k..kk..k....',
+    '...kLk.kLk.kLk..',
+    '..kLdLkLhLkLdLk.',
+    '.kLLdLLLhLLLdLLk',
+    'kLtLLhLkLLtLhLLk',
+    'kLLLtLLLLtLLLLkk',
+    'kLhLLLtLLLLhtLLk',
+    'kLLtLhLLtLLLLtLk',
+    '.kLLLLtLLLhLLLk.',
+    '.kLtLLLLtLLLtLk.',
+    '..kkLLkkkLLkkk..',
+    '....kk...kk.....',
+  ];
+}
+
+/** 12x18 shock crystal (glows). */
+export function crystalSprite() {
+  return [
+    '.....kk.....',
+    '....kIIk....',
+    '....kIXk....',
+    '...kIIXIk...',
+    '...kIXXIk...',
+    '..kIIXXIIk..',
+    '..kIXXIIIk..',
+    '..kIXIIIbk..',
+    '..kIIIIIbk..',
+    '..kIIIIbbk..',
+    '..kIIIbbbk..',
+    '...kIIbbk...',
+    '...kIbbbk...',
+    '..kmrrrrmk..',
+    '.kmrRRRrrmk.',
+    '.kmrrrrrmmk.',
+    'kmmmmmmmmmmk',
+    'kkkkkkkkkkkk',
+  ];
+}
+
+/** 10x12 water jar. */
+export function jarSprite() {
+  return [
+    '...kkkk...',
+    '..kWWWWk..',
+    '...kNNk...',
+    '..kNNNNk..',
+    '.kNfNNNNk.',
+    'kNffNNNNNk',
+    'kNfNWWNNNk',
+    'kNNWbbWNNk',
+    'kNNNWWNNNk',
+    '.kNNNNNNk.',
+    '..kTTTTk..',
+    '...kkkk...',
+  ];
+}
+
+/** 12x16 receiver pillar: dark rune, or lit when powered. @param {boolean} on */
+export function receiverSprite(on) {
+  const r = on ? 'I' : 'Q';
+  return [
+    '...kkkkkk...',
+    '..kaaaaaak..',
+    '..kmmmmmmk..',
+    `..km${r}${r}${r}${r}mk..`,
+    `..km${r}mm${r}mk..`,
+    `..km${r}${r}${r}${r}mk..`,
+    '..kmmmmmmk..',
+    '..kmrrrrmk..',
+    '..kmrRrrmk..',
+    '..kmrrrrmk..',
+    '..kmrrrrmk..',
+    '..kmrrrrmk..',
+    '.kmmrrrrmmk.',
+    'kmmmmmmmmmmk',
+    'kmmmmmmmmmmk',
+    'kkkkkkkkkkkk',
+  ];
+}
+
+/** 16x20 rune door stone. */
+export function doorSprite() {
+  return [
+    '..kkkkkkkkkkkk..',
+    '.kvvvvvvvvvvvvk.',
+    'kvBBBBBBBBBBBBQk',
+    'kvBBBBBQQBBBBBQk',
+    'kvBBBBQIIQBBBBQk',
+    'kvBBBQIBBIQBBBQk',
+    'kvBBBQIBBIQBBBQk',
+    'kvBBBBQIIQBBBBQk',
+    'kvBBBBBQQBBBBBQk',
+    'kvBBBBBBBBBBBBQk',
+    'kvBBBBBBBBBBBBQk',
+    'kvBBBBBQQBBBBBQk',
+    'kvBBBBQIIQBBBBQk',
+    'kvBBBBBQQBBBBBQk',
+    'kvBBBBBBBBBBBBQk',
+    'kvBBBBBBBBBBBBQk',
+    'kvBBBBBBBBBBBBQk',
+    'kQQQQQQQQQQQQQQk',
+    'kQQQQQQQQQQQQQQk',
+    'kkkkkkkkkkkkkkkk',
+  ];
+}
+
+/** 12x16 brazier (stone bowl with a flame) frames. */
+export function brazierFrames() {
+  const base = [
+    'kkkkkkkkkkkk',
+    'kvBBBBBBBBQk',
+    '.kBBBBBBBQk.',
+    '..kBBBBBQk..',
+    '...kBBBQk...',
+    '...kBBBQk...',
+    '..kvBBBBQk..',
+    '..kkkkkkkk..',
+  ];
+  return {
+    'obj.brazier.0': ['....kk......', '...kKk......', '...kKJk..k..', '..kKJJkkKk..', '..kKJXJKKk..', '.kKJXXJJKk..', '.kKJXXXJKk..', '.kKJJJJJKk..', ...base],
+    'obj.brazier.1': ['......kk....', '......kKk...', '..k..kJKk...', '..kKkkJJKk..', '..kKKJXJKk..', '..kKJJXXJKk.', '..kKJXXXJKk.', '..kKJJJJJKk.', ...base],
+  };
+}
+
+/** 14x8 burnt tree stump. */
+export function stumpSprite() {
+  return [
+    '...kkkkkkkk...',
+    '..kFFFFFFFFk..',
+    '..kTFkFFkFTk..',
+    '..kTTFFFFTTk..',
+    '..kTTTkTTTTk..',
+    '.kkTTTTTTTTkk.',
+    'kTTkkTTTTkkTTk',
+    '.kk..kkkk..kk.',
+  ];
+}
