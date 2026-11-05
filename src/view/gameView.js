@@ -22,6 +22,8 @@ import { ItemView } from './itemView.js';
 import { PuzzleView } from './puzzleView.js';
 import { NpcView } from './npcView.js';
 import { regionAt } from '../game/world/world.js';
+import { seasonAt } from '../game/env/weather.js';
+import { SEASON_ENTRIES, seasonKeys } from './assets/placeholderPack.js';
 
 /** Chunk size in tiles (P8). */
 export const CHUNK = 32;
@@ -68,6 +70,17 @@ export class GameView {
   constructor(app, assets, state) {
     this.app = app;
     this.assets = assets;
+    /** P10.2: the season the world is drawn for, and its art bundle (held while it lasts). */
+    /** @type {string | null} */
+    this.season = null;
+    /** @type {string | null} */
+    this.seasonBundle = null;
+    /** @type {string | null} */
+    this.seasonLoading = null;
+    /** @type {string | null} */
+    this.seasonLoaded = null;
+    /** @type {Set<string>} */
+    this.seasonKeySet = new Set();
     this.map = state.map;
     this.world = new Container();
     this.world.label = 'world';
@@ -172,12 +185,53 @@ export class GameView {
     this.playerOccluded = false;
   }
 
+  /** The texture name for the current season (P10.2: e.g. "obj.tree" -> "autumn.obj.tree"). @param {string} key */
+  seasonal(key) {
+    return this.seasonKeySet.has(key) ? `${this.season}.${key}` : key;
+  }
+
   /** @param {string} key */
   makeSprite(key) {
-    const s = new Sprite(this.assets.texture(key));
-    const [ax, ay] = this.assets.meta(key).anchor;
+    const k = this.seasonal(key);
+    const s = new Sprite(this.assets.texture(k));
+    const [ax, ay] = this.assets.meta(k).anchor;
     s.anchor.set(ax, ay);
     return s;
+  }
+
+  /**
+   * P10.2: dresses the world for the season. The new season's art is loaded first (the old look stays
+   * on screen meanwhile); then every chunk is rebuilt at once with it, and the old season's art is
+   * released. Summer is the plain art.
+   * @param {number} worldMs
+   */
+  updateSeason(worldMs) {
+    const want = seasonAt(worldMs).id;
+    if (want === this.season) return;
+    const bundle = SEASON_ENTRIES[`season:${want}`] ? `season:${want}` : null;
+    if (bundle && !this.assets.isLoaded(bundle)) {
+      if (this.seasonLoading !== bundle) {
+        this.seasonLoading = bundle;
+        this.assets.load(bundle).then(
+          () => {
+            // Arrived too late (the season moved on): let it go.
+            if (this.seasonLoading !== bundle) this.assets.unload(bundle);
+            else this.seasonLoaded = bundle;
+          },
+          () => (this.seasonLoading = null),
+        );
+      }
+      if (this.seasonLoaded !== bundle) return;
+    }
+    for (const c of this.chunks.values()) this.destroyChunk(c);
+    this.chunks.clear();
+    if (this.seasonBundle) this.assets.unload(this.seasonBundle);
+    this.seasonBundle = bundle;
+    this.seasonLoading = null;
+    this.seasonLoaded = null;
+    this.season = want;
+    this.seasonKeySet = seasonKeys(want);
+    this.envVersion = -1;
   }
 
   /** @param {number} tx @param {number} ty */
@@ -204,13 +258,15 @@ export class GameView {
     return `${cx},${cy}`;
   }
 
-  /** Bundles a chunk's art needs (its regions'). @param {number} cx @param {number} cy @returns {string[]} */
+  /** Bundles a chunk's art needs (its regions', and the season's). @param {number} cx @param {number} cy @returns {string[]} */
   chunkBundles(cx, cy) {
     const x0 = cx * CHUNK;
     const y0 = cy * CHUNK;
-    return this.regions
+    const list = this.regions
       .filter((r) => r.bundle && r.tx < x0 + CHUNK && r.tx + r.tw > x0 && r.ty < y0 + CHUNK && r.ty + r.th > y0)
       .map((r) => /** @type {string} */ (r.bundle));
+    // P10.2: and the season's look.
+    return this.seasonBundle ? [...list, this.seasonBundle] : list;
   }
 
   /**
@@ -508,7 +564,7 @@ export class GameView {
         e.occluder = null;
         sprite.alpha = 1;
       }
-      sprite.texture = this.assets.texture(this.objectKey(o, timeSec));
+      sprite.texture = this.assets.texture(this.seasonal(this.objectKey(o, timeSec)));
     }
   }
 
@@ -569,6 +625,7 @@ export class GameView {
     if (this.applyBounds(state)) this.camera.snapTo(x, y - camZ - CAMERA_TARGET_OFFSET_Y);
     else this.camera.follow(x, y - camZ - CAMERA_TARGET_OFFSET_Y, dtSec);
     this.applyCamera();
+    this.updateSeason(state.env.now);
     this.updateChunks(this.camera.origin(), this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom);
     // P10.1: the elder's charm is back on its shelf once the quest is done.
     const charmHome = state.progress.quests.lost_charm === 'done';

@@ -210,7 +210,12 @@ export const REGIONS = [
    {
     "kind": "beast",
     "tx": 39,
-    "ty": 39
+    "ty": 39,
+    "seasons": [
+     "spring",
+     "summer",
+     "autumn"
+    ]
    },
    {
     "kind": "beast",
@@ -226,6 +231,30 @@ export const REGIONS = [
     "kind": "beast",
     "tx": 66,
     "ty": 80
+   },
+   {
+    "kind": "beast",
+    "tx": 36,
+    "ty": 56,
+    "seasons": [
+     "autumn"
+    ]
+   },
+   {
+    "kind": "beast",
+    "tx": 64,
+    "ty": 44,
+    "seasons": [
+     "autumn"
+    ]
+   },
+   {
+    "kind": "beast",
+    "tx": 24,
+    "ty": 84,
+    "seasons": [
+     "autumn"
+    ]
    }
   ],
   "chests": [
@@ -291,6 +320,114 @@ export const REGIONS = [
     "tx": 44,
     "ty": 86,
     "count": 5
+   },
+   {
+    "id": "plains-spring0",
+    "item": "swift_herb",
+    "tx": 18,
+    "ty": 34,
+    "seasons": [
+     "spring"
+    ]
+   },
+   {
+    "id": "plains-spring1",
+    "item": "swift_herb",
+    "tx": 40,
+    "ty": 50,
+    "seasons": [
+     "spring"
+    ]
+   },
+   {
+    "id": "plains-spring2",
+    "item": "swift_herb",
+    "tx": 62,
+    "ty": 72,
+    "seasons": [
+     "spring"
+    ]
+   },
+   {
+    "id": "plains-summer0",
+    "item": "red_berry",
+    "tx": 26,
+    "ty": 46,
+    "seasons": [
+     "summer"
+    ]
+   },
+   {
+    "id": "plains-summer1",
+    "item": "red_berry",
+    "tx": 58,
+    "ty": 36,
+    "seasons": [
+     "summer"
+    ]
+   },
+   {
+    "id": "plains-summer2",
+    "item": "red_berry",
+    "tx": 36,
+    "ty": 66,
+    "seasons": [
+     "summer"
+    ]
+   },
+   {
+    "id": "plains-autumn0",
+    "item": "mushroom",
+    "tx": 14,
+    "ty": 50,
+    "seasons": [
+     "autumn"
+    ]
+   },
+   {
+    "id": "plains-autumn1",
+    "item": "mushroom",
+    "tx": 32,
+    "ty": 82,
+    "seasons": [
+     "autumn"
+    ]
+   },
+   {
+    "id": "plains-autumn2",
+    "item": "mushroom",
+    "tx": 78,
+    "ty": 74,
+    "seasons": [
+     "autumn"
+    ]
+   },
+   {
+    "id": "plains-autumn3",
+    "item": "mushroom",
+    "tx": 54,
+    "ty": 30,
+    "seasons": [
+     "autumn"
+    ]
+   },
+   {
+    "id": "plains-winter0",
+    "item": "ember_pepper",
+    "tx": 19,
+    "ty": 29,
+    "seasons": [
+     "winter"
+    ]
+   },
+   {
+    "id": "plains-winter1",
+    "item": "ember_pepper",
+    "tx": 66,
+    "ty": 64,
+    "seasons": [
+     "winter"
+    ]
    }
   ],
   "envObjects": [

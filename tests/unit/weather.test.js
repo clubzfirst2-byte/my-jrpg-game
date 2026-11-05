@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CLOCK, WEATHER, hourOf, clockText, weatherAt, rainWetAt, ambientAt, isDark } from '../../src/game/env/weather.js';
+import { CLOCK, WEATHER, SEASON, inSeason, hourOf, clockText, weatherAt, rainWetAt, ambientAt, isDark } from '../../src/game/env/weather.js';
 import { parseMap } from '../../src/game/world/tilemap.js';
 import { createEnv, stepEnv, ignite, ENV, envSummary } from '../../src/game/env/envSim.js';
 import { createGameState, stepGame } from '../../src/game/state.js';
@@ -30,16 +30,28 @@ describe('weather', () => {
   it('is the same for the same seed and time, and changes every few hours', () => {
     expect(weatherAt(1, 30 * H)).toEqual(weatherAt(1, 30 * H));
     const kinds = new Set();
-    for (let slot = 0; slot < 400; slot++) kinds.add(weatherAt(1, CLOCK.dayMs + slot * WEATHER.slotMs).kind);
-    expect([...kinds].sort()).toEqual(['clear', 'cloudy', 'rain', 'storm']);
+    for (let slot = 0; slot < 1200; slot++) kinds.add(weatherAt(1, CLOCK.dayMs + slot * WEATHER.slotMs).kind);
+    expect([...kinds].sort()).toEqual(['clear', 'cloudy', 'rain', 'snow', 'storm']);
   });
 
-  it('roughly matches the planned chances', () => {
-    const n = 4000;
-    const count = { clear: 0, cloudy: 0, rain: 0, storm: 0 };
-    for (let slot = 0; slot < n; slot++) count[weatherAt(3, CLOCK.dayMs + slot * WEATHER.slotMs).kind]++;
-    expect(count.storm / n).toBeCloseTo(WEATHER.chance.storm, 1);
-    expect(count.rain / n).toBeCloseTo(WEATHER.chance.rain, 1);
+  it('roughly matches the planned chances of each season (P10.2)', () => {
+    const yearMs = 4 * SEASON.days * CLOCK.dayMs;
+    for (const id of SEASON.order) {
+      const count = { clear: 0, cloudy: 0, rain: 0, storm: 0, snow: 0 };
+      let n = 0;
+      // Many years, only the slots of this season.
+      for (let year = 1; year < 60; year++) {
+        const start = inSeason(year * yearMs, id);
+        for (let slot = 0; slot < (SEASON.days * CLOCK.dayMs) / WEATHER.slotMs; slot++) {
+          count[weatherAt(3, start + slot * WEATHER.slotMs).kind]++;
+          n++;
+        }
+      }
+      const c = WEATHER.chance[id];
+      expect(count.storm / n).toBeCloseTo(c.storm, 1);
+      expect(count.rain / n).toBeCloseTo(c.rain, 1);
+      expect(count.snow / n).toBeCloseTo(c.snow, 1);
+    }
   });
 
   it('the first morning is always clear, and an override wins', () => {

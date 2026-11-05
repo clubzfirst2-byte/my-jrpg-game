@@ -70,6 +70,13 @@ import {
   stoveSprite,
   barrelSprite,
   matSprite,
+  springTreeSprite,
+  autumnTreeSprite,
+  autumnGrass,
+  winterTreeSprite,
+  snowTile,
+  winterLip,
+  autumnLip,
 } from './placeholderArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
@@ -181,6 +188,36 @@ export const REGION_ENTRIES = {
     { key: 'obj.mat', rows: matSprite(), anchor: FEET },
   ],
 };
+
+/**
+ * Season bundles (P10.2): each season's look of the ground, cliff lips and trees, named
+ * "<season>.<the key it replaces>". Summer is the plain art (no bundle).
+ */
+const lipKeys = () => [4, 8].flatMap((h) => [false, true].map((bottom) => ({ key: `face.earth.top${bottom ? '-base' : ''}.${h}`, rows: earthFace(h, true, bottom) })));
+const grassKeys = () => [
+  ...[0, 1, 2].map((i) => ({ key: `tile.grass.${i}`, rows: grassTile(100 + i) })),
+  ...[0, 1, 2, 3].map((i) => ({ key: `plains.grass.${i}`, rows: plainsGrassTile(i) })),
+];
+/** @type {Record<string, () => { key: string, rows: string[], anchor: [number, number] }[]>} */
+export const SEASON_ENTRIES = {
+  'season:spring': () => [{ key: 'spring.obj.tree', rows: springTreeSprite(), anchor: FEET }],
+  'season:autumn': () => [
+    { key: 'autumn.obj.tree', rows: autumnTreeSprite(), anchor: FEET },
+    ...grassKeys().map((e) => ({ key: `autumn.${e.key}`, rows: autumnGrass(e.rows), anchor: TOP_LEFT })),
+    ...lipKeys().map((e) => ({ key: `autumn.${e.key}`, rows: autumnLip(e.rows), anchor: TOP_LEFT })),
+  ],
+  'season:winter': () => [
+    { key: 'winter.obj.tree', rows: winterTreeSprite(), anchor: FEET },
+    ...grassKeys().map((e, i) => ({ key: `winter.${e.key}`, rows: snowTile(i), anchor: TOP_LEFT })),
+    ...lipKeys().map((e) => ({ key: `winter.${e.key}`, rows: winterLip(e.rows), anchor: TOP_LEFT })),
+  ],
+};
+/** The keys a season replaces (without its prefix). @param {string} season */
+export function seasonKeys(season) {
+  const make = SEASON_ENTRIES[`season:${season}`];
+  return new Set(make ? make().map((e) => e.key.slice(season.length + 1)) : []);
+}
+for (const [name, make] of Object.entries(SEASON_ENTRIES)) REGION_ENTRIES[name] = make;
 
 /** @param {string} name */
 export function buildRegionPack(name) {

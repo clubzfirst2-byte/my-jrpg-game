@@ -324,9 +324,9 @@ hx, hy = features['checkpoints'][1]['tx'], features['checkpoints'][1]['ty']
 ax, ay = near_free(hx + 2, hy, h[hy][hx])
 env_obj('anvil', ax, ay)
 PICKUPS = []
-def pickup(pid, item, x, y, count=1, lvl=None):
+def pickup(pid, item, x, y, count=1, lvl=None, seasons=None):
     px_, py_ = near_free(x, y, lvl)
-    PICKUPS.append({'id': pid, 'item': item, 'tx': px_, 'ty': py_, **({'count': count} if count != 1 else {})})
+    PICKUPS.append({'id': pid, 'item': item, 'tx': px_, 'ty': py_, **({'count': count} if count != 1 else {}), **({'seasons': seasons} if seasons else {})})
 for k, (x, y) in enumerate([(9, 40), (11, 48), (17, 38), (14, 44)]):
     pickup(f'mushroom{k}', 'mushroom', x, y)
 for k, (x, y) in enumerate([(29, 50), (59, 50), (66, 46), (63, 58)]):
@@ -337,6 +337,11 @@ for k, (x, y) in enumerate([(75, 36), (70, 45)]):
     pickup(f'pepper{k}', 'ember_pepper', x, y)
 for k, (x, y) in enumerate([(44, 58), (66, 40), (30, 44)]):
     pickup(f'arrows{k}', 'arrow', x, y, count=5)
+# P10.2: autumn mushrooms in the west forest; peppers that keep you warm in winter.
+for k, (x, y) in enumerate([(8, 36), (12, 42), (16, 47)]):
+    pickup(f'autumn-mushroom{k}', 'mushroom', x, y, seasons=['autumn'])
+for k, (x, y) in enumerate([(62, 54), (34, 54)]):
+    pickup(f'winter-pepper{k}', 'ember_pepper', x, y, seasons=['winter'])
 pickup('spear', 'guard_spear', 52, 31)
 pickup('greatsword', 'rusty_greatsword', 82, 38, lvl=16)
 pickup('travel_sword', 'travel_sword', 36, 60)

@@ -18,6 +18,7 @@ import {
 import { ignite } from '../env/envSim.js';
 import { tileIndexAt } from '../env/envActions.js';
 import { npcInReach } from '../npc/npcs.js';
+import { seasonAt } from '../env/weather.js';
 import { bedInReach } from '../world/interiors.js';
 
 /** Items lying in the world come back after one game day. */
@@ -54,7 +55,7 @@ export function applyGear(state) {
 }
 
 /**
- * Places the map's items (except ones taken less than a day ago).
+ * Places the map's items (except ones taken less than a day ago, and ones out of season).
  * @param {any} state
  */
 export function placePickups(state) {
@@ -62,7 +63,9 @@ export function placePickups(state) {
   const picked = state.progress.picked ?? {};
   /** @type {Pickup[]} */
   const list = [];
+  const season = seasonAt(state.env.now).id;
   for (const d of state.pickupDefs) {
+    if (d.seasons && !d.seasons.includes(season)) continue; // P10.2: out of season
     const t = picked[d.id];
     if (typeof t === 'number' && state.env.now - t < PICKUP_REGROW_MS) continue;
     if (typeof t === 'number' && itemDef(d.item).type === 'key') continue; // story items never come back (P9)
