@@ -7,10 +7,12 @@ const KEY = 'seimyaku.settings.v1';
 /**
  * @typedef {object} Settings
  * @property {number} resolution  internal height candidate
+ * @property {number} bgmVolume  P11.2: music, 0..1
+ * @property {number} sfxVolume  P11.2: sound effects, 0..1
  */
 
 /** @type {Settings} */
-const DEFAULTS = { resolution: 216 };
+const DEFAULTS = { resolution: 216, bgmVolume: 0.5, sfxVolume: 0.8 };
 
 /** @returns {Settings} */
 export function loadSettings() {
