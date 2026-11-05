@@ -558,7 +558,7 @@ export class GameView {
     const z = map.elev[o.ty * map.width + o.tx];
     s.position.set(x, feetY - z);
     // The door mat lies flat on the floor: under anyone standing on it.
-    s.zIndex = o.type === 'mat' ? feetY - ts : feetY;
+    s.zIndex = o.type === 'mat' || o.type === 'stairs' ? feetY - ts : feetY;
     s.visible = !o.gone;
     this.actors.addChild(s);
     /** @type {Occluder | null} */

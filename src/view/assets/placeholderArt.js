@@ -1456,3 +1456,14 @@ export function bossSprite(kind, frame) {
   }
   return toRows(g);
 }
+
+/** P10.5: stairs going down (16 x 16, flat on the floor). */
+export function stairsSprite() {
+  const rows = [];
+  for (let y = 0; y < 16; y++) {
+    const step = Math.floor(y / 4);
+    const shade = ['Q', 'm', 'D', 'k'][step];
+    rows.push(y % 4 === 0 ? 'kvvvvvvvvvvvvvvk' : `k${shade.repeat(14)}k`);
+  }
+  return rows;
+}

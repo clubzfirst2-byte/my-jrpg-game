@@ -84,6 +84,7 @@ import {
   stoneFace,
   lakeGrassTile,
   bossSprite,
+  stairsSprite,
 } from './placeholderArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
@@ -202,6 +203,7 @@ export const REGION_ENTRIES = {
   'region:mountains': () => [
     ...[0, 1, 2, 3].map((i) => ({ key: `mountains.snow.${i}`, rows: mountainSnowTile(i), anchor: TOP_LEFT })),
     { key: 'mountains.pine', rows: snowPineSprite(), anchor: FEET },
+    { key: 'obj.stairs', rows: stairsSprite(), anchor: FEET }, // P10.5: 白嶺の坑道
     ...[4, 8].flatMap((h) =>
       [true, false].flatMap((top) => [true, false].map((bottom) => ({ key: `face.stone.${top ? 'top' : 'mid'}${bottom ? '-base' : ''}.${h}`, rows: stoneFace(h, top, bottom), anchor: TOP_LEFT }))),
     ),

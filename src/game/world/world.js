@@ -49,6 +49,7 @@ export function stitchWorld(island, regions) {
     warps: [...(island.warps ?? [])],
     areas: [...(island.areas ?? [])],
     bosses: [...(island.bosses ?? [])],
+    switches: [...(island.switches ?? [])],
     /** @type {RegionInfo[]} */
     regions: [{ id: 'island', name: 'はじまりの島', tx: 0, ty: 0, tw: OUTDOOR_W, th: island.ground.length, climate: 'temperate', bundle: null }],
   };
@@ -64,7 +65,7 @@ export function stitchWorld(island, regions) {
     for (const row of r.height) heights[col].push(row + '0'.repeat(pad));
     placed[r.id] = { ox, oy };
     const at = (/** @type {any} */ o) => ({ ...o, tx: o.tx + ox, ty: o.ty + oy });
-    for (const key of ['enemies', 'chests', 'checkpoints', 'landmarks', 'pickups', 'envObjects', 'campfires', 'npcs', 'areas']) {
+    for (const key of ['enemies', 'chests', 'checkpoints', 'landmarks', 'pickups', 'envObjects', 'campfires', 'npcs', 'areas', 'switches']) {
       for (const o of r[key] ?? []) def[key].push(at(o));
     }
     // P10.4: bosses and their arenas.
