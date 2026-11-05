@@ -37,7 +37,7 @@ class Region:
         self.id, self.name, self.seed = rid, name, seed
         self.g = [['~'] * RW for _ in range(RH)]
         self.h = [[0] * RW for _ in range(RH)]
-        self.features = {'enemies': [], 'chests': [], 'checkpoints': [], 'landmarks': [], 'pickups': [], 'envObjects': [], 'campfires': [], 'npcs': [], 'warps': [], 'areas': [], 'bosses': []}
+        self.features = {'enemies': [], 'chests': [], 'checkpoints': [], 'landmarks': [], 'pickups': [], 'envObjects': [], 'campfires': [], 'npcs': [], 'warps': [], 'areas': [], 'bosses': [], 'switches': []}
         # The room strip east of the region (P10.1): nothing there until a room is carved out.
         self.eg = [['%'] * EW for _ in range(RH)]
         self.eh = [[0] * EW for _ in range(RH)]
@@ -91,6 +91,52 @@ class Region:
                 assert not (x0 <= o['tx'] < x0 + w and y0 <= o['ty'] < y0 + h), ('arena over', self.id, key, o)
         self.features['envObjects'] = [o for o in self.features['envObjects'] if not (x0 <= o['tx'] < x0 + w and y0 <= o['ty'] < y0 + h)]
         self.features['bosses'].append({'id': bid, 'kind': kind, 'tx': x0 + w // 2, 'ty': y0 + h // 2, 'arena': {'tx': x0, 'ty': y0, 'tw': w, 'th': h}})
+
+    # --- P10.5: trials and the dungeon, in the strip (columns 99-109 inside, like the island's) ---
+    def sg(self, X, y, ch, h=None):
+        """Sets a strip tile by its region column (96-111)."""
+        self.eg[y][X - 96] = ch
+        if h is not None: self.eh[y][X - 96] = h
+
+    def obj(self, t, X, y, **kw):
+        self.features['envObjects'].append({'type': t, 'tx': X, 'ty': y, **kw})
+
+    def switch(self, sid, kind, X, y, link, group, accepts):
+        self.features['switches'].append({'id': sid, 'kind': kind, 'tx': X, 'ty': y, 'link': link, 'group': group, 'accepts': accepts})
+
+    def puzzle_box(self, rid, name, y0, dark=False):
+        """A ruin room like the island's trials: tall walls, floor cols 99-109, rows y0+1..y0+12, a line of
+        rocks closing the south (y0+13; in the 3/4 view a tall south wall would hide the player).
+        The way out is walking down from (104, y0+12)."""
+        for y in range(y0, y0 + 16):
+            for X in range(98, 111):
+                self.sg(X, y, 'u', 48)
+        for y in range(y0 + 1, y0 + 16):
+            for X in range(99, 110):
+                self.sg(X, y, 'u', 0)
+        for X in range(99, 110):
+            self.sg(X, y0 + 13, '#')
+        self.features['areas'].append({'id': rid, 'name': name, 'tx': 98, 'ty': y0, 'tw': 13, 'th': 14, **({'dark': True} if dark else {})})
+
+    def partition(self, y, door_link):
+        """Rocks across the room with a rune door in the middle (opened by the room's switches)."""
+        for X in range(99, 110):
+            if X != 104: self.sg(X, y, '#')
+        self.obj('door', 104, y, link=door_link)
+
+    def pillar_gate(self, tid, name, near, y0):
+        """A glowing pillar outdoors; walk up into it to enter (like the island's trials)."""
+        x0, yy = near
+        for d in range(0, 14):
+            for y in range(yy - d, yy + d + 1):
+                for x in range(x0 - d, x0 + d + 1):
+                    if all(self.free(x, y + k, self.h[y][x] if 0 <= y < RH and 0 <= x < RW else None) and self.g[y + k][x] != '=' for k in range(3)):
+                        self.obj('pillar', x, y)
+                        self.features['warps'].append({'id': f'{tid}-in', 'tx': x, 'ty': y + 1, 'facing': 'up', 'toTx': 104, 'toTy': y0 + 11})
+                        self.features['warps'].append({'id': f'{tid}-back', 'tx': 104, 'ty': y0 + 12, 'facing': 'down', 'toTx': x, 'toTy': y + 2})
+                        self.features['landmarks'].append({'id': tid, 'name': f'光る石柱（{name}）', 'tx': x, 'ty': y, 'always': False})
+                        return x, y
+        raise AssertionError(('no gate spot', self.id, near))
 
     def room(self, rid, name, y0, door, furniture=(), home=True):
         """A room in the east strip (world cols 98-110, rows y0..y0+9) behind the door of a house.
@@ -406,6 +452,93 @@ for R in (F, M, S, L):
     for b in R.features['bosses']:
         R.features['landmarks'].append({'id': b['id'], 'name': '澱の核', 'tx': b['tx'], 'ty': b['ty'], 'always': False})
 
+# ---------------- P10.5: three more trials, and a dungeon under the mountains ----------------
+# Each puzzle room can be solved in at least two ways (tests/unit/trials2.test.js).
+
+# 双火の試練 (forest): two sconces must both burn. Fire arrows through the braziers, or the fire blade.
+F.puzzle_box('trial_twin', '双火の試練', 4)
+F.partition(8, 'trial_twin')
+F.features['chests'].append({'id': 'trial_twin', 'tx': 104, 'ty': 6, 'reward': 'money', 'money': 120})
+F.obj('brazier', 100, 11); F.obj('sconce', 102, 11)
+F.obj('brazier', 108, 13); F.obj('sconce', 106, 13)
+F.switch('twin-a', 'sconce', 102, 11, 'trial_twin', 'fire', ['fire'])
+F.switch('twin-b', 'sconce', 106, 13, 'trial_twin', 'fire', ['fire'])
+F.pillar_gate('trial_twin', '双火の試練', (40, 46), 4)
+
+# 暗がりの試練 (desert, a dark room): light on the sensor AND weight on the plate at once.
+S.puzzle_box('trial_dark', '暗がりの試練', 4, dark=True)
+S.partition(8, 'trial_dark')
+S.features['chests'].append({'id': 'trial_dark', 'tx': 104, 'ty': 6, 'reward': 'money', 'money': 120})
+S.switch('dark-sensor', 'sensor', 105, 10, 'trial_dark', 'a', ['light'])
+S.obj('brazier', 100, 11); S.obj('sconce', 107, 11)
+S.switch('dark-plate', 'plate', 99, 13, 'trial_dark', 'a', ['weight'])
+S.obj('crate', 104, 13)
+S.pillar_gate('trial_dark', '暗がりの試練', (30, 60), 4)
+
+# 水鏡の試練 (lake): the switches are across a water channel; any one opens the ring of doors
+# around the prize. A fire arrow over the water / swim across to the plate / 共鳴 on the stone.
+L.puzzle_box('trial_water', '水鏡の試練', 4)
+for y in (10, 11):
+    for X in range(99, 110):
+        L.sg(X, y, '~')
+L.features['chests'].append({'id': 'trial_water', 'tx': 101, 'ty': 14, 'reward': 'money', 'money': 120})
+for (X, y) in [(101, 13), (101, 15), (100, 14), (102, 14)]:
+    L.obj('door', X, y, link='trial_water')
+for (X, y) in [(100, 13), (102, 13), (100, 15), (102, 15)]:
+    L.sg(X, y, '#')
+L.obj('brazier', 106, 14)
+L.obj('sconce', 106, 7)
+L.switch('water-sconce', 'sconce', 106, 7, 'trial_water', 'fire', ['fire'])
+L.switch('water-plate', 'plate', 103, 7, 'trial_water', 'weight', ['weight'])
+L.obj('stone', 109, 6)
+L.switch('water-stone', 'stone', 109, 6, 'trial_water', 'resonance', ['resonance', 'shock'])
+L.pillar_gate('trial_water', '水鏡の試練', (14, 58), 4)
+
+# 白嶺の坑道 (the dungeon): three floors under the mountains, stairs between them.
+MINE = [4, 22, 40]
+M.puzzle_box('mine_1', '白嶺の坑道 地下1階', MINE[0], dark=True)
+M.puzzle_box('mine_2', '白嶺の坑道 地下2階', MINE[1])
+M.puzzle_box('mine_3', '白嶺の坑道 地下3階', MINE[2])
+# 1F (dark): light the sensor — a light orb, or a fire arrow through the brazier onto the sconce.
+y0 = MINE[0]
+M.partition(y0 + 4, 'mine_1')
+M.switch('mine1-sensor', 'sensor', 105, y0 + 6, 'mine_1', 'a', ['light'])
+M.obj('brazier', 100, y0 + 7); M.obj('sconce', 107, y0 + 7)
+# 2F: electricity — strike the crystal (sparks run along the metal floor to the stone), or 共鳴.
+y0 = MINE[1]
+M.partition(y0 + 4, 'mine_2')
+for X in range(101, 110):
+    M.sg(X, y0 + 8, 'm')
+M.obj('crystal', 100, y0 + 8)
+M.obj('stone', 109, y0 + 7)
+M.switch('mine2-stone', 'stone', 109, y0 + 7, 'mine_2', 'a', ['resonance', 'shock'])
+# 3F: two plates at once — a crate (念動 or sword pushes) on one, the player on the other.
+y0 = MINE[2]
+M.partition(y0 + 4, 'mine_3')
+M.obj('crate', 104, y0 + 9)
+M.switch('mine3-west', 'plate', 99, y0 + 9, 'mine_3', 'a', ['weight'])
+M.switch('mine3-east', 'plate', 109, y0 + 7, 'mine_3', 'a', ['weight'])
+M.features['chests'].append({'id': 'mine', 'tx': 104, 'ty': y0 + 2, 'reward': 'item', 'item': 'star_shard'})
+# Stairs: up from the far side of 1F / 2F to the next floor; down from its south end back up.
+for k in (0, 1):
+    a, b = MINE[k], MINE[k + 1]
+    M.obj('stairs', 104, a + 2)
+    M.features['warps'].append({'id': f'mine{k + 1}-down', 'tx': 104, 'ty': a + 2, 'facing': 'up', 'toTx': 104, 'toTy': b + 11})
+    M.features['warps'].append({'id': f'mine{k + 2}-up', 'tx': 104, 'ty': b + 12, 'facing': 'down', 'toTx': 104, 'toTy': a + 3})
+# The way in: a dark opening in a cliff of the mountains (walk up into it).
+def cliff_door(R, near):
+    x0, y0_ = near
+    for d in range(0, 20):
+        for y in range(y0_ - d, y0_ + d + 1):
+            for x in range(x0 - d, x0 + d + 1):
+                if 2 < y < RH - 2 and 2 < x < RW - 2 and R.free(x, y) and R.free(x, y + 1, R.h[y][x]) and R.h[y - 1][x] >= R.h[y][x] + 16 and R.g[y][x] != '=':
+                    return x, y
+    raise AssertionError(('no cliff', R.id, near))
+mx, my = cliff_door(M, (30, 66))
+M.features['warps'].append({'id': 'mine-in', 'tx': mx, 'ty': my, 'facing': 'up', 'toTx': 104, 'toTy': MINE[0] + 11, 'reveal': True})
+M.features['warps'].append({'id': 'mine-out', 'tx': 104, 'ty': MINE[0] + 12, 'facing': 'down', 'toTx': mx, 'toTy': my + 1})
+M.features['landmarks'].append({'id': 'mine', 'name': '白嶺の坑道', 'tx': mx, 'ty': my, 'always': False})
+
 # The passes between the columns.
 PASS_PF = range(52, 55)
 PASS_SL = range(46, 49)
@@ -419,7 +552,7 @@ L.extra['passes'] = [{'id': 'pass-desert', 'tx': 0, 'ty': 47, 'facing': 'left', 
 regions = [P.out(), S.out(), M.out(), F.out(), L.out()]
 for r in regions:
     assert len(r['ground']) == RH and all(len(row) == RW + EW for row in r['ground'])
-    walk = lambda x, y: r['ground'][y][x] in '.s=w' and not any(o['tx'] == x and o['ty'] == y for o in r['envObjects'] if o['type'] != 'mat')
+    walk = lambda x, y: r['ground'][y][x] in '.s=wum' and not any(o['tx'] == x and o['ty'] == y for o in r['envObjects'] if o['type'] not in ('mat', 'stairs'))
     for w in r.get('passes', []):
         assert r['ground'][w['ty']][w['tx']] in '=.s', ('pass blocked', r['id'], w)
         assert r['ground'][w['ty']][w['tx'] + (-1 if w['facing'] == 'right' else 1)] in '=.s', ('pass approach blocked', r['id'], w)
@@ -427,7 +560,7 @@ for r in regions:
         assert walk(w['tx'], w['ty']), ('warp tile blocked', r['id'], w)
         assert walk(w['toTx'], w['toTy']), ('warp arrival blocked', r['id'], w)
     for c in r['chests'] + r['checkpoints']:
-        assert r['ground'][c['ty']][c['tx']] in '.s=', (r['id'], c)
+        assert r['ground'][c['ty']][c['tx']] in '.s=u', (r['id'], c)
 
 out = """// @ts-check
 // Region templates south of the first island (P8). GENERATED by tools/gen_world.py: edit the script.
