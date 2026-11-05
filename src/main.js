@@ -38,13 +38,15 @@ import { createGameState, stepGame, spawnEnemies, respawnPlayer, MAPS } from './
 import { applyProgress, areaAt } from './game/world/features.js';
 import { activeBoss } from './game/entities/bosses.js';
 import { registerServiceWorker, loadTiming } from './platform/pwa.js';
+import { AudioEngine } from './audio/audioEngine.js';
+import { sfxFor, chooseTrack } from './audio/cues.js';
 import { hitEnemy } from './game/combat/damage.js';
 import { envSummary, ignite, material, setWorldTime } from './game/env/envSim.js';
 import { playerWeather } from './game/env/weatherActions.js';
 import { regionAt } from './game/world/world.js';
 import { computeWorldDiff } from './game/world/worldDiff.js';
 import { TOUR, TOUR_STOPS, tourReport } from './debug/tour.js';
-import { clockText, CLOCK, SEASON, seasonAt, inSeason } from './game/env/weather.js';
+import { clockText, CLOCK, SEASON, seasonAt, inSeason, hourOf } from './game/env/weather.js';
 import { groundHeightUnder } from './game/physics/collision.js';
 import { GAME_TITLE, PHASE } from './game/version.js';
 
@@ -139,6 +141,11 @@ async function boot() {
   deathOverlay.hidden = true;
   uiRoot.append(deathOverlay);
   const toast = new Toast(uiRoot);
+  // P11.2: sound. iOS allows sound only after a touch: start it on the first one.
+  const audio = new AudioEngine();
+  audio.setVolumes({ bgm: settings.bgmVolume, sfx: settings.sfxVolume });
+  const unlockAudio = () => audio.unlock();
+  for (const type of ['pointerdown', 'touchend', 'keydown']) window.addEventListener(type, unlockAudio, { capture: true });
   const treasureHud = document.createElement('div');
   treasureHud.id = 'hud-treasure';
   treasureHud.hidden = true;
@@ -284,6 +291,7 @@ async function boot() {
       if (announced.has(e)) continue;
       announced.add(e);
       const ev = /** @type {any} */ (e);
+      audio.play(sfxFor(ev)); // P11.2
       if (ev.type === 'chest') {
         toast.show(
           ev.reward === 'heart'
@@ -345,15 +353,30 @@ async function boot() {
   const pauseOverlay = new PauseOverlay(uiRoot, {
     onPauseRequest: () => pause(''),
     onResume: () => resume(),
+    // P11.2: volumes step 0 -> 25 -> 50 -> 75 -> 100 % and round again; remembered.
+    onVolume: (kind) => setVolume(kind, nextVolume(kind === 'bgm' ? settings.bgmVolume : settings.sfxVolume)),
+    volumes: () => ({ bgm: settings.bgmVolume, sfx: settings.sfxVolume }),
   });
+  /** @param {number} v */
+  const nextVolume = (v) => (Math.round(v * 4) + 1) % 5 / 4;
+  /** @param {'bgm' | 'sfx'} kind @param {number} v */
+  function setVolume(kind, v) {
+    if (kind === 'bgm') settings.bgmVolume = v;
+    else settings.sfxVolume = v;
+    saveSettings(settings);
+    audio.setVolumes({ bgm: settings.bgmVolume, sfx: settings.sfxVolume });
+    pauseOverlay.refresh();
+  }
   /** @param {string} message */
   function pause(message) {
     paused = true;
+    audio.suspend();
     input.clear();
     pauseOverlay.show(message);
   }
   function resume() {
     paused = false;
+    audio.resume();
     loop.reset(); // never "catch up" on time spent paused
     stats.reset();
     skipNextFrame = true;
@@ -604,6 +627,13 @@ async function boot() {
       clockHud.textContent = clock;
     }
     const boss = activeBoss(state);
+    // P11.2: the music for where the player is.
+    {
+      const p = state.player;
+      const tx = Math.floor(p.x / 16);
+      const ty = Math.floor(p.y / 16);
+      audio.setTrack(chooseTrack({ inTitle, boss: !!boss, area: areaAt(state, p.x, p.y), region: regionAt(state.regions, tx, ty)?.id ?? null, hour: hourOf(state.env.now) }));
+    }
     const bossKey = boss ? `${boss.name}:${boss.hp}:${boss.phase}` : '';
     if (bossKey !== shownBoss) {
       shownBoss = bossKey;
@@ -709,6 +739,9 @@ async function boot() {
     },
     rotateHintVisible: () => rotateHint.visible,
     titleVisible: () => !!title && title.visible,
+    /** P11.2: sound (state, track, effects played) and volume. */
+    audio: () => audio.stats(),
+    setVolume: (/** @type {'bgm' | 'sfx'} */ kind, /** @type {number} */ v) => setVolume(kind, v),
     /** P10.6 test helper: where things are (checkpoints, chests, doorways). */
     places: () => ({
       checkpoints: state.checkpointDefs.map((/** @type {any} */ c) => ({ id: c.id, tx: c.tx, ty: c.ty })),
