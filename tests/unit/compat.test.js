@@ -5,6 +5,9 @@ import { applyProgress, emptyProgress, respawnPoint } from '../../src/game/world
 import { computeWorldDiff } from '../../src/game/world/worldDiff.js';
 import { makeEnvelope, chooseSave, migrate, fnv1a, SCHEMA_VERSION } from '../../src/save/saveFormat.js';
 import { LEGACY_OBJECTS } from '../../src/save/legacyObjects.js';
+import { useLegacyObjects } from '../../src/save/saveFormat.js';
+
+useLegacyObjects(LEGACY_OBJECTS); // (the game loads them on demand; P11.4)
 import { countOf } from '../../src/game/items/inventory.js';
 import LEGACY_IDS from '../fixtures/legacy-ids.json';
 

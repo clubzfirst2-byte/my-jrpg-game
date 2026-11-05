@@ -2,7 +2,20 @@
 // Save data format (DESIGN.md 2.6): versioned envelope with a checksum, a migration chain, and the
 // rule for picking which of the two alternating generations (A / B) to load. Pure: unit-tested.
 import { nameIndexedDiff } from '../game/world/worldDiff.js';
-import { LEGACY_OBJECTS } from './legacyObjects.js';
+
+/**
+ * The object lists of P8-P10.2 (src/save/legacyObjects.js, 31 KB) are only needed to read saves of
+ * those versions, so they are loaded on demand (P11.4): saveStore loads them before migrating an
+ * old save; tests register them directly.
+ * @type {string[][] | null}
+ */
+let legacyLists = null;
+/** @param {Record<string, string>} objects */
+export function useLegacyObjects(objects) {
+  legacyLists = Object.values(objects).map((l) => l.split(' '));
+}
+/** Whether a stored envelope needs the old object lists to be read. @param {any} e */
+export const needsLegacyObjects = (e) => !!e && typeof e.schemaVersion === 'number' && e.schemaVersion < 3;
 
 /** Bump when the shape of `data` changes, and add a migration from the previous version. */
 export const SCHEMA_VERSION = 3;
@@ -19,7 +32,7 @@ export const MIGRATIONS = {
   },
   // v2 -> v3 (P10.3): changed world objects are named "type@tx,ty" instead of by list index (which
   // shifts whenever the map gains objects). See nameIndexedDiff.
-  2: (data) => ({ ...data, worldDiff: nameIndexedDiff(data?.worldDiff, Object.values(LEGACY_OBJECTS).map((l) => l.split(' '))) }),
+  2: (data) => ({ ...data, worldDiff: nameIndexedDiff(data?.worldDiff, legacyLists ?? []) }),
 };
 
 /**

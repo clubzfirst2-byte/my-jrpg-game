@@ -9,6 +9,9 @@ import { ignite, material, weatherNow } from '../../src/game/env/envSim.js';
 import { computeWorldDiff, applyWorldDiff, nameIndexedDiff } from '../../src/game/world/worldDiff.js';
 import { migrate } from '../../src/save/saveFormat.js';
 import { LEGACY_OBJECTS } from '../../src/save/legacyObjects.js';
+import { useLegacyObjects } from '../../src/save/saveFormat.js';
+
+useLegacyObjects(LEGACY_OBJECTS); // (the game loads them on demand; P11.4)
 import { applyProgress, emptyProgress } from '../../src/game/world/features.js';
 import { judgeTour } from '../../src/debug/tour.js';
 import { validateItems } from '../../src/game/items/validateItems.js';
