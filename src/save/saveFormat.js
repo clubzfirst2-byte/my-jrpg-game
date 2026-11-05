@@ -1,9 +1,11 @@
 // @ts-check
 // Save data format (DESIGN.md 2.6): versioned envelope with a checksum, a migration chain, and the
 // rule for picking which of the two alternating generations (A / B) to load. Pure: unit-tested.
+import { nameIndexedDiff } from '../game/world/worldDiff.js';
+import { LEGACY_OBJECTS } from './legacyObjects.js';
 
 /** Bump when the shape of `data` changes, and add a migration from the previous version. */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /**
  * Migrations from version N to N+1, applied in order when loading an older save.
@@ -15,6 +17,9 @@ export const MIGRATIONS = {
     const { treasures = 0, ...rest } = data ?? {};
     return { ...rest, inv: { ...(rest.inv ?? {}), money: (rest.inv?.money ?? 0) + treasures * 50 } };
   },
+  // v2 -> v3 (P10.3): changed world objects are named "type@tx,ty" instead of by list index (which
+  // shifts whenever the map gains objects). See nameIndexedDiff.
+  2: (data) => ({ ...data, worldDiff: nameIndexedDiff(data?.worldDiff, Object.values(LEGACY_OBJECTS).map((l) => l.split(' '))) }),
 };
 
 /**

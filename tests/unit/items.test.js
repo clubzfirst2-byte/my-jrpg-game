@@ -302,7 +302,7 @@ describe('in the game', () => {
 
 describe('save format v2', () => {
   it('migrates old saves: treasures become money', () => {
-    expect(SCHEMA_VERSION).toBe(2);
+    expect(SCHEMA_VERSION).toBe(3); // v3 (P10.3): world differences named by object
     const old = { ...makeEnvelope({ openedChests: ['camp'], treasures: 3, maxHp: 16 }, '0.0.1', 1, 0), schemaVersion: 1 };
     const r = migrate(old);
     expect(r.ok).toBe(true);

@@ -6,7 +6,9 @@ import { createGameState, stepGame } from '../../src/game/state.js';
 import { parseMap, Ground } from '../../src/game/world/tilemap.js';
 import { weatherAt, WEATHER, CLOCK } from '../../src/game/env/weather.js';
 import { ignite, material } from '../../src/game/env/envSim.js';
-import { computeWorldDiff, applyWorldDiff } from '../../src/game/world/worldDiff.js';
+import { computeWorldDiff, applyWorldDiff, nameIndexedDiff } from '../../src/game/world/worldDiff.js';
+import { migrate } from '../../src/save/saveFormat.js';
+import { LEGACY_OBJECTS } from '../../src/save/legacyObjects.js';
 import { applyProgress, emptyProgress } from '../../src/game/world/features.js';
 import { judgeTour } from '../../src/debug/tour.js';
 import { validateItems } from '../../src/game/items/validateItems.js';
@@ -131,6 +133,66 @@ describe('saving the world as differences', () => {
     expect(t.map.solid[from]).toBe(0);
     expect(t.map.solid[moved.ty * t.map.width + moved.tx]).toBe(1);
     expect(t.env.objectAt.get(moved.ty * t.map.width + moved.tx)).toBe(moved);
+  });
+});
+
+describe('saves outlive map changes (objects are named by kind and place, not by list position)', () => {
+  /** A world whose map gained objects in front of all others (as P10.1 added house walls). */
+  const grown = () => {
+    const def = { ...WORLD, envObjects: [{ type: 'barrel', tx: 104, ty: 72 + 5 }, ...WORLD.envObjects] };
+    return createGameState(def);
+  };
+
+  it('a broken jar stays broken after the map gains objects', () => {
+    const s = createGameState(WORLD);
+    const jar = s.map.objects.find((o) => o.type === 'jar');
+    jar.gone = true;
+    const diff = JSON.parse(JSON.stringify(computeWorldDiff(s)));
+    expect(Object.values(diff).flatMap((d) => Object.keys(d))).toEqual([`jar@${jar.tx},${jar.ty}`]);
+    const t = grown();
+    applyProgress(t, { ...emptyProgress(), worldDiff: diff });
+    const again = t.map.objects.find((o) => o.type === 'jar' && o.tx === jar.tx && o.ty === jar.ty);
+    expect(again.gone).toBe(true);
+    expect(t.map.objects.filter((o) => o.gone)).toHaveLength(1); // nothing else touched
+  });
+
+  it('an old save (objects named by list position) is converted only where the old lists agree', () => {
+    const s = createGameState(WORLD);
+    const k = s.map.objects.findIndex((o) => o.type === 'jar');
+    const jar = s.map.objects[k];
+    const chunk = `${Math.floor(jar.tx / 32)},${Math.floor(jar.ty / 32)}`;
+    const ids = s.objectBaseline.map((b) => `${b.type}@${b.tx},${b.ty}`);
+    // Two old lists that agree on what index k was: converted.
+    expect(nameIndexedDiff({ [chunk]: { [k]: { gone: true } } }, [ids, ids])).toEqual({ [chunk]: { [`jar@${jar.tx},${jar.ty}`]: { gone: true } } });
+    // Lists that disagree, both plausibly: dropped (better a jar back than the wrong thing broken).
+    const other = [...ids];
+    other[k] = `jar@${jar.tx + 1},${jar.ty}`;
+    expect(nameIndexedDiff({ [chunk]: { [k]: { gone: true } } }, [ids, other])).toEqual({});
+    // A list where index k is something that cannot have been broken: ignored, the other one wins.
+    const tree = [...ids];
+    tree[k] = `anvil@${jar.tx},${jar.ty}`;
+    expect(Object.keys(nameIndexedDiff({ [chunk]: { [k]: { gone: true } } }, [ids, tree])[chunk])).toEqual([`jar@${jar.tx},${jar.ty}`]);
+    // Unconverted index keys are never applied directly.
+    const t = createGameState(WORLD);
+    applyWorldDiff(t, { [chunk]: { [k]: { gone: true } } });
+    expect(t.map.objects.filter((o) => o.gone)).toHaveLength(0);
+  });
+
+  it('a real P8-P10.2 save: the migration to schema 3 names its objects from the frozen old lists', () => {
+    const lists = Object.values(LEGACY_OBJECTS).map((l) => l.split(' '));
+    // The broken jar of a P10.2 save (index in the P10.2 list).
+    const p10 = LEGACY_OBJECTS.p10.split(' ');
+    const k = p10.findIndex((id) => id.startsWith('jar@'));
+    const [tx, ty] = p10[k].split('@')[1].split(',').map(Number);
+    const chunk = `${Math.floor(tx / 32)},${Math.floor(ty / 32)}`;
+    const old = { schemaVersion: 2, data: { ...emptyProgress(), worldDiff: { [chunk]: { [k]: { gone: true } } } } };
+    const r = migrate(/** @type {any} */ (old));
+    expect(r.ok).toBe(true);
+    const named = r.data.worldDiff;
+    // Whatever the version, either it is safely named as that jar, or dropped (never something else).
+    const keys = Object.values(named).flatMap((d) => Object.keys(d));
+    expect(keys.every((id) => id === p10[k])).toBe(true);
+    expect(lists.length).toBe(3);
   });
 });
 
