@@ -9,7 +9,7 @@ async function open(page, query = '') {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(`/?map=world&time=10${query}`);
-  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 10_000 });
   await api(page, 'clearEnemies');
   return errors;
 }
@@ -26,11 +26,23 @@ test('travelling around the world again and again does not pile up memory', asyn
   const errors = await open(page);
   /** @type {any[]} */
   const laps = [];
+  // Each stop must really be visited: wait until the view has updated there and every chunk it
+  // wants is built (on a slow machine 250 ms may pass without a single frame; the stop would then
+  // be skipped and its chunks left alive within the keep range, changing what is counted).
+  const visit = async (/** @type {number} */ tx, /** @type {number} */ ty) => {
+    // Read the count and teleport in one go: frames can pass between two separate calls.
+    const before = await page.evaluate(([x, y]) => {
+      const n = window.__debugApi.stream().updates;
+      window.__debugApi.teleport(x, y);
+      return n;
+    }, [tx, ty]);
+    await expect.poll(async () => {
+      const s = await api(page, 'stream');
+      return s.updates >= before + 2 && s.pending === 0;
+    }, { timeout: 10_000 }).toBe(true);
+  };
   for (let lap = 0; lap < 4; lap++) {
-    for (const [tx, ty] of STOPS) {
-      await api(page, 'teleport', tx, ty);
-      await page.waitForTimeout(250);
-    }
+    for (const [tx, ty] of STOPS) await visit(tx, ty);
     laps.push(await api(page, 'stream'));
   }
   // Chunks are built and freed all along, but what is alive stays the same lap after lap.
@@ -88,7 +100,7 @@ test('a broken jar stays broken after つづきから (the world is saved as dif
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
-  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 10_000 });
   await page.click('#title-new');
   await api(page, 'clearEnemies');
   // The jar at the camp (73,36): hit it from the south.
@@ -105,7 +117,7 @@ test('a broken jar stays broken after つづきから (the world is saved as dif
     .not.toBe('jar');
   expect(await api(page, 'saveNow')).toBe(true);
   await page.reload();
-  await expect(page.locator('#title-continue')).toBeEnabled({ timeout: 20_000 });
+  await expect(page.locator('#title-continue')).toBeEnabled({ timeout: 10_000 });
   await page.click('#title-continue');
   expect((await api(page, 'envTile', 73, 36)).material).not.toBe('jar');
   expect(errors).toEqual([]);
@@ -114,7 +126,7 @@ test('a broken jar stays broken after つづきから (the world is saved as dif
 test('the auto tour runs through the regions and writes a report', async ({ page }) => {
   const errors = await open(page, '&debug=1');
   await api(page, 'startTour', 0.15); // 9 seconds
-  await expect.poll(() => api(page, 'tourRunning'), { timeout: 20_000 }).toBe(false);
+  await expect.poll(() => api(page, 'tourRunning'), { timeout: 10_000 }).toBe(false);
   expect((await api(page, 'tourResult')).length).toBeGreaterThan(0);
   await expect(page.locator('#debug-modal')).toBeVisible();
   await expect(page.locator('#debug-modal-body')).toHaveValue(/自動巡回/);

@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "shops": [
+    {
+      "id": "general",
+      "name": "風見の雑貨屋",
+      "sells": [
+        {
+          "item": "arrow",
+          "price": 3
+        },
+        {
+          "item": "mushroom",
+          "price": 6
+        },
+        {
+          "item": "red_berry",
+          "price": 5
+        },
+        {
+          "item": "grilled_meat",
+          "price": 20
+        },
+        {
+          "item": "travel_sword",
+          "price": 80
+        },
+        {
+          "item": "bark_vest",
+          "price": 70
+        }
+      ],
+      "buyRate": 0.5
+    }
+  ]
+}

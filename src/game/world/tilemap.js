@@ -47,6 +47,7 @@ const HEIGHT_DIGITS = '0123456789abcdefghijklmnopqrstuv';
  * @property {{ id: string, item: string, tx: number, ty: number, count?: number }[]} [pickups]  P6: items lying in the world
  * @property {import('../puzzles/switches.js').SwitchDef[]} [switches]  P7: plates, sensors, sconces, stones
  * @property {import('./world.js').RegionInfo[]} [regions]  P8: the regions of the world (climate, art bundle)
+ * @property {{ id: string, name: string, dialogue: string, look?: number, tx: number, ty: number }[]} [npcs]  P9: villagers
  * @property {import('./features.js').LandmarkDef[]} [landmarks]
  * @typedef {string[] | IslandDef} MapDef
  */

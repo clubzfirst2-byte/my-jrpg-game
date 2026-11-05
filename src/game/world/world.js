@@ -34,6 +34,7 @@ export function stitchWorld(island, regions) {
     pickups: [...(island.pickups ?? [])],
     envObjects: [...(island.envObjects ?? [])],
     campfires: [...(island.campfires ?? [])],
+    npcs: [...(island.npcs ?? [])],
     /** @type {RegionInfo[]} */
     regions: [{ id: 'island', name: 'はじまりの島', tx: 0, ty: 0, tw: OUTDOOR_W, th: island.ground.length, climate: 'temperate', bundle: null }],
   };
@@ -44,7 +45,7 @@ export function stitchWorld(island, regions) {
     for (const row of r.ground) ground.push(row + '~'.repeat(pad));
     for (const row of r.height) height.push(row + '0'.repeat(pad));
     const at = (/** @type {any} */ o) => ({ ...o, ty: o.ty + oy });
-    for (const key of ['enemies', 'chests', 'checkpoints', 'landmarks', 'pickups', 'envObjects', 'campfires']) {
+    for (const key of ['enemies', 'chests', 'checkpoints', 'landmarks', 'pickups', 'envObjects', 'campfires', 'npcs']) {
       for (const o of r[key] ?? []) def[key].push(at(o));
     }
     def.regions.push({ id: r.id, name: r.name, tx: 0, ty: oy, tw: r.ground[0].length, th: r.ground.length, climate: r.climate, bundle: r.bundle });

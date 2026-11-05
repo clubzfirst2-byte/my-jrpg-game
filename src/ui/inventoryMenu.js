@@ -21,8 +21,9 @@ import {
   SHARD,
 } from '../game/items/inventory.js';
 import { ABILITY_NAMES } from '../game/puzzles/abilities.js';
+import { questLog } from '../game/npc/talk.js';
 
-/** @typedef {'weapon' | 'bow' | 'armor' | 'material' | 'food' | 'power' | 'cook' | 'forge'} Tab */
+/** @typedef {'weapon' | 'bow' | 'armor' | 'material' | 'food' | 'power' | 'quest' | 'cook' | 'forge'} Tab */
 
 const TAB_NAMES = /** @type {Record<Tab, string>} */ ({
   weapon: '武器',
@@ -31,6 +32,7 @@ const TAB_NAMES = /** @type {Record<Tab, string>} */ ({
   material: '素材',
   food: '料理',
   power: '能力',
+  quest: 'クエスト',
   cook: '鍋',
   forge: '鍛冶',
 });
@@ -45,7 +47,7 @@ const EFFECT_NAMES = /** @type {Record<string, string>} */ ({
 export class InventoryMenu {
   /**
    * @param {HTMLElement} root
-   * @param {{ getState: () => any, onOpen: () => void, onClose: () => void, toast: (msg: string) => void }} hooks
+   * @param {{ getState: () => any, onOpen: () => void, onClose: () => void, toast: (msg: string) => void, talk?: () => void }} hooks
    */
   constructor(root, hooks) {
     this.hooks = hooks;
@@ -57,7 +59,9 @@ export class InventoryMenu {
     this.bagButton = button('bag-button', '持ち物', () => this.open());
     // The station (fire / anvil) is decided when the button is pressed: the game is paused while the
     // menu is open, so the player is still there.
-    this.useButton = button('use-button', '', () => this.open(this.useTab, true));
+    this.useButton = button('use-button', '', () => (this.useKind === 'talk' ? this.hooks.talk?.() : this.open(this.useTab, true)));
+    /** @type {'cook' | 'forge' | 'talk'} what the button does now */
+    this.useKind = 'cook';
     /** @type {Tab | null} cooking / forge tab available in this opening of the menu */
     this.station = null;
     this.useButton.hidden = true;
@@ -85,14 +89,15 @@ export class InventoryMenu {
     return !this.el.hidden;
   }
 
-  /** Shows the "料理する / 鍛冶" button when something usable is in reach. @param {'cook' | 'forge' | null} nearby */
-  setNearby(nearby) {
+  /** Shows the "料理する / 鍛冶 / 話す" button when something usable is in reach. @param {'cook' | 'forge' | 'talk' | null} nearby @param {string} [who] */
+  setNearby(nearby, who = '') {
     // Called every frame: touch the DOM only when something changes. Rewriting the label every
     // frame replaces its text node, and WebKit (iPhone Safari) can then drop a tap on the button.
     const hidden = !nearby || this.isOpen;
     if (this.useButton.hidden !== hidden) this.useButton.hidden = hidden;
-    if (nearby && nearby !== this.useTab) this.useTab = nearby;
-    const label = this.useTab === 'cook' ? '料理する' : '鍛冶';
+    if (nearby) this.useKind = nearby;
+    if (nearby && nearby !== 'talk' && nearby !== this.useTab) this.useTab = nearby;
+    const label = this.useKind === 'talk' ? `話す（${who}）` : this.useTab === 'cook' ? '料理する' : '鍛冶';
     if (this.useButton.textContent !== label) this.useButton.textContent = label;
   }
 
@@ -124,7 +129,7 @@ export class InventoryMenu {
     const inv = s.progress.inv;
     this.money.textContent = `★ ${inv.money} 星貨`;
     /** @type {Tab[]} */
-    const tabs = ['weapon', 'bow', 'armor', 'material', 'food', 'power'];
+    const tabs = ['weapon', 'bow', 'armor', 'material', 'food', 'power', 'quest'];
     if (this.station === 'cook') tabs.push('cook');
     if (this.station === 'forge') tabs.push('forge');
     this.tabs.replaceChildren(
@@ -202,6 +207,13 @@ export class InventoryMenu {
       case 'power':
         this.renderPower(list, s);
         break;
+      case 'quest': {
+        const log = questLog(s);
+        if (log.length === 0) empty('受けているクエストはない（村の人と話してみよう）');
+        const STATE = /** @type {Record<string, string>} */ ({ active: '進行中', ready: '報告できる', done: '達成' });
+        for (const q of log) list.append(row(`inv-quest-${q.id}`, `${q.state === 'done' ? '✓ ' : ''}${q.name}（${STATE[q.state]}）`, q.desc, q.state === 'ready', null));
+        break;
+      }
       case 'cook':
         this.renderCook(list, inv);
         break;

@@ -4,6 +4,8 @@
 import { direction, facingVector } from '../combat/hitbox.js';
 import { facingFrom } from '../core/facing.js';
 import { chestInReach, openChest } from '../world/features.js';
+import { npcInReach } from '../npc/npcs.js';
+import { startDialogue } from '../npc/talk.js';
 
 export const SWORD = Object.freeze([
   // startup: before the blade hits; active: hitbox live; recovery: after. reach: hitbox offset.
@@ -163,8 +165,12 @@ export function combatStep(p, input, state, dt) {
       } else if (attackPressed && canActOnGround(p) && !p.guarding) {
         // The attack button doubles as "open / examine" in front of a chest (P3.5).
         const chest = state.chests ? chestInReach(state) : null;
+        // P9: ... and "talk" in front of a villager.
+        const npc = !chest && state.npcs ? npcInReach(state) : null;
         if (chest) {
           openChest(state, chest);
+        } else if (npc) {
+          startDialogue(state, npc.dialogue, npc.id);
         } else {
           startSwing(p, 0);
           state.events.push({ type: 'swing', tick: state.tick });

@@ -23,6 +23,9 @@ import { HeartsHud } from './ui/hud.js';
 import { RotateHint } from './ui/rotateHint.js';
 import { TitleScreen } from './ui/title.js';
 import { InventoryMenu } from './ui/inventoryMenu.js';
+import { DialogueBox } from './ui/dialogueBox.js';
+import { ShopMenu } from './ui/shopMenu.js';
+import { startDialogue, dialogueView, advance, questDef } from './game/npc/talk.js';
 import { itemName } from './game/items/itemSystem.js';
 import { equippedWeapon, itemDef, addItem } from './game/items/inventory.js';
 import { ABILITY_NAMES, cycleAbility, grantAbility } from './game/puzzles/abilities.js';
@@ -175,12 +178,37 @@ async function boot() {
       loop.reset();
     },
     toast: (msg) => toast.show(msg),
+    talk: () => {
+      const n = state.nearbyNpc;
+      if (n) startDialogue(state, n.dialogue, n.id);
+    },
   });
+  // P9: conversations and the shop (the game waits while either is open).
+  const dialogueBox = new DialogueBox(uiRoot, {
+    next: () => advance(state),
+    choose: (i) => advance(state, i),
+  });
+  const shopMenu = new ShopMenu(uiRoot, {
+    getState: () => state,
+    onClose: () => {
+      state.shop = null;
+      input.clear();
+      loop.reset();
+    },
+    toast: (msg) => toast.show(msg),
+  });
+  /** Talking or shopping: the world waits. */
+  const inTalk = () => !!state.dialogue || !!state.shop;
   window.addEventListener('keydown', (e) => {
+    if (state.dialogue && (e.code === 'KeyJ' || e.code === 'Enter' || e.code === 'Space')) {
+      e.preventDefault();
+      if (!dialogueView(state)?.choices) advance(state);
+      return;
+    }
     if ((e.code === 'KeyE' || e.code === 'Tab') && !inTitle && !paused) {
       e.preventDefault();
       if (menu.isOpen) menu.close();
-      else menu.open(state.nearby ?? undefined);
+      else menu.open(state.nearby === 'cook' || state.nearby === 'forge' ? state.nearby : undefined);
     } else if (e.code === 'Escape' && menu.isOpen) menu.close();
     else if (e.code === 'KeyR' && !inTitle && !menu.isOpen) cycleAbility(state);
   });
@@ -225,10 +253,15 @@ async function boot() {
   window.addEventListener('pagehide', () => void autosave.saveNow());
 
   // Messages for things that happened in the game.
-  let lastEventTick = state.tick;
+  // Each event is announced once. (Events can happen while the clock stands still — in a
+  // conversation, P9 — so the tick alone cannot tell old from new.)
+  /** @type {WeakSet<object>} */
+  const announced = new WeakSet();
+  for (const e of state.events) announced.add(e);
   function announceEvents() {
     for (const e of state.events) {
-      if (e.tick <= lastEventTick) continue;
+      if (announced.has(e)) continue;
+      announced.add(e);
       const ev = /** @type {any} */ (e);
       if (ev.type === 'chest') {
         toast.show(
@@ -254,6 +287,10 @@ async function boot() {
         toast.show('星環の力をまだ持っていない', { ms: 1200 });
       } else if (ev.type === 'noTarget') {
         toast.show(ev.id === 'vine' ? '前に水か穴がない' : '前に動かせる箱がない', { ms: 1200 });
+      } else if (ev.type === 'questStart') {
+        toast.show(`クエスト「${questDef(ev.id).name}」を受けた（持ち物の「クエスト」で確認）`, { ms: 3500 });
+      } else if (ev.type === 'questDone') {
+        toast.show(`クエスト「${questDef(ev.id).name}」達成！`, { ms: 3500 });
       } else if (ev.type === 'fell') {
         toast.show('穴に落ちた…', { ms: 1200 });
       } else if (ev.type === 'checkpoint') {
@@ -265,7 +302,6 @@ async function boot() {
         if (l && !l.always) toast.show(`発見：${l.name}`);
       }
     }
-    lastEventTick = state.tick;
   }
 
   const bench = new Bench(app);
@@ -497,14 +533,31 @@ async function boot() {
 
   // NORMAL priority: fixed-step logic, then draw the interpolated state.
   let alpha = 0;
+  let wasTalking = false;
+  const TAP_KEYS = /** @type {const} */ (['jump', 'attack', 'dodge', 'ability']);
+  /** @type {Record<string, boolean>} */
+  const heldTaps = {};
   app.ticker.add((ticker) => {
-    if (!paused && !inTitle && !inMenu) {
+    if (!paused && !inTitle && !inMenu && !inTalk()) {
       const frameInput = input.sample();
+      // A tap read on a frame where the logic runs no step must not be lost: keep it for the next
+      // frame (the display can run slightly faster than the 60 Hz logic).
+      for (const k of TAP_KEYS) if (heldTaps[k]) frameInput[k] = true;
       // Real elapsed time (PixiJS caps ticker.deltaMS at 100ms); the loop applies its own clamp
       // and accounts for any time it drops (DESIGN.md 1.3).
-      alpha = loop.advance(ticker.elapsedMS, () => stepGame(state, frameInput)).alpha;
+      const result = loop.advance(ticker.elapsedMS, () => stepGame(state, frameInput));
+      alpha = result.alpha;
+      for (const k of TAP_KEYS) heldTaps[k] = result.steps === 0 && !!frameInput[k];
     }
-    if (!paused && !inTitle && !inMenu) {
+    // P9: show the conversation / shop; when a talk ends, the world goes on with fresh input.
+    dialogueBox.show(dialogueView(state));
+    if (state.shop && !shopMenu.isOpen) shopMenu.open();
+    if (wasTalking && !inTalk()) {
+      input.clear();
+      loop.reset();
+    }
+    wasTalking = inTalk();
+    if (!paused && !inTitle && !inMenu && !inTalk()) {
       announceEvents();
       autosave.update(state, ticker.elapsedMS);
     }
@@ -522,7 +575,7 @@ async function boot() {
       shownTreasures = gearText;
       treasureHud.textContent = shownTreasures;
     }
-    menu.setNearby(inTitle ? null : state.nearby);
+    menu.setNearby(inTitle || inTalk() ? null : state.nearby, state.nearbyNpc?.name ?? '');
     // The ability button shows the selected 星環 power (hidden until the first one is learned).
     const abilityLabel = state.progress.ability ? ABILITY_NAMES[state.progress.ability] : '';
     if (abilityButton.textContent !== abilityLabel) abilityButton.textContent = abilityLabel;
@@ -615,6 +668,27 @@ async function boot() {
     inventory: () => JSON.parse(JSON.stringify(state.progress.inv)),
     pickups: () => state.pickups.map((p) => ({ key: p.key, item: p.item, count: p.count, tx: Math.floor(p.x / 16), ty: Math.floor(p.y / 16) })),
     nearby: () => state.nearby,
+    /** P9: villagers and conversations. */
+    npcs: () => state.npcs.map((n) => ({ id: n.id, name: n.name, tx: Math.floor(n.x / 16), ty: Math.floor(n.y / 16) })),
+    dialogue: () => dialogueView(state),
+    talkTo: (/** @type {string} */ id) => {
+      const n = state.npcs.find((x) => x.id === id);
+      if (n) startDialogue(state, n.dialogue, n.id);
+    },
+    shopOpen: () => state.shop,
+    /** Test helper: stand just south of a villager, facing them. */
+    standBy: (/** @type {string} */ id) => {
+      const n = state.npcs.find((x) => x.id === id);
+      if (!n) return;
+      const p = state.player;
+      p.x = p.prevX = n.x;
+      p.y = p.prevY = n.y + 14;
+      p.z = p.prevZ = p.groundZ = n.z;
+      p.facing = 'up';
+      p.aimX = 0;
+      p.aimY = -1;
+      view.snapCamera(state);
+    },
     /** P8: streaming numbers (chunks, bundles, textures, display objects). */
     /** GPU textures by size (find leaks). */
     textureList: () => (renderer.texture?.managedTextures ?? []).filter(Boolean).map((/** @type {any} */ t) => `${t.label ?? ''}:${t.pixelWidth ?? t.width}x${t.pixelHeight ?? t.height}`),

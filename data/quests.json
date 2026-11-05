@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "quests": [
+    {
+      "id": "lost_charm",
+      "name": "なくしたお守り",
+      "giver": "elder",
+      "desc": "長老は、荒野を旅したときにお守りを落としたらしい。赤砂の荒野のオアシスの近くを探そう。",
+      "goal": {
+        "type": "item",
+        "item": "lost_charm",
+        "count": 1
+      },
+      "reward": {
+        "money": 150,
+        "items": {
+          "star_shard": 1
+        }
+      },
+      "consume": true
+    },
+    {
+      "id": "meat_for_cook",
+      "name": "料理人の頼み",
+      "giver": "cook",
+      "desc": "宿の料理人が、獣の肉を 3 つ欲しがっている。",
+      "goal": {
+        "type": "item",
+        "item": "beast_meat",
+        "count": 3
+      },
+      "reward": {
+        "money": 60,
+        "items": {
+          "hunter_stew": 1
+        }
+      },
+      "consume": true
+    },
+    {
+      "id": "windmill_watch",
+      "name": "風車跡の見回り",
+      "giver": "guard",
+      "desc": "見張りに頼まれた。草原の東の丘にある風車跡を見てこよう。",
+      "goal": {
+        "type": "landmark",
+        "landmark": "windmill"
+      },
+      "reward": {
+        "money": 40,
+        "items": {
+          "arrow": 10
+        }
+      },
+      "consume": false
+    }
+  ]
+}
