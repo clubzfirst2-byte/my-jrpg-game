@@ -1411,3 +1411,48 @@ export function lakeGrassTile(seed) {
   if (seed === 3) g[8][8] = 'X';
   return toRows(g);
 }
+
+// --- P10.4: the cores of the murk (bosses), 32 x 30, two frames ---
+
+/**
+ * A murk body with a glowing core and the region's mark (roots, ice horns, sand, sparks).
+ * @param {'root' | 'frost' | 'sand' | 'storm'} kind @param {number} frame
+ */
+export function bossSprite(kind, frame) {
+  const w = 32;
+  const h = 30;
+  const g = grid(w, h, '.');
+  const bob = frame;
+  const accent = { root: ['T', 't'], frost: ['4', '5'], sand: ['u', 'U'], storm: ['Y', 'J'] }[kind];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = (x - 15.5) / 13;
+      const dy = (y - 17 - bob) / 11;
+      const d = dx * dx + dy * dy;
+      if (d > 1) continue;
+      g[y][x] = d > 0.86 ? 'k' : dy < -0.4 && dx < 0 ? 'j' : (x * 3 + y * 5) % 11 === 0 ? 'Z' : 'z';
+    }
+  }
+  // The core: a glowing heart in the middle.
+  for (let y = 14; y < 21; y++) for (let x = 13; x < 19; x++) if (Math.abs(x - 15.5) + Math.abs(y - 17.5) < 4) g[y + bob][x] = Math.abs(x - 15.5) + Math.abs(y - 17.5) < 2 ? 'X' : 'O';
+  // Eyes.
+  g[11 + bob][10] = g[11 + bob][21] = 'i';
+  g[11 + bob][11] = g[11 + bob][20] = 'i';
+  // The region's mark.
+  if (kind === 'frost') {
+    for (let k = 0; k < 6; k++) {
+      g[5 - k + bob + 3][7 - Math.floor(k / 2)] = k % 2 ? accent[1] : accent[0];
+      g[5 - k + bob + 3][24 + Math.floor(k / 2)] = k % 2 ? accent[1] : accent[0];
+    }
+  } else if (kind === 'root') {
+    for (let x = 2; x < 30; x += 4) for (let y = 25; y < 30; y++) if (g[y][x] === '.' || y > 27) g[y][x] = y % 2 ? accent[0] : accent[1];
+  } else if (kind === 'sand') {
+    for (let y = 22; y < 30; y++) for (let x = 3; x < 29; x++) if ((x + y * 3 + frame) % 7 === 0) g[y][x] = accent[(x + y) % 2];
+  } else {
+    for (const [x, y] of [[3, 8], [28, 10], [5, 22], [27, 24], [16, 2]]) {
+      g[y][x] = accent[0];
+      if (y + 1 < h) g[y + 1][x + (frame ? 1 : -1)] = accent[1];
+    }
+  }
+  return toRows(g);
+}

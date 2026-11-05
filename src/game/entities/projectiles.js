@@ -34,7 +34,7 @@ function collide(state, pr) {
   if (pr.owner === 'player') {
     for (const e of state.enemies) {
       if (e.state === 'dead') continue;
-      if (overlaps(point, { x: e.x, y: e.y - 4, z: e.z, r: 7 })) {
+      if (overlaps(point, { x: e.x, y: e.y - 4, z: e.z, r: (e.r ?? 6) + 1 })) {
         hitEnemy(state, e, { owner: 'player', id: pr.id, damage: pr.damage, knock: 0.5, from: { x: pr.x - pr.vx, y: pr.y - pr.vy }, kind: 'projectile' });
         if (state.env) fireArrowHitsEnemy(state, pr, e);
         return true;

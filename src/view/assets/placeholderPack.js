@@ -83,6 +83,7 @@ import {
   snowPineSprite,
   stoneFace,
   lakeGrassTile,
+  bossSprite,
 } from './placeholderArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
@@ -241,6 +242,13 @@ export function seasonKeys(season) {
   return new Set(make ? make().map((e) => e.key.slice(season.length + 1)) : []);
 }
 for (const [name, make] of Object.entries(SEASON_ENTRIES)) REGION_ENTRIES[name] = make;
+
+// P10.4: each core of the murk is drawn by its region's bundle.
+const bossFrames = (/** @type {'root' | 'frost' | 'sand' | 'storm'} */ kind) => [0, 1].map((f) => ({ key: `enemy.boss_${kind}.${f}`, rows: bossSprite(kind, f), anchor: FEET }));
+for (const [region, kind] of /** @type {const} */ ([['region:forest', 'root'], ['region:mountains', 'frost'], ['region:desert', 'sand'], ['region:lake', 'storm']])) {
+  const make = REGION_ENTRIES[region];
+  REGION_ENTRIES[region] = () => [...make(), ...bossFrames(kind)];
+}
 
 /** @param {string} name */
 export function buildRegionPack(name) {

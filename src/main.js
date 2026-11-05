@@ -36,6 +36,8 @@ import { failureMessage } from './save/saveFormat.js';
 import { FixedStepLoop } from './game/core/fixedStep.js';
 import { createGameState, stepGame, spawnEnemies, respawnPlayer, MAPS } from './game/state.js';
 import { applyProgress, areaAt } from './game/world/features.js';
+import { activeBoss } from './game/entities/bosses.js';
+import { hitEnemy } from './game/combat/damage.js';
 import { envSummary, ignite, material, setWorldTime } from './game/env/envSim.js';
 import { playerWeather } from './game/env/weatherActions.js';
 import { regionAt } from './game/world/world.js';
@@ -156,6 +158,20 @@ async function boot() {
   clockHud.id = 'hud-clock';
   uiRoot.append(clockHud);
   let shownClock = '';
+  // P10.4: the boss's name and health while a core of the murk is fighting.
+  const bossBar = document.createElement('div');
+  bossBar.id = 'boss-bar';
+  bossBar.hidden = true;
+  const bossName = document.createElement('div');
+  bossName.className = 'boss-name';
+  const bossTrack = document.createElement('div');
+  bossTrack.className = 'boss-track';
+  const bossFill = document.createElement('div');
+  bossFill.className = 'boss-fill';
+  bossTrack.append(bossFill);
+  bossBar.append(bossName, bossTrack);
+  uiRoot.append(bossBar);
+  let shownBoss = '';
   const WEATHER_NAMES = { clear: '晴れ', cloudy: 'くもり', rain: '雨', storm: '雷雨', snow: '雪' };
 
   // --- save (DESIGN.md 2.6) ---
@@ -297,6 +313,12 @@ async function boot() {
         toast.show(`クエスト「${questDef(ev.id).name}」達成！`, { ms: 3500 });
       } else if (ev.type === 'season') {
         toast.show(`${SEASON.names[/** @type {string} */ (ev.id)]}になった`, { ms: 3000 });
+      } else if (ev.type === 'bossAwake') {
+        toast.show('澱の核が目を覚ました！', { ms: 2000 });
+      } else if (ev.type === 'bossPhase') {
+        toast.show('澱の核が怒り狂っている…！', { ms: 2000 });
+      } else if (ev.type === 'bossDown') {
+        toast.show(`${ev.name}を浄化した！（澱の核 ${ev.count}/4） 星のかけらを手に入れた`, { ms: 4500 });
       } else if (ev.type === 'warp') {
         // P10.1: stepping into a house shows its name.
         const room = areaAt(state, state.player.x, state.player.y);
@@ -579,6 +601,17 @@ async function boot() {
       shownClock = clock;
       clockHud.textContent = clock;
     }
+    const boss = activeBoss(state);
+    const bossKey = boss ? `${boss.name}:${boss.hp}:${boss.phase}` : '';
+    if (bossKey !== shownBoss) {
+      shownBoss = bossKey;
+      bossBar.hidden = !boss;
+      if (boss) {
+        bossName.textContent = boss.name;
+        bossFill.style.width = `${(100 * boss.hp) / boss.maxHp}%`;
+        bossBar.classList.toggle('phase2', boss.phase === 2);
+      }
+    }
     const inv = state.progress.inv;
     const w = equippedWeapon(inv);
     const gearText = `★${inv.money}  ${w ? `${itemDef(w.id).name}${w.lvl ? `+${w.lvl}` : ''} ${w.dur}` : '素手'}  矢${inv.items.arrow ?? 0}`;
@@ -674,6 +707,12 @@ async function boot() {
     },
     rotateHintVisible: () => rotateHint.visible,
     titleVisible: () => !!title && title.visible,
+    /** P10.4 test helpers: the bosses, and a heavy blow to one. */
+    bosses: () => state.enemies.filter((/** @type {any} */ e) => e.boss).map((/** @type {any} */ e) => ({ id: e.bossId, name: e.name, hp: e.hp, maxHp: e.maxHp, phase: e.phase, awake: e.awake, state: e.state, pattern: e.pattern, x: e.x, y: e.y, arena: e.arena })),
+    hurtBoss: (/** @type {string} */ id, /** @type {number} */ damage) => {
+      const e = state.enemies.find((/** @type {any} */ x) => x.boss && x.bossId === id);
+      if (e) hitEnemy(state, e, { owner: 'player', id: `debug${state.tick}-${Math.random()}`, damage, from: { x: e.x, y: e.y + 20 }, kind: 'melee' });
+    },
     progress: () => JSON.parse(JSON.stringify(state.progress)),
     /** P6: inventory, pickups and the menu. */
     inventory: () => JSON.parse(JSON.stringify(state.progress.inv)),

@@ -761,3 +761,36 @@ body {
   color: #ffd28a;
   white-space: nowrap;
 }
+
+/* P10.4: boss health */
+#boss-bar {
+  position: absolute;
+  top: calc(8px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(46vw, 360px);
+  pointer-events: none;
+  text-align: center;
+}
+#boss-bar .boss-name {
+  font-size: 13px;
+  font-weight: bold;
+  color: #e8d8ff;
+  text-shadow: 0 1px 0 #000;
+  margin-bottom: 3px;
+}
+#boss-bar .boss-track {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(10, 6, 20, 0.75);
+  border: 1px solid #6a4590;
+  overflow: hidden;
+}
+#boss-bar .boss-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #9b6fc4, #c9a2f2);
+  transition: width 0.15s;
+}
+#boss-bar.phase2 .boss-fill {
+  background: linear-gradient(90deg, #c43a5a, #ff7a90);
+}
