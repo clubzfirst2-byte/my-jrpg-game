@@ -8,6 +8,7 @@
 ## 遊ぶ・確認する
 
 - 公開版：https://clubzfirst2-byte.github.io/my-jrpg-game/
+- アプリのように使う（P11.1）：iPhone の Safari で開き、「共有 → ホーム画面に追加」。一度開けば、電波がなくても遊べる
 - 計測表示を最初から開く：`?debug=1`
 - 負荷テストのスプライト数を指定：`?bench=1000`
 - 計測レポートの時間（秒）を変更：`?reportSec=60`

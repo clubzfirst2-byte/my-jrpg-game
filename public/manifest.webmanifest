@@ -1,0 +1,17 @@
+{
+  "name": "星脈のワイルズ（仮）",
+  "short_name": "星脈のワイルズ",
+  "description": "島から始まる、見下ろし型のオープンワールド・アクション。",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#16202c",
+  "theme_color": "#16202c",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

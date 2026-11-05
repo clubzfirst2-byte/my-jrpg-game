@@ -22,5 +22,8 @@
     "src/**/*.js",
     "src/globals.d.ts",
     "data/*.json"
+  ],
+  "exclude": [
+    "src/sw/**"
   ]
 }

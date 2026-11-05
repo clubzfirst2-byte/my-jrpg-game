@@ -15,6 +15,7 @@ import { summarize } from './frameStats.js';
  * @property {number} textures
  * @property {number} errors        errors raised during the run
  * @property {Record<string, string|number>} device
+ * @property {{ pageMs: number | null, scriptsMs: number | null, readyMs: number, transferKb: number | null, fromCache: boolean | null }} [load]  P11.1
  */
 
 /** @param {number} v */
@@ -44,7 +45,7 @@ export function buildReport(r) {
 | JS 処理時間（平均） | ${f1(s.avgCpuMs)} ms |
 | 描画呼び出し数（平均） | ${f1(avgDraw)} |
 | テクスチャ数 | ${r.textures} |
-| 計測中のエラー | ${r.errors} 件 |
+| 計測中のエラー | ${r.errors} 件 |${r.load ? `\n| 起動にかかった時間 | ${r.load.readyMs} ms（ページ ${r.load.pageMs ?? '—'} / スクリプト ${r.load.scriptsMs ?? '—'} ms、通信 ${r.load.fromCache ? '0 KB（保存済み）' : `${r.load.transferKb ?? '—'} KB`}） |` : ''}
 | 判定 | ${verdict} |
 
 | 端末情報 | 値 |

@@ -37,6 +37,7 @@ import { FixedStepLoop } from './game/core/fixedStep.js';
 import { createGameState, stepGame, spawnEnemies, respawnPlayer, MAPS } from './game/state.js';
 import { applyProgress, areaAt } from './game/world/features.js';
 import { activeBoss } from './game/entities/bosses.js';
+import { registerServiceWorker, loadTiming } from './platform/pwa.js';
 import { hitEnemy } from './game/combat/damage.js';
 import { envSummary, ignite, material, setWorldTime } from './game/env/envSim.js';
 import { playerWeather } from './game/env/weatherActions.js';
@@ -499,6 +500,7 @@ async function boot() {
       sprites: bench.count,
       textures: textureCount(),
       errors: errorLog.total - r.errorsAtStart,
+      load: timing,
       device: {
         内部解像度: `${resolution.width}×${resolution.height}（目標 ${targetHeight}、×${resolution.scale}）`,
         ...collectDeviceInfo(gl, app.renderer.name),
@@ -823,6 +825,10 @@ async function boot() {
   /** @type {any} */ (window).__debugApi = api;
   // ?tour=60 starts the auto tour right away (with ?map=..., which skips the title).
   if (params.get('tour') && !withTitle) startTour(Number.parseFloat(params.get('tour') ?? '') || 60);
+  // P11.1: how long the start took, and offline play (the service worker).
+  const timing = loadTiming(performance.now());
+  api.loadTiming = () => timing;
+  registerServiceWorker({ onUpdate: () => toast.show('新しい版を受け取りました。次に開いたときから新しくなります', { ms: 4000 }) });
   document.body.dataset.ready = 'true';
 }
 
