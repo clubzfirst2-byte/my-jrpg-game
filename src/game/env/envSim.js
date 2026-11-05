@@ -37,7 +37,7 @@ export const ENV = Object.freeze({
 
 const FLAMMABLE = new Set(['grass', 'tree', 'bramble', 'vine']);
 /** Objects that block movement while they exist. */
-export const SOLID_OBJECTS = new Set(['tree', 'rock', 'bramble', 'crystal', 'jar', 'receiver', 'door', 'brazier', 'campfire', 'anvil', 'crate', 'sconce', 'stone', 'pillar', 'altar', 'cactus']);
+export const SOLID_OBJECTS = new Set(['tree', 'rock', 'bramble', 'crystal', 'jar', 'receiver', 'door', 'brazier', 'campfire', 'anvil', 'crate', 'sconce', 'stone', 'pillar', 'altar', 'cactus', 'house']);
 
 /**
  * @typedef {{ burnMs: number, at: number, wetUntil: number, ashUntil: number }} Cell

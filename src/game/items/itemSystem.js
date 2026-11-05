@@ -17,6 +17,7 @@ import {
 } from './inventory.js';
 import { ignite } from '../env/envSim.js';
 import { tileIndexAt } from '../env/envActions.js';
+import { npcInReach } from '../npc/npcs.js';
 
 /** Items lying in the world come back after one game day. */
 export const PICKUP_REGROW_MS = 24 * 60_000;
@@ -63,6 +64,7 @@ export function placePickups(state) {
   for (const d of state.pickupDefs) {
     const t = picked[d.id];
     if (typeof t === 'number' && state.env.now - t < PICKUP_REGROW_MS) continue;
+    if (typeof t === 'number' && itemDef(d.item).type === 'key') continue; // story items never come back (P9)
     const ts = map.tileSize;
     list.push({ key: d.id, mapId: d.id, item: d.item, count: d.count ?? 1, x: d.tx * ts + ts / 2, y: d.ty * ts + ts - 3, z: map.elev[d.ty * map.width + d.tx] });
   }
@@ -130,8 +132,13 @@ export function itemStep(state) {
     });
   }
 
-  // Something to use nearby: a fire (cooking) or the forge.
+  // Something to use nearby: a villager to talk to (P9), a fire (cooking) or the forge.
   state.nearby = null;
+  state.nearbyNpc = state.npcs ? npcInReach(state) : null;
+  if (state.nearbyNpc) {
+    state.nearby = 'talk';
+    return;
+  }
   for (const [idx, o] of state.env.objectAt) {
     if (o.gone || (o.type !== 'campfire' && o.type !== 'brazier' && o.type !== 'anvil')) continue;
     const ts = state.map.tileSize;

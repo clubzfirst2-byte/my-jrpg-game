@@ -56,6 +56,8 @@ import {
   desertSandTile,
   plainsGrassTile,
   cactusSprite,
+  villagerFrames,
+  houseSprite,
 } from './placeholderArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
@@ -145,12 +147,44 @@ export const REGION_ENTRIES = {
     ...[0, 1, 2].map((i) => ({ key: `desert.sand.${i}`, rows: desertSandTile(i), anchor: TOP_LEFT })),
     { key: 'obj.cactus', rows: cactusSprite(), anchor: FEET },
   ],
-  'region:plains': () => [0, 1, 2, 3].map((i) => ({ key: `plains.grass.${i}`, rows: plainsGrassTile(i), anchor: TOP_LEFT })),
+  'region:plains': () => [
+    ...[0, 1, 2, 3].map((i) => ({ key: `plains.grass.${i}`, rows: plainsGrassTile(i), anchor: TOP_LEFT })),
+    // P9: the village of 風見 (houses and villagers) is in the plains.
+    { key: 'obj.house', rows: houseSprite(), anchor: FEET },
+    ...[1, 2, 3, 4, 5].flatMap((look) => Object.entries(villagerFrames(look)).map(([key, rows]) => ({ key, rows, anchor: FEET }))),
+  ],
 };
 
 /** @param {string} name */
 export function buildRegionPack(name) {
-  return buildPlaceholderPack(REGION_ENTRIES[name](), 64);
+  return buildPlaceholderPack(REGION_ENTRIES[name](), atlasSizeFor(REGION_ENTRIES[name]()));
+}
+
+/** The smallest square atlas (64 .. 1024) the entries fit in, with the same shelf packing. @param {{ rows: string[] }[]} entries */
+export function atlasSizeFor(entries) {
+  for (const size of [64, 128, 256, 512, 1024]) {
+    let x = 0;
+    let y = 0;
+    let shelf = 0;
+    let fits = true;
+    for (const e of entries) {
+      const w = e.rows[0].length;
+      const h = e.rows.length;
+      if (x + w > size) {
+        x = 0;
+        y += shelf + 1;
+        shelf = 0;
+      }
+      if (w > size || y + h > size) {
+        fits = false;
+        break;
+      }
+      x += w + 1;
+      shelf = Math.max(shelf, h);
+    }
+    if (fits) return size;
+  }
+  throw new Error('Too many sprites for one atlas');
 }
 
 /**

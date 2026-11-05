@@ -32,11 +32,13 @@ const OPEN_RANGE = 20;
  * @property {string | null} ability    the selected one
  * @property {number} maxStamina
  * @property {Record<string, Record<string, any>>} [worldDiff]  P8: changed objects, by chunk
+ * @property {Record<string, boolean>} flags   P9: things said and done
+ * @property {Record<string, 'active' | 'done'>} quests  P9: quests started / finished
  */
 
 /** @returns {Progress} */
 export function emptyProgress() {
-  return { openedChests: [], checkpoints: [], checkpoint: null, landmarks: [], maxHp: 12, gates: [], inv: createInventory(), picked: {}, abilities: [], ability: null, maxStamina: 100 };
+  return { openedChests: [], checkpoints: [], checkpoint: null, landmarks: [], maxHp: 12, gates: [], inv: createInventory(), picked: {}, abilities: [], ability: null, maxStamina: 100, flags: {}, quests: {} };
 }
 
 /** Feet position at the center-bottom of a tile. @param {any} map @param {number} tx @param {number} ty */
@@ -201,6 +203,8 @@ export function applyProgress(state, saved) {
   pr.landmarks = [...pr.landmarks];
   pr.gates = [...pr.gates];
   pr.abilities = [...pr.abilities];
+  pr.flags = { ...pr.flags };
+  pr.quests = { ...pr.quests };
   pr.inv = normalizeInventory(saved.inv);
   pr.picked = { ...(saved.picked ?? {}) };
   state.progress = pr;

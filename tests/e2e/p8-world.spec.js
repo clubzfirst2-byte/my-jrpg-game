@@ -26,12 +26,24 @@ test('travelling around the world again and again does not pile up memory', asyn
   const errors = await open(page);
   /** @type {any[]} */
   const laps = [];
+  // Streaming finishes over a few frames: read the numbers once nothing is built or freed anymore.
+  const settled = async () => {
+    let last = '';
+    for (let k = 0; k < 40; k++) {
+      const s = await api(page, 'stream');
+      const key = `${s.built}/${s.freed}/${s.bundles}`;
+      if (key === last) return s;
+      last = key;
+      await page.waitForTimeout(150);
+    }
+    return api(page, 'stream');
+  };
   for (let lap = 0; lap < 4; lap++) {
     for (const [tx, ty] of STOPS) {
       await api(page, 'teleport', tx, ty);
       await page.waitForTimeout(250);
     }
-    laps.push(await api(page, 'stream'));
+    laps.push(await settled());
   }
   // Chunks are built and freed all along, but what is alive stays the same lap after lap.
   expect(laps[3].built).toBeGreaterThan(laps[0].built);

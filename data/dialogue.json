@@ -1,0 +1,357 @@
+{
+  "version": 1,
+  "dialogues": {
+    "elder": {
+      "name": "長老",
+      "start": [
+        {
+          "if": [
+            {
+              "quest": "lost_charm",
+              "state": "done"
+            }
+          ],
+          "goto": "thanks"
+        },
+        {
+          "if": [
+            {
+              "quest": "lost_charm",
+              "state": "ready"
+            }
+          ],
+          "goto": "found"
+        },
+        {
+          "if": [
+            {
+              "quest": "lost_charm",
+              "state": "active"
+            }
+          ],
+          "goto": "waiting"
+        },
+        {
+          "if": [
+            {
+              "flag": "elder_met"
+            }
+          ],
+          "goto": "ask"
+        },
+        {
+          "goto": "intro"
+        }
+      ],
+      "nodes": {
+        "intro": {
+          "text": [
+            "よく来たな、旅の人。ここは風見の村じゃ。",
+            "島から渡ってきたのか？ あの砂の道を歩いてくるとは、たいしたものじゃ。"
+          ],
+          "effects": [
+            {
+              "setFlag": "elder_met"
+            }
+          ],
+          "next": "ask"
+        },
+        "ask": {
+          "text": [
+            "……実は困っておってな。荒野を旅したときに、大事なお守りを落としてしもうた。",
+            "オアシスの近くで休んだのが最後じゃ。探してきてはくれんか？"
+          ],
+          "choices": [
+            {
+              "label": "引き受ける",
+              "effects": [
+                {
+                  "startQuest": "lost_charm"
+                }
+              ],
+              "goto": "accepted"
+            },
+            {
+              "label": "また今度",
+              "goto": "later"
+            }
+          ]
+        },
+        "accepted": {
+          "text": [
+            "ありがたい！ 荒野は暑いぞ。水と食べ物を忘れずにな。"
+          ]
+        },
+        "later": {
+          "text": [
+            "そうか……気が向いたら頼む。"
+          ]
+        },
+        "waiting": {
+          "text": [
+            "お守りは見つかったかの？ オアシスの近くじゃよ。"
+          ]
+        },
+        "found": {
+          "text": [
+            "おお、それじゃ！ 本当にありがとう。",
+            "これは礼じゃ。星の欠片という、不思議な石じゃよ。"
+          ],
+          "effects": [
+            {
+              "completeQuest": "lost_charm"
+            }
+          ],
+          "next": "thanks"
+        },
+        "thanks": {
+          "text": [
+            "お守りが戻って、村の風も穏やかになった気がするわい。"
+          ]
+        }
+      }
+    },
+    "cook": {
+      "name": "宿の料理人",
+      "start": [
+        {
+          "if": [
+            {
+              "quest": "meat_for_cook",
+              "state": "done"
+            }
+          ],
+          "goto": "done"
+        },
+        {
+          "if": [
+            {
+              "quest": "meat_for_cook",
+              "state": "ready"
+            }
+          ],
+          "goto": "ready"
+        },
+        {
+          "if": [
+            {
+              "quest": "meat_for_cook",
+              "state": "active"
+            }
+          ],
+          "goto": "waiting"
+        },
+        {
+          "goto": "intro"
+        }
+      ],
+      "nodes": {
+        "intro": {
+          "text": [
+            "いらっしゃい！ ……と言いたいところだけど、肉が切れちまってね。",
+            "獣の肉を 3 つ持ってきてくれたら、自慢の煮込みをごちそうするよ。"
+          ],
+          "choices": [
+            {
+              "label": "持ってくる",
+              "effects": [
+                {
+                  "startQuest": "meat_for_cook"
+                }
+              ],
+              "goto": "ok"
+            },
+            {
+              "label": "今は無理",
+              "goto": "no"
+            }
+          ]
+        },
+        "ok": {
+          "text": [
+            "頼んだよ！ 草原の獣なら、よく肉を落とすよ。"
+          ]
+        },
+        "no": {
+          "text": [
+            "気が向いたらでいいよ。"
+          ]
+        },
+        "waiting": {
+          "text": [
+            "肉は 3 つだよ。草原の獣を探してごらん。"
+          ]
+        },
+        "ready": {
+          "text": [
+            "おっ、いい肉だね！ さっそく煮込むよ。",
+            "はい、狩人の煮込み。食べると力がわくよ！"
+          ],
+          "effects": [
+            {
+              "completeQuest": "meat_for_cook"
+            }
+          ],
+          "next": "done"
+        },
+        "done": {
+          "text": [
+            "また腹が減ったら寄っておくれ。"
+          ]
+        }
+      }
+    },
+    "guard": {
+      "name": "見張り",
+      "start": [
+        {
+          "if": [
+            {
+              "quest": "windmill_watch",
+              "state": "done"
+            }
+          ],
+          "goto": "done"
+        },
+        {
+          "if": [
+            {
+              "quest": "windmill_watch",
+              "state": "ready"
+            }
+          ],
+          "goto": "ready"
+        },
+        {
+          "if": [
+            {
+              "quest": "windmill_watch",
+              "state": "active"
+            }
+          ],
+          "goto": "waiting"
+        },
+        {
+          "goto": "intro"
+        }
+      ],
+      "nodes": {
+        "intro": {
+          "text": [
+            "見張りの俺は村を離れられない。",
+            "東の丘の風車跡に、変わったことがないか見てきてくれないか？"
+          ],
+          "choices": [
+            {
+              "label": "見てくる",
+              "effects": [
+                {
+                  "startQuest": "windmill_watch"
+                }
+              ],
+              "goto": "ok"
+            },
+            {
+              "label": "断る",
+              "goto": "no"
+            }
+          ]
+        },
+        "ok": {
+          "text": [
+            "助かる。丘の上の古い風車だ。高い所からならすぐ見つかる。"
+          ]
+        },
+        "no": {
+          "text": [
+            "そうか。"
+          ]
+        },
+        "waiting": {
+          "text": [
+            "風車跡は東の丘の上だ。"
+          ]
+        },
+        "ready": {
+          "text": [
+            "見てきてくれたか！ 異常なしなら一安心だ。",
+            "礼に矢を持っていけ。"
+          ],
+          "effects": [
+            {
+              "completeQuest": "windmill_watch"
+            }
+          ],
+          "next": "done"
+        },
+        "done": {
+          "text": [
+            "今日も村は平和だ。"
+          ]
+        }
+      }
+    },
+    "merchant": {
+      "name": "雑貨屋",
+      "start": [
+        {
+          "goto": "hello"
+        }
+      ],
+      "nodes": {
+        "hello": {
+          "text": [
+            "いらっしゃい！ 何か入り用かい？"
+          ],
+          "choices": [
+            {
+              "label": "見せて",
+              "effects": [
+                {
+                  "openShop": "general"
+                }
+              ]
+            },
+            {
+              "label": "またね"
+            }
+          ]
+        }
+      }
+    },
+    "child": {
+      "name": "村の子",
+      "start": [
+        {
+          "if": [
+            {
+              "flag": "child_told"
+            }
+          ],
+          "goto": "again"
+        },
+        {
+          "goto": "intro"
+        }
+      ],
+      "nodes": {
+        "intro": {
+          "text": [
+            "ねえねえ、光る石柱って知ってる？",
+            "中に入ると、ふしぎな力がもらえるんだって！"
+          ],
+          "effects": [
+            {
+              "setFlag": "child_told"
+            }
+          ]
+        },
+        "again": {
+          "text": [
+            "いつか、ぼくも島に渡ってみたいなあ。"
+          ]
+        }
+      }
+    }
+  }
+}

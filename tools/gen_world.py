@@ -34,7 +34,7 @@ class Region:
         self.id, self.name, self.seed = rid, name, seed
         self.g = [['~'] * RW for _ in range(RH)]
         self.h = [[0] * RW for _ in range(RH)]
-        self.features = {'enemies': [], 'chests': [], 'checkpoints': [], 'landmarks': [], 'pickups': [], 'envObjects': [], 'campfires': []}
+        self.features = {'enemies': [], 'chests': [], 'checkpoints': [], 'landmarks': [], 'pickups': [], 'envObjects': [], 'campfires': [], 'npcs': []}
 
     def land(self, edge):
         # Land everywhere except a sea border (`edge` tiles) on the west, east and south.
@@ -63,6 +63,9 @@ class Region:
         if self.g[y][x] not in '.s=': return False
         if lvl is not None and self.h[y][x] != lvl: return False
         taken = [(o['tx'], o['ty']) for lst in self.features.values() for o in lst if isinstance(o, dict) and 'tx' in o]
+        # Houses (P9) cover 3 x 2 tiles: their anchor and the tiles beside / behind it.
+        for o in self.features['envObjects']:
+            if o['type'] == 'house' and abs(x - o['tx']) <= 1 and 0 <= o['ty'] - y <= 1: return False
         return (x, y) not in taken
 
     def near_free(self, x0, y0, lvl=0):
@@ -111,7 +114,28 @@ for y in range(RH):
     for x in range(RW):
         if P.g[y][x] == '.' and P.h[y][x] == 0 and hsh(x, y, 45) < 0.05: P.g[y][x] = 'T'
         elif P.g[y][x] == '.' and P.h[y][x] == 16 and hsh(x, y, 46) < 0.08: P.g[y][x] = 'T'
-P.features['checkpoints'].append({'id': 'plains', **dict(zip(('tx', 'ty'), P.near_free(50, 12)))})
+# --- P9: 風見の村 (a village by the causeway): houses, villagers, a well-trodden square ---
+for y in range(9, 24):
+    for x in range(11, 38):
+        if P.g[y][x] != '~':
+            P.g[y][x] = '.'; P.h[y][x] = 0
+for x in range(11, 47):
+    P.g[16][x] = '='
+HOUSES = [(16, 13), (24, 13), (32, 13), (18, 21)]
+for (x, y) in HOUSES:
+    P.features['envObjects'].append({'type': 'house', 'tx': x, 'ty': y})
+    for yy in (y - 1, y):
+        for xx in (x - 1, x, x + 1):
+            assert P.g[yy][xx] in '.=', ('house on', xx, yy)
+P.features['npcs'] = [
+    {'id': 'elder', 'name': '長老', 'dialogue': 'elder', 'look': 1, 'tx': 20, 'ty': 17},
+    {'id': 'cook', 'name': '宿の料理人', 'dialogue': 'cook', 'look': 2, 'tx': 26, 'ty': 15},
+    {'id': 'guard', 'name': '見張り', 'dialogue': 'guard', 'look': 3, 'tx': 37, 'ty': 17},
+    {'id': 'merchant', 'name': '雑貨屋', 'dialogue': 'merchant', 'look': 4, 'tx': 30, 'ty': 18},
+    {'id': 'child', 'name': '村の子', 'dialogue': 'child', 'look': 5, 'tx': 23, 'ty': 22},
+]
+P.features['landmarks'].append({'id': 'village', 'name': '風見の村', 'tx': 24, 'ty': 15, 'always': False})
+P.features['checkpoints'].append({'id': 'plains', **dict(zip(('tx', 'ty'), P.near_free(42, 14)))})
 for k, (x, y) in enumerate([(40, 40), (60, 58), (30, 75), (66, 80)]):
     tx, ty = P.near_free(x, y)
     P.features['enemies'].append({'kind': 'beast', 'tx': tx, 'ty': ty})
@@ -155,6 +179,9 @@ for (x, y) in [(30, 40), (60, 45), (40, 80)]:
 for (x, y) in [(70, 80), (20, 55)]:
     tx, ty = S.near_free(x, y)
     S.features['enemies'].append({'kind': 'beast', 'tx': tx, 'ty': ty})
+# P9: the elder's lost charm, by the oasis.
+cx_, cy_ = S.near_free(43, 66)
+S.features['pickups'].append({'id': 'charm', 'item': 'lost_charm', 'tx': cx_, 'ty': cy_})
 for k, (x, y, item) in enumerate([(38, 64, 'red_berry'), (64, 40, 'ember_pepper'), (25, 26, 'arrow'), (80, 60, 'ember_pepper')]):
     tx, ty = S.near_free(x, y, S.h[y][x] if S.g[y][x] == 's' else 0)
     S.features['pickups'].append({'id': f'desert{k}', 'item': item, 'tx': tx, 'ty': ty, **({'count': 5} if item == 'arrow' else {})})

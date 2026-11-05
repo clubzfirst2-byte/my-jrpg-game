@@ -28,6 +28,7 @@ import { areaAt } from './world/features.js';
 import { ISLAND } from './world/maps/island.js';
 import { WORLD } from './world/world.js';
 import { objectBaseline } from './world/worldDiff.js';
+import { createNpcs, stepNpcs } from './npc/npcs.js';
 import { TEST_FIELD } from './world/maps/testField.js';
 import { HEIGHT_TEST } from './world/maps/heightTest.js';
 
@@ -69,7 +70,8 @@ const ENEMY_CORPSE_MS = 600;
  * @property {any[]} pickupDefs   items placed by the map (P6)
  * @property {import('./items/itemSystem.js').Pickup[]} pickups  items lying in the world now
  * @property {any[]} landedHits   player sword hits that landed this step
- * @property {'cook' | 'forge' | null} nearby  something to use in reach
+ * @property {'cook' | 'forge' | 'talk' | null} nearby  something to use in reach
+ * @property {import('./npc/npcs.js').Npc | null} [nearbyNpc]  P9: the villager in front
  * @property {number} respawns
  * @property {boolean} [pickupsStale]
  * @property {import('./puzzles/switches.js').SwitchDef[]} switches  P7
@@ -81,6 +83,9 @@ const ENEMY_CORPSE_MS = 600;
  * @property {boolean} abilityHeld
  * @property {import('./world/world.js').RegionInfo[]} regions  P8
  * @property {any[]} objectBaseline  P8: objects as the map made them (for saving differences)
+ * @property {import('./npc/npcs.js').Npc[]} npcs  P9: villagers
+ * @property {{ id: string, npc: string | null, node: string, line: number } | null} dialogue  P9: the conversation going on
+ * @property {string | null} shop  P9: the shop open now
  */
 
 /** @param {import('./world/tilemap.js').MapDef} [def] @returns {GameState} */
@@ -129,14 +134,22 @@ export function createGameState(def = HEIGHT_TEST) {
     abilityHeld: false,
     regions: f.regions ?? [],
     objectBaseline: [],
+    npcs: [],
+    dialogue: null,
+    shop: null,
   };
   placeFeatureSolids(state);
   // P4: environment objects join the map's objects (the view draws them all the same way).
   for (const o of f.envObjects ?? []) {
     map.objects.push({ ...o });
     if (SOLID_OBJECTS.has(o.type)) map.solid[o.ty * map.width + o.tx] = 1;
+    // P9: a house covers 3 x 2 tiles (its door tile at the bottom middle is the anchor).
+    if (o.type === 'house') {
+      for (let dy = -1; dy <= 0; dy++) for (let dx = -1; dx <= 1; dx++) map.solid[(o.ty + dy) * map.width + o.tx + dx] = 1;
+    }
   }
   state.objectBaseline = objectBaseline(map.objects);
+  state.npcs = createNpcs(map, f.npcs ?? []);
   const campfires = state.campfires.map((c) => ({ type: 'campfire', tx: c.tx, ty: c.ty }));
   state.env = createEnv(map, [...map.objects, ...campfires], 1, CLOCK.startHour * CLOCK.hourMs);
   // P8: dry regions (the desert) never get rain.
@@ -225,6 +238,7 @@ export function stepGame(state, input) {
   pushApart(state);
   updateProjectiles(state, enemyDt);
   itemStep(state);
+  stepNpcs(state, STEP_SEC);
   stepAbilities(state);
   stepSwitches(state);
   learnAbilities(state);

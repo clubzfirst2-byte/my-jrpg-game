@@ -20,6 +20,7 @@ import { EnvView } from './envView.js';
 import { WeatherView } from './weatherView.js';
 import { ItemView } from './itemView.js';
 import { PuzzleView } from './puzzleView.js';
+import { NpcView } from './npcView.js';
 import { regionAt } from '../game/world/world.js';
 
 /** Chunk size in tiles (P8). */
@@ -120,6 +121,7 @@ export class GameView {
     );
     this.envVersion = -1;
     this.items = new ItemView((key) => this.makeSprite(key), this.actors);
+    this.npcs = new NpcView(assets, (key) => this.makeSprite(key), this.actors);
     this.puzzles = new PuzzleView(
       (key) => this.makeSprite(key),
       (key) => this.assets.texture(key),
@@ -325,6 +327,8 @@ export class GameView {
         this.objectSprites.delete(o);
       }
     }
+    // Villagers use the plains art: drop their sprites before that bundle can be released.
+    if (c.bundles.includes('region:plains')) this.npcs.clear();
     for (const b of c.bundles) this.assets.unload(b);
     this.chunkStats.freed++;
     void map;
@@ -377,6 +381,7 @@ export class GameView {
       } else if (!this.bundlesLoading.has(b)) {
         const stillWanted = this.regions.some((r) => r.bundle === b && this.regionNear(r, origin, viewW, viewH));
         if (!stillWanted) {
+          if (b === 'region:plains') this.npcs.clear();
           this.assets.unload(b);
           this.preloaded.delete(b);
         }
@@ -568,6 +573,7 @@ export class GameView {
     this.env.update(state, o, this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom, timeSec);
     this.weather.update(state, o, this.camera.zoom, this.boundsArea ? areaAt(state, state.player.x, state.player.y) : null, timeSec, dtSec);
     this.items.update(state, timeSec);
+    this.npcs.update(state, alpha, { x, y });
     this.puzzles.update(state, timeSec);
     this.features.update(
       state,

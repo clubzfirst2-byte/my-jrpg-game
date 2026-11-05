@@ -40,3 +40,15 @@ describe('placeholder pack', () => {
     }
   });
 });
+
+describe('region bundles (P8, P9)', async () => {
+  const { REGION_ENTRIES, atlasSizeFor } = await import('../../src/view/assets/placeholderPack.js');
+  it('every region bundle is valid and fits an atlas', () => {
+    for (const [name, make] of Object.entries(REGION_ENTRIES)) {
+      const entries = make();
+      for (const e of entries) for (const r of e.rows) expect(r.length, `${name} ${e.key}`).toBe(e.rows[0].length);
+      for (const e of entries) for (const r of e.rows) for (const c of r) expect(c === '.' || c in PALETTE, `${name} ${e.key} "${c}"`).toBe(true);
+      expect(atlasSizeFor(entries)).toBeLessThanOrEqual(512);
+    }
+  });
+});

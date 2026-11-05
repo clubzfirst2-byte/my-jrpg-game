@@ -1042,3 +1042,57 @@ export function cactusSprite() {
     '............',
   ];
 }
+
+// ---- P9 villagers ----
+
+/** Outfits: [tunic, tunic dark, hair] palette letters per look. */
+const LOOKS = [
+  ['c', 'C', 'H'], // 0: like the player
+  ['B', 'Q', 'v'], // 1: elder (grey robe, white hair)
+  ['X', 'B', 'T'], // 2: cook (white apron)
+  ['i', 'Z', 'k'], // 3: guard (red coat)
+  ['g', 'd', 'N'], // 4: merchant (green)
+  ['y', 'A', 'f'], // 5: child (yellow)
+];
+
+/** Villager walk frames (same shapes as the player, another outfit). @param {number} look */
+export function villagerFrames(look) {
+  const [t, td, hair] = LOOKS[look] ?? LOOKS[0];
+  /** @type {Record<string, string[]>} */
+  const out = {};
+  for (const [key, rows] of Object.entries(playerFrames())) {
+    const name = key.replace('player.', `npc.${look}.`);
+    const swap = /** @type {Record<string, string>} */ ({ c: t, C: td, H: hair });
+    out[name] = rows.map((r) => [...r].map((ch) => swap[ch] ?? ch).join(''));
+  }
+  return out;
+}
+
+/** 48x40 village house (3 tiles wide; the door is on the bottom middle tile). */
+export function houseSprite() {
+  const roof = [];
+  for (let y = 0; y < 18; y++) {
+    const inset = Math.max(0, 8 - y);
+    let row = '.'.repeat(inset);
+    for (let x = inset; x < 48 - inset; x++) {
+      const edge = x === inset || x === 47 - inset || y === 0 || y === 17;
+      row += edge ? 'k' : (x + y) % 6 === 0 ? 'F' : y % 3 === 0 ? 'E' : 'f';
+    }
+    row += '.'.repeat(inset);
+    roof.push(row);
+  }
+  const wall = [];
+  for (let y = 0; y < 22; y++) {
+    let row = '';
+    for (let x = 0; x < 48; x++) {
+      const door = x >= 19 && x <= 28 && y >= 8;
+      const window1 = (x >= 6 && x <= 12) || (x >= 35 && x <= 41);
+      if (x === 0 || x === 47 || y === 21) row += 'k';
+      else if (door) row += x === 19 || x === 28 || y === 8 ? 'k' : x === 26 && y === 15 ? 'Y' : 'T';
+      else if (window1 && y >= 5 && y <= 10) row += y === 5 || y === 10 || x === 6 || x === 12 || x === 35 || x === 41 ? 'k' : 'J';
+      else row += y % 5 === 4 ? 'A' : 'v';
+    }
+    wall.push(row);
+  }
+  return [...roof, ...wall];
+}
