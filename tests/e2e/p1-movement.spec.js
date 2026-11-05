@@ -12,6 +12,8 @@ async function open(page, query = '') {
 
 const player = (page) => page.evaluate(() => window.__debugApi.player());
 const tick = (page) => page.evaluate(() => window.__debugApi.tick());
+/** The player's x and the logic tick, read in the same frame. */
+const xAtTick = (page) => page.evaluate(() => ({ x: window.__debugApi.player().x, t: window.__debugApi.tick() }));
 
 test('renders the test field and the player', async ({ page }, testInfo) => {
   const errors = await open(page);
@@ -73,15 +75,13 @@ test('dash button makes the player faster', async ({ page }) => {
     await page.mouse.move(ox + 60, oy, { steps: 4 });
     if (dash) await page.locator('#dash-button').dispatchEvent('pointerdown', { pointerId: 99 });
     await page.waitForTimeout(300); // reach full speed
-    const a = await player(page);
-    const t0 = await tick(page);
+    const a = await xAtTick(page);
     await page.waitForTimeout(300);
-    const b = await player(page);
-    const t1 = await tick(page);
+    const b = await xAtTick(page);
     await page.mouse.up();
     if (dash) await page.locator('#dash-button').dispatchEvent('pointerup', { pointerId: 99 });
     await page.waitForTimeout(300);
-    return (b.x - a.x) / (t1 - t0);
+    return (b.x - a.x) / (b.t - a.t);
   };
   const walk = await speed(false);
   const dash = await speed(true);

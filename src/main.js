@@ -218,9 +218,22 @@ async function boot() {
     },
   });
   // P9: conversations and the shop (the game waits while either is open).
+  /**
+   * Moves the conversation on. When it ends, input is cleared right here, so the press that closed
+   * it does not carry into the world, while keys pressed after it are kept.
+   * @param {number} [choice]
+   */
+  const advanceTalk = (choice) => {
+    advance(state, choice);
+    if (!inTalk()) {
+      input.clear();
+      loop.reset();
+      wasTalking = false;
+    }
+  };
   const dialogueBox = new DialogueBox(uiRoot, {
-    next: () => advance(state),
-    choose: (i) => advance(state, i),
+    next: () => advanceTalk(),
+    choose: (i) => advanceTalk(i),
   });
   const shopMenu = new ShopMenu(uiRoot, {
     getState: () => state,
@@ -236,7 +249,7 @@ async function boot() {
   window.addEventListener('keydown', (e) => {
     if (state.dialogue && (e.code === 'KeyJ' || e.code === 'Enter' || e.code === 'Space')) {
       e.preventDefault();
-      if (!dialogueView(state)?.choices) advance(state);
+      if (!dialogueView(state)?.choices) advanceTalk();
       return;
     }
     if ((e.code === 'KeyE' || e.code === 'Tab') && !inTitle && !paused) {
