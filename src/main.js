@@ -13,6 +13,7 @@ import { createRenderer, resizeRenderer } from './view/renderer.js';
 import { RESOLUTION_CANDIDATES, DEFAULT_TARGET_HEIGHT, nextCandidate } from './view/resolution.js';
 import { AssetManager } from './view/assets/assetManager.js';
 import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES } from './view/assets/placeholderPack.js';
+import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
 import { InputManager } from './platform/inputManager.js';
@@ -110,9 +111,9 @@ async function boot() {
 
   // --- assets / logic / view ---
   const assets = new AssetManager();
-  assets.register('placeholder', () => buildPlaceholderPack());
+  assets.register('placeholder', () => buildPlaceholderPack(undefined, ART_OVERRIDES));
   // P8: each region's art is its own bundle, loaded by the view near the region.
-  for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name));
+  for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name, ART_OVERRIDES));
   await assets.load('placeholder');
   performance.mark('art');
   // Without ?map= the game starts at the title on the first island and saves its progress.

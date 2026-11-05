@@ -252,21 +252,23 @@ for (const [region, kind] of /** @type {const} */ ([['region:forest', 'root'], [
   REGION_ENTRIES[region] = () => [...make(), ...bossFrames(kind)];
 }
 
-/** @param {string} name */
-export function buildRegionPack(name) {
-  return buildPlaceholderPack(REGION_ENTRIES[name](), atlasSizeFor(REGION_ENTRIES[name]()));
+/** @param {string} name @param {Map<string, string>} [overrides] */
+export function buildRegionPack(name, overrides) {
+  return buildPlaceholderPack(REGION_ENTRIES[name](), overrides);
 }
 
-/** The smallest square atlas (64 .. 1024) the entries fit in, with the same shelf packing. @param {{ rows: string[] }[]} entries */
+/** Width and height of an entry: its PNG when one replaces it, else the placeholder. @param {{ rows: string[], image?: { width: number, height: number } }} e */
+const sizeOf = (e) => (e.image ? { w: e.image.width, h: e.image.height } : { w: e.rows[0].length, h: e.rows.length });
+
+/** The smallest square atlas (64 .. 2048) the entries fit in, with the same shelf packing. @param {{ rows: string[], image?: { width: number, height: number } }[]} entries */
 export function atlasSizeFor(entries) {
-  for (const size of [64, 128, 256, 512, 1024]) {
+  for (const size of [64, 128, 256, 512, 1024, 2048]) {
     let x = 0;
     let y = 0;
     let shelf = 0;
     let fits = true;
     for (const e of entries) {
-      const w = e.rows[0].length;
-      const h = e.rows.length;
+      const { w, h } = sizeOf(e);
       if (x + w > size) {
         x = 0;
         y += shelf + 1;
@@ -285,11 +287,66 @@ export function atlasSizeFor(entries) {
 }
 
 /**
+ * Tiles and cliff faces sit on the 16 px grid, so their size is fixed; other sprites may be any
+ * size (they are placed by their anchor: feet, or centre for effects).
+ * @param {[number, number]} anchor
+ */
+export const mustKeepSize = (anchor) => anchor[0] === 0 && anchor[1] === 0;
+
+/** @param {string} url @returns {Promise<HTMLImageElement>} */
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Could not load ${url}`));
+    img.src = url;
+  });
+}
+
+/**
+ * P11.5: puts the real art (src/art/<name>.png) in place of the placeholder where there is one.
+ * A tile of the wrong size is left as the placeholder (it would not fit the grid) and reported.
+ * @param {{ key: string, rows: string[], anchor: [number, number] }[]} entries
+ * @param {Map<string, string>} overrides logical name → PNG URL (artOverrides.js)
+ * @returns {Promise<{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement }[]>}
+ */
+export async function withOverrides(entries, overrides) {
+  if (overrides.size === 0) return entries;
+  return Promise.all(
+    entries.map(async (e) => {
+      const url = overrides.get(e.key);
+      if (!url) return e;
+      try {
+        const image = await loadImage(url);
+        if (mustKeepSize(e.anchor) && (image.width !== e.rows[0].length || image.height !== e.rows.length)) {
+          console.warn(`art: ${e.key}.png must be ${e.rows[0].length}x${e.rows.length} (is ${image.width}x${image.height}); using the placeholder`);
+          return e;
+        }
+        return { ...e, image };
+      } catch (err) {
+        console.warn(`art: ${String(err)}; using the placeholder`);
+        return e;
+      }
+    }),
+  );
+}
+
+/**
  * @param {{ key: string, rows: string[], anchor: [number, number] }[]} [entries]
- * @param {number} [atlasSize]
+ * @param {Map<string, string>} [overrides] the real art (P11.5), by logical name
+ * @returns {Promise<import('./assetManager.js').BuiltBundle>}
+ */
+export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map()) {
+  const all = await withOverrides(entries, overrides);
+  return packAtlas(all, atlasSizeFor(all));
+}
+
+/**
+ * @param {{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement }[]} entries
+ * @param {number} atlasSize
  * @returns {import('./assetManager.js').BuiltBundle}
  */
-export function buildPlaceholderPack(entries = placeholderEntries(), atlasSize = 256) {
+function packAtlas(entries, atlasSize) {
   const ATLAS = atlasSize;
   const PAD = 1;
   const canvas = document.createElement('canvas');
@@ -303,14 +360,20 @@ export function buildPlaceholderPack(entries = placeholderEntries(), atlasSize =
   let y = 0;
   let shelf = 0;
   for (const e of entries) {
-    const w = e.rows[0].length;
-    const h = e.rows.length;
+    const { w, h } = sizeOf(e);
     if (x + w > ATLAS) {
       x = 0;
       y += shelf + PAD;
       shelf = 0;
     }
     if (y + h > ATLAS) throw new Error('Placeholder atlas is full');
+    if (e.image) {
+      ctx.drawImage(e.image, x, y);
+      rects.set(e.key, { x, y, w, h });
+      x += w + PAD;
+      shelf = Math.max(shelf, h);
+      continue;
+    }
     for (let py = 0; py < h; py++) {
       for (let px = 0; px < w; px++) {
         const c = e.rows[py][px];
