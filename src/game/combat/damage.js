@@ -15,6 +15,9 @@ import { direction, fromFront } from './hitbox.js';
  * @property {'fire' | 'shock'} [element]  P6: fire / electricity (armor traits and buffs can stop them)
  */
 
+/** P11.3: how hard hits land, by difficulty (quarter hearts are rounded, never below 1). */
+export const DIFFICULTY = Object.freeze({ easy: 0.5, normal: 1, hard: 1.5 });
+
 /**
  * Applies an enemy hit to the player.
  * @param {any} state @param {Hit} hit
@@ -43,7 +46,8 @@ export function hitPlayer(state, hit) {
   }
   // Armor: half its defense (rounded down) off every hit, one more with a defense dish; never below 1.
   const cut = Math.floor((p.defense ?? 0) / 2) + (p.defenseUp ? 1 : 0);
-  p.hp = Math.max(0, p.hp - Math.max(1, hit.damage - cut));
+  const scaled = Math.max(1, Math.round(hit.damage * (DIFFICULTY[/** @type {'normal'} */ (state.difficulty)] ?? 1)));
+  p.hp = Math.max(0, p.hp - Math.max(1, scaled - cut));
   p.invulnMs = COMBAT.hurtInvulnMs;
   knockback(p, hit.from, hit.knock ?? 1);
   state.events.push({ type: 'hurt', tick: state.tick, x: p.x, y: p.y });

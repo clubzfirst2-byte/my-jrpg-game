@@ -5,7 +5,7 @@
 export class PauseOverlay {
   /**
    * @param {HTMLElement} root
-   * @param {{ onPauseRequest: () => void, onResume: () => void, onVolume?: (kind: 'bgm' | 'sfx') => void, volumes?: () => { bgm: number, sfx: number } }} handlers
+   * @param {{ onPauseRequest: () => void, onResume: () => void, onVolume?: (kind: 'bgm' | 'sfx') => void, volumes?: () => { bgm: number, sfx: number }, onSettings?: () => void }} handlers
    */
   constructor(root, handlers) {
     this.handlers = handlers;
@@ -45,6 +45,16 @@ export class PauseOverlay {
     };
     this.bgmButton = volumeButton('bgm');
     this.sfxButton = volumeButton('sfx');
+    // P11.3: the settings screen.
+    const settings = document.createElement('button');
+    settings.type = 'button';
+    settings.id = 'open-settings';
+    settings.textContent = '設定';
+    settings.addEventListener('click', (e) => {
+      e.stopPropagation();
+      handlers.onSettings?.();
+    });
+    sound.append(settings);
     this.overlay.append(title, this.message, sound, resume);
     this.refresh();
     this.overlay.addEventListener('click', () => handlers.onResume());

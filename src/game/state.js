@@ -47,6 +47,7 @@ const ENEMY_CORPSE_MS = 600;
 /**
  * @typedef {object} GameState
  * @property {number} tick
+ * @property {'easy' | 'normal' | 'hard'} difficulty  P11.3: how hard enemy hits land (a player setting)
  * @property {import('./env/weather.js').SeasonId | null} season  P10.2: the season the world is dressed for
  * @property {string} [spawnSeason]  the season the enemies were placed for
  * @property {import('./world/tilemap.js').TileMap} map
@@ -104,6 +105,7 @@ export function createGameState(def = HEIGHT_TEST) {
   const state = {
     tick: 0,
     season: null,
+    difficulty: 'normal',
     map,
     player,
     enemies: [],
