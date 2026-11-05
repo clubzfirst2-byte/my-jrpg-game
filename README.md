@@ -15,7 +15,7 @@
 - マップを選ぶ：`?map=world`（世界全体）/ `?map=island`（最初の島だけ）/ `?map=height`（高さ検証マップ）/ `?map=field`（P1 の平らなフィールド）。`?map=` を付けるとタイトル画面を飛ばし、**保存もしない**（確認・テスト用）
 - カメラのズーム倍率：`?zoom=2`（1〜4。確認用）
 - 長時間プレイ測定：計測パネルの「自動巡回 60分」、または `?map=world&tour=60&debug=1`（終わるとレポートが出る）
-- 時刻・天候を指定：`?time=22`（時）/ `?weather=rain`（`clear` / `cloudy` / `rain` / `storm`）/ `?light=0`（ライトを消す）
+- 時刻・天候・季節を指定：`?time=22`（時）/ `?weather=rain`（`clear` / `cloudy` / `rain` / `storm` / `snow`）/ `?season=winter`（`spring` / `summer` / `autumn` / `winter`）/ `?light=0`（ライトを消す）
 - フレームレートを制限：`?fps=30`（30fps でもゲームの速さが変わらないことの確認用）
 
 ## 操作

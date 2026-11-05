@@ -13,7 +13,7 @@
 // Pure logic: no DOM, no PixiJS.
 import { Ground } from '../world/tilemap.js';
 import { roll } from '../core/hashRandom.js';
-import { WEATHER, weatherAt, rainWetAt, isRaining } from './weather.js';
+import { WEATHER, weatherAt, rainWetAt, isWet } from './weather.js';
 
 export const ENV = Object.freeze({
   tickMs: 100,
@@ -335,7 +335,7 @@ export function runCatchUp(env, map, budget) {
     const inJob = new Set(job.regions);
     const list = [...env.burning].filter((i) => inJob.has(regionOf(env, map, i))).sort((a, b) => a - b);
     const w = weatherNow(env, T);
-    const rain = isRaining(w);
+    const rain = isWet(w);
     for (const i of list) {
       const c = /** @type {Cell} */ (env.cells.get(i));
       const r = regionOf(env, map, i);
@@ -401,7 +401,7 @@ function tick(env, map) {
   env.cursor += n;
   const k = Math.floor(t / ENV.tickMs);
   const w = weatherNow(env, t);
-  const rain = isRaining(w);
+  const rain = isWet(w);
   for (let j = 0; j < n; j++) {
     const i = all[(startAt + j) % all.length];
     const c = /** @type {Cell} */ (env.cells.get(i));

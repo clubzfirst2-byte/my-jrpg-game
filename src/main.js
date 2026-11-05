@@ -41,7 +41,7 @@ import { playerWeather } from './game/env/weatherActions.js';
 import { regionAt } from './game/world/world.js';
 import { computeWorldDiff } from './game/world/worldDiff.js';
 import { TOUR, TOUR_STOPS, tourReport } from './debug/tour.js';
-import { clockText, CLOCK } from './game/env/weather.js';
+import { clockText, CLOCK, SEASON, seasonAt, inSeason } from './game/env/weather.js';
 import { groundHeightUnder } from './game/physics/collision.js';
 import { GAME_TITLE, PHASE } from './game/version.js';
 
@@ -117,8 +117,11 @@ async function boot() {
   // Test / check helpers: ?time=20 (hour) and ?weather=rain|storm|cloudy|clear.
   const timeParam = Number.parseFloat(params.get('time') ?? '');
   if (Number.isFinite(timeParam)) setWorldTime(state.env, timeParam * CLOCK.hourMs);
+  // P10.2: ?season=spring|summer|autumn|winter (the first day of it, same hour).
+  const seasonParam = params.get('season');
+  if (seasonParam && SEASON.order.includes(/** @type {any} */ (seasonParam))) setWorldTime(state.env, inSeason(state.env.now, /** @type {any} */ (seasonParam)));
   const weatherParam = params.get('weather');
-  if (weatherParam && ['clear', 'cloudy', 'rain', 'storm'].includes(weatherParam)) state.env.weatherOverride = /** @type {any} */ (weatherParam);
+  if (weatherParam && ['clear', 'cloudy', 'rain', 'storm', 'snow'].includes(weatherParam)) state.env.weatherOverride = /** @type {any} */ (weatherParam);
   if (params.get('light') === '0') view.weather.enabled = false;
   if (params.get('chunks') === 'all') view.loadAll = true; // P8: draw the whole map at once (comparison)
   const zoomParam = Number.parseFloat(params.get('zoom') ?? '');
@@ -153,7 +156,7 @@ async function boot() {
   clockHud.id = 'hud-clock';
   uiRoot.append(clockHud);
   let shownClock = '';
-  const WEATHER_NAMES = { clear: '晴れ', cloudy: 'くもり', rain: '雨', storm: '雷雨' };
+  const WEATHER_NAMES = { clear: '晴れ', cloudy: 'くもり', rain: '雨', storm: '雷雨', snow: '雪' };
 
   // --- save (DESIGN.md 2.6) ---
   const store = new SaveStore(__APP_VERSION__);
@@ -292,6 +295,8 @@ async function boot() {
         toast.show(`クエスト「${questDef(ev.id).name}」を受けた（持ち物の「クエスト」で確認）`, { ms: 3500 });
       } else if (ev.type === 'questDone') {
         toast.show(`クエスト「${questDef(ev.id).name}」達成！`, { ms: 3500 });
+      } else if (ev.type === 'season') {
+        toast.show(`${SEASON.names[/** @type {string} */ (ev.id)]}になった`, { ms: 3000 });
       } else if (ev.type === 'warp') {
         // P10.1: stepping into a house shows its name.
         const room = areaAt(state, state.player.x, state.player.y);
@@ -568,7 +573,8 @@ async function boot() {
     }
     view.render(state, alpha, visualTime ?? performance.now() / 1000, ticker.elapsedMS / 1000);
     hud.update(state.player.hp, state.player.maxHp);
-    const clock = `${clockText(state.env.now)} ${WEATHER_NAMES[playerWeather(state).kind]}`;
+    const season = seasonAt(state.env.now);
+    const clock = `${season.name} ${season.day}日目 ${clockText(state.env.now)} ${WEATHER_NAMES[playerWeather(state).kind]}`;
     if (clock !== shownClock) {
       shownClock = clock;
       clockHud.textContent = clock;
@@ -726,7 +732,10 @@ async function boot() {
       return { material: material(state.env, state.map, i), burning: state.env.burning.has(i), solid: state.map.solid[i] === 1 };
     },
     /** P5: time of day and weather. */
-    weather: () => ({ ...playerWeather(state), clock: clockText(state.env.now), lightOn: view.weather.lightOn, lightMs: view.weather.lightMs, rainVisible: view.weather.rain.visible }),
+    weather: () => ({ ...playerWeather(state), clock: clockText(state.env.now), lightOn: view.weather.lightOn, lightMs: view.weather.lightMs, rainVisible: view.weather.rain.visible, snowVisible: view.weather.snow.visible }),
+    /** P10.2: jump to the first day of a season (same hour). */
+    setSeason: (/** @type {any} */ id) => setWorldTime(state.env, inSeason(state.env.now, id)),
+    season: () => ({ ...seasonAt(state.env.now), view: view.season }),
     setHour: (/** @type {number} */ h) => setWorldTime(state.env, Math.floor(state.env.now / CLOCK.dayMs) * CLOCK.dayMs + h * CLOCK.hourMs),
     setWeather: (/** @type {any} */ kind) => {
       state.env.weatherOverride = kind;

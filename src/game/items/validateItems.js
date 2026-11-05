@@ -1,6 +1,7 @@
 // @ts-check
 // Integrity check of the item data (P6, DESIGN.md roadmap: "データの整合性チェック"). Used by the unit
 // tests and by `npm run check:data` (CI). Returns a list of problems; empty means valid.
+import { SEASON } from '../env/weather.js';
 
 const TYPES = ['weapon', 'bow', 'ammo', 'armor', 'material', 'food', 'key'];
 const SLOTS = ['head', 'body', 'legs'];
@@ -10,7 +11,7 @@ const ELEMENTS = ['fire'];
 
 /**
  * @param {any} data contents of data/items.json
- * @param {{ chests?: any[], pickups?: any[] }} [map] references from a map to check too
+ * @param {{ chests?: any[], pickups?: any[], enemies?: any[] }} [map] references from a map to check too
  * @returns {string[]}
  */
 export function validateItems(data, map = {}) {
@@ -137,11 +138,19 @@ export function validateItems(data, map = {}) {
     else if (c.reward === 'money') num(c.money, `chest ${c.id}.money`, 1, 100000);
     else if (c.reward !== 'heart') err(`chest ${c.id}: reward must be heart / money / item`);
   }
+  // P10.2: things that only come out in some seasons name real seasons.
+  const seasons = (/** @type {any} */ list, /** @type {string} */ at) => {
+    if (list === undefined) return;
+    if (!Array.isArray(list) || list.length === 0) err(`${at}: seasons must be a non-empty list`);
+    else for (const id of list) if (!SEASON.order.includes(id)) err(`${at}: unknown season "${id}"`);
+  };
   const pickIds = new Set();
   for (const p of map.pickups ?? []) {
     exists(p.item, `pickup ${p.id}`, TYPES);
     if (pickIds.has(p.id)) err(`pickup ${p.id}: duplicate id`);
     pickIds.add(p.id);
+    seasons(p.seasons, `pickup ${p.id}`);
   }
+  for (const [k, e] of (map.enemies ?? []).entries()) seasons(e.seasons, `enemy ${k}`);
   return errors;
 }

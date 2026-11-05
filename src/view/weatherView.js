@@ -57,6 +57,11 @@ export class WeatherView {
     this.rain.label = 'rain';
     /** @type {{ s: Sprite, x: number, y: number }[]} */
     this.drops = [];
+    // Snow (P10.2): slow flakes that sway and drift with the wind.
+    this.snow = new Container();
+    this.snow.label = 'snow';
+    /** @type {{ s: Sprite, x: number, y: number, phase: number, speed: number }[]} */
+    this.flakes = [];
     // Lightning.
     this.bolt = new Graphics();
     this.flash = new Graphics();
@@ -73,12 +78,13 @@ export class WeatherView {
     this.enabled = true;
   }
 
-  /** Adds the screen-space layers in order: light map, rain, bolt, flash. @param {Container} stage @param {number} index */
+  /** Adds the screen-space layers in order: light map, rain, snow, bolt, flash. @param {Container} stage @param {number} index */
   attach(stage, index) {
     stage.addChildAt(this.overlay, index);
     stage.addChildAt(this.rain, index + 1);
-    stage.addChildAt(this.bolt, index + 2);
-    stage.addChildAt(this.flash, index + 3);
+    stage.addChildAt(this.snow, index + 2);
+    stage.addChildAt(this.bolt, index + 3);
+    stage.addChildAt(this.flash, index + 4);
   }
 
   /**
@@ -143,6 +149,36 @@ export class WeatherView {
     const raining = isRaining(w) && !indoor;
     this.rain.visible = raining;
     if (raining) this.updateRain(w, sw, sh, dtSec, w.kind === 'storm' ? 1 : 0.6);
+    const snowing = w.kind === 'snow' && !indoor;
+    this.snow.visible = snowing;
+    if (snowing) this.updateSnow(w, sw, sh, dtSec, timeSec);
+  }
+
+  /** @param {import('../game/env/weather.js').Weather} w @param {number} sw @param {number} sh @param {number} dt @param {number} timeSec */
+  updateSnow(w, sw, sh, dt, timeSec) {
+    const want = Math.round((sw * sh) / 1400);
+    while (this.flakes.length < want) {
+      const s = this.makeSprite('px');
+      const big = Math.random() < 0.3;
+      s.width = s.height = big ? 2 : 1;
+      s.tint = 0xffffff;
+      s.alpha = big ? 0.9 : 0.7;
+      this.snow.addChild(s);
+      this.flakes.push({ s, x: Math.random() * sw, y: Math.random() * sh, phase: Math.random() * 6.28, speed: big ? 34 : 22 });
+    }
+    this.flakes.forEach((f, j) => {
+      f.s.visible = j < want;
+      if (j >= want) return;
+      f.x += (w.windX * 30 + Math.sin(timeSec * 1.7 + f.phase) * 10) * dt;
+      f.y += f.speed * dt;
+      if (f.y > sh) {
+        f.y -= sh + 4;
+        f.x = Math.random() * sw;
+      }
+      if (f.x < 0) f.x += sw;
+      if (f.x > sw) f.x -= sw;
+      f.s.position.set(Math.round(f.x), Math.round(f.y));
+    });
   }
 
   /** @returns {number} lights used */

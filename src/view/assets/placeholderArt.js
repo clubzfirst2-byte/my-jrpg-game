@@ -55,6 +55,17 @@ export const PALETTE = Object.freeze({
   S: '#c8c8d0', // smoke
   D: '#0e0a12', // cave darkness
   I: '#7fe8ff', // rune glow
+  // P10.2: the seasons.
+  1: '#d9822b', // autumn leaves
+  2: '#a5481f', // autumn leaves dark
+  3: '#f0c04a', // autumn leaves light
+  4: '#f4f8ff', // snow
+  5: '#c9d6ea', // snow shade
+  6: '#f6b8cf', // blossom
+  7: '#d97ea4', // blossom dark
+  8: '#b0a050', // dry grass
+  9: '#857a3a', // dry grass dark
+  M: '#cfc070', // dry grass light
 });
 
 // Player frames (16x16). Only down / up / right are drawn; left is right mirrored.
@@ -1299,3 +1310,40 @@ export function matSprite() {
     '.kkkkkkkkkkkkkk.',
   ];
 }
+
+// --- P10.2: the seasons (each season's art is its own bundle, loaded while it lasts) ---
+
+/** Swaps palette letters. @param {string[]} rows @param {Record<string, string>} map */
+export function recolor(rows, map) {
+  return rows.map((r) => [...r].map((ch) => map[ch] ?? ch).join(''));
+}
+
+/** Spring: pink blossoms in the canopy. */
+export function springTreeSprite() {
+  return treeSprite().map((r, y) => [...r].map((ch, x) => (ch === 'h' ? '6' : ch === 'l' && (x * 3 + y * 5) % 7 === 0 ? '7' : ch === 'l' && (x + y * 2) % 5 === 0 ? '6' : ch)).join(''));
+}
+
+/** Autumn: orange and red leaves. */
+export const autumnTreeSprite = () => recolor(treeSprite(), { l: '1', L: '2', h: '3' });
+/** Autumn: grass gone dry and golden. @param {string[]} rows */
+export const autumnGrass = (rows) => recolor(rows, { g: '8', G: 'M', d: '9', h: 'M' });
+
+/** Winter: snow on the canopy. */
+export const winterTreeSprite = () => recolor(treeSprite(), { h: '4', l: '5' });
+
+/** Winter: the ground under snow (16 x 16). @param {number} seed */
+export function snowTile(seed) {
+  const g = grid(16, 16, '4');
+  const rand = rng(700 + seed);
+  for (let i = 0; i < 9; i++) {
+    const x = Math.floor(rand() * 15);
+    const y = Math.floor(rand() * 15);
+    g[y][x] = '5';
+    if (rand() < 0.5) g[y][x + 1] = '5';
+  }
+  return toRows(g);
+}
+/** Winter: snow on the lip of a cliff. @param {string[]} rows */
+export const winterLip = (rows) => recolor(rows, { G: '4', d: '5' });
+/** Autumn: a dry lip. @param {string[]} rows */
+export const autumnLip = (rows) => recolor(rows, { G: 'M', d: '9' });

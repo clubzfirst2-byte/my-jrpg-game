@@ -20,7 +20,7 @@ import {
 import { createEnv, stepEnv, SOLID_OBJECTS } from './env/envSim.js';
 import { swordHitsObjects, fireDamage } from './env/envActions.js';
 import { applyWeatherToPlayer, stormStep } from './env/weatherActions.js';
-import { CLOCK } from './env/weather.js';
+import { CLOCK, seasonAt } from './env/weather.js';
 import { applyGear, itemStep, placePickups } from './items/itemSystem.js';
 import { stepSwitches } from './puzzles/switches.js';
 import { useAbility, stepAbilities, grantAbility } from './puzzles/abilities.js';
@@ -46,17 +46,19 @@ const ENEMY_CORPSE_MS = 600;
 /**
  * @typedef {object} GameState
  * @property {number} tick
+ * @property {import('./env/weather.js').SeasonId | null} season  P10.2: the season the world is dressed for
+ * @property {string} [spawnSeason]  the season the enemies were placed for
  * @property {import('./world/tilemap.js').TileMap} map
  * @property {import('./entities/player.js').Player & Record<string, any>} player
  * @property {any[]} enemies
  * @property {any[]} projectiles
  * @property {any[]} hitboxes   player attack hitboxes live this step (also read by the view)
- * @property {{ type: string, tick: number, x?: number, y?: number }[]} events  recent events for the view
+ * @property {{ type: string, tick: number, x?: number, y?: number, id?: string }[]} events  recent events for the view
  * @property {number} flurryMs  perfect-dodge slow motion remaining
  * @property {boolean} bulletTime aiming in mid-air (everything slowed)
  * @property {number} deathMs   time since the player collapsed (-1 when alive)
  * @property {number} nextId
- * @property {{ kind: 'beast' | 'archer', tx: number, ty: number }[]} enemySpawns
+ * @property {import('./world/tilemap.js').EnemySpawn[]} enemySpawns
  * @property {any[]} chests
  * @property {any[]} checkpointDefs
  * @property {any[]} campfires
@@ -98,6 +100,7 @@ export function createGameState(def = HEIGHT_TEST) {
   /** @type {GameState} */
   const state = {
     tick: 0,
+    season: null,
     map,
     player,
     enemies: [],
@@ -168,12 +171,30 @@ export function createGameState(def = HEIGHT_TEST) {
 /** (Re)places every enemy of the map at its spawn point. @param {GameState} state */
 export function spawnEnemies(state) {
   const ts = state.map.tileSize;
-  state.enemies = state.enemySpawns.map((s, i) => {
+  // P10.2: some enemies only come out in certain seasons.
+  const season = seasonAt(state.env.now).id;
+  state.spawnSeason = season;
+  state.enemies = state.enemySpawns.flatMap((s, i) => {
+    if (s.seasons && !s.seasons.includes(season)) return [];
     const x = s.tx * ts + ts / 2;
     const y = s.ty * ts + ts - 2;
     const z = groundHeightUnder({ x, y, halfWidth: 5, height: 6 }, state.map);
-    return createEnemy(s.kind, x, y, z, i + 1);
+    return [createEnemy(s.kind, x, y, z, i + 1)];
   });
+}
+
+/**
+ * A new season (P10.2): its own items lie in the world and its own enemies come out.
+ * @param {GameState} state
+ */
+function changeSeason(state) {
+  const id = seasonAt(state.env.now).id;
+  if (id === state.season) return;
+  const first = state.season === null;
+  state.season = id;
+  state.pickupsStale = true;
+  if (state.spawnSeason !== id) spawnEnemies(state); // (a saved game may start in another season)
+  if (!first) state.events.push({ type: 'season', tick: state.tick, id });
 }
 
 /**
@@ -186,6 +207,7 @@ export function stepGame(state, input) {
   state.hitboxes = [];
   // The world keeps going while the player is down (fires burn on).
   stepEnv(state.env, state.map, state.player, STEP_SEC * 1000);
+  changeSeason(state);
   stormStep(state, STEP_SEC * 1000);
   applyGear(state);
   applyWeatherToPlayer(state);

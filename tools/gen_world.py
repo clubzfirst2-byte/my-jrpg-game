@@ -186,6 +186,22 @@ for k, (x, y) in enumerate([(40, 40), (60, 58), (30, 75), (66, 80)]):
 for k, (x, y, item) in enumerate([(35, 26, 'red_berry'), (22, 40, 'mushroom'), (55, 70, 'swift_herb'), (75, 66, 'red_berry'), (44, 86, 'arrow')]):
     tx, ty = P.near_free(x, y)
     P.features['pickups'].append({'id': f'plains{k}', 'item': item, 'tx': tx, 'ty': ty, **({'count': 5} if item == 'arrow' else {})})
+# P10.2: what each season brings to the plains (items lying around, and who roams).
+SEASONAL = [
+    ('spring', 'swift_herb', [(18, 34), (40, 50), (62, 72)]),
+    ('summer', 'red_berry', [(26, 46), (58, 36), (36, 66)]),
+    ('autumn', 'mushroom', [(14, 50), (32, 82), (78, 74), (54, 30)]),
+    ('winter', 'ember_pepper', [(20, 30), (66, 64)]),
+]
+for season, item, spots in SEASONAL:
+    for k, (x, y) in enumerate(spots):
+        tx, ty = P.near_free(x, y)
+        P.features['pickups'].append({'id': f'plains-{season}{k}', 'item': item, 'tx': tx, 'ty': ty, 'seasons': [season]})
+# Autumn: beasts fatten up and come out in packs; in winter one of the usual ones keeps to its den.
+for (x, y) in [(36, 56), (64, 44), (24, 84)]:
+    tx, ty = P.near_free(x, y)
+    P.features['enemies'].append({'kind': 'beast', 'tx': tx, 'ty': ty, 'seasons': ['autumn']})
+P.features['enemies'][0]['seasons'] = ['spring', 'summer', 'autumn']
 tx, ty = P.near_free(72, 33, 32)
 P.features['chests'].append({'id': 'windmill', 'tx': tx, 'ty': ty, 'reward': 'money', 'money': 80})
 P.features['landmarks'].append({'id': 'windmill', 'name': '風車跡', 'tx': 72, 'ty': 29, 'always': False})
