@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 
 // P11.5: the real art (src/art/<name>.png) replaces placeholder sprites by name.
 vi.mock('pixi.js', () => ({ Rectangle: class {}, Texture: class {} }));
-const { withOverrides, atlasSizeFor, mustKeepSize, placeholderEntries } = await import('../../src/view/assets/placeholderPack.js');
+const { withOverrides, atlasSizeFor, mustKeepSize, placeholderEntries, ART_SCALE } = await import('../../src/view/assets/placeholderPack.js');
 
 /** A stand-in for the browser's Image: "loads" with the size written in its URL (w x h), or fails. */
 class FakeImage {
@@ -27,20 +27,24 @@ describe('art overrides', () => {
     expect(mustKeepSize([0.5, 0.5])).toBe(false);
   });
 
+  it('the real art has 2 pixels per game pixel (tiles 32×32, characters 32×56)', () => {
+    expect(ART_SCALE).toBe(2);
+  });
+
   it('a PNG replaces its sprite; a tile of the wrong size or a broken file keeps the placeholder', async () => {
     vi.stubGlobal('Image', FakeImage);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const out = await withOverrides(
       entries,
       new Map([
-        ['tile.path', 'path-16x16.png'],
+        ['tile.path', 'path-32x32.png'],
         ['obj.rock', 'rock-40x36.png'],
-        ['tile.sand', 'sand-10x10.png'],
         ['obj.tree', 'broken.png'],
+        ['tile.sand', 'sand-16x16.png'], // the placeholder's size, not the real art's
       ]),
     );
     const by = Object.fromEntries(out.map((e) => [e.key, e]));
-    expect(by['tile.path'].image).toMatchObject({ width: 16, height: 16 });
+    expect(by['tile.path'].image).toMatchObject({ width: 32, height: 32 });
     expect(by['obj.rock'].image).toMatchObject({ width: 40, height: 36 });
     expect(by['tile.sand'].image).toBeUndefined();
     expect(by['obj.tree'].image).toBeUndefined();

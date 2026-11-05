@@ -43,6 +43,9 @@ const TREE_FADE_ALPHA = 0.5;
 const CLIFF_SHADOW_PX = 6;
 const EDGE_PX = 2;
 const GLIDER_SHOULDER_Y = 9;
+/** The hero's placeholder height in game pixels; offsets around the hero below are for this size
+ *  and scale with the hero's real height (P11.5: the 32×56 art is 28 game pixels tall). */
+const HERO_BASE_H = 16;
 const STAMINA_OK = 0x7bd46a;
 const STAMINA_LOW = 0xe8c14a;
 const STAMINA_EXHAUSTED = 0xe8505b;
@@ -188,6 +191,8 @@ export class GameView {
     app.stage.addChild(this.slowTint);
     /** True while the player is hidden behind terrain (exposed for tests). */
     this.playerOccluded = false;
+    /** How much taller the drawn hero is than the placeholder (P11.5). */
+    this.heroK = 1;
   }
 
   /** The texture name for the current season (P10.2: e.g. "obj.tree" -> "autumn.obj.tree"). @param {string} key */
@@ -619,12 +624,15 @@ export class GameView {
       ? this.assets.texture(`player.swim.${p.facing}.${Math.floor(p.walkTime * (p.moving ? 6 : 2)) % 2}`)
       : this.assets.texture(`player.walk.${p.facing}.${frame}`);
     this.player.texture = tex;
+    // P11.5: the glider, the hidden-player check, the stamina wheel, the shield and the bow sit
+    // relative to the hero's body, so they follow the drawn hero's height (not its hit box).
+    this.heroK = Math.max(1, tex.height / HERO_BASE_H);
     this.player.position.set(sx, sy);
     this.player.zIndex = y;
     // Glider canopy above the player's head; its cords end at the shoulders.
     this.glider.visible = p.gliding;
     if (p.gliding) {
-      this.glider.position.set(sx, sy - GLIDER_SHOULDER_Y);
+      this.glider.position.set(sx, sy - Math.round(GLIDER_SHOULDER_Y * this.heroK));
       this.glider.zIndex = y + 0.001;
     }
 
@@ -648,8 +656,9 @@ export class GameView {
     const camZ = p.gliding || p.climbing ? z : p.groundZ;
     this.camera.setViewport(this.app.screen.width, this.app.screen.height);
     // Entering / leaving an area (cave) switches the camera bounds and cuts to the player.
-    if (this.applyBounds(state)) this.camera.snapTo(x, y - camZ - CAMERA_TARGET_OFFSET_Y);
-    else this.camera.follow(x, y - camZ - CAMERA_TARGET_OFFSET_Y, dtSec);
+    const aimY = CAMERA_TARGET_OFFSET_Y * this.heroK;
+    if (this.applyBounds(state)) this.camera.snapTo(x, y - camZ - aimY);
+    else this.camera.follow(x, y - camZ - aimY, dtSec);
     this.applyCamera();
     this.updateSeason(state.env.now);
     this.updateChunks(this.camera.origin(), this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom);
@@ -731,7 +740,7 @@ export class GameView {
   updateOcclusion(sx, sy, key, tex) {
     const px0 = sx - 6;
     const px1 = sx + 6;
-    const py0 = sy - 15;
+    const py0 = sy - Math.round(15 * this.heroK);
     const py1 = sy - 1;
     for (const { occluder: t } of this.objectSprites.values()) {
       if (!t) continue;
@@ -770,7 +779,7 @@ export class GameView {
     g.visible = show;
     if (!show) return;
     const cx = sx + 11;
-    const cy = sy - 18;
+    const cy = sy - Math.round(18 * this.heroK);
     const r = 5;
     const frac = Math.max(0, Math.min(1, p.stamina / p.maxStamina));
     // Exhausted: red and pulsing until the wheel is full again.
@@ -871,7 +880,7 @@ export class GameView {
     // Shield in front while guarding; bow and aim line while aiming.
     this.shield.visible = !!p.guarding;
     if (p.guarding) {
-      this.shield.position.set(Math.round(sx + p.aimX * 7), Math.round(sy - 7 + p.aimY * 4));
+      this.shield.position.set(Math.round(sx + p.aimX * 7), Math.round(sy - 7 * this.heroK + p.aimY * 4));
       this.shield.zIndex = p.aimY < 0 ? py - 0.01 : py + 0.01;
     }
     const aiming = p.action === 'aim';
@@ -879,12 +888,12 @@ export class GameView {
     this.aimLine.clear();
     if (aiming) {
       const drawn = p.actionMs >= COMBAT.bowDrawMs;
-      this.bow.position.set(Math.round(sx + p.aimX * 7), Math.round(sy - 8 + p.aimY * 4));
+      this.bow.position.set(Math.round(sx + p.aimX * 7), Math.round(sy - 8 * this.heroK + p.aimY * 4));
       this.bow.rotation = Math.atan2(p.aimY, p.aimX);
       this.bow.zIndex = p.aimY < 0 ? py - 0.01 : py + 0.01;
       // Dotted aim line, brighter once the draw is full.
       for (let d = 12; d < 64; d += 6) {
-        this.aimLine.rect(Math.round(sx + p.aimX * d), Math.round(sy - 8 + p.aimY * d), 1, 1);
+        this.aimLine.rect(Math.round(sx + p.aimX * d), Math.round(sy - 8 * this.heroK + p.aimY * d), 1, 1);
       }
       this.aimLine.fill({ color: drawn ? 0xfff2a0 : 0xffffff, alpha: drawn ? 0.9 : 0.4 });
     }

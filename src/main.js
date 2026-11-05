@@ -14,6 +14,8 @@ import { RESOLUTION_CANDIDATES, DEFAULT_TARGET_HEIGHT, nextCandidate } from './v
 import { AssetManager } from './view/assets/assetManager.js';
 import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES } from './view/assets/placeholderPack.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
+import { ART_SCALE } from './view/assets/placeholderPack.js';
+import { testHeroFrames } from './debug/testHero.js';
 import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
 import { InputManager } from './platform/inputManager.js';
@@ -93,10 +95,21 @@ async function boot() {
       ? settings.resolution
       : DEFAULT_TARGET_HEIGHT;
 
+  // P11.5: which art, and how fine. The real art (src/art) has 2 pixels per game pixel, so with any
+  // of it the canvas gets 2 pixels per game pixel too (the world keeps its size on screen).
+  //   ?hd=0        the placeholder art only, as before the real art (for before/after comparison)
+  //   ?hd=1        the fine canvas even without real art
+  //   ?hero=test   a size-test hero (仮, 32×56) in place of the hero, to check the new standard
+  const hdParam = params.get('hd');
+  /** @type {Map<string, string>} */
+  const artOverrides = hdParam === '0' ? new Map() : new Map(ART_OVERRIDES);
+  if (params.get('hero') === 'test' && hdParam !== '0') for (const [k, v] of testHeroFrames()) artOverrides.set(k, v);
+  const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
+
   /** @type {import('pixi.js').Application} */
   let app;
   try {
-    app = await createRenderer(host, targetHeight);
+    app = await createRenderer(host, targetHeight, artDensity);
     performance.mark('renderer');
   } catch (err) {
     errorLog.add('error', err, performance.now());
@@ -111,9 +124,9 @@ async function boot() {
 
   // --- assets / logic / view ---
   const assets = new AssetManager();
-  assets.register('placeholder', () => buildPlaceholderPack(undefined, ART_OVERRIDES));
+  assets.register('placeholder', () => buildPlaceholderPack(undefined, artOverrides));
   // P8: each region's art is its own bundle, loaded by the view near the region.
-  for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name, ART_OVERRIDES));
+  for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name, artOverrides));
   await assets.load('placeholder');
   performance.mark('art');
   // Without ?map= the game starts at the title on the first island and saves its progress.
@@ -136,8 +149,10 @@ async function boot() {
   if (weatherParam && ['clear', 'cloudy', 'rain', 'storm', 'snow'].includes(weatherParam)) state.env.weatherOverride = /** @type {any} */ (weatherParam);
   if (params.get('light') === '0') view.weather.enabled = false;
   if (params.get('chunks') === 'all') view.loadAll = true; // P8: draw the whole map at once (comparison)
+  // The camera zooms by the art density, so a game pixel covers the same screen area either way.
+  view.camera.setZoom(artDensity);
   const zoomParam = Number.parseFloat(params.get('zoom') ?? '');
-  if (Number.isFinite(zoomParam)) view.camera.setZoom(zoomParam); // e.g. ?zoom=2 (zoom is adjustable later)
+  if (Number.isFinite(zoomParam)) view.camera.setZoom(zoomParam * artDensity); // e.g. ?zoom=2 (zoom is adjustable later)
   const loop = new FixedStepLoop();
   const input = new InputManager(uiRoot);
   const hud = new HeartsHud(uiRoot);
@@ -425,7 +440,7 @@ async function boot() {
     pauseOverlay.hide();
   }
 
-  let resolution = resizeRenderer(app, targetHeight);
+  let resolution = resizeRenderer(app, targetHeight, artDensity);
   installLifecycle(app.canvas, {
     onPause: () => {
       if (!paused) pause('');
@@ -434,7 +449,7 @@ async function boot() {
     onContextLost: () => pause('描画が一時的に中断されました。戻らない場合は再読み込みしてください。'),
     onContextRestored: () => pauseOverlay.show('描画が復帰しました。'),
     onViewportChange: () => {
-      resolution = resizeRenderer(app, targetHeight);
+      resolution = resizeRenderer(app, targetHeight, artDensity);
     },
   });
 
@@ -486,7 +501,7 @@ async function boot() {
         targetHeight = nextCandidate(targetHeight);
         settings.resolution = targetHeight;
         saveSettings(settings);
-        resolution = resizeRenderer(app, targetHeight);
+        resolution = resizeRenderer(app, targetHeight, artDensity);
         stats.reset();
         return targetHeight;
       },
@@ -888,6 +903,8 @@ async function boot() {
       for (let i = 0; i < n; i++) stepGame(state, input.sample());
     },
     resolution: () => ({ ...resolution, target: targetHeight }),
+    /** P11.5: the art in use (density, how many real-art sprites) and the drawn hero's size in game px. */
+    art: () => ({ density: artDensity, overrides: artOverrides.size, zoom: view.camera.zoom, hero: { w: view.player.texture.width, h: view.player.texture.height, k: view.heroK } }),
     /** P8: the auto tour (minutes may be fractional in tests). */
     startTour: (/** @type {number} */ minutes) => startTour(minutes),
     stopTour: () => finishTour(),

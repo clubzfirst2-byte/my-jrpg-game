@@ -287,8 +287,15 @@ export function atlasSizeFor(entries) {
 }
 
 /**
- * Tiles and cliff faces sit on the 16 px grid, so their size is fixed; other sprites may be any
- * size (they are placed by their anchor: feet, or centre for effects).
+ * P11.5 standard: the real art (src/art) has 2 art pixels per game pixel — tiles 32×32, characters
+ * 32×56 (docs/ART.md). It is shown at half its pixel size, so it covers the same ground as the
+ * placeholder while keeping its finer detail (the renderer draws 2 canvas pixels per game pixel).
+ */
+export const ART_SCALE = 2;
+
+/**
+ * Tiles and cliff faces sit on the 16 px grid, so their size is fixed (ART_SCALE × the placeholder);
+ * other sprites may be any size (they are placed by their anchor: feet, or centre for effects).
  * @param {[number, number]} anchor
  */
 export const mustKeepSize = (anchor) => anchor[0] === 0 && anchor[1] === 0;
@@ -318,8 +325,9 @@ export async function withOverrides(entries, overrides) {
       if (!url) return e;
       try {
         const image = await loadImage(url);
-        if (mustKeepSize(e.anchor) && (image.width !== e.rows[0].length || image.height !== e.rows.length)) {
-          console.warn(`art: ${e.key}.png must be ${e.rows[0].length}x${e.rows.length} (is ${image.width}x${image.height}); using the placeholder`);
+        const [w, h] = [e.rows[0].length * ART_SCALE, e.rows.length * ART_SCALE];
+        if (mustKeepSize(e.anchor) && (image.width !== w || image.height !== h)) {
+          console.warn(`art: ${e.key}.png must be ${w}x${h} (is ${image.width}x${image.height}); using the placeholder`);
           return e;
         }
         return { ...e, image };
@@ -338,15 +346,33 @@ export async function withOverrides(entries, overrides) {
  */
 export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map()) {
   const all = await withOverrides(entries, overrides);
-  return packAtlas(all, atlasSizeFor(all));
+  // The placeholders and the real art are packed apart: the real art's atlas has 2 pixels per unit.
+  const plain = all.filter((e) => !e.image);
+  const real = all.filter((e) => e.image);
+  const packs = [packAtlas(plain, atlasSizeFor(plain), 1)];
+  if (real.length) packs.push(packAtlas(real, atlasSizeFor(real), ART_SCALE));
+  return mergePacks(packs);
+}
+
+/** @param {import('./assetManager.js').BuiltBundle[]} packs @returns {import('./assetManager.js').BuiltBundle} */
+function mergePacks(packs) {
+  if (packs.length === 1) return packs[0];
+  return {
+    textures: new Map(packs.flatMap((p) => [...p.textures])),
+    meta: new Map(packs.flatMap((p) => [...p.meta])),
+    destroy() {
+      for (const p of packs) p.destroy();
+    },
+  };
 }
 
 /**
  * @param {{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement }[]} entries
  * @param {number} atlasSize
+ * @param {number} resolution pixels per game pixel (1 for placeholders, ART_SCALE for the real art)
  * @returns {import('./assetManager.js').BuiltBundle}
  */
-function packAtlas(entries, atlasSize) {
+function packAtlas(entries, atlasSize, resolution) {
   const ATLAS = atlasSize;
   const PAD = 1;
   const canvas = document.createElement('canvas');
@@ -391,13 +417,16 @@ function packAtlas(entries, atlasSize) {
 
   const base = Texture.from(canvas);
   base.source.scaleMode = 'nearest';
+  // Frames are given in game pixels (the source's size divided by its resolution).
+  if (resolution !== 1) base.source.resolution = resolution;
+  const k = 1 / resolution;
   /** @type {Map<string, Texture>} */
   const textures = new Map();
   /** @type {Map<string, import('./assetManager.js').SpriteMeta>} */
   const meta = new Map();
   for (const e of entries) {
     const r = /** @type {{ x: number, y: number, w: number, h: number }} */ (rects.get(e.key));
-    textures.set(e.key, new Texture({ source: base.source, frame: new Rectangle(r.x, r.y, r.w, r.h) }));
+    textures.set(e.key, new Texture({ source: base.source, frame: new Rectangle(r.x * k, r.y * k, r.w * k, r.h * k) }));
     meta.set(e.key, { anchor: e.anchor });
   }
   return {
