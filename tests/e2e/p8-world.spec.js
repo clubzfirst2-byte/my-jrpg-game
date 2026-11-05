@@ -125,8 +125,11 @@ test('a broken jar stays broken after つづきから (the world is saved as dif
 
 test('the auto tour runs through the regions and writes a report', async ({ page }) => {
   const errors = await open(page, '&debug=1');
-  await api(page, 'startTour', 0.15); // 9 seconds
-  await expect.poll(() => api(page, 'tourRunning'), { timeout: 10_000 }).toBe(false);
+  await api(page, 'startTour', 0.15); // 9 seconds of real time
+  // The tour ends after 9 s of real time, checked once per frame: on a slow runner (WebKit in CI)
+  // frames are far apart, so wait with room to spare. A page error shows up here, not as a timeout.
+  const status = async () => (errors.length ? `error: ${errors[0]}` : (await api(page, 'tourRunning')) ? 'running' : 'done');
+  await expect.poll(status, { timeout: 30_000 }).toBe('done');
   expect((await api(page, 'tourResult')).length).toBeGreaterThan(0);
   await expect(page.locator('#debug-modal')).toBeVisible();
   await expect(page.locator('#debug-modal-body')).toHaveValue(/自動巡回/);
