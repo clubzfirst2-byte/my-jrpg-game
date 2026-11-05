@@ -69,7 +69,8 @@ test('chasm trial: a vine bridge (蔓結び) across the pit to the plate', async
   await standAt(page, 103, 64, 'up');
   await useAbility(page);
   await expect.poll(async () => (await api(page, 'envTile', 103, 63)).material).toBe('vine');
-  await page.waitForTimeout(400); // cooldown
+  // The cooldown runs on game time (a slow machine may need longer than it looks).
+  await expect.poll(async () => (await api(page, 'abilities')).ready).toBe(true);
   await standAt(page, 103, 63, 'up');
   await useAbility(page);
   await expect.poll(async () => (await api(page, 'envTile', 103, 62)).material).toBe('vine');

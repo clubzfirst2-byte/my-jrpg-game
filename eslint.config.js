@@ -16,6 +16,11 @@ export default [
     },
   },
   {
+    // P11.1: the service worker template (vite.config.js fills in the version and the file list).
+    files: ['src/sw/**/*.js'],
+    languageOptions: { sourceType: 'script', globals: { ...globals.serviceworker, __SW_VERSION__: 'readonly', __SW_FILES__: 'readonly' } },
+  },
+  {
     files: ['*.config.js', 'tools/**/*.mjs', 'tests/**/*.js'],
     languageOptions: { globals: { ...globals.node } },
   },
