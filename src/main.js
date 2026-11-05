@@ -707,6 +707,12 @@ async function boot() {
     },
     rotateHintVisible: () => rotateHint.visible,
     titleVisible: () => !!title && title.visible,
+    /** P10.6 test helper: where things are (checkpoints, chests, doorways). */
+    places: () => ({
+      checkpoints: state.checkpointDefs.map((/** @type {any} */ c) => ({ id: c.id, tx: c.tx, ty: c.ty })),
+      chests: state.chests.map((/** @type {any} */ c) => ({ id: c.id, tx: c.tx, ty: c.ty })),
+      warps: state.warps.map((/** @type {any} */ w) => ({ id: w.id, tx: w.tx, ty: w.ty, facing: w.facing })),
+    }),
     /** P10.4 test helpers: the bosses, and a heavy blow to one. */
     bosses: () => state.enemies.filter((/** @type {any} */ e) => e.boss).map((/** @type {any} */ e) => ({ id: e.bossId, name: e.name, hp: e.hp, maxHp: e.maxHp, phase: e.phase, awake: e.awake, state: e.state, pattern: e.pattern, x: e.x, y: e.y, arena: e.arena })),
     hurtBoss: (/** @type {string} */ id, /** @type {number} */ damage) => {

@@ -29,10 +29,11 @@ export const OUTDOOR_W = 96;
 export function stitchWorld(island, regions) {
   const iw = island.ground[0].length;
   // A column is a whole number of chunks wide (P8 chunks are 32 tiles): a chunk never holds two
-  // columns, so the far column's art is never loaded for nothing.
+  // columns, so the far column's art is never loaded for nothing. The filler between and below the
+  // columns is nothing at all (solid dark): no swimming around the edge of the world (P10.6).
   const colW = Math.ceil(iw / COLUMN_ALIGN) * COLUMN_ALIGN;
   /** @type {string[][]} */
-  const cols = [island.ground.map((r) => r + '~'.repeat(colW - iw)), []];
+  const cols = [island.ground.map((r) => r + '%'.repeat(colW - iw)), []];
   /** @type {string[][]} */
   const heights = [(island.height ?? island.ground.map((r) => '0'.repeat(r.length))).map((r) => r + '0'.repeat(colW - iw)), []];
   /** @type {any} */
@@ -61,7 +62,7 @@ export function stitchWorld(island, regions) {
     const oy = cols[col].length;
     const pad = colW - r.ground[0].length;
     if (pad < 0) throw new Error(`Region ${r.id} is wider than the world`);
-    for (const row of r.ground) cols[col].push(row + '~'.repeat(pad));
+    for (const row of r.ground) cols[col].push(row + '%'.repeat(pad));
     for (const row of r.height) heights[col].push(row + '0'.repeat(pad));
     placed[r.id] = { ox, oy };
     const at = (/** @type {any} */ o) => ({ ...o, tx: o.tx + ox, ty: o.ty + oy });
@@ -87,7 +88,7 @@ export function stitchWorld(island, regions) {
   const twoCols = cols[1].length > 0;
   const height = Math.max(cols[0].length, cols[1].length);
   const colHeights = [cols[0].length, cols[1].length];
-  for (const rows of cols) while (rows.length < height) rows.push('~'.repeat(colW));
+  for (const rows of cols) while (rows.length < height) rows.push('%'.repeat(colW));
   for (const rows of heights) while (rows.length < height) rows.push('0'.repeat(colW));
   def.ground = cols[0].map((row, y) => (twoCols ? row + cols[1][y] : row));
   def.height = heights[0].map((row, y) => (twoCols ? row + heights[1][y] : row));
