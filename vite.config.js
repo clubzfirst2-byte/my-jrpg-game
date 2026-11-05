@@ -36,6 +36,13 @@ export default defineConfig({
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        // P11.4: PixiJS in one file, loaded together with the game (the page preloads it): its
+        // renderer parts are imported on demand, which on a phone made a chain of round trips.
+        manualChunks: (id) => (id.includes('node_modules/pixi.js') || id.includes('node_modules/@pixi') ? 'pixi' : undefined),
+      },
+    },
   },
   test: {
     include: ['tests/unit/**/*.test.js'],

@@ -572,7 +572,7 @@ out = """// @ts-check
 
 /** @type {RegionDef[]} */
 export const REGIONS = %s;
-""" % json.dumps(regions, ensure_ascii=False, indent=1)
+""" % json.dumps(regions, ensure_ascii=False, separators=(",", ":"))
 path = os.path.join(os.path.dirname(__file__), '..', 'src', 'game', 'world', 'maps', 'regions.js')
 with open(path, 'w') as f:
     f.write(out)

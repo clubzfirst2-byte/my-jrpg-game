@@ -27,7 +27,16 @@ export function registerServiceWorker(hooks) {
  */
 export function loadTiming(readyAt) {
   const nav = /** @type {PerformanceNavigationTiming | undefined} */ (performance.getEntriesByType('navigation')[0]);
+  // P11.4: how long each step of the start took (marks set in main.js).
+  /** @type {Record<string, number>} */
+  const steps = {};
+  let prev = null;
+  for (const m of performance.getEntriesByType('mark')) {
+    if (prev) steps[m.name] = Math.round(m.startTime - prev.startTime);
+    prev = m;
+  }
   return {
+    steps,
     pageMs: nav ? Math.round(nav.responseEnd) : null,
     scriptsMs: nav ? Math.round(nav.domContentLoadedEventEnd) : null,
     readyMs: Math.round(readyAt),

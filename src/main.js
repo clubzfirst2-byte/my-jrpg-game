@@ -77,6 +77,7 @@ function countDisplayObjects(node) {
 }
 
 async function boot() {
+  performance.mark('boot');
   const host = /** @type {HTMLElement} */ (document.getElementById('app'));
   const uiRoot = /** @type {HTMLElement} */ (document.getElementById('ui'));
   document.title = GAME_TITLE;
@@ -95,6 +96,7 @@ async function boot() {
   let app;
   try {
     app = await createRenderer(host, targetHeight);
+    performance.mark('renderer');
   } catch (err) {
     errorLog.add('error', err, performance.now());
     showFatal(
@@ -112,6 +114,7 @@ async function boot() {
   // P8: each region's art is its own bundle, loaded by the view near the region.
   for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name));
   await assets.load('placeholder');
+  performance.mark('art');
   // Without ?map= the game starts at the title on the first island and saves its progress.
   // ?map=... (tests, height/field test maps) skips the title and never touches the save.
   const mapParam = params.get('map');
@@ -119,7 +122,9 @@ async function boot() {
   // P8: a new game is the whole world (the island and the regions south of it).
   const mapName = /** @type {keyof typeof MAPS} */ (mapParam ?? 'world');
   const state = createGameState(MAPS[mapName] ?? MAPS.world);
+  performance.mark('world');
   const view = new GameView(app, assets, state);
+  performance.mark('view');
   // Test / check helpers: ?time=20 (hour) and ?weather=rain|storm|cloudy|clear.
   const timeParam = Number.parseFloat(params.get('time') ?? '');
   if (Number.isFinite(timeParam)) setWorldTime(state.env, timeParam * CLOCK.hourMs);
@@ -245,6 +250,7 @@ async function boot() {
   let title = null;
   if (withTitle) {
     loaded = await store.load();
+    performance.mark('save');
     const notes = {
       empty: '',
       ok: loaded.recovered ? '最新の保存データが壊れていたため、ひとつ前の保存から再開します。' : '',

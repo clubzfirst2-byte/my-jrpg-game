@@ -2,7 +2,7 @@
 // IndexedDB save store (DESIGN.md 2.6). Two generations (A / B) are written alternately; the data
 // and the "which one is latest" record are committed in ONE transaction, so an interrupted write
 // leaves the previous generation intact. Writes never overlap: requests are queued and coalesced.
-import { chooseSave, classifyError, makeEnvelope } from './saveFormat.js';
+import { chooseSave, classifyError, makeEnvelope, needsLegacyObjects, useLegacyObjects } from './saveFormat.js';
 
 const DB_NAME = 'seimyaku';
 const STORE = 'saves';
@@ -68,6 +68,8 @@ export class SaveStore {
       const tx = db.transaction(STORE, 'readonly');
       const store = tx.objectStore(STORE);
       const [a, b] = await Promise.all([result(store.get(`${SLOT}A`)), result(store.get(`${SLOT}B`))]);
+      // P11.4: an old save (P8-P10.2) needs the old object lists, fetched only then.
+      if (needsLegacyObjects(a) || needsLegacyObjects(b)) useLegacyObjects((await import('./legacyObjects.js')).LEGACY_OBJECTS);
       const choice = chooseSave(a ?? null, b ?? null);
       this.seq = Math.max(a?.seq ?? 0, b?.seq ?? 0);
       return choice;
