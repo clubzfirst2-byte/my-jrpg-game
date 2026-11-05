@@ -120,6 +120,7 @@ export class GameView {
       state,
     );
     this.envVersion = -1;
+    this.charmHome = false;
     this.items = new ItemView((key) => this.makeSprite(key), this.actors);
     this.npcs = new NpcView(assets, (key) => this.makeSprite(key), this.actors);
     this.puzzles = new PuzzleView(
@@ -186,6 +187,9 @@ export class GameView {
     const region = regionAt(this.regions, tx, ty);
     if (region?.id === 'desert' && g === Ground.SAND) return `desert.sand.${hash(tx, ty) % 3}`;
     if (region?.id === 'plains' && g === Ground.GRASS) return `plains.grass.${hash(tx, ty) % 4}`;
+    if (g === Ground.WOOD) return 'tile.wood';
+    if (g === Ground.WALL) return 'tile.walltop';
+    if (g === Ground.DARK) return 'tile.dark';
     if (g === Ground.PATH) return 'tile.path';
     if (g === Ground.WATER) return 'tile.water.0';
     if (g === Ground.RUIN) return 'tile.ruin';
@@ -425,7 +429,8 @@ export class GameView {
   addFace(row, tx, ty, x, faceTop, faceBottom) {
     let remaining = faceBottom - faceTop;
     if (remaining <= 0) return;
-    const mat = this.map.ground[ty * this.map.width + tx] === Ground.RUIN ? 'ruin' : 'earth';
+    const g = this.map.ground[ty * this.map.width + tx];
+    const mat = g === Ground.RUIN ? 'ruin' : g === Ground.WALL ? 'wall' : 'earth';
     let y = faceTop;
     let first = true;
     while (remaining > 0) {
@@ -457,6 +462,7 @@ export class GameView {
     if (o.type === 'brazier') return `obj.brazier.${Math.floor(timeSec * 6) % 2}`;
     if (o.type === 'sconce') return o.lit ? 'obj.sconce.on' : 'obj.sconce.off';
     if (o.type === 'stone') return o.glow ? 'obj.stone.on' : 'obj.stone.off';
+    if (o.type === 'charm_shelf') return this.charmHome ? 'obj.charm_shelf.on' : 'obj.charm_shelf'; // P10.1
     return `obj.${o.type}`;
   }
 
@@ -469,7 +475,8 @@ export class GameView {
     const feetY = o.ty * ts + ts;
     const z = map.elev[o.ty * map.width + o.tx];
     s.position.set(x, feetY - z);
-    s.zIndex = feetY;
+    // The door mat lies flat on the floor: under anyone standing on it.
+    s.zIndex = o.type === 'mat' ? feetY - ts : feetY;
     s.visible = !o.gone;
     this.actors.addChild(s);
     /** @type {Occluder | null} */
@@ -563,6 +570,12 @@ export class GameView {
     else this.camera.follow(x, y - camZ - CAMERA_TARGET_OFFSET_Y, dtSec);
     this.applyCamera();
     this.updateChunks(this.camera.origin(), this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom);
+    // P10.1: the elder's charm is back on its shelf once the quest is done.
+    const charmHome = state.progress.quests.lost_charm === 'done';
+    if (charmHome !== this.charmHome) {
+      this.charmHome = charmHome;
+      this.envVersion = -1;
+    }
     if (state.env.version !== this.envVersion || this.hasBraziers) {
       this.envVersion = state.env.version;
       // Resonance stones glow while their switch is active.

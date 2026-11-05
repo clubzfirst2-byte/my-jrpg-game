@@ -15,7 +15,7 @@ const OPEN_RANGE = 20;
  * @typedef {{ id: string, tx: number, ty: number, reward: 'heart' | 'money' | 'item', money?: number, item?: string, count?: number }} ChestDef
  * @typedef {{ id: string, tx: number, ty: number }} CheckpointDef
  * @typedef {{ id: string, tx: number, ty: number, facing: 'up' | 'down' | 'left' | 'right', toTx: number, toTy: number, reveal?: boolean }} WarpDef  reveal: draw a cave opening on the cliff above
- * @typedef {{ id: string, tx: number, ty: number, tw: number, th: number, grants?: string, name?: string, dark?: boolean }} AreaDef  P7: trials grant an ability; dark rooms
+ * @typedef {{ id: string, tx: number, ty: number, tw: number, th: number, grants?: string, name?: string, dark?: boolean, home?: boolean }} AreaDef  P7: trials grant an ability; dark rooms; P10.1: home = a lived-in room (warm light)
  * @typedef {{ id: string, name: string, tx: number, ty: number, always: boolean }} LandmarkDef
  *
  * @typedef {object} Progress  what is saved (DESIGN.md 2.6)

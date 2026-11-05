@@ -181,6 +181,7 @@ async function boot() {
     talk: () => {
       const n = state.nearbyNpc;
       if (n) startDialogue(state, n.dialogue, n.id);
+      else if (state.nearby === 'sleep') startDialogue(state, 'bed'); // P10.1
     },
   });
   // P9: conversations and the shop (the game waits while either is open).
@@ -291,6 +292,10 @@ async function boot() {
         toast.show(`クエスト「${questDef(ev.id).name}」を受けた（持ち物の「クエスト」で確認）`, { ms: 3500 });
       } else if (ev.type === 'questDone') {
         toast.show(`クエスト「${questDef(ev.id).name}」達成！`, { ms: 3500 });
+      } else if (ev.type === 'warp') {
+        // P10.1: stepping into a house shows its name.
+        const room = areaAt(state, state.player.x, state.player.y);
+        if (room?.home && room.name) toast.show(room.name, { ms: 1500 });
       } else if (ev.type === 'fell') {
         toast.show('穴に落ちた…', { ms: 1200 });
       } else if (ev.type === 'checkpoint') {

@@ -10,7 +10,7 @@ export const LEVEL_PX = 16;
 export const HEIGHT_UNIT_PX = 4;
 
 /** Ground tile ids (what is drawn underneath, and the cliff material). */
-export const Ground = Object.freeze({ GRASS: 0, PATH: 1, WATER: 2, RUIN: 3, SAND: 4, METAL: 5, PIT: 6, VINE: 7 });
+export const Ground = Object.freeze({ GRASS: 0, PATH: 1, WATER: 2, RUIN: 3, SAND: 4, METAL: 5, PIT: 6, VINE: 7, WOOD: 8, WALL: 9, DARK: 10 });
 
 /** Tile shapes. RAMP_N rises toward the north by exactly 1 level across the tile. */
 export const Shape = Object.freeze({ FLAT: 0, RAMP_N: 1 });
@@ -47,7 +47,7 @@ const HEIGHT_DIGITS = '0123456789abcdefghijklmnopqrstuv';
  * @property {{ id: string, item: string, tx: number, ty: number, count?: number }[]} [pickups]  P6: items lying in the world
  * @property {import('../puzzles/switches.js').SwitchDef[]} [switches]  P7: plates, sensors, sconces, stones
  * @property {import('./world.js').RegionInfo[]} [regions]  P8: the regions of the world (climate, art bundle)
- * @property {{ id: string, name: string, dialogue: string, look?: number, tx: number, ty: number }[]} [npcs]  P9: villagers
+ * @property {{ id: string, name: string, dialogue: string, look?: number, tx: number, ty: number, stay?: boolean, reach?: number }[]} [npcs]  P9: villagers
  * @property {import('./features.js').LandmarkDef[]} [landmarks]
  * @typedef {string[] | IslandDef} MapDef
  */
@@ -110,6 +110,22 @@ export function parseMap(def) {
           ground[i] = Ground.GRASS;
           solid[i] = 1;
           objects.push({ type: 'rock', tx, ty });
+          break;
+        case 'w':
+          ground[i] = Ground.WOOD; // P10.1: a house floor
+          break;
+        case 'W':
+          ground[i] = Ground.WALL; // a house wall: never walked through or climbed
+          solid[i] = 1;
+          break;
+        case 'H':
+          ground[i] = Ground.WOOD; // the low front wall of a room (3/4 view: it never hides the player)
+          solid[i] = 1;
+          objects.push({ type: 'lowwall', tx, ty });
+          break;
+        case '%':
+          ground[i] = Ground.DARK; // outside every room: nothing there
+          solid[i] = 1;
           break;
         case 'P':
           ground[i] = Ground.PATH;

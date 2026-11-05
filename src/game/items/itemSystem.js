@@ -18,6 +18,7 @@ import {
 import { ignite } from '../env/envSim.js';
 import { tileIndexAt } from '../env/envActions.js';
 import { npcInReach } from '../npc/npcs.js';
+import { bedInReach } from '../world/interiors.js';
 
 /** Items lying in the world come back after one game day. */
 export const PICKUP_REGROW_MS = 24 * 60_000;
@@ -132,15 +133,19 @@ export function itemStep(state) {
     });
   }
 
-  // Something to use nearby: a villager to talk to (P9), a fire (cooking) or the forge.
+  // Something to use nearby: a villager to talk to (P9), a bed (P10.1), a fire or stove (cooking) or the forge.
   state.nearby = null;
   state.nearbyNpc = state.npcs ? npcInReach(state) : null;
   if (state.nearbyNpc) {
     state.nearby = 'talk';
     return;
   }
+  if (bedInReach(state)) {
+    state.nearby = 'sleep'; // P10.1
+    return;
+  }
   for (const [idx, o] of state.env.objectAt) {
-    if (o.gone || (o.type !== 'campfire' && o.type !== 'brazier' && o.type !== 'anvil')) continue;
+    if (o.gone || (o.type !== 'campfire' && o.type !== 'brazier' && o.type !== 'anvil' && o.type !== 'stove')) continue;
     const ts = state.map.tileSize;
     const ox = (idx % state.map.width) * ts + ts / 2;
     const oy = Math.floor(idx / state.map.width) * ts + ts / 2;

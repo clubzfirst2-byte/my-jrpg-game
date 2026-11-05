@@ -10,7 +10,7 @@ import { REGIONS } from './maps/regions.js';
  * @typedef {{ id: string, name: string, tx: number, ty: number, tw: number, th: number, climate: 'temperate' | 'dry', bundle: string | null }} RegionInfo
  */
 
-/** Width of the outdoor world (the island's east strip holds the indoor rooms). */
+/** Width of the outdoor world (the east strip holds the indoor rooms: caves, trials, houses). */
 export const OUTDOOR_W = 96;
 
 /**
@@ -35,6 +35,8 @@ export function stitchWorld(island, regions) {
     envObjects: [...(island.envObjects ?? [])],
     campfires: [...(island.campfires ?? [])],
     npcs: [...(island.npcs ?? [])],
+    warps: [...(island.warps ?? [])],
+    areas: [...(island.areas ?? [])],
     /** @type {RegionInfo[]} */
     regions: [{ id: 'island', name: 'はじまりの島', tx: 0, ty: 0, tw: OUTDOOR_W, th: island.ground.length, climate: 'temperate', bundle: null }],
   };
@@ -45,9 +47,12 @@ export function stitchWorld(island, regions) {
     for (const row of r.ground) ground.push(row + '~'.repeat(pad));
     for (const row of r.height) height.push(row + '0'.repeat(pad));
     const at = (/** @type {any} */ o) => ({ ...o, ty: o.ty + oy });
-    for (const key of ['enemies', 'chests', 'checkpoints', 'landmarks', 'pickups', 'envObjects', 'campfires', 'npcs']) {
+    for (const key of ['enemies', 'chests', 'checkpoints', 'landmarks', 'pickups', 'envObjects', 'campfires', 'npcs', 'areas']) {
       for (const o of r[key] ?? []) def[key].push(at(o));
     }
+    // P10.1: house doors lead to rooms in the region's east strip (both ends move with the region).
+    for (const w of r.warps ?? []) def.warps.push({ ...w, ty: w.ty + oy, toTy: w.toTy + oy });
+    // The region (its climate and art bundle) includes its strip of rooms.
     def.regions.push({ id: r.id, name: r.name, tx: 0, ty: oy, tw: r.ground[0].length, th: r.ground.length, climate: r.climate, bundle: r.bundle });
   }
   def.outdoor = { id: 'outdoor', tx: 0, ty: 0, tw: OUTDOOR_W, th: ground.length };

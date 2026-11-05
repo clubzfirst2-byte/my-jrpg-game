@@ -5,6 +5,7 @@ import { direction, facingVector } from '../combat/hitbox.js';
 import { facingFrom } from '../core/facing.js';
 import { chestInReach, openChest } from '../world/features.js';
 import { npcInReach } from '../npc/npcs.js';
+import { bedInReach } from '../world/interiors.js';
 import { startDialogue } from '../npc/talk.js';
 
 export const SWORD = Object.freeze([
@@ -167,10 +168,14 @@ export function combatStep(p, input, state, dt) {
         const chest = state.chests ? chestInReach(state) : null;
         // P9: ... and "talk" in front of a villager.
         const npc = !chest && state.npcs ? npcInReach(state) : null;
+        // P10.1: ... and "lie down" in front of a bed.
+        const bed = !chest && !npc && state.env ? bedInReach(state) : null;
         if (chest) {
           openChest(state, chest);
         } else if (npc) {
           startDialogue(state, npc.dialogue, npc.id);
+        } else if (bed) {
+          startDialogue(state, 'bed');
         } else {
           startSwing(p, 0);
           state.events.push({ type: 'swing', tick: state.tick });

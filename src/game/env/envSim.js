@@ -37,7 +37,7 @@ export const ENV = Object.freeze({
 
 const FLAMMABLE = new Set(['grass', 'tree', 'bramble', 'vine']);
 /** Objects that block movement while they exist. */
-export const SOLID_OBJECTS = new Set(['tree', 'rock', 'bramble', 'crystal', 'jar', 'receiver', 'door', 'brazier', 'campfire', 'anvil', 'crate', 'sconce', 'stone', 'pillar', 'altar', 'cactus', 'house']);
+export const SOLID_OBJECTS = new Set(['tree', 'rock', 'bramble', 'crystal', 'jar', 'receiver', 'door', 'brazier', 'campfire', 'anvil', 'crate', 'sconce', 'stone', 'pillar', 'altar', 'cactus', 'house', 'lowwall', 'bed', 'table', 'shelf', 'charm_shelf', 'counter', 'stove', 'barrel']);
 
 /**
  * @typedef {{ burnMs: number, at: number, wetUntil: number, ashUntil: number }} Cell
@@ -114,6 +114,22 @@ export function setWorldTime(env, ms) {
   env.now = ms;
   env.nextTickMs = ms + ENV.tickMs;
   env.clock.fill(ms);
+}
+
+/**
+ * Time passes without anything being simulated now (sleeping, P10.1): every region freezes at the
+ * current time and is fast-forwarded the usual way (DESIGN.md 4.4) when it wakes up again, so a fire
+ * left burning outside has burnt out by morning, deterministically.
+ * @param {Env} env @param {number} ms
+ */
+export function skipTime(env, ms) {
+  for (let r = 0; r < env.awake.length; r++) {
+    if (env.awake[r] && !env.pending[r]) env.clock[r] = env.now;
+    env.awake[r] = 0;
+  }
+  env.now += ms;
+  env.nextTickMs = env.now + ENV.tickMs;
+  env.version++;
 }
 
 /**

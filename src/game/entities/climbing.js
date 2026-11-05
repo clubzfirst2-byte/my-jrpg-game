@@ -57,7 +57,7 @@ export function isClimbableAt(map, px, py) {
   const ty = Math.floor(py / map.tileSize);
   if (!inBounds(map, tx, ty) || isSolidTile(map, tx, ty)) return false;
   const i = ty * map.width + tx;
-  return map.ground[i] !== Ground.RUIN && map.shape[i] !== Shape.RAMP_N;
+  return map.ground[i] !== Ground.RUIN && map.ground[i] !== Ground.WALL && map.shape[i] !== Shape.RAMP_N;
 }
 
 /**

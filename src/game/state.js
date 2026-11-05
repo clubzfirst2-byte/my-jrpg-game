@@ -70,7 +70,7 @@ const ENEMY_CORPSE_MS = 600;
  * @property {any[]} pickupDefs   items placed by the map (P6)
  * @property {import('./items/itemSystem.js').Pickup[]} pickups  items lying in the world now
  * @property {any[]} landedHits   player sword hits that landed this step
- * @property {'cook' | 'forge' | 'talk' | null} nearby  something to use in reach
+ * @property {'cook' | 'forge' | 'talk' | 'sleep' | null} nearby  something to use in reach
  * @property {import('./npc/npcs.js').Npc | null} [nearbyNpc]  P9: the villager in front
  * @property {number} respawns
  * @property {boolean} [pickupsStale]
