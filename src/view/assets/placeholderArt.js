@@ -1347,3 +1347,67 @@ export function snowTile(seed) {
 export const winterLip = (rows) => recolor(rows, { G: '4', d: '5' });
 /** Autumn: a dry lip. @param {string[]} rows */
 export const autumnLip = (rows) => recolor(rows, { G: 'M', d: '9' });
+
+// --- P10.3: the remaining regions ---
+
+/** 囁きの森: dark, mossy ground (16 x 16). @param {number} seed */
+export function forestGrassTile(seed) {
+  const g = grid(16, 16, 'd');
+  const rand = rng(900 + seed);
+  for (let i = 0; i < 14; i++) {
+    const x = Math.floor(rand() * 15);
+    const y = Math.floor(rand() * 15) + 1;
+    g[y][x] = rand() < 0.5 ? 'L' : 'g';
+    if (rand() < 0.3) g[y - 1][x] = 'l';
+  }
+  if (seed % 2 === 1) g[4 + seed][6] = 'O'; // a glowing spore here and there
+  return toRows(g);
+}
+
+/** 囁きの森: a tall dark conifer (16 x 30). */
+export function pineSprite() {
+  const w = 16;
+  const h = 30;
+  const g = grid(w, h, '.');
+  for (let y = 0; y < 24; y++) {
+    const half = Math.min(7.5, 1 + y * 0.32 + (y % 6) * 0.35);
+    for (let x = 0; x < w; x++) {
+      const dx = Math.abs(x - 7.5);
+      if (dx > half) continue;
+      g[y][x] = dx > half - 1 || y === 23 ? 'k' : x < 7 && y % 6 < 3 ? 'l' : (x + y) % 5 === 0 ? 'd' : 'L';
+    }
+  }
+  for (let y = 24; y < h; y++) for (let x = 6; x <= 9; x++) g[y][x] = x === 6 || x === 9 || y === h - 1 ? 'k' : 'T';
+  return toRows(g);
+}
+
+/** 白嶺山脈: snow with rock showing through (16 x 16). @param {number} seed */
+export function mountainSnowTile(seed) {
+  const g = toRows(grid(16, 16, '4')).map((r) => [...r]);
+  const rand = rng(950 + seed);
+  for (let i = 0; i < 8; i++) {
+    const x = Math.floor(rand() * 15);
+    const y = Math.floor(rand() * 15);
+    g[y][x] = i < 2 ? 'r' : '5';
+    if (rand() < 0.5) g[y][x + 1] = '5';
+  }
+  return toRows(g);
+}
+/** 白嶺山脈: a conifer under snow. */
+export const snowPineSprite = () => recolor(pineSprite(), { l: '4', L: '5', d: 'L' });
+/** 白嶺山脈: grey rock cliffs with a snowy lip. @param {number} h @param {boolean} top @param {boolean} [bottom] */
+export const stoneFace = (h, top, bottom = false) => recolor(earthFace(h, top, bottom), { E: 'r', F: 'm', f: 'R', G: '4', d: '5' });
+
+/** 鏡湖と群島: bright lakeside grass (16 x 16). @param {number} seed */
+export function lakeGrassTile(seed) {
+  const g = grid(16, 16, 'G');
+  const rand = rng(990 + seed);
+  for (let i = 0; i < 10; i++) {
+    const x = Math.floor(rand() * 15);
+    const y = Math.floor(rand() * 15) + 1;
+    g[y][x] = 'h';
+    if (rand() < 0.5) g[y - 1][x] = 'g';
+  }
+  if (seed === 3) g[8][8] = 'X';
+  return toRows(g);
+}

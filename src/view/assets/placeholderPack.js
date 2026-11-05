@@ -77,6 +77,12 @@ import {
   snowTile,
   winterLip,
   autumnLip,
+  forestGrassTile,
+  pineSprite,
+  mountainSnowTile,
+  snowPineSprite,
+  stoneFace,
+  lakeGrassTile,
 } from './placeholderArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
@@ -187,6 +193,19 @@ export const REGION_ENTRIES = {
     { key: 'obj.barrel', rows: barrelSprite(), anchor: FEET },
     { key: 'obj.mat', rows: matSprite(), anchor: FEET },
   ],
+  // P10.3: the east column.
+  'region:forest': () => [
+    ...[0, 1, 2, 3].map((i) => ({ key: `forest.grass.${i}`, rows: forestGrassTile(i), anchor: TOP_LEFT })),
+    { key: 'forest.pine', rows: pineSprite(), anchor: FEET },
+  ],
+  'region:mountains': () => [
+    ...[0, 1, 2, 3].map((i) => ({ key: `mountains.snow.${i}`, rows: mountainSnowTile(i), anchor: TOP_LEFT })),
+    { key: 'mountains.pine', rows: snowPineSprite(), anchor: FEET },
+    ...[4, 8].flatMap((h) =>
+      [true, false].flatMap((top) => [true, false].map((bottom) => ({ key: `face.stone.${top ? 'top' : 'mid'}${bottom ? '-base' : ''}.${h}`, rows: stoneFace(h, top, bottom), anchor: TOP_LEFT }))),
+    ),
+  ],
+  'region:lake': () => [...[0, 1, 2, 3].map((i) => ({ key: `lake.grass.${i}`, rows: lakeGrassTile(i), anchor: TOP_LEFT }))],
 };
 
 /**
@@ -197,7 +216,10 @@ const lipKeys = () => [4, 8].flatMap((h) => [false, true].map((bottom) => ({ key
 const grassKeys = () => [
   ...[0, 1, 2].map((i) => ({ key: `tile.grass.${i}`, rows: grassTile(100 + i) })),
   ...[0, 1, 2, 3].map((i) => ({ key: `plains.grass.${i}`, rows: plainsGrassTile(i) })),
+  // P10.3: the lake's grass dries and is snowed on too; the forest floor only under snow.
+  ...[0, 1, 2, 3].map((i) => ({ key: `lake.grass.${i}`, rows: lakeGrassTile(i) })),
 ];
+const forestKeys = () => [0, 1, 2, 3].map((i) => ({ key: `forest.grass.${i}`, rows: forestGrassTile(i) }));
 /** @type {Record<string, () => { key: string, rows: string[], anchor: [number, number] }[]>} */
 export const SEASON_ENTRIES = {
   'season:spring': () => [{ key: 'spring.obj.tree', rows: springTreeSprite(), anchor: FEET }],
@@ -208,7 +230,8 @@ export const SEASON_ENTRIES = {
   ],
   'season:winter': () => [
     { key: 'winter.obj.tree', rows: winterTreeSprite(), anchor: FEET },
-    ...grassKeys().map((e, i) => ({ key: `winter.${e.key}`, rows: snowTile(i), anchor: TOP_LEFT })),
+    ...[...grassKeys(), ...forestKeys()].map((e, i) => ({ key: `winter.${e.key}`, rows: snowTile(i), anchor: TOP_LEFT })),
+    { key: 'winter.forest.pine', rows: snowPineSprite(), anchor: FEET },
     ...lipKeys().map((e) => ({ key: `winter.${e.key}`, rows: winterLip(e.rows), anchor: TOP_LEFT })),
   ],
 };

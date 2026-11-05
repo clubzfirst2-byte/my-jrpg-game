@@ -170,7 +170,9 @@ export function discoverLandmarks(state, viewRadius) {
   for (const l of state.landmarks) {
     if (state.progress.landmarks.includes(l.id)) continue;
     const f = tileFeet(state.map, l.tx, l.ty);
-    if (l.always || high || Math.hypot(f.x - p.x, f.y - p.y) < viewRadius) {
+    // From high ground you see far, but not the whole world (P10.3: it is no longer one island).
+    const d = Math.hypot(f.x - p.x, f.y - p.y);
+    if (l.always || (high && d < HIGH_VIEW_PX) || d < viewRadius) {
       state.progress.landmarks.push(l.id);
       state.events.push({ type: 'landmark', tick: state.tick, id: l.id });
     }
@@ -179,6 +181,8 @@ export function discoverLandmarks(state, viewRadius) {
 
 /** Standing this high (2 levels) counts as a lookout. */
 export const HIGH_GROUND_PX = 32;
+/** How far high ground lets you see landmarks (about one region across). */
+export const HIGH_VIEW_PX = 80 * 16;
 
 /**
  * Where the player respawns: the active checkpoint, else the map's start.

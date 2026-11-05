@@ -65,6 +65,7 @@ const ENEMY_CORPSE_MS = 600;
  * @property {any[]} warps
  * @property {any[]} areas
  * @property {any | null} outdoor
+ * @property {any[]} outdoors  P10.3: camera bounds of each column of regions
  * @property {any[]} landmarks
  * @property {import('./world/features.js').Progress} progress
  * @property {boolean} saveRequested  something worth saving happened (the platform layer saves)
@@ -118,6 +119,7 @@ export function createGameState(def = HEIGHT_TEST) {
     warps: f.warps ?? [],
     areas: f.areas ?? [],
     outdoor: f.outdoor ?? null,
+    outdoors: f.outdoors ?? (f.outdoor ? [f.outdoor] : []),
     landmarks: f.landmarks ?? [],
     progress: emptyProgress(),
     saveRequested: false,
@@ -156,9 +158,11 @@ export function createGameState(def = HEIGHT_TEST) {
   const campfires = state.campfires.map((c) => ({ type: 'campfire', tx: c.tx, ty: c.ty }));
   state.env = createEnv(map, [...map.objects, ...campfires], 1, CLOCK.startHour * CLOCK.hourMs);
   // P8: dry regions (the desert) never get rain.
+  // P10.3: cold regions (the mountains) snow instead of raining.
   for (const r of f.regions ?? []) {
-    if (r.climate !== 'dry') continue;
-    for (let ty = r.ty; ty < r.ty + r.th; ty++) for (let tx = r.tx; tx < r.tx + r.tw; tx++) state.env.dry[ty * map.width + tx] = 1;
+    const mark = r.climate === 'dry' ? state.env.dry : r.climate === 'cold' ? state.env.cold : null;
+    if (!mark) continue;
+    for (let ty = r.ty; ty < r.ty + r.th; ty++) for (let tx = r.tx; tx < r.tx + r.tw; tx++) mark[ty * map.width + tx] = 1;
   }
   // Caves are under a roof: no rain, no wind, no lightning.
   for (const a of state.areas) {

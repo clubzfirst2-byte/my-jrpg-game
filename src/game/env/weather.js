@@ -84,7 +84,7 @@ export function clockText(worldMs) {
  * The weather at a moment (deterministic). A dry region (P8: the desert) gets the same skies
  * without the rain: rain becomes clear, a storm becomes cloudy.
  * @param {number} seed @param {number} worldMs @param {WeatherKind | null} [override]
- * @param {'temperate' | 'dry'} [climate]
+ * @param {'temperate' | 'dry' | 'cold'} [climate]  P10.3: a cold region (the mountains) snows instead of raining all year
  * @returns {Weather}
  */
 export function weatherAt(seed, worldMs, override = null, climate = 'temperate') {
@@ -107,6 +107,7 @@ export function weatherAt(seed, worldMs, override = null, climate = 'temperate')
   if (climate === 'dry' && kind === 'rain') kind = 'clear';
   if (climate === 'dry' && kind === 'storm') kind = 'cloudy';
   if (climate === 'dry' && kind === 'snow') kind = 'clear'; // P10.2: no snow in the desert either
+  if (climate === 'cold' && (kind === 'rain' || kind === 'storm')) kind = 'snow';
   return { kind, windX: Math.cos(angle) * wind, windY: Math.sin(angle) * wind, wind };
 }
 
@@ -120,7 +121,7 @@ export const isWet = (w) => isRaining(w) || w.kind === 'snow';
  * Wet from rain at t: raining now or within the last WEATHER.wetAfterMs.
  * @param {number} seed @param {number} t @param {WeatherKind | null} [override]
  */
-export function rainWetAt(seed, t, override = null, climate = /** @type {'temperate' | 'dry'} */ ('temperate')) {
+export function rainWetAt(seed, t, override = null, climate = /** @type {'temperate' | 'dry' | 'cold'} */ ('temperate')) {
   return isWet(weatherAt(seed, t, override, climate)) || isWet(weatherAt(seed, t - WEATHER.wetAfterMs, override, climate));
 }
 
