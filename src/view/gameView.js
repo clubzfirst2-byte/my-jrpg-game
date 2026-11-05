@@ -101,7 +101,7 @@ export class GameView {
     this.preloaded = new Set();
     /** Load every chunk at once (?chunks=all: for comparing against streaming). */
     this.loadAll = false;
-    this.chunkStats = { built: 0, freed: 0 };
+    this.chunkStats = { built: 0, freed: 0, pending: 0, updates: 0 };
     this.hasBraziers = this.map.objects.some((o) => o.type === 'brazier');
     // Screen-space layer above the world (landmark markers).
     this.screenLayer = new Container();
@@ -352,6 +352,8 @@ export class GameView {
     });
     const want = range(ts * 4); // a little beyond the screen (raised ground draws up to 4 tiles higher)
     const keep = range(size); // hysteresis: freed only once well out of view
+    this.chunkStats.updates++;
+    let pending = 0;
     for (let cy = want.y0; cy <= want.y1; cy++) {
       for (let cx = want.x0; cx <= want.x1; cx++) {
         const key = this.chunkKey(cx, cy);
@@ -360,12 +362,14 @@ export class GameView {
         const missing = bundles.filter((b) => !this.assets.isLoaded(b));
         if (missing.length > 0) {
           for (const b of missing) this.requestBundle(b);
+          pending++;
           continue;
         }
         for (const b of bundles) this.assets.retain(b);
         this.chunks.set(key, this.buildChunk(cx, cy));
       }
     }
+    this.chunkStats.pending = pending;
     for (const [key, c] of this.chunks) {
       if (c.cx < keep.x0 || c.cx > keep.x1 || c.cy < keep.y0 || c.cy > keep.y1) {
         this.destroyChunk(c);
@@ -411,7 +415,7 @@ export class GameView {
 
   /** Chunk / bundle numbers for the debug overlay and tests. */
   streamStats() {
-    return { chunks: this.chunks.size, built: this.chunkStats.built, freed: this.chunkStats.freed, objects: this.objectSprites.size, bundles: this.assets.stats().bundles };
+    return { chunks: this.chunks.size, built: this.chunkStats.built, freed: this.chunkStats.freed, pending: this.chunkStats.pending, updates: this.chunkStats.updates, objects: this.objectSprites.size, bundles: this.assets.stats().bundles };
   }
 
   /**
