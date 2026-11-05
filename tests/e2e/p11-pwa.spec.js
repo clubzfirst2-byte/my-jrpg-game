@@ -35,7 +35,7 @@ test('the service worker keeps every file of this version', async ({ page, reque
   expect(sw).toMatch(/seimyaku-/);
 });
 
-test('with no network at all, the game still starts and plays', async ({ page, context }) => {
+test('with no network at all, the game still starts and plays', async ({ page, context, browserName }) => {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/?map=world&sw=1');
@@ -47,6 +47,22 @@ test('with no network at all, the game still starts and plays', async ({ page, c
   await page.reload();
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  // Every file the game needs is kept (what makes an offline start possible), in every browser.
+  const missing = await page.evaluate(async () => {
+    const text = await (await fetch('sw.js')).text();
+    const files = JSON.parse(/const FILES = (\[.*?\]);/.exec(text)[1]);
+    const out = [];
+    for (const f of files) if (!(await caches.match(new URL(f, location.href).href, { ignoreSearch: true, ignoreVary: true }))) out.push(f);
+    return out;
+  });
+  expect(missing).toEqual([]);
+  // Starting with the network off: Playwright's WebKit cannot navigate offline through a service
+  // worker (it reports an internal error), so the start itself is driven in Chromium here and
+  // checked on the iPhone (docs/device-tests, P11.1).
+  if (browserName !== 'chromium') {
+    expect(errors).toEqual([]);
+    return;
+  }
   await context.setOffline(true);
   try {
     await page.reload();

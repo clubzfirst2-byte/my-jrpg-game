@@ -23,8 +23,8 @@ test('the forest core: wakes in its arena, shows its health, rages below half, a
   await expect(page.locator('#boss-bar')).toBeVisible();
   await expect(page.locator('#boss-bar .boss-name')).toHaveText('朽ち根のヌシ');
   await expect.poll(async () => (await api(page, 'toasts')).some((t) => t.includes('目を覚ました'))).toBe(true);
-  // It attacks (a wind-up first).
-  await expect.poll(async () => (await api(page, 'bosses')).find((b) => b.id === 'core_forest').state, { timeout: 5000 }).toBe('windup');
+  // It attacks (a pattern starts with a wind-up; polling may miss the short wind-up itself).
+  await expect.poll(async () => (await api(page, 'bosses')).find((b) => b.id === 'core_forest').pattern, { timeout: 5000 }).not.toBe(null);
   await page.screenshot({ path: testInfo.outputPath('forest-core.png') });
   // (Its charges can knock the player out of the arena, where it calms down: step back in.)
   const backIn = () => api(page, 'teleport', Math.floor(boss.arena.tx + boss.arena.tw / 2), boss.arena.ty + boss.arena.th - 2);

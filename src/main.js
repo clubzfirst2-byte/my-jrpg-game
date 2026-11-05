@@ -752,7 +752,7 @@ async function boot() {
     textureList: () => (renderer.texture?.managedTextures ?? []).filter(Boolean).map((/** @type {any} */ t) => `${t.label ?? ''}:${t.pixelWidth ?? t.width}x${t.pixelHeight ?? t.height}`),
     stream: () => ({ ...view.streamStats(), bundleNames: [...assets.loaded.keys()], textures: textureCount(), displayObjects: countDisplayObjects(app.stage), region: regionAt(state.regions, Math.floor(state.player.x / 16), Math.floor(state.player.y / 16))?.id ?? null }),
     /** P7: abilities and switches. */
-    abilities: () => ({ owned: [...state.progress.abilities], selected: state.progress.ability }),
+    abilities: () => ({ owned: [...state.progress.abilities], selected: state.progress.ability, ready: (state.abilityReadyAt ?? 0) <= state.env.now }),
     grantAbility: (/** @type {string} */ id) => grantAbility(state, id),
     selectAbility: (/** @type {string} */ id) => {
       state.progress.ability = id;
