@@ -29,6 +29,8 @@ export class TouchControls {
     // P7: the selected 星環 ability (its label shows which one).
     this.ability = new HoldButton(root, 'ability-button', '能力');
 
+    /** P11.3: buttons under the left thumb, the stick on the right half. */
+    this.leftHanded = false;
     /** @type {number | null} */
     this.stickPointer = null;
     this.originX = 0;
@@ -49,8 +51,9 @@ export class TouchControls {
 
   /** @param {PointerEvent} e */
   onStickDown(e) {
-    // Left half only: the right half is reserved for action buttons.
-    if (this.stickPointer !== null || e.clientX > window.innerWidth / 2) return;
+    // The stick's half only: the other half is reserved for action buttons.
+    const half = window.innerWidth / 2;
+    if (this.stickPointer !== null || (this.leftHanded ? e.clientX < half : e.clientX > half)) return;
     e.preventDefault();
     this.stickPointer = e.pointerId;
     this.originX = e.clientX;

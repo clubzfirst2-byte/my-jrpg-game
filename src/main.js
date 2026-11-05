@@ -19,6 +19,7 @@ import { InputManager } from './platform/inputManager.js';
 import { installLifecycle } from './platform/lifecycle.js';
 import { loadSettings, saveSettings } from './platform/settings.js';
 import { PauseOverlay } from './ui/pauseOverlay.js';
+import { SettingsMenu } from './ui/settingsMenu.js';
 import { HeartsHud } from './ui/hud.js';
 import { RotateHint } from './ui/rotateHint.js';
 import { TitleScreen } from './ui/title.js';
@@ -356,7 +357,28 @@ async function boot() {
     // P11.2: volumes step 0 -> 25 -> 50 -> 75 -> 100 % and round again; remembered.
     onVolume: (kind) => setVolume(kind, nextVolume(kind === 'bgm' ? settings.bgmVolume : settings.sfxVolume)),
     volumes: () => ({ bgm: settings.bgmVolume, sfx: settings.sfxVolume }),
+    onSettings: () => settingsMenu.open(),
   });
+  // P11.3: the settings screen; every choice applies at once and is remembered.
+  const settingsMenu = new SettingsMenu(uiRoot, {
+    get: () => settings,
+    set: (key, value) => {
+      /** @type {any} */ (settings)[key] = value;
+      saveSettings(settings);
+      applySettings();
+    },
+    onClose: () => pauseOverlay.refresh(),
+  });
+  function applySettings() {
+    uiRoot.classList.toggle('text-large', settings.textSize === 'large');
+    uiRoot.classList.toggle('btn-small', settings.buttonSize === 'small');
+    uiRoot.classList.toggle('btn-large', settings.buttonSize === 'large');
+    uiRoot.classList.toggle('left-handed', settings.hand === 'left');
+    input.touch.leftHanded = settings.hand === 'left';
+    audio.setVolumes({ bgm: settings.bgmVolume, sfx: settings.sfxVolume });
+    pauseOverlay.refresh();
+  }
+  applySettings();
   /** @param {number} v */
   const nextVolume = (v) => (Math.round(v * 4) + 1) % 5 / 4;
   /** @param {'bgm' | 'sfx'} kind @param {number} v */
@@ -602,6 +624,7 @@ async function boot() {
       for (const k of TAP_KEYS) if (heldTaps[k]) frameInput[k] = true;
       // Real elapsed time (PixiJS caps ticker.deltaMS at 100ms); the loop applies its own clamp
       // and accounts for any time it drops (DESIGN.md 1.3).
+      state.difficulty = settings.difficulty; // P11.3
       const result = loop.advance(ticker.elapsedMS, () => stepGame(state, frameInput));
       alpha = result.alpha;
       for (const k of TAP_KEYS) heldTaps[k] = result.steps === 0 && !!frameInput[k];
@@ -741,6 +764,7 @@ async function boot() {
     titleVisible: () => !!title && title.visible,
     /** P11.2: sound (state, track, effects played) and volume. */
     audio: () => audio.stats(),
+    settings: () => ({ ...settings }),
     setVolume: (/** @type {'bgm' | 'sfx'} */ kind, /** @type {number} */ v) => setVolume(kind, v),
     /** P10.6 test helper: where things are (checkpoints, chests, doorways). */
     places: () => ({

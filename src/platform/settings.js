@@ -9,10 +9,14 @@ const KEY = 'seimyaku.settings.v1';
  * @property {number} resolution  internal height candidate
  * @property {number} bgmVolume  P11.2: music, 0..1
  * @property {number} sfxVolume  P11.2: sound effects, 0..1
+ * @property {'easy' | 'normal' | 'hard'} difficulty  P11.3
+ * @property {'normal' | 'large'} textSize  P11.3: conversations, messages, menus
+ * @property {'small' | 'medium' | 'large'} buttonSize  P11.3: the touch buttons
+ * @property {'right' | 'left'} hand  P11.3: which hand presses the action buttons
  */
 
 /** @type {Settings} */
-const DEFAULTS = { resolution: 216, bgmVolume: 0.5, sfxVolume: 0.8 };
+const DEFAULTS = { resolution: 216, bgmVolume: 0.5, sfxVolume: 0.8, difficulty: /** @type {const} */ ('normal'), textSize: /** @type {const} */ ('normal'), buttonSize: /** @type {const} */ ('medium'), hand: /** @type {const} */ ('right') };
 
 /** @returns {Settings} */
 export function loadSettings() {
