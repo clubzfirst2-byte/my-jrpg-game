@@ -8,11 +8,12 @@ import DIALOGUE from '../../../data/dialogue.json';
 import QUESTS from '../../../data/quests.json';
 import SHOPS from '../../../data/shops.json';
 import { addItem, removeItem, countOf, itemDef } from '../items/inventory.js';
+import { sleepUntil } from '../world/interiors.js';
 
 export const TALK_DATA = { dialogue: DIALOGUE, quests: QUESTS, shops: SHOPS };
 
 /** @typedef {{ flag?: string, is?: boolean, quest?: string, state?: string, item?: string, count?: number, money?: number }} Condition */
-/** @typedef {{ setFlag?: string, clearFlag?: string, startQuest?: string, completeQuest?: string, giveItem?: string, count?: number, giveMoney?: number, openShop?: string }} Effect */
+/** @typedef {{ setFlag?: string, clearFlag?: string, startQuest?: string, completeQuest?: string, giveItem?: string, count?: number, giveMoney?: number, openShop?: string, sleep?: number }} Effect  sleep: until that hour (P10.1) */
 
 /** @param {string} id */
 export function questDef(id) {
@@ -70,6 +71,7 @@ export function applyEffects(state, effects = []) {
     if (e.giveItem) addItem(pr.inv, e.giveItem, e.count ?? 1);
     if (e.giveMoney) pr.inv.money += e.giveMoney;
     if (e.openShop) shop = e.openShop;
+    if (e.sleep !== undefined) sleepUntil(state, e.sleep);
   }
   if (effects.length > 0) state.saveRequested = true;
   return shop;

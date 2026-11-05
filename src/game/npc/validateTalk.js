@@ -5,7 +5,7 @@
 
 const QUEST_STATES = ['none', 'active', 'ready', 'done'];
 const COND_KEYS = ['flag', 'is', 'quest', 'state', 'item', 'count', 'money'];
-const EFFECT_KEYS = ['setFlag', 'clearFlag', 'startQuest', 'completeQuest', 'giveItem', 'count', 'giveMoney', 'openShop'];
+const EFFECT_KEYS = ['setFlag', 'clearFlag', 'startQuest', 'completeQuest', 'giveItem', 'count', 'giveMoney', 'openShop', 'sleep'];
 
 /**
  * @param {{ dialogue: any, quests: any, shops: any, items: any }} data
@@ -36,6 +36,7 @@ export function validateTalk(data, world = {}) {
       for (const k of ['startQuest', 'completeQuest']) if (e[k] !== undefined && !quests.has(e[k])) err(`${at}: unknown quest "${e[k]}"`);
       if (e.giveItem !== undefined && !items.has(e.giveItem)) err(`${at}: unknown item "${e.giveItem}"`);
       if (e.openShop !== undefined && !shops.has(e.openShop)) err(`${at}: unknown shop "${e.openShop}"`);
+      if (e.sleep !== undefined && !(Number.isInteger(e.sleep) && e.sleep >= 0 && e.sleep < 24)) err(`${at}: sleep must be an hour 0..23`);
     }
   };
 

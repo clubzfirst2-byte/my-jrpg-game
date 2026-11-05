@@ -1096,3 +1096,206 @@ export function houseSprite() {
   }
   return [...roof, ...wall];
 }
+
+// --- P10.1: inside the houses ---
+
+/** Wooden floor boards (16 x 16). */
+export function woodFloorTile() {
+  const g = grid(16, 16, 'f');
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      if (y % 4 === 3) g[y][x] = 'F';
+      else if ((x + (Math.floor(y / 4) % 2) * 8) % 16 === 0) g[y][x] = 'E';
+      else if ((x * 5 + y * 3) % 17 === 0) g[y][x] = 'E';
+    }
+  }
+  return toRows(g);
+}
+
+/** The top of a house wall seen from above: dark timber (16 x 16). */
+export function wallTopTile() {
+  const g = grid(16, 16, 'T');
+  for (let x = 0; x < 16; x++) {
+    g[0][x] = 'N';
+    g[15][x] = 'k';
+  }
+  for (let y = 4; y < 16; y += 5) for (let x = 0; x < 16; x++) if (x % 7 !== 3) g[y][x] = 'F';
+  return toRows(g);
+}
+
+/** Nothing (outside every room). */
+export function darkTile() {
+  return toRows(grid(16, 16, 'k'));
+}
+
+/** Plastered wall face with a timber beam on top and a skirting board at the base (16 x h). */
+export function plasterFace(h, top, bottom = false) {
+  const g = grid(16, h, 'v');
+  for (let y = 0; y < h; y++) for (let x = 0; x < 16; x++) if ((x * 3 + y * 7) % 19 === 0) g[y][x] = 'B';
+  if (top) for (let x = 0; x < 16; x++) g[0][x] = g[1][x] = 'T';
+  if (bottom) {
+    for (let x = 0; x < 16; x++) {
+      g[h - 1][x] = 'k';
+      if (h > 2) g[h - 2][x] = 'N';
+    }
+  }
+  return toRows(g);
+}
+
+/** @param {string[]} rows @param {number} w */
+const pad = (rows, w) => rows.map((r) => r.padEnd(w, '.'));
+
+/** The low front wall of a room (16 x 12). */
+export function lowWallSprite() {
+  return [
+    'kkkkkkkkkkkkkkkk',
+    'NNNNNNNNNNNNNNNN',
+    'AAAAAAAAAAAAAAAA',
+    'kkkkkkkkkkkkkkkk',
+    'TNTTTTTTNTTTTTTT',
+    'TNTTTTTTNTTTTTTT',
+    'TNTTTTTTNTTTTTTT',
+    'TNTTTTTTNTTTTTTT',
+    'TNTTTTTTNTTTTTTT',
+    'TNTTTTTTNTTTTTTT',
+    'FFFFFFFFFFFFFFFF',
+    'kkkkkkkkkkkkkkkk',
+  ];
+}
+
+/** A bed, head to the north (16 x 26). */
+export function bedSprite() {
+  const rows = ['.kkkkkkkkkkkkkk.', 'kNNNNNNNNNNNNNNk', 'kNTTTTTTTTTTTTNk', 'kNkkkkkkkkkkkkNk', 'kNkXXXXXXXXXXkNk', 'kNkXXXXXXXXXXkNk', 'kNkXXXXXXXXXXkNk', 'kNkkkkkkkkkkkkNk'];
+  for (let y = 0; y < 14; y++) rows.push(y === 0 ? 'kNkCCCCCCCCCCkNk' : y === 13 ? 'kNkkkkkkkkkkkkNk' : y % 4 === 2 ? 'kNkcCccccccCckNk' : 'kNkccccccccccckNk'.slice(0, 16));
+  rows.push('kNNNNNNNNNNNNNNk', 'kTTTTTTTTTTTTTTk', 'kTk..........kTk', 'kkk..........kkk');
+  return pad(rows, 16);
+}
+
+/** A small table (16 x 14). */
+export function tableSprite() {
+  return [
+    '.kkkkkkkkkkkkkk.',
+    'kqqqqqqqqqqqqqqk',
+    'kNNNNNNNNNNNNNNk',
+    'kNNNNNNNNNNNNNNk',
+    'kNNNNSNNNNNNNNNk',
+    'kNNNNNNNNNNNNNNk',
+    'kTTTTTTTTTTTTTTk',
+    '.kTkkkkkkkkkkTk.',
+    '.kTk........kTk.',
+    '.kTk........kTk.',
+    '.kTk........kTk.',
+    '.kTk........kTk.',
+    '.kTk........kTk.',
+    '.kkk........kkk.',
+  ];
+}
+
+/** A shelf against the wall, with jars and books; `charm` adds the elder's charm glowing on top. @param {boolean} [charm] */
+export function shelfSprite(charm = false) {
+  const rows = [
+    charm ? '......kIIk......' : '................',
+    charm ? '.....kIOOIk.....' : '................',
+    charm ? '......kIIk......' : '................',
+    'kkkkkkkkkkkkkkkk',
+    'kTTTTTTTTTTTTTTk',
+    'kTkkkkkkkkkkkkTk',
+    'kTkYYkWWkKKkrrTk',
+    'kTkYYkWWkKKkrrTk',
+    'kTTTTTTTTTTTTTTk',
+    'kTkcckhhkkRRkkTk',
+    'kTkcckhhkkRRkkTk',
+    'kTkcckhhkkRRkkTk',
+    'kTTTTTTTTTTTTTTk',
+    'kTkNNNNkkiiikkTk',
+    'kTkNNNNkkiiikkTk',
+    'kTTTTTTTTTTTTTTk',
+    'kTk..........kTk',
+    'kTk..........kTk',
+    'kTTTTTTTTTTTTTTk',
+    'kkkkkkkkkkkkkkkk',
+  ];
+  return rows;
+}
+
+/** One length of shop counter (16 x 16). */
+export function counterSprite() {
+  return [
+    'kkkkkkkkkkkkkkkk',
+    'qqqqqqqqqqqqqqqq',
+    'vvvvvvvvvvvvvvvv',
+    'kkkkkkkkkkkkkkkk',
+    'NNNNNNNNNNNNNNNN',
+    'NTTNNNNNNNNNNTTN',
+    'NTTNNNNNNNNNNTTN',
+    'NNNNNNNNNNNNNNNN',
+    'NNNNNNNNNNNNNNNN',
+    'NTTNNNNNNNNNNTTN',
+    'NTTNNNNNNNNNNTTN',
+    'NNNNNNNNNNNNNNNN',
+    'NNNNNNNNNNNNNNNN',
+    'TTTTTTTTTTTTTTTT',
+    'FFFFFFFFFFFFFFFF',
+    'kkkkkkkkkkkkkkkk',
+  ];
+}
+
+/** A stone cooking stove with a fire inside (16 x 20). */
+export function stoveSprite() {
+  return [
+    '....kkkkkkkk....',
+    '....kmmmmmmk....',
+    '....kmrrrrmk....',
+    '..kkkmmmmmmkkk..',
+    '.kRRRRRRRRRRRRk.',
+    'kRrrrrrrrrrrrrRk',
+    'krrrrrrrrrrrrrrk',
+    'krmmmmmmmmmmmmrk',
+    'krmkkkkkkkkkkmrk',
+    'krmkDDDDDDDDkmrk',
+    'krmkDDKKKKDDkmrk',
+    'krmkDKJJJJKDkmrk',
+    'krmkKJJJJJJKkmrk',
+    'krmkKJJYYJJKkmrk',
+    'krmkkkkkkkkkkmrk',
+    'krrrrrrrrrrrrrrk',
+    'krmrrmrrmrrmrrmk',
+    'krrrrrrrrrrrrrrk',
+    'kmmmmmmmmmmmmmmk',
+    'kkkkkkkkkkkkkkkk',
+  ];
+}
+
+/** A barrel (12 x 14). */
+export function barrelSprite() {
+  return [
+    '..kkkkkkkk..',
+    '.kNNNNNNNNk.',
+    'kNTTTTTTTTNk',
+    'kkkkkkkkkkkk',
+    'kNNTNNNNTNNk',
+    'kNNTNNNNTNNk',
+    'kaaaaaaaaaak',
+    'kNNTNNNNTNNk',
+    'kNNTNNNNTNNk',
+    'kNNTNNNNTNNk',
+    'kaaaaaaaaaak',
+    'kNNTNNNNTNNk',
+    '.kNTNNNNTNk.',
+    '..kkkkkkkk..',
+  ];
+}
+
+/** The door mat: walk down onto it to go back outside (16 x 8). */
+export function matSprite() {
+  return [
+    '.kkkkkkkkkkkkkk.',
+    'kiiiiiiiiiiiiiik',
+    'kiYYYYYYYYYYYYik',
+    'kiYiiiiiiiiiiYik',
+    'kiYiiiiiiiiiiYik',
+    'kiYYYYYYYYYYYYik',
+    'kiiiiiiiiiiiiiik',
+    '.kkkkkkkkkkkkkk.',
+  ];
+}

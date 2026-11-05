@@ -352,6 +352,54 @@
           ]
         }
       }
+    },
+    "bed": {
+      "name": "ベッド",
+      "start": [
+        {
+          "goto": "ask"
+        }
+      ],
+      "nodes": {
+        "ask": {
+          "text": [
+            "ふかふかのベッドだ。ひと休みしようか？"
+          ],
+          "choices": [
+            {
+              "label": "朝まで眠る",
+              "effects": [
+                {
+                  "sleep": 6
+                }
+              ],
+              "goto": "morning"
+            },
+            {
+              "label": "夕方まで眠る",
+              "effects": [
+                {
+                  "sleep": 18
+                }
+              ],
+              "goto": "evening"
+            },
+            {
+              "label": "やめておく"
+            }
+          ]
+        },
+        "morning": {
+          "text": [
+            "……ぐっすり眠った。朝になった。"
+          ]
+        },
+        "evening": {
+          "text": [
+            "……ひと眠りした。日が傾いてきた。"
+          ]
+        }
+      }
     }
   }
 }

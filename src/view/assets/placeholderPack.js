@@ -58,6 +58,18 @@ import {
   cactusSprite,
   villagerFrames,
   houseSprite,
+  woodFloorTile,
+  wallTopTile,
+  darkTile,
+  plasterFace,
+  lowWallSprite,
+  bedSprite,
+  tableSprite,
+  shelfSprite,
+  counterSprite,
+  stoveSprite,
+  barrelSprite,
+  matSprite,
 } from './placeholderArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
@@ -74,7 +86,7 @@ export function placeholderEntries() {
   entries.push({ key: 'tile.ruin', rows: ruinFloorTile(), anchor: TOP_LEFT });
   entries.push({ key: 'tile.ramp', rows: rampSprite(LEVEL_PX), anchor: TOP_LEFT });
   // Cliff face segments: face.<material>.<top|mid><bottom?>.<4|8>
-  for (const [mat, face] of /** @type {const} */ ([['earth', earthFace], ['ruin', ruinFace]])) {
+  for (const [mat, face] of /** @type {const} */ ([['earth', earthFace], ['ruin', ruinFace], ['wall', plasterFace]])) {
     for (const h of [4, 8]) {
       for (const top of [true, false]) {
         for (const bottom of [true, false]) {
@@ -135,6 +147,10 @@ export function placeholderEntries() {
   entries.push({ key: 'sw.sensor.off', rows: sensorSprite(false), anchor: FEET });
   entries.push({ key: 'sw.sensor.on', rows: sensorSprite(true), anchor: FEET });
   entries.push({ key: 'fx.light', rows: lightOrbSprite(), anchor: CENTER });
+  // P10.1: house floors and walls (rooms can be in any region's strip); nothing outside the rooms.
+  entries.push({ key: 'tile.wood', rows: woodFloorTile(), anchor: TOP_LEFT });
+  entries.push({ key: 'tile.walltop', rows: wallTopTile(), anchor: TOP_LEFT });
+  entries.push({ key: 'tile.dark', rows: darkTile(), anchor: TOP_LEFT });
   return entries;
 }
 
@@ -152,6 +168,17 @@ export const REGION_ENTRIES = {
     // P9: the village of 風見 (houses and villagers) is in the plains.
     { key: 'obj.house', rows: houseSprite(), anchor: FEET },
     ...[1, 2, 3, 4, 5].flatMap((look) => Object.entries(villagerFrames(look)).map(([key, rows]) => ({ key, rows, anchor: FEET }))),
+    // P10.1: the furniture inside the village houses.
+    { key: 'obj.lowwall', rows: lowWallSprite(), anchor: FEET },
+    { key: 'obj.bed', rows: bedSprite(), anchor: FEET },
+    { key: 'obj.table', rows: tableSprite(), anchor: FEET },
+    { key: 'obj.shelf', rows: shelfSprite(), anchor: FEET },
+    { key: 'obj.charm_shelf', rows: shelfSprite(), anchor: FEET },
+    { key: 'obj.charm_shelf.on', rows: shelfSprite(true), anchor: FEET },
+    { key: 'obj.counter', rows: counterSprite(), anchor: FEET },
+    { key: 'obj.stove', rows: stoveSprite(), anchor: FEET },
+    { key: 'obj.barrel', rows: barrelSprite(), anchor: FEET },
+    { key: 'obj.mat', rows: matSprite(), anchor: FEET },
   ],
 };
 

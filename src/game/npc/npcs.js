@@ -20,11 +20,12 @@ export const NPC = Object.freeze({
 /**
  * @typedef {{ id: string, name: string, dialogue: string, look: number, x: number, y: number, z: number,
  *   prevX: number, prevY: number, homeX: number, homeY: number, tx: number, ty: number, waitMs: number,
- *   facing: string, moving: boolean, walkTime: number, halfWidth: number, height: number }} Npc
+ *   facing: string, moving: boolean, walkTime: number, halfWidth: number, height: number, stay: boolean, reach: number }} Npc
+ * stay: never strolls (a shopkeeper behind the counter, P10.1); reach: talk range (across a counter)
  */
 
 /**
- * @param {any} map @param {{ id: string, name: string, dialogue: string, look?: number, tx: number, ty: number }[]} defs
+ * @param {any} map @param {{ id: string, name: string, dialogue: string, look?: number, tx: number, ty: number, stay?: boolean, reach?: number }[]} defs
  * @returns {Npc[]}
  */
 export function createNpcs(map, defs) {
@@ -53,6 +54,8 @@ export function createNpcs(map, defs) {
       walkTime: 0,
       halfWidth: 5,
       height: 6,
+      stay: !!d.stay,
+      reach: d.reach ?? NPC.talkRange,
     };
   });
 }
@@ -69,10 +72,10 @@ export function stepNpcs(state, dt) {
     n.prevY = n.y;
     const dx = p.x - n.x;
     const dy = p.y - n.y;
-    const near = Math.hypot(dx, dy) < NPC.stopNear;
-    if (near || state.dialogue?.npc === n.id) {
+    const near = Math.hypot(dx, dy) < Math.max(NPC.stopNear, n.reach + 12);
+    if (near || n.stay || state.dialogue?.npc === n.id) {
       n.moving = false;
-      n.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
+      n.facing = !near && n.stay ? 'down' : Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
       continue;
     }
     const tdx = n.tx - n.x;
@@ -123,7 +126,7 @@ export function npcInReach(state) {
     const dx = n.x - p.x;
     const dy = n.y - p.y;
     const d = Math.hypot(dx, dy);
-    if (d < NPC.talkRange && dx * p.aimX + dy * p.aimY > 0 && Math.abs(n.z - p.z) < 12 && d < bestD) {
+    if (d < n.reach && dx * p.aimX + dy * p.aimY > 0 && Math.abs(n.z - p.z) < 12 && d < bestD) {
       best = n;
       bestD = d;
     }

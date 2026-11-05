@@ -59,8 +59,8 @@ export class InventoryMenu {
     this.bagButton = button('bag-button', '持ち物', () => this.open());
     // The station (fire / anvil) is decided when the button is pressed: the game is paused while the
     // menu is open, so the player is still there.
-    this.useButton = button('use-button', '', () => (this.useKind === 'talk' ? this.hooks.talk?.() : this.open(this.useTab, true)));
-    /** @type {'cook' | 'forge' | 'talk'} what the button does now */
+    this.useButton = button('use-button', '', () => (this.useKind === 'talk' || this.useKind === 'sleep' ? this.hooks.talk?.() : this.open(this.useTab, true)));
+    /** @type {'cook' | 'forge' | 'talk' | 'sleep'} what the button does now */
     this.useKind = 'cook';
     /** @type {Tab | null} cooking / forge tab available in this opening of the menu */
     this.station = null;
@@ -89,15 +89,15 @@ export class InventoryMenu {
     return !this.el.hidden;
   }
 
-  /** Shows the "料理する / 鍛冶 / 話す" button when something usable is in reach. @param {'cook' | 'forge' | 'talk' | null} nearby @param {string} [who] */
+  /** Shows the "料理する / 鍛冶 / 話す / 眠る" button when something usable is in reach. @param {'cook' | 'forge' | 'talk' | 'sleep' | null} nearby @param {string} [who] */
   setNearby(nearby, who = '') {
     // Called every frame: touch the DOM only when something changes. Rewriting the label every
     // frame replaces its text node, and WebKit (iPhone Safari) can then drop a tap on the button.
     const hidden = !nearby || this.isOpen;
     if (this.useButton.hidden !== hidden) this.useButton.hidden = hidden;
     if (nearby) this.useKind = nearby;
-    if (nearby && nearby !== 'talk' && nearby !== this.useTab) this.useTab = nearby;
-    const label = this.useKind === 'talk' ? `話す（${who}）` : this.useTab === 'cook' ? '料理する' : '鍛冶';
+    if ((nearby === 'cook' || nearby === 'forge') && nearby !== this.useTab) this.useTab = nearby;
+    const label = this.useKind === 'talk' ? `話す（${who}）` : this.useKind === 'sleep' ? '眠る' : this.useTab === 'cook' ? '料理する' : '鍛冶';
     if (this.useButton.textContent !== label) this.useButton.textContent = label;
   }
 

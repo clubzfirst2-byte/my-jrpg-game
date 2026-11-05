@@ -8,11 +8,14 @@ the island (rows 0-71) by src/game/world/world.js:
   赤砂の荒野 (desert, rows 168-263) dunes, mesas, cacti, an oasis; it never rains there
 
 The island's sand causeway (cols 45-50) continues into the plains' north edge.
+East of each region (cols 96-111, hidden from the outdoor camera) is a strip of rooms: P10.1 puts
+the insides of the village houses there; their doors are warps.
 Coordinates in the features below are LOCAL to each region; world.js offsets them.
 """
 import math, json, os
 
 RW, RH = 96, 96
+EW = 16  # the room strip (world cols 96-111)
 D = '0123456789abcdefghijklmnopqrstuv'
 CAUSEWAY = range(45, 51)
 
@@ -34,7 +37,10 @@ class Region:
         self.id, self.name, self.seed = rid, name, seed
         self.g = [['~'] * RW for _ in range(RH)]
         self.h = [[0] * RW for _ in range(RH)]
-        self.features = {'enemies': [], 'chests': [], 'checkpoints': [], 'landmarks': [], 'pickups': [], 'envObjects': [], 'campfires': [], 'npcs': []}
+        self.features = {'enemies': [], 'chests': [], 'checkpoints': [], 'landmarks': [], 'pickups': [], 'envObjects': [], 'campfires': [], 'npcs': [], 'warps': [], 'areas': []}
+        # The room strip east of the region (P10.1): nothing there until a room is carved out.
+        self.eg = [['%'] * EW for _ in range(RH)]
+        self.eh = [[0] * EW for _ in range(RH)]
 
     def land(self, edge):
         # Land everywhere except a sea border (`edge` tiles) on the west, east and south.
@@ -75,14 +81,39 @@ class Region:
                     if self.free(x, y, lvl): return x, y
         raise AssertionError(('no free tile', self.id, x0, y0))
 
+    def room(self, rid, name, y0, door, furniture=(), home=True):
+        """A room in the east strip (world cols 98-110, rows y0..y0+9) behind the door of a house.
+
+        Walls: two raised rows on the north (their plaster face shows), flat wall tops west and east
+        (a raised side wall would show its end at the bottom corners), and a low front wall on the
+        south (in the 3/4 view a tall south wall would hide the player).
+        Inside: floor rows y0+2..y0+8. The mat at (104, y0+8) leads back out (walk down onto it).
+        """
+        X0, X1 = 2, 14  # strip-local columns of the west and east walls (world 98, 110)
+        for y in range(y0, y0 + 10):
+            for x in range(X0, X1 + 1):
+                wall = y < y0 + 2 or x in (X0, X1)
+                self.eg[y][x] = 'H' if y == y0 + 9 else 'W' if wall else 'w'
+                self.eh[y][x] = 32 if y < y0 + 2 else 0
+        hx, hy = door
+        wx = 96 + 8  # world column of the mat / arrival
+        self.features['warps'].append({'id': f'{rid}-in', 'tx': hx, 'ty': hy + 1, 'facing': 'up', 'toTx': wx, 'toTy': y0 + 7})
+        self.features['warps'].append({'id': f'{rid}-out', 'tx': wx, 'ty': y0 + 8, 'facing': 'down', 'toTx': hx, 'toTy': hy + 2})
+        self.features['areas'].append({'id': rid, 'name': name, 'tx': 96 + X0, 'ty': y0, 'tw': X1 - X0 + 1, 'th': 10, **({'home': True} if home else {})})
+        self.features['envObjects'].append({'type': 'mat', 'tx': wx, 'ty': y0 + 8})
+        for (t, x, y) in furniture:
+            assert self.eg[y0 + y][x - 96] == 'w', ('furniture on', t, x, y)
+            assert (x, y) not in ((8 + 96, 7), (8 + 96, 8)), ('furniture blocks the door', t)
+            self.features['envObjects'].append({'type': t, 'tx': x, 'ty': y0 + y})
+
     def out(self):
-        def hc(x, y):
-            v = self.h[y][x]; assert v % 4 == 0 and v // 4 < 32
+        def hc(v):
+            assert v % 4 == 0 and v // 4 < 32
             return D[v // 4]
         return {
             'id': self.id, 'name': self.name,
-            'ground': [''.join(r) for r in self.g],
-            'height': [''.join(hc(x, y) for x in range(RW)) for y in range(RH)],
+            'ground': [''.join(self.g[y]) + ''.join(self.eg[y]) for y in range(RH)],
+            'height': [''.join(hc(self.h[y][x]) for x in range(RW)) + ''.join(hc(self.eh[y][x]) for x in range(EW)) for y in range(RH)],
             **self.features, **self.extra,
         }
 
@@ -127,11 +158,24 @@ for (x, y) in HOUSES:
     for yy in (y - 1, y):
         for xx in (x - 1, x, x + 1):
             assert P.g[yy][xx] in '.=', ('house on', xx, yy)
+# --- P10.1: inside the houses (rooms in the east strip; local x is the world column 96..111) ---
+# 雑貨屋: the shopkeeper stands behind the counter and sells across it.
+P.room('shop', '風見の雑貨屋', 3, HOUSES[0], [
+    *[('counter', x, 4) for x in range(99, 110) if x != 104], ('counter', 104, 4),
+    ('shelf', 100, 2), ('shelf', 102, 2), ('shelf', 106, 2), ('shelf', 108, 2), ('barrel', 99, 7), ('barrel', 109, 7),
+])
+# 料理番の家: a stove to cook at.
+P.room('kitchen', '料理番の家', 15, HOUSES[1], [('stove', 100, 2), ('stove', 101, 2), ('table', 106, 5), ('table', 107, 5), ('barrel', 109, 2), ('shelf', 103, 2)])
+# 長老の家: the charm goes on the shelf once it is brought back.
+P.room('elder_house', '長老の家', 27, HOUSES[2], [('charm_shelf', 104, 2), ('shelf', 100, 2), ('bed', 108, 3), ('table', 101, 6)])
+# 風見の宿: beds to sleep in until morning or evening.
+P.room('inn', '風見の宿', 39, HOUSES[3], [('bed', 100, 3), ('bed', 102, 3), ('bed', 106, 3), ('bed', 108, 3), ('table', 104, 3), ('barrel', 109, 7)])
 P.features['npcs'] = [
     {'id': 'elder', 'name': '長老', 'dialogue': 'elder', 'look': 1, 'tx': 20, 'ty': 17},
     {'id': 'cook', 'name': '宿の料理人', 'dialogue': 'cook', 'look': 2, 'tx': 26, 'ty': 15},
     {'id': 'guard', 'name': '見張り', 'dialogue': 'guard', 'look': 3, 'tx': 37, 'ty': 17},
-    {'id': 'merchant', 'name': '雑貨屋', 'dialogue': 'merchant', 'look': 4, 'tx': 30, 'ty': 18},
+    # Behind the counter: stays put, and is talked to across it.
+    {'id': 'merchant', 'name': '雑貨屋', 'dialogue': 'merchant', 'look': 4, 'tx': 104, 'ty': 3 + 3, 'stay': True, 'reach': 40},
     {'id': 'child', 'name': '村の子', 'dialogue': 'child', 'look': 5, 'tx': 23, 'ty': 22},
 ]
 P.features['landmarks'].append({'id': 'village', 'name': '風見の村', 'tx': 24, 'ty': 15, 'always': False})
@@ -194,13 +238,17 @@ S.extra = {'climate': 'dry', 'bundle': 'region:desert'}
 
 regions = [P.out(), S.out()]
 for r in regions:
-    assert len(r['ground']) == RH and all(len(row) == RW for row in r['ground'])
+    assert len(r['ground']) == RH and all(len(row) == RW + EW for row in r['ground'])
+    walk = lambda x, y: r['ground'][y][x] in '.s=w' and not any(o['tx'] == x and o['ty'] == y for o in r['envObjects'] if o['type'] != 'mat')
+    for w in r['warps']:
+        assert walk(w['tx'], w['ty']), ('warp tile blocked', r['id'], w)
+        assert walk(w['toTx'], w['toTy']), ('warp arrival blocked', r['id'], w)
     for c in r['chests'] + r['checkpoints']:
         assert r['ground'][c['ty']][c['tx']] in '.s=', (r['id'], c)
 
 out = """// @ts-check
 // Region templates south of the first island (P8). GENERATED by tools/gen_world.py: edit the script.
-// Each region is 96 x 96 tiles; coordinates are local to the region (src/game/world/world.js
+// Each region is 96 x 96 tiles plus a 16-column strip of rooms to the east (P10.1); coordinates are local to the region (src/game/world/world.js
 // stacks the regions under the island and offsets them).
 
 /** @typedef {import('../tilemap.js').IslandDef & { id: string, name: string, climate: 'temperate' | 'dry', bundle: string }} RegionDef */
