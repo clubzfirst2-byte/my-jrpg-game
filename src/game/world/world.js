@@ -48,6 +48,7 @@ export function stitchWorld(island, regions) {
     npcs: [...(island.npcs ?? [])],
     warps: [...(island.warps ?? [])],
     areas: [...(island.areas ?? [])],
+    bosses: [...(island.bosses ?? [])],
     /** @type {RegionInfo[]} */
     regions: [{ id: 'island', name: 'はじまりの島', tx: 0, ty: 0, tw: OUTDOOR_W, th: island.ground.length, climate: 'temperate', bundle: null }],
   };
@@ -66,6 +67,8 @@ export function stitchWorld(island, regions) {
     for (const key of ['enemies', 'chests', 'checkpoints', 'landmarks', 'pickups', 'envObjects', 'campfires', 'npcs', 'areas']) {
       for (const o of r[key] ?? []) def[key].push(at(o));
     }
+    // P10.4: bosses and their arenas.
+    for (const b of r.bosses ?? []) def.bosses.push({ ...at(b), arena: at(b.arena) });
     // P10.1: house doors lead to rooms in the region's east strip (both ends move with the region).
     for (const w of r.warps ?? []) def.warps.push({ ...w, tx: w.tx + ox, ty: w.ty + oy, toTx: w.toTx + ox, toTy: w.toTy + oy });
     // The region (its climate and art bundle) includes its strip of rooms.

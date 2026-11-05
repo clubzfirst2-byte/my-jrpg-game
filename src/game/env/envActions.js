@@ -241,7 +241,7 @@ export function fireDamage(state, dtMs) {
     const ei = tileIndexAt(state, e.x, e.y);
     if (e.fireMs === 0 && env.burning.has(ei) && e.z - state.map.elev[ei] <= 8) {
       e.fireMs = ENV_COMBAT.fireEnemyEveryMs;
-      hitEnemy(state, e, { owner: 'player', id: `fire${state.tick}`, damage: ENV_COMBAT.fireEnemyDamage, from: { x: e.x, y: e.y - 1 }, kind: 'projectile', knock: 0.2 });
+      hitEnemy(state, e, { owner: 'player', id: `fire${state.tick}`, damage: ENV_COMBAT.fireEnemyDamage, from: { x: e.x, y: e.y - 1 }, kind: 'projectile', knock: 0.2, element: 'fire' });
     }
   }
 }
@@ -280,7 +280,7 @@ export function arrowEnv(state, pr, blocked, expired) {
 /** A fire arrow that hits an enemy burns it and the ground under it. @param {any} state @param {any} pr @param {any} e */
 export function fireArrowHitsEnemy(state, pr, e) {
   if (!pr.fire) return;
-  hitEnemy(state, e, { owner: 'player', id: `${pr.id}f`, damage: ENV_COMBAT.fireArrowDamage, from: { x: pr.x, y: pr.y }, kind: 'projectile', knock: 0 });
+  hitEnemy(state, e, { owner: 'player', id: `${pr.id}f`, damage: ENV_COMBAT.fireArrowDamage, from: { x: pr.x, y: pr.y }, kind: 'projectile', knock: 0, element: 'fire' });
   ignite(state.env, state.map, tileIndexAt(state, e.x, e.y));
 }
 

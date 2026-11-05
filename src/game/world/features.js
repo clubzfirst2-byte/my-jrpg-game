@@ -34,11 +34,12 @@ const OPEN_RANGE = 20;
  * @property {Record<string, Record<string, any>>} [worldDiff]  P8: changed objects, by chunk
  * @property {Record<string, boolean>} flags   P9: things said and done
  * @property {Record<string, 'active' | 'done'>} quests  P9: quests started / finished
+ * @property {string[]} bosses  P10.4: cores of the murk purified (bosses defeated)
  */
 
 /** @returns {Progress} */
 export function emptyProgress() {
-  return { openedChests: [], checkpoints: [], checkpoint: null, landmarks: [], maxHp: 12, gates: [], inv: createInventory(), picked: {}, abilities: [], ability: null, maxStamina: 100, flags: {}, quests: {} };
+  return { openedChests: [], checkpoints: [], checkpoint: null, landmarks: [], maxHp: 12, gates: [], inv: createInventory(), picked: {}, abilities: [], ability: null, maxStamina: 100, flags: {}, quests: {}, bosses: [] };
 }
 
 /** Feet position at the center-bottom of a tile. @param {any} map @param {number} tx @param {number} ty */
@@ -209,10 +210,13 @@ export function applyProgress(state, saved) {
   pr.abilities = [...pr.abilities];
   pr.flags = { ...pr.flags };
   pr.quests = { ...pr.quests };
+  pr.bosses = [...pr.bosses];
   pr.inv = normalizeInventory(saved.inv);
   pr.picked = { ...(saved.picked ?? {}) };
   state.progress = pr;
   state.pickupsStale = true; // placed again on the next step (taken ones stay away for a day)
+  // P10.4: purified cores stay gone.
+  if (state.enemies) state.enemies = state.enemies.filter((/** @type {any} */ e) => !e.boss || !pr.bosses.includes(e.bossId));
   if (state.env) {
     for (const link of pr.gates) openDoors(state.env, state.map, link);
     if (typeof pr.worldMs === 'number') setWorldTime(state.env, pr.worldMs);

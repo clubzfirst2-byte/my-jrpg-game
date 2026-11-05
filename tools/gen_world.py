@@ -37,7 +37,7 @@ class Region:
         self.id, self.name, self.seed = rid, name, seed
         self.g = [['~'] * RW for _ in range(RH)]
         self.h = [[0] * RW for _ in range(RH)]
-        self.features = {'enemies': [], 'chests': [], 'checkpoints': [], 'landmarks': [], 'pickups': [], 'envObjects': [], 'campfires': [], 'npcs': [], 'warps': [], 'areas': []}
+        self.features = {'enemies': [], 'chests': [], 'checkpoints': [], 'landmarks': [], 'pickups': [], 'envObjects': [], 'campfires': [], 'npcs': [], 'warps': [], 'areas': [], 'bosses': []}
         # The room strip east of the region (P10.1): nothing there until a room is carved out.
         self.eg = [['%'] * EW for _ in range(RH)]
         self.eh = [[0] * EW for _ in range(RH)]
@@ -80,6 +80,17 @@ class Region:
                 for x in range(x0 - d, x0 + d + 1):
                     if self.free(x, y, lvl): return x, y
         raise AssertionError(('no free tile', self.id, x0, y0))
+
+    def arena(self, bid, kind, x0, y0, w, h, level=0):
+        """P10.4: a flat open ground where a core of the murk waits (its boss stays inside)."""
+        for y in range(y0, y0 + h):
+            for x in range(x0, x0 + w):
+                self.g[y][x] = '.'; self.h[y][x] = level
+        for key in ('enemies', 'pickups', 'chests', 'checkpoints', 'campfires'):
+            for o in self.features[key]:
+                assert not (x0 <= o['tx'] < x0 + w and y0 <= o['ty'] < y0 + h), ('arena over', self.id, key, o)
+        self.features['envObjects'] = [o for o in self.features['envObjects'] if not (x0 <= o['tx'] < x0 + w and y0 <= o['ty'] < y0 + h)]
+        self.features['bosses'].append({'id': bid, 'kind': kind, 'tx': x0 + w // 2, 'ty': y0 + h // 2, 'arena': {'tx': x0, 'ty': y0, 'tw': w, 'th': h}})
 
     def room(self, rid, name, y0, door, furniture=(), home=True):
         """A room in the east strip (world cols 98-110, rows y0..y0+9) behind the door of a house.
@@ -312,7 +323,7 @@ M.features['checkpoints'].append({'id': 'mountains', **dict(zip(('tx', 'ty'), M.
 tx, ty = M.near_free(53, 30, 64)
 M.features['chests'].append({'id': 'summit', 'tx': tx, 'ty': ty, 'reward': 'money', 'money': 150})
 M.features['landmarks'].append({'id': 'summit', 'name': '白嶺の頂', 'tx': 53, 'ty': 30, 'always': False})
-for (x, y, lvl) in [(30, 50, 16), (66, 44, 16), (50, 26, 48)]:
+for (x, y, lvl) in [(30, 50, 16), (40, 62, 16), (50, 26, 48)]:
     tx, ty = M.near_free(x, y, lvl)
     M.features['enemies'].append({'kind': 'archer', 'tx': tx, 'ty': ty})
 tx, ty = M.near_free(20, 78, 16)
@@ -343,7 +354,7 @@ F.features['landmarks'].append({'id': 'great_tree', 'name': '囁きの大樹', '
 F.features['checkpoints'].append({'id': 'forest', **dict(zip(('tx', 'ty'), F.near_free(12, 53)))})
 tx, ty = F.near_free(82, 76)
 F.features['chests'].append({'id': 'thicket', 'tx': tx, 'ty': ty, 'reward': 'money', 'money': 120})
-for (x, y, kind) in [(30, 40, 'beast'), (58, 70, 'beast'), (74, 44, 'beast'), (40, 20, 'archer'), (20, 64, 'archer')]:
+for (x, y, kind) in [(30, 40, 'beast'), (58, 70, 'beast'), (84, 30, 'beast'), (40, 20, 'archer'), (20, 64, 'archer')]:
     tx, ty = F.near_free(x, y, 16 if (x, y) == (20, 64) else 0)
     F.features['enemies'].append({'kind': kind, 'tx': tx, 'ty': ty})
 for k, (x, y, item) in enumerate([(16, 44, 'mushroom'), (34, 60, 'mushroom'), (60, 30, 'mushroom'), (80, 58, 'red_berry'), (52, 86, 'arrow')]):
@@ -385,6 +396,15 @@ for k, (x, y, item) in enumerate([(58, 34, 'red_berry'), (44, 62, 'swift_herb'),
     tx, ty = L.near_free(x, y)
     L.features['pickups'].append({'id': f'lake{k}', 'item': item, 'tx': tx, 'ty': ty, **({'count': 5} if item == 'arrow' else {})})
 L.extra = {'climate': 'temperate', 'bundle': 'region:lake', 'col': 1}
+
+# P10.4: the four cores of the murk, each in an open arena of its region.
+F.arena('core_forest', 'root', 66, 38, 16, 12)          # the clearing of the great tree
+M.arena('core_mountains', 'frost', 60, 44, 16, 11, 16)  # a snowfield shelf below the summit
+S.arena('core_desert', 'sand', 72, 76, 16, 12)          # the dunes south-east
+L.arena('core_lake', 'storm', 60, 78, 18, 10)           # the south shore
+for R in (F, M, S, L):
+    for b in R.features['bosses']:
+        R.features['landmarks'].append({'id': b['id'], 'name': '澱の核', 'tx': b['tx'], 'ty': b['ty'], 'always': False})
 
 # The passes between the columns.
 PASS_PF = range(52, 55)

@@ -13,6 +13,7 @@ import { Ground, Shape, LEVEL_PX, inBounds, northEdgeHeight, southEdgeHeight } f
 import { lerp } from '../game/core/math.js';
 import { Camera } from './camera.js';
 import { windupProgress } from '../game/entities/enemies.js';
+import { BOSS_KINDS } from '../game/entities/bosses.js';
 import { COMBAT } from '../game/entities/playerCombat.js';
 import { areaAt } from '../game/world/features.js';
 import { FeatureView } from './featureView.js';
@@ -136,6 +137,8 @@ export class GameView {
     );
     this.envVersion = -1;
     this.charmHome = false;
+    /** @type {Graphics | null} P10.4: slam telegraph */
+    this.bossRing = null;
     this.items = new ItemView((key) => this.makeSprite(key), this.actors);
     this.npcs = new NpcView(assets, (key) => this.makeSprite(key), this.actors);
     this.puzzles = new PuzzleView(
@@ -395,6 +398,7 @@ export class GameView {
     }
     // Villagers use the plains art: drop their sprites before that bundle can be released.
     if (c.bundles.includes('region:plains')) this.npcs.clear();
+    if (c.bundles.some((b) => b.startsWith('region:'))) this.dropBossSprites();
     for (const b of c.bundles) this.assets.unload(b);
     this.chunkStats.freed++;
     void map;
@@ -452,6 +456,7 @@ export class GameView {
         const stillWanted = this.regions.some((r) => r.bundle === b && this.regionNear(r, origin, viewW, viewH));
         if (!stillWanted) {
           if (b === 'region:plains') this.npcs.clear();
+          this.dropBossSprites();
           this.assets.unload(b);
           this.preloaded.delete(b);
         }
@@ -477,6 +482,15 @@ export class GameView {
       },
       () => this.bundlesLoading.delete(name),
     );
+  }
+
+  /** Bosses are drawn with region art: drop their sprites before a region bundle can go (redrawn next frame if still loaded). */
+  dropBossSprites() {
+    for (const [id, spr] of this.enemySprites) {
+      if (id < 1000) continue;
+      spr.destroy();
+      this.enemySprites.delete(id);
+    }
   }
 
   /** Chunk / bundle numbers for the debug overlay and tests. */
@@ -782,6 +796,8 @@ export class GameView {
     // Enemies: create / update / remove sprites by id.
     const seen = new Set();
     for (const e of state.enemies) {
+      // P10.4: a core of the murk is drawn by its region's art, only while that is loaded.
+      if (e.boss && !this.assets.hasTexture(`enemy.${e.kind}.0`)) continue;
       seen.add(e.id);
       let spr = this.enemySprites.get(e.id);
       if (!spr) {
@@ -803,6 +819,20 @@ export class GameView {
       } else if (e.state === 'stun') spr.tint = 0xa8b8ff;
       else spr.tint = 0xffffff;
       spr.alpha = e.state === 'dead' ? Math.max(0, 1 - e.t / 600) : 1;
+    }
+    // P10.4: a core winding up its slam shows the shockwave's reach on the ground.
+    if (!this.bossRing) {
+      this.bossRing = new Graphics();
+      this.actors.addChild(this.bossRing);
+    }
+    this.bossRing.clear();
+    for (const e of state.enemies) {
+      if (!e.boss || e.state !== 'windup' || e.pattern !== 'slam') continue;
+      const k = windupProgress(e);
+      const r = BOSS_KINDS[e.bossKind].slamRadius;
+      this.bossRing.circle(Math.round(e.x), Math.round(e.y - e.z), r).stroke({ width: 2, color: 0xd0202a, alpha: 0.6 + 0.4 * k });
+      this.bossRing.circle(Math.round(e.x), Math.round(e.y - e.z), r * k).fill({ color: 0xd0202a, alpha: 0.18 });
+      this.bossRing.zIndex = e.y - r;
     }
     for (const [id, spr] of this.enemySprites) {
       if (!seen.has(id)) {

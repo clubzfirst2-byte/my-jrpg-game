@@ -68,6 +68,7 @@ describe('what each season brings', () => {
     const s = createGameState(WORLD);
     applyProgress(s, { ...emptyProgress(), worldMs: inSeason(YEAR, id) + 10 * CLOCK.hourMs });
     stepGame(s, none);
+    s.enemies = s.enemies.filter((e) => !e.boss); // (the cores of the murk are there all year)
     return s;
   };
   const seasonal = (s, season) => s.pickups.filter((p) => p.mapId && WORLD.pickups.find((d) => d.id === p.mapId)?.seasons?.includes(season)).length;

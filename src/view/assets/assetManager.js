@@ -66,6 +66,12 @@ export class AssetManager {
     entry.refs++;
   }
 
+  /** Whether a texture is loaded right now (P10.4: bosses are drawn by their region's bundle). @param {string} key */
+  hasTexture(key) {
+    for (const { bundle } of this.loaded.values()) if (bundle.textures.has(key)) return true;
+    return false;
+  }
+
   /** @param {string} key logical name, e.g. "player.walk.down.0" */
   texture(key) {
     for (const { bundle } of this.loaded.values()) {

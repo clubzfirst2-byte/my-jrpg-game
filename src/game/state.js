@@ -4,6 +4,7 @@ import { parseMap } from './world/tilemap.js';
 import { groundHeightUnder } from './physics/collision.js';
 import { createPlayer, updatePlayer, respawn } from './entities/player.js';
 import { combatStep, initCombat, COMBAT } from './entities/playerCombat.js';
+import { createBoss, settleBosses } from './entities/bosses.js';
 import { createEnemy, updateEnemy } from './entities/enemies.js';
 import { updateProjectiles } from './entities/projectiles.js';
 import { hitEnemy } from './combat/damage.js';
@@ -59,6 +60,7 @@ const ENEMY_CORPSE_MS = 600;
  * @property {number} deathMs   time since the player collapsed (-1 when alive)
  * @property {number} nextId
  * @property {import('./world/tilemap.js').EnemySpawn[]} enemySpawns
+ * @property {import('./entities/bosses.js').BossDef[]} bossDefs  P10.4
  * @property {any[]} chests
  * @property {any[]} checkpointDefs
  * @property {any[]} campfires
@@ -113,6 +115,7 @@ export function createGameState(def = HEIGHT_TEST) {
     deathMs: -1,
     nextId: 1,
     enemySpawns: f.enemies ?? [],
+    bossDefs: f.bosses ?? [],
     chests: f.chests ?? [],
     checkpointDefs: f.checkpoints ?? [],
     campfires: f.campfires ?? [],
@@ -185,6 +188,10 @@ export function spawnEnemies(state) {
     const z = groundHeightUnder({ x, y, halfWidth: 5, height: 6 }, state.map);
     return [createEnemy(s.kind, x, y, z, i + 1)];
   });
+  // P10.4: the cores not yet purified wait in their arenas.
+  state.bossDefs.forEach((/** @type {any} */ b, /** @type {number} */ k) => {
+    if (!state.progress.bosses.includes(b.id)) state.enemies.push(createBoss(b, state.map, 1000 + k));
+  });
 }
 
 /**
@@ -251,7 +258,7 @@ export function stepGame(state, input) {
   // Player sword hits.
   for (const hb of state.hitboxes) {
     for (const e of state.enemies) {
-      if (e.state !== 'dead' && overlaps(hb, { x: e.x, y: e.y - 3, z: e.z, r: 6 }) && hitEnemy(state, e, hb)) state.landedHits.push(hb);
+      if (e.state !== 'dead' && overlaps(hb, { x: e.x, y: e.y - 3, z: e.z, r: e.r ?? 6 }) && hitEnemy(state, e, hb)) state.landedHits.push(hb);
     }
   }
 
@@ -268,6 +275,7 @@ export function stepGame(state, input) {
   stepAbilities(state);
   stepSwitches(state);
   learnAbilities(state);
+  settleBosses(state);
 }
 
 /**
