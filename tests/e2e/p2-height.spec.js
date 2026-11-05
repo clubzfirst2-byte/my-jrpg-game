@@ -31,17 +31,15 @@ test("Space jumps and the player lands back on the ground", async ({
 }) => {
   const errors = await open(page);
   let maxZ = 0;
-  await page.keyboard.down("Space");
+  // A tap (holding Space in the air would open the glider, and a slow machine holds it longer).
+  await page.keyboard.press("Space");
   for (let i = 0; i < 12; i++) {
     maxZ = Math.max(maxZ, (await player(page)).z);
     await page.waitForTimeout(25);
   }
-  await page.keyboard.up("Space");
-  await page.waitForTimeout(600);
   expect(maxZ).toBeGreaterThan(8);
-  const p = await player(page);
-  expect(p.grounded).toBe(true);
-  expect(p.z).toBe(0);
+  await expect.poll(async () => (await player(page)).grounded, { timeout: 3000 }).toBe(true);
+  expect((await player(page)).z).toBe(0);
   expect(errors).toEqual([]);
 });
 
