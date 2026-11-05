@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { WORLD, stitchWorld, regionAt, OUTDOOR_W } from '../../src/game/world/world.js';
+import { WORLD, stitchWorld, regionAt, outdoorAt, OUTDOOR_W } from '../../src/game/world/world.js';
 import { ISLAND } from '../../src/game/world/maps/island.js';
 import { REGIONS } from '../../src/game/world/maps/regions.js';
 import { createGameState, stepGame } from '../../src/game/state.js';
 import { parseMap, Ground } from '../../src/game/world/tilemap.js';
 import { weatherAt, WEATHER, CLOCK } from '../../src/game/env/weather.js';
-import { ignite, material } from '../../src/game/env/envSim.js';
-import { computeWorldDiff, applyWorldDiff } from '../../src/game/world/worldDiff.js';
+import { ignite, material, weatherNow } from '../../src/game/env/envSim.js';
+import { computeWorldDiff, applyWorldDiff, nameIndexedDiff } from '../../src/game/world/worldDiff.js';
+import { migrate } from '../../src/save/saveFormat.js';
+import { LEGACY_OBJECTS } from '../../src/save/legacyObjects.js';
 import { applyProgress, emptyProgress } from '../../src/game/world/features.js';
 import { judgeTour } from '../../src/debug/tour.js';
 import { validateItems } from '../../src/game/items/validateItems.js';
@@ -16,9 +18,15 @@ const none = { moveX: 0, moveY: 0, dash: false, jump: false, attack: false, dodg
 
 describe('the world: the island with the regions stacked below', () => {
   it('keeps the island where it was and offsets each region', () => {
-    expect(WORLD.ground.slice(0, ISLAND.ground.length)).toEqual(ISLAND.ground);
-    expect(WORLD.ground.length).toBe(ISLAND.ground.length + REGIONS.reduce((n, r) => n + r.ground.length, 0));
-    expect(WORLD.regions.map((r) => [r.id, r.ty])).toEqual([['island', 0], ['plains', 72], ['desert', 168]]);
+    // The west column is the island with the plains and the desert below, where they always were.
+    expect(WORLD.ground.slice(0, ISLAND.ground.length).map((r) => r.slice(0, 112))).toEqual(ISLAND.ground);
+    const west = REGIONS.filter((r) => !r.col);
+    const east = REGIONS.filter((r) => r.col === 1);
+    expect(WORLD.ground.length).toBe(Math.max(ISLAND.ground.length + west.reduce((n, r) => n + r.ground.length, 0), east.reduce((n, r) => n + r.ground.length, 0)));
+    expect(WORLD.regions.map((r) => [r.id, r.tx, r.ty])).toEqual([
+      ['island', 0, 0], ['plains', 0, 72], ['desert', 0, 168],
+      ['mountains', 128, 0], ['forest', 128, 96], ['lake', 128, 192],
+    ]);
     const plains = REGIONS[0];
     const chest = plains.chests[0];
     expect(WORLD.chests.find((c) => c.id === chest.id).ty).toBe(chest.ty + 72);
@@ -28,7 +36,7 @@ describe('the world: the island with the regions stacked below', () => {
 
   it('parses into one map; ids stay unique; item references are valid', () => {
     const map = parseMap(WORLD);
-    expect(map.width).toBe(112);
+    expect(map.width).toBe(256); // P10.3: two columns of 128 (whole chunks)
     for (const key of ['chests', 'checkpoints', 'pickups', 'landmarks']) {
       const ids = WORLD[key].map((x) => x.id);
       expect(new Set(ids).size).toBe(ids.length);
@@ -54,6 +62,55 @@ describe('the world: the island with the regions stacked below', () => {
     for (let i = 0; i < 60 * 8; i++) stepGame(s, { ...none, moveY: 1 });
     expect(regionAt(s.regions, Math.floor(p.x / 16), Math.floor(p.y / 16)).id).toBe('plains');
     expect(p.swimming).toBe(false);
+  });
+
+  it('P10.3: the passes lead from the plains to the forest and from the desert to the lake, and back', () => {
+    for (const [from, to] of [['pass-forest', 'forest'], ['pass-plains', 'plains'], ['pass-lake', 'lake'], ['pass-desert', 'desert']]) {
+      const s = createGameState(WORLD);
+      s.enemies = [];
+      s.enemySpawns = [];
+      const w = WORLD.warps.find((x) => x.id === from);
+      const dx = w.facing === 'right' ? 1 : -1;
+      const p = s.player;
+      p.x = p.prevX = (w.tx - dx * 3) * 16 + 8;
+      p.y = p.prevY = w.ty * 16 + 14;
+      for (let i = 0; i < 60 * 3 && regionAt(s.regions, Math.floor(p.x / 16), Math.floor(p.y / 16))?.id !== to; i++) stepGame(s, { ...none, moveX: dx });
+      expect(regionAt(s.regions, Math.floor(p.x / 16), Math.floor(p.y / 16))?.id, from).toBe(to);
+      expect(p.swimming).toBe(false);
+      // The camera shows the other column's outdoors now.
+      expect(outdoorAt(s.outdoors, Math.floor(p.x / 16), Math.floor(p.y / 16))?.id).toBe(w.facing === 'right' ? 'outdoor-east' : 'outdoor');
+    }
+  });
+
+  it('P10.3: the east column is one land: a road from the mountains through the forest to the lake', () => {
+    const map = parseMap(WORLD);
+    for (let ty = 86; ty < 106; ty++) {
+      const g = map.ground[ty * map.width + 128 + 47];
+      expect(g !== Ground.WATER, `mountains-forest row ${ty}`).toBe(true);
+    }
+    for (let ty = 184; ty < 204; ty++) {
+      const g = map.ground[ty * map.width + 128 + 47];
+      expect(g !== Ground.WATER, `forest-lake row ${ty}`).toBe(true);
+    }
+  });
+
+  it('P10.3: in the mountains it snows instead of raining, all year', () => {
+    const s = createGameState(WORLD);
+    const i = 40 * s.map.width + 128 + 30;
+    const plains = 120 * s.map.width + 40;
+    s.env.weatherOverride = 'rain';
+    expect(weatherNow(s.env, s.env.now, i).kind).toBe('snow');
+    expect(weatherNow(s.env, s.env.now, plains).kind).toBe('rain');
+  });
+
+  it('P10.3: every region has a checkpoint, a chest and something to find', () => {
+    for (const r of WORLD.regions.filter((x) => x.id !== 'island')) {
+      const inside = (/** @type {any} */ o) => o.tx >= r.tx && o.tx < r.tx + r.tw && o.ty >= r.ty && o.ty < r.ty + r.th;
+      expect(WORLD.checkpoints.some(inside), r.id).toBe(true);
+      expect(WORLD.chests.some(inside), r.id).toBe(true);
+      expect(WORLD.pickups.filter(inside).length, r.id).toBeGreaterThan(2);
+      expect(WORLD.landmarks.some(inside), r.id).toBe(true);
+    }
   });
 
   it('stitching rejects a region wider than the world', () => {
@@ -131,6 +188,66 @@ describe('saving the world as differences', () => {
     expect(t.map.solid[from]).toBe(0);
     expect(t.map.solid[moved.ty * t.map.width + moved.tx]).toBe(1);
     expect(t.env.objectAt.get(moved.ty * t.map.width + moved.tx)).toBe(moved);
+  });
+});
+
+describe('saves outlive map changes (objects are named by kind and place, not by list position)', () => {
+  /** A world whose map gained objects in front of all others (as P10.1 added house walls). */
+  const grown = () => {
+    const def = { ...WORLD, envObjects: [{ type: 'barrel', tx: 104, ty: 72 + 5 }, ...WORLD.envObjects] };
+    return createGameState(def);
+  };
+
+  it('a broken jar stays broken after the map gains objects', () => {
+    const s = createGameState(WORLD);
+    const jar = s.map.objects.find((o) => o.type === 'jar');
+    jar.gone = true;
+    const diff = JSON.parse(JSON.stringify(computeWorldDiff(s)));
+    expect(Object.values(diff).flatMap((d) => Object.keys(d))).toEqual([`jar@${jar.tx},${jar.ty}`]);
+    const t = grown();
+    applyProgress(t, { ...emptyProgress(), worldDiff: diff });
+    const again = t.map.objects.find((o) => o.type === 'jar' && o.tx === jar.tx && o.ty === jar.ty);
+    expect(again.gone).toBe(true);
+    expect(t.map.objects.filter((o) => o.gone)).toHaveLength(1); // nothing else touched
+  });
+
+  it('an old save (objects named by list position) is converted only where the old lists agree', () => {
+    const s = createGameState(WORLD);
+    const k = s.map.objects.findIndex((o) => o.type === 'jar');
+    const jar = s.map.objects[k];
+    const chunk = `${Math.floor(jar.tx / 32)},${Math.floor(jar.ty / 32)}`;
+    const ids = s.objectBaseline.map((b) => `${b.type}@${b.tx},${b.ty}`);
+    // Two old lists that agree on what index k was: converted.
+    expect(nameIndexedDiff({ [chunk]: { [k]: { gone: true } } }, [ids, ids])).toEqual({ [chunk]: { [`jar@${jar.tx},${jar.ty}`]: { gone: true } } });
+    // Lists that disagree, both plausibly: dropped (better a jar back than the wrong thing broken).
+    const other = [...ids];
+    other[k] = `jar@${jar.tx + 1},${jar.ty}`;
+    expect(nameIndexedDiff({ [chunk]: { [k]: { gone: true } } }, [ids, other])).toEqual({});
+    // A list where index k is something that cannot have been broken: ignored, the other one wins.
+    const tree = [...ids];
+    tree[k] = `anvil@${jar.tx},${jar.ty}`;
+    expect(Object.keys(nameIndexedDiff({ [chunk]: { [k]: { gone: true } } }, [ids, tree])[chunk])).toEqual([`jar@${jar.tx},${jar.ty}`]);
+    // Unconverted index keys are never applied directly.
+    const t = createGameState(WORLD);
+    applyWorldDiff(t, { [chunk]: { [k]: { gone: true } } });
+    expect(t.map.objects.filter((o) => o.gone)).toHaveLength(0);
+  });
+
+  it('a real P8-P10.2 save: the migration to schema 3 names its objects from the frozen old lists', () => {
+    const lists = Object.values(LEGACY_OBJECTS).map((l) => l.split(' '));
+    // The broken jar of a P10.2 save (index in the P10.2 list).
+    const p10 = LEGACY_OBJECTS.p10.split(' ');
+    const k = p10.findIndex((id) => id.startsWith('jar@'));
+    const [tx, ty] = p10[k].split('@')[1].split(',').map(Number);
+    const chunk = `${Math.floor(tx / 32)},${Math.floor(ty / 32)}`;
+    const old = { schemaVersion: 2, data: { ...emptyProgress(), worldDiff: { [chunk]: { [k]: { gone: true } } } } };
+    const r = migrate(/** @type {any} */ (old));
+    expect(r.ok).toBe(true);
+    const named = r.data.worldDiff;
+    // Whatever the version, either it is safely named as that jar, or dropped (never something else).
+    const keys = Object.values(named).flatMap((d) => Object.keys(d));
+    expect(keys.every((id) => id === p10[k])).toBe(true);
+    expect(lists.length).toBe(3);
   });
 });
 

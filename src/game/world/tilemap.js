@@ -43,6 +43,7 @@ const HEIGHT_DIGITS = '0123456789abcdefghijklmnopqrstuv';
  * @property {import('./features.js').WarpDef[]} [warps]
  * @property {import('./features.js').AreaDef[]} [areas]
  * @property {import('./features.js').AreaDef} [outdoor]  camera bounds outside every area (default: the whole map)
+ * @property {import('./features.js').AreaDef[]} [outdoors]  P10.3: the outdoors of each column of regions
  * @property {{ type: string, tx: number, ty: number, link?: string }[]} [envObjects]  P4: crystals, jars, brambles, braziers, receivers, doors; P6: anvil
  * @property {{ id: string, item: string, tx: number, ty: number, count?: number, seasons?: string[] }[]} [pickups]  P6: items lying in the world; P10.2: some only in some seasons
  * @property {import('../puzzles/switches.js').SwitchDef[]} [switches]  P7: plates, sensors, sconces, stones

@@ -67,6 +67,7 @@ export const SOLID_OBJECTS = new Set(['tree', 'rock', 'bramble', 'crystal', 'jar
  * @property {{ i: number, atMs: number } | null} strike  a lightning strike about to land (P5)
  * @property {Map<number, { ground: number, untilMs: number }>} vines  P7: vine platforms (the ground they cover)
  * @property {Uint8Array} dry  P8: tiles in a dry region (no rain)
+ * @property {Uint8Array} cold  P10.3: tiles in a cold region (snow instead of rain)
  */
 
 /**
@@ -106,6 +107,7 @@ export function createEnv(map, objects, seed = 1, now = 0) {
     strike: null,
     vines: new Map(),
     dry: new Uint8Array(map.width * map.height),
+    cold: new Uint8Array(map.width * map.height),
   };
 }
 
@@ -136,8 +138,11 @@ export function skipTime(env, ms) {
  * The weather at a time, at a tile (its region's climate; P8). Without a tile: a temperate region.
  * @param {Env} env @param {number} [t] @param {number} [i]
  */
+/** The climate at a tile (P8 dry, P10.3 cold), or temperate. @param {Env} env @param {number} i */
+export const climateOf = (env, i) => (i < 0 ? 'temperate' : env.dry[i] ? 'dry' : env.cold[i] ? 'cold' : 'temperate');
+
 export function weatherNow(env, t = env.now, i = -1) {
-  return weatherAt(env.seed, t, env.weatherOverride, i >= 0 && env.dry[i] ? 'dry' : 'temperate');
+  return weatherAt(env.seed, t, env.weatherOverride, climateOf(env, i));
 }
 
 export { roll };
@@ -172,7 +177,7 @@ export function material(env, map, i, t = env.now) {
 export function canIgnite(env, map, i, t) {
   if (env.burning.has(i)) return false;
   if (!FLAMMABLE.has(material(env, map, i, t))) return false;
-  if (!env.indoor[i] && rainWetAt(env.seed, t, env.weatherOverride, env.dry[i] ? 'dry' : 'temperate')) return false; // rained on (P5)
+  if (!env.indoor[i] && rainWetAt(env.seed, t, env.weatherOverride, climateOf(env, i))) return false; // rained on (P5)
   const c = env.cells.get(i);
   return !c || c.wetUntil <= t;
 }

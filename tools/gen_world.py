@@ -252,10 +252,157 @@ taken = {(o['tx'], o['ty']) for lst in S.features.values() for o in lst if isins
 S.features['envObjects'] = [{'type': 'cactus', 'tx': x, 'ty': y} for (x, y) in cacti if (x, y) not in taken and x not in CAUSEWAY]
 S.extra = {'climate': 'dry', 'bundle': 'region:desert'}
 
-regions = [P.out(), S.out()]
+# ---------------- P10.3: the east column (white peaks, whispering forest, mirror lake) ----------------
+# Passes join the columns: walk off the east edge of the plains / desert (facing east) and you come
+# out at the west edge of the forest / lake, and back. Within the east column the regions touch:
+# a road runs from the mountains' south edge through the forest to the lake.
+
+def carve_pass(R, rows, side):
+    """A flat path from the region's west / east edge inland until it meets open ground."""
+    xs = range(RW - 1, -1, -1) if side == 'east' else range(0, RW)
+    for y in rows:
+        for x in xs:
+            if R.g[y][x] in '.s' and R.h[y][x] == 0 and abs(x - (RW - 1 if side == 'east' else 0)) > 6:
+                break
+            R.g[y][x] = '='; R.h[y][x] = 0
+    for lst in R.features.values():
+        for o in lst:
+            if isinstance(o, dict) and 'tx' in o and o.get('type') not in ('cactus',) and 'ty' in o:
+                assert not (o['ty'] in rows and R.g[o['ty']][o['tx']] == '=' and o['tx'] in range(RW)) or o in R.features['envObjects'], ('pass over', R.id, o)
+    R.features['envObjects'] = [o for o in R.features['envObjects'] if not (o['ty'] in rows and R.g[o['ty']][o['tx']] == '=')]
+
+def road_south(R, top=False, bottom=False):
+    """The road through the east column: open the north and / or south edge at cols 45-50."""
+    if top:
+        for y in range(0, 8):
+            for x in CAUSEWAY:
+                R.g[y][x] = '='; R.h[y][x] = 0
+    if bottom:
+        for y in range(RH - 8, RH):
+            for x in CAUSEWAY:
+                R.g[y][x] = '='; R.h[y][x] = 0
+    for y in range(RH):
+        x = int(47 + 4 * math.sin(y / 9))
+        for dx in (0, 1, 2):
+            if R.g[y][x + dx] in '.T#' and R.h[y][x + dx] == 0: R.g[y][x + dx] = '='
+
+def rocks_and_trees(R, rock, tree, seed, tree_lvls=(0,)):
+    for y in range(RH):
+        for x in range(RW):
+            if R.g[y][x] != '.': continue
+            if R.h[y][x] in tree_lvls and hsh(x, y, seed) < tree: R.g[y][x] = 'T'
+            elif hsh(x, y, seed + 1) < rock: R.g[y][x] = '#'
+
+# 白嶺山脈: snowfields rising in steps to a summit; cold all year (it snows instead of raining).
+M = Region('mountains', '白嶺山脈', 71)
+M.base = '.'
+M.land(3)
+M.plateau(48, 40, 34, 26, 16, 72)
+M.plateau(50, 36, 24, 18, 32, 73)
+M.plateau(52, 32, 15, 11, 48, 74)
+M.plateau(53, 30, 7, 5, 64, 75)
+M.plateau(18, 72, 10, 8, 16, 76)
+M.water(78, 70, 7, 5, 77)  # a cold tarn
+road_south(M, bottom=True)
+for y in range(RH - 30, RH):  # the road climbs nowhere: keep it in the valley
+    for x in range(44, 52):
+        if M.g[y][x] == '=': M.h[y][x] = 0
+rocks_and_trees(M, 0.03, 0.04, 78, (0, 16))
+M.features['checkpoints'].append({'id': 'mountains', **dict(zip(('tx', 'ty'), M.near_free(47, 86)))})
+tx, ty = M.near_free(53, 30, 64)
+M.features['chests'].append({'id': 'summit', 'tx': tx, 'ty': ty, 'reward': 'money', 'money': 150})
+M.features['landmarks'].append({'id': 'summit', 'name': '白嶺の頂', 'tx': 53, 'ty': 30, 'always': False})
+for (x, y, lvl) in [(30, 50, 16), (66, 44, 16), (50, 26, 48)]:
+    tx, ty = M.near_free(x, y, lvl)
+    M.features['enemies'].append({'kind': 'archer', 'tx': tx, 'ty': ty})
+tx, ty = M.near_free(20, 78, 16)
+M.features['enemies'].append({'kind': 'beast', 'tx': tx, 'ty': ty})
+for k, (x, y, item, lvl) in enumerate([(40, 70, 'ember_pepper', 0), (60, 56, 'ember_pepper', 16), (26, 60, 'arrow', 16), (70, 24, 'swift_herb', 0)]):
+    tx, ty = M.near_free(x, y, lvl)
+    M.features['pickups'].append({'id': f'mountains{k}', 'item': item, 'tx': tx, 'ty': ty, **({'count': 5} if item == 'arrow' else {})})
+M.extra = {'climate': 'cold', 'bundle': 'region:mountains', 'col': 1}
+
+# 囁きの森: a deep forest with bog pools; narrow paths, a thicket hiding a chest. It burns well.
+F = Region('forest', '囁きの森', 81)
+F.base = '.'
+F.land(3)
+for (cx, cy, rx, ry, sd) in [(24, 30, 6, 4, 82), (66, 62, 7, 5, 83), (38, 78, 5, 3, 84), (74, 22, 4, 3, 85)]:
+    F.water(cx, cy, rx, ry, sd)
+F.plateau(20, 64, 9, 7, 16, 86)
+road_south(F, top=True, bottom=True)
+rocks_and_trees(F, 0.01, 0.42, 87, (0, 16))
+# A winding side path east from the road, and a clearing with the forest's great tree.
+for x in range(10, 47):
+    y = int(52 + 3 * math.sin(x / 5))
+    for dy in (0, 1):
+        if F.g[y + dy][x] in '.T': F.g[y + dy][x] = '='
+for y in range(40, 49):
+    for x in range(68, 80):
+        if F.g[y][x] in '.T#': F.g[y][x] = '.'
+F.features['landmarks'].append({'id': 'great_tree', 'name': '囁きの大樹', 'tx': 74, 'ty': 44, 'always': False})
+F.features['checkpoints'].append({'id': 'forest', **dict(zip(('tx', 'ty'), F.near_free(12, 53)))})
+tx, ty = F.near_free(82, 76)
+F.features['chests'].append({'id': 'thicket', 'tx': tx, 'ty': ty, 'reward': 'money', 'money': 120})
+for (x, y, kind) in [(30, 40, 'beast'), (58, 70, 'beast'), (74, 44, 'beast'), (40, 20, 'archer'), (20, 64, 'archer')]:
+    tx, ty = F.near_free(x, y, 16 if (x, y) == (20, 64) else 0)
+    F.features['enemies'].append({'kind': kind, 'tx': tx, 'ty': ty})
+for k, (x, y, item) in enumerate([(16, 44, 'mushroom'), (34, 60, 'mushroom'), (60, 30, 'mushroom'), (80, 58, 'red_berry'), (52, 86, 'arrow')]):
+    tx, ty = F.near_free(x, y)
+    F.features['pickups'].append({'id': f'forest{k}', 'item': item, 'tx': tx, 'ty': ty, **({'count': 5} if item == 'arrow' else {})})
+F.extra = {'climate': 'temperate', 'bundle': 'region:forest', 'col': 1}
+
+# 鏡湖と群島: a great lake dotted with islets; swim between them. A star shard waits on the far one.
+L = Region('lake', '鏡湖と群島', 91)
+L.base = '.'
+L.land(3)
+L.water(50, 50, 34, 30, 92)
+ISLETS = [(34, 40, 5, 4), (58, 34, 4, 3), (66, 56, 6, 4), (44, 62, 4, 3), (74, 40, 3, 3)]
+for (cx, cy, rx, ry) in ISLETS:
+    for y in range(RH):
+        for x in range(RW):
+            d = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2
+            if d < 1: L.g[y][x] = '.' if d < 0.55 else 's'; L.h[y][x] = 0
+for y in range(RH):  # sandy shores around the lake
+    for x in range(RW):
+        if L.g[y][x] == '.' and any(0 <= y + dy < RH and 0 <= x + dx < RW and L.g[y + dy][x + dx] == '~' for dy in (-1, 0, 1) for dx in (-1, 0, 1)):
+            L.g[y][x] = 's'
+road_south(L, top=True)
+for y in range(8, 22):  # the road from the forest reaches the north shore
+    for x in range(45, 51):
+        if L.g[y][x] == '~': L.g[y][x] = '='
+rocks_and_trees(L, 0.01, 0.06, 93)
+L.features['landmarks'].append({'id': 'mirror_lake', 'name': '鏡湖', 'tx': 50, 'ty': 50, 'always': False})
+L.features['checkpoints'].append({'id': 'lake', **dict(zip(('tx', 'ty'), L.near_free(10, 47)))})
+tx, ty = L.near_free(74, 40)
+L.features['chests'].append({'id': 'far_islet', 'tx': tx, 'ty': ty, 'reward': 'item', 'item': 'star_shard'})
+for (x, y) in [(34, 40), (66, 56)]:
+    tx, ty = L.near_free(x, y)
+    L.features['enemies'].append({'kind': 'archer', 'tx': tx, 'ty': ty})
+for (x, y) in [(14, 70), (80, 80)]:
+    tx, ty = L.near_free(x, y)
+    L.features['enemies'].append({'kind': 'beast', 'tx': tx, 'ty': ty})
+for k, (x, y, item) in enumerate([(58, 34, 'red_berry'), (44, 62, 'swift_herb'), (12, 30, 'red_berry'), (84, 66, 'arrow')]):
+    tx, ty = L.near_free(x, y)
+    L.features['pickups'].append({'id': f'lake{k}', 'item': item, 'tx': tx, 'ty': ty, **({'count': 5} if item == 'arrow' else {})})
+L.extra = {'climate': 'temperate', 'bundle': 'region:lake', 'col': 1}
+
+# The passes between the columns.
+PASS_PF = range(52, 55)
+PASS_SL = range(46, 49)
+carve_pass(P, PASS_PF, 'east'); carve_pass(F, PASS_PF, 'west')
+carve_pass(S, PASS_SL, 'east'); carve_pass(L, PASS_SL, 'west')
+P.extra['passes'] = [{'id': 'pass-forest', 'tx': RW - 1, 'ty': 53, 'facing': 'right', 'to': {'region': 'forest', 'tx': 1, 'ty': 53}}]
+F.extra['passes'] = [{'id': 'pass-plains', 'tx': 0, 'ty': 53, 'facing': 'left', 'to': {'region': 'plains', 'tx': RW - 2, 'ty': 53}}]
+S.extra['passes'] = [{'id': 'pass-lake', 'tx': RW - 1, 'ty': 47, 'facing': 'right', 'to': {'region': 'lake', 'tx': 1, 'ty': 47}}]
+L.extra['passes'] = [{'id': 'pass-desert', 'tx': 0, 'ty': 47, 'facing': 'left', 'to': {'region': 'desert', 'tx': RW - 2, 'ty': 47}}]
+
+regions = [P.out(), S.out(), M.out(), F.out(), L.out()]
 for r in regions:
     assert len(r['ground']) == RH and all(len(row) == RW + EW for row in r['ground'])
     walk = lambda x, y: r['ground'][y][x] in '.s=w' and not any(o['tx'] == x and o['ty'] == y for o in r['envObjects'] if o['type'] != 'mat')
+    for w in r.get('passes', []):
+        assert r['ground'][w['ty']][w['tx']] in '=.s', ('pass blocked', r['id'], w)
+        assert r['ground'][w['ty']][w['tx'] + (-1 if w['facing'] == 'right' else 1)] in '=.s', ('pass approach blocked', r['id'], w)
     for w in r['warps']:
         assert walk(w['tx'], w['ty']), ('warp tile blocked', r['id'], w)
         assert walk(w['toTx'], w['toTy']), ('warp arrival blocked', r['id'], w)
@@ -267,7 +414,8 @@ out = """// @ts-check
 // Each region is 96 x 96 tiles plus a 16-column strip of rooms to the east (P10.1); coordinates are local to the region (src/game/world/world.js
 // stacks the regions under the island and offsets them).
 
-/** @typedef {import('../tilemap.js').IslandDef & { id: string, name: string, climate: 'temperate' | 'dry', bundle: string }} RegionDef */
+/** @typedef {{ id: string, tx: number, ty: number, facing: 'up' | 'down' | 'left' | 'right', to: { region: string, tx: number, ty: number } }} PassDef */
+/** @typedef {import('../tilemap.js').IslandDef & { id: string, name: string, climate: 'temperate' | 'dry' | 'cold', bundle: string, col?: number, passes?: PassDef[] }} RegionDef */
 
 /** @type {RegionDef[]} */
 export const REGIONS = %s;

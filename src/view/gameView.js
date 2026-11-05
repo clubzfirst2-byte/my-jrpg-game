@@ -21,7 +21,7 @@ import { WeatherView } from './weatherView.js';
 import { ItemView } from './itemView.js';
 import { PuzzleView } from './puzzleView.js';
 import { NpcView } from './npcView.js';
-import { regionAt } from '../game/world/world.js';
+import { regionAt, outdoorAt } from '../game/world/world.js';
 import { seasonAt } from '../game/env/weather.js';
 import { SEASON_ENTRIES, seasonKeys } from './assets/placeholderPack.js';
 
@@ -98,6 +98,8 @@ export class GameView {
     this.camera = new Camera();
     /** @type {string | null} id of the area whose bounds are applied ('' = outdoors) */
     this.boundsArea = null;
+    /** @type {string | null} */
+    this.boundsKey = null;
     this.applyBounds(state);
 
     this.waterFrame = -1;
@@ -241,6 +243,10 @@ export class GameView {
     const region = regionAt(this.regions, tx, ty);
     if (region?.id === 'desert' && g === Ground.SAND) return `desert.sand.${hash(tx, ty) % 3}`;
     if (region?.id === 'plains' && g === Ground.GRASS) return `plains.grass.${hash(tx, ty) % 4}`;
+    // P10.3: the east column.
+    if (region?.id === 'forest' && g === Ground.GRASS) return `forest.grass.${hash(tx, ty) % 4}`;
+    if (region?.id === 'mountains' && g === Ground.GRASS) return `mountains.snow.${hash(tx, ty) % 4}`;
+    if (region?.id === 'lake' && g === Ground.GRASS) return `lake.grass.${hash(tx, ty) % 4}`;
     if (g === Ground.WOOD) return 'tile.wood';
     if (g === Ground.WALL) return 'tile.walltop';
     if (g === Ground.DARK) return 'tile.dark';
@@ -486,7 +492,8 @@ export class GameView {
     let remaining = faceBottom - faceTop;
     if (remaining <= 0) return;
     const g = this.map.ground[ty * this.map.width + tx];
-    const mat = g === Ground.RUIN ? 'ruin' : g === Ground.WALL ? 'wall' : 'earth';
+    const mountains = regionAt(this.regions, tx, ty)?.id === 'mountains';
+    const mat = g === Ground.RUIN ? 'ruin' : g === Ground.WALL ? 'wall' : mountains ? 'stone' : 'earth';
     let y = faceTop;
     let first = true;
     while (remaining > 0) {
@@ -518,6 +525,11 @@ export class GameView {
     if (o.type === 'brazier') return `obj.brazier.${Math.floor(timeSec * 6) % 2}`;
     if (o.type === 'sconce') return o.lit ? 'obj.sconce.on' : 'obj.sconce.off';
     if (o.type === 'stone') return o.glow ? 'obj.stone.on' : 'obj.stone.off';
+    // P10.3: conifers in the forest and the mountains.
+    if (o.type === 'tree') {
+      const r = regionAt(this.regions, o.tx, o.ty)?.id;
+      if (r === 'forest' || r === 'mountains') return `${r}.pine`;
+    }
     if (o.type === 'charm_shelf') return this.charmHome ? 'obj.charm_shelf.on' : 'obj.charm_shelf'; // P10.1
     return `obj.${o.type}`;
   }
@@ -667,11 +679,14 @@ export class GameView {
    */
   applyBounds(state) {
     const area = areaAt(state, state.player.x, state.player.y);
-    const id = area ? area.id : '';
-    if (id === this.boundsArea) return false;
-    this.boundsArea = id;
     const ts = this.map.tileSize;
-    const r = area ?? state.outdoor ?? { tx: 0, ty: 0, tw: this.map.width, th: this.map.height };
+    // P10.3: outdoors, the column of regions the player is in (each has its own bounds).
+    const outdoor = area ? null : (outdoorAt(state.outdoors, Math.floor(state.player.x / ts), Math.floor(state.player.y / ts)) ?? state.outdoor);
+    const key = area ? area.id : `:${outdoor?.id ?? ''}`;
+    if (key === this.boundsKey) return false;
+    this.boundsKey = key;
+    this.boundsArea = area ? area.id : '';
+    const r = area ?? outdoor ?? { tx: 0, ty: 0, tw: this.map.width, th: this.map.height };
     this.camera.setBounds({ x: r.tx * ts, y: r.ty * ts, width: r.tw * ts, height: r.th * ts });
     return true;
   }

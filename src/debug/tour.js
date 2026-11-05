@@ -14,11 +14,15 @@ export const TOUR = Object.freeze({
   sampleSec: 30,
 });
 
-/** Stops: the island, the causeway, the plains, the desert, and back (tile coordinates). */
+/** Stops: the island, the plains, the desert, then (P10.3) the lake, the forest, the mountains and back (tile coordinates). */
 export const TOUR_STOPS = [
   [48, 60], [30, 40], [16, 34], [60, 30], [80, 44], [47, 70],
   [50, 90], [30, 105], [70, 100], [48, 140], [48, 172],
-  [30, 200], [70, 190], [36, 236], [60, 250], [48, 172], [48, 120], [47, 70],
+  [30, 200], [70, 190], [36, 236], [60, 250],
+  [128 + 12, 239], [128 + 34, 232], [128 + 66, 248], [128 + 47, 200],
+  [128 + 30, 148], [128 + 74, 140], [128 + 47, 104],
+  [128 + 47, 70], [128 + 50, 34], [128 + 30, 50],
+  [93, 125], [48, 120], [47, 70],
 ];
 
 /**
