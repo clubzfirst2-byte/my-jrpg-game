@@ -13,7 +13,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # The browser install sometimes stalls on the runner; it has its own limit and one retry below.
+    # The browser download sometimes stalls on the runner; it has its own limit and one retry below.
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v5
@@ -32,12 +32,17 @@ jobs:
         run: npx vitest run --reporter=default --reporter=json --outputFile.json=reports/unit.json
       - name: Build
         run: npm run build
-      - name: Install Playwright browsers
-        timeout-minutes: 16
+      # System packages once (apt holds a lock, so it must not be cut off and retried), then the
+      # browser download, which sometimes stalls: it has its own limit and one retry.
+      - name: Install browser system packages
+        timeout-minutes: 10
+        run: npx playwright install-deps chromium webkit
+      - name: Download Playwright browsers
+        timeout-minutes: 12
         run: |
           for attempt in 1 2; do
-            timeout 420 npx playwright install --with-deps chromium webkit && exit 0
-            echo "Browser install attempt $attempt did not finish; trying again"
+            timeout 300 npx playwright install chromium webkit && exit 0
+            echo "Browser download attempt $attempt did not finish; trying again"
           done
           exit 1
       - name: E2E tests (iPhone viewport, Chromium + WebKit)
