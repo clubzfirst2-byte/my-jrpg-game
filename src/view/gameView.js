@@ -193,6 +193,9 @@ export class GameView {
     this.playerOccluded = false;
     /** How much taller the drawn hero is than the placeholder (P11.5). */
     this.heroK = 1;
+    /** P12 preview only (?enemylook=): enemy kind → the art drawn for it. Empty in normal play. */
+    /** @type {Map<string, string>} */
+    this.enemyLook = new Map();
   }
 
   /** The texture name for the current season (P10.2: e.g. "obj.tree" -> "autumn.obj.tree"). @param {string} key */
@@ -806,18 +809,20 @@ export class GameView {
     const seen = new Set();
     for (const e of state.enemies) {
       // P10.4: a core of the murk is drawn by its region's art, only while that is loaded.
-      if (e.boss && !this.assets.hasTexture(`enemy.${e.kind}.0`)) continue;
+      const swap = this.enemyLook.get(e.kind);
+      const look = swap && this.assets.hasTexture(`enemy.${swap}.0`) ? swap : e.kind;
+      if (e.boss && !this.assets.hasTexture(`enemy.${look}.0`)) continue;
       seen.add(e.id);
       let spr = this.enemySprites.get(e.id);
       if (!spr) {
-        spr = this.makeSprite(`enemy.${e.kind}.0`);
+        spr = this.makeSprite(`enemy.${look}.0`);
         this.enemySprites.set(e.id, spr);
         this.actors.addChild(spr);
       }
       const ex = lerp(e.prevX, e.x, alpha);
       const ey = lerp(e.prevY, e.y, alpha);
       const moving = Math.hypot(e.x - e.prevX, e.y - e.prevY) > 0.01;
-      spr.texture = this.assets.texture(`enemy.${e.kind}.${moving ? Math.floor(timeSec * 6) % 2 : 0}`);
+      spr.texture = this.assets.texture(`enemy.${look}.${moving ? Math.floor(timeSec * 6) % 2 : 0}`);
       spr.position.set(Math.round(ex), Math.round(ey - e.z));
       spr.zIndex = ey;
       spr.scale.x = e.faceX < -0.2 ? -1 : 1;

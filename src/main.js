@@ -12,7 +12,7 @@ import { createOverlay } from './debug/overlay.js';
 import { createRenderer, resizeRenderer } from './view/renderer.js';
 import { RESOLUTION_CANDIDATES, DEFAULT_TARGET_HEIGHT, nextCandidate } from './view/resolution.js';
 import { AssetManager } from './view/assets/assetManager.js';
-import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES } from './view/assets/placeholderPack.js';
+import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES, placeholderEntries, newLookEntries } from './view/assets/placeholderPack.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
@@ -130,7 +130,7 @@ async function boot() {
 
   // --- assets / logic / view ---
   const assets = new AssetManager();
-  assets.register('placeholder', () => buildPlaceholderPack(undefined, artOverrides));
+  assets.register('placeholder', () => buildPlaceholderPack([...placeholderEntries(), ...newLookEntries('base', artOverrides)], artOverrides));
   // P8: each region's art is its own bundle, loaded by the view near the region.
   for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name, artOverrides));
   await assets.load('placeholder');
@@ -162,6 +162,12 @@ async function boot() {
   if (weatherParam && ['clear', 'cloudy', 'rain', 'storm', 'snow'].includes(weatherParam)) state.env.weatherOverride = /** @type {any} */ (weatherParam);
   if (params.get('light') === '0') view.weather.enabled = false;
   if (params.get('chunks') === 'all') view.loadAll = true; // P8: draw the whole map at once (comparison)
+  // P12 preview only: ?enemylook=beast:golem,archer:slime draws those enemies with another
+  // prototype's art. Drawing only — their AI, attacks, hit boxes and health stay theirs.
+  for (const pair of (params.get('enemylook') ?? '').split(',').filter(Boolean)) {
+    const [kind, look] = pair.split(':');
+    if (kind && look && /^[a-z_]+$/.test(look)) view.enemyLook.set(kind, look);
+  }
   // The camera zooms by the art density, so a game pixel covers the same screen area either way.
   view.camera.setZoom(artDensity);
   const zoomParam = Number.parseFloat(params.get('zoom') ?? '');
@@ -735,7 +741,7 @@ async function boot() {
   });
 
   // Read-only hook for automated E2E tests.
-  /** @type {{ looks: number[] } | null} */
+  /** @type {{ looks: number[], enemies: string[] } | null} */
   let galleryInfo = null;
   const api = {
     summary: () => stats.summary(),

@@ -259,14 +259,23 @@ export function buildRegionPack(name, overrides) {
 
 /**
  * P12 prototypes: villagers with a look no placeholder has (new NPCs such as the star-ring princess)
- * get a slot in the plains bundle, where the villagers are drawn — only when such art is given
- * (?npc=proto), so normal play builds exactly the same bundle.
+ * get a slot in the plains bundle, where the villagers are drawn, and new enemies a slot in the base
+ * bundle — only when such art is given (?npc=proto / ?enemy=proto), so normal play builds exactly
+ * the same bundles.
  * @param {string} name @param {Map<string, string>} [overrides]
  */
 export function newLookEntries(name, overrides) {
-  if (name !== 'region:plains' || !overrides?.size) return [];
-  const known = new Set(REGION_ENTRIES[name]().map((e) => e.key));
-  return [...overrides.keys()].filter((k) => /^npc\.\d+\.walk\./.test(k) && !known.has(k)).map((key) => ({ key, rows: ['.'], anchor: FEET }));
+  if (!overrides?.size) return [];
+  if (name === 'region:plains') {
+    const known = new Set(REGION_ENTRIES[name]().map((e) => e.key));
+    return [...overrides.keys()].filter((k) => /^npc\.\d+\.walk\./.test(k) && !known.has(k)).map((key) => ({ key, rows: ['.'], anchor: FEET }));
+  }
+  if (name === 'base') {
+    // P12 round 3: enemies no placeholder has (slime, flyer, plant, golem) — preview only
+    const known = new Set([...placeholderEntries(), ...Object.values(REGION_ENTRIES).flatMap((make) => make())].map((e) => e.key));
+    return [...overrides.keys()].filter((k) => /^enemy\.[a-z_]+\.\d$/.test(k) && !known.has(k)).map((key) => ({ key, rows: ['.'], anchor: FEET }));
+  }
+  return [];
 }
 
 /** Width and height of an entry: its PNG when one replaces it, else the placeholder. @param {{ rows: string[], image?: { width: number, height: number } }} e */
