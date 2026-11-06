@@ -16,6 +16,7 @@ import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES } from './view/as
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
+import { openProtoGallery } from './debug/protoGallery.js';
 import { prototypeFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
 import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
@@ -141,6 +142,13 @@ async function boot() {
   // P8: a new game is the whole world (the island and the regions south of it).
   const mapName = /** @type {keyof typeof MAPS} */ (mapParam ?? 'world');
   const state = createGameState(MAPS[mapName] ?? MAPS.world);
+  // P12 preview only: ?npclook=elder:9,guard:6 shows those villagers with another look (prototype
+  // art for new NPCs). Display only — no NPC, talk or save changes.
+  for (const pair of (params.get('npclook') ?? '').split(',').filter(Boolean)) {
+    const [id, look] = pair.split(':');
+    const npc = state.npcs.find((n) => n.id === id);
+    if (npc && Number.isInteger(Number(look))) npc.look = Number(look);
+  }
   performance.mark('world');
   const view = new GameView(app, assets, state);
   performance.mark('view');
@@ -727,6 +735,8 @@ async function boot() {
   });
 
   // Read-only hook for automated E2E tests.
+  /** @type {{ looks: number[] } | null} */
+  let galleryInfo = null;
   const api = {
     summary: () => stats.summary(),
     sprites: () => bench.count,
@@ -824,7 +834,7 @@ async function boot() {
     pickups: () => state.pickups.map((p) => ({ key: p.key, item: p.item, count: p.count, tx: Math.floor(p.x / 16), ty: Math.floor(p.y / 16) })),
     nearby: () => state.nearby,
     /** P9: villagers and conversations. */
-    npcs: () => state.npcs.map((n) => ({ id: n.id, name: n.name, tx: Math.floor(n.x / 16), ty: Math.floor(n.y / 16) })),
+    npcs: () => state.npcs.map((n) => ({ id: n.id, name: n.name, look: n.look, tx: Math.floor(n.x / 16), ty: Math.floor(n.y / 16) })),
     dialogue: () => dialogueView(state),
     talkTo: (/** @type {string} */ id) => {
       const n = state.npcs.find((x) => x.id === id);
@@ -908,6 +918,8 @@ async function boot() {
       for (let i = 0; i < n; i++) stepGame(state, input.sample());
     },
     resolution: () => ({ ...resolution, target: targetHeight }),
+    /** P12: the prototype gallery (?gallery=1), once open. */
+    gallery: () => galleryInfo,
     /** P11.5: the art in use (density, how many real-art sprites) and the drawn hero's size in game px. */
     art: () => ({ density: artDensity, overrides: artOverrides.size, zoom: view.camera.zoom, hero: { w: view.player.texture.width, h: view.player.texture.height, k: view.heroK } }),
     /** P8: the auto tour (minutes may be fractional in tests). */
@@ -922,6 +934,8 @@ async function boot() {
     assets: () => assets.stats(),
   };
   /** @type {any} */ (window).__debugApi = api;
+  // P12 preview only: the prototype gallery over the game (?gallery=1).
+  if (params.get('gallery') === '1') galleryInfo = await openProtoGallery(uiRoot);
   // ?tour=60 starts the auto tour right away (with ?map=..., which skips the title).
   if (params.get('tour') && !withTitle) startTour(Number.parseFloat(params.get('tour') ?? '') || 60);
   // P11.1: how long the start took, and offline play (the service worker).

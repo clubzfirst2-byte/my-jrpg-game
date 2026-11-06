@@ -254,7 +254,19 @@ for (const [region, kind] of /** @type {const} */ ([['region:forest', 'root'], [
 
 /** @param {string} name @param {Map<string, string>} [overrides] */
 export function buildRegionPack(name, overrides) {
-  return buildPlaceholderPack(REGION_ENTRIES[name](), overrides);
+  return buildPlaceholderPack([...REGION_ENTRIES[name](), ...newLookEntries(name, overrides)], overrides);
+}
+
+/**
+ * P12 prototypes: villagers with a look no placeholder has (new NPCs such as the star-ring princess)
+ * get a slot in the plains bundle, where the villagers are drawn — only when such art is given
+ * (?npc=proto), so normal play builds exactly the same bundle.
+ * @param {string} name @param {Map<string, string>} [overrides]
+ */
+export function newLookEntries(name, overrides) {
+  if (name !== 'region:plains' || !overrides?.size) return [];
+  const known = new Set(REGION_ENTRIES[name]().map((e) => e.key));
+  return [...overrides.keys()].filter((k) => /^npc\.\d+\.walk\./.test(k) && !known.has(k)).map((key) => ({ key, rows: ['.'], anchor: FEET }));
 }
 
 /** Width and height of an entry: its PNG when one replaces it, else the placeholder. @param {{ rows: string[], image?: { width: number, height: number } }} e */

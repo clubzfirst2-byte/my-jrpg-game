@@ -1,4 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { readdirSync } from 'node:fs';
+
+/** How many prototype frames each group has (src/art-proto/<group>/*.png). */
+const PROTO_FILES = Object.fromEntries(
+  ['hero', 'npc', 'enemy'].map((g) => [g, readdirSync(new URL(`../../src/art-proto/${g}/`, import.meta.url)).filter((f) => f.endsWith('.png')).length]),
+);
 
 // P11.5: the character standard (32×56 art at 2 pixels per game pixel). Without real art the game
 // is exactly as before; ?hero=test shows a size-test hero (仮素材) of the new size; ?hd=0 is "before".
@@ -95,8 +101,8 @@ test('P12 round 1 prototypes (?proto=all): elder, watchman, beast and goblin dra
     if (m.text().startsWith('art:')) warnings.push(m.text());
   });
   const errors = await open(page, '&proto=all');
-  // 20 hero + 24 NPC (elder, watchman) + 4 enemy (beast, goblin) frames
-  expect((await api(page, 'art')).overrides).toBe(48);
+  // every prototype frame there is (hero, NPCs of every round, enemies) is used
+  expect((await api(page, 'art')).overrides).toBe(PROTO_FILES.hero + PROTO_FILES.npc + PROTO_FILES.enemy);
   const elder = (await api(page, 'npcs')).find((n) => n.id === 'elder');
   await api(page, 'teleport', elder.tx + 2, elder.ty + 1);
   await api(page, 'spawnEnemy', 'beast', elder.tx + 4, elder.ty + 2);
@@ -109,4 +115,43 @@ test('P12 round 1 prototypes (?proto=all): elder, watchman, beast and goblin dra
   const page2 = await page.context().newPage();
   await open(page2, '&enemy=proto');
   expect(await api(page2, 'art')).toMatchObject({ overrides: 4, hero: { h: 16 } });
+});
+
+test('P12 round 2: all NPC prototypes load (?npc=proto) and a new look can be previewed in place (?npclook=)', async ({ page }, testInfo) => {
+  const warnings = [];
+  page.on('console', (m) => {
+    if (m.text().startsWith('art:')) warnings.push(m.text());
+  });
+  const errors = await open(page, '&npc=proto&npclook=elder:9,guard:6');
+  // round 1 (elder, watchman: 24) + round 2 (6 NPCs: 72)
+  expect(PROTO_FILES.npc).toBe(96);
+  expect((await api(page, 'art')).overrides).toBe(96);
+  const npcs = await api(page, 'npcs');
+  expect(npcs.find((n) => n.id === 'elder').look).toBe(9);
+  expect(npcs.find((n) => n.id === 'guard').look).toBe(6);
+  await api(page, 'teleport', 28, 91);
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: testInfo.outputPath('round2.png') });
+  expect(warnings).toEqual([]);
+  expect(errors).toEqual([]);
+  // Without the preview parameters the villagers keep their looks and no prototype is used.
+  const page2 = await page.context().newPage();
+  await open(page2, '');
+  expect((await api(page2, 'npcs')).find((n) => n.id === 'elder').look).toBe(1);
+  expect((await api(page2, 'art')).overrides).toBe(0);
+});
+
+test('P12 gallery (?gallery=1): every NPC prototype by name, walking (frames 1, 0, 2, 0)', async ({ page }) => {
+  const errors = await open(page, '&gallery=1');
+  await expect(page.locator('#proto-gallery')).toBeVisible();
+  expect((await api(page, 'gallery')).looks).toEqual([1, 3, 4, 5, 6, 7, 8, 9]);
+  for (const name of ['村人', '商人', '鍛冶屋', '子ども', '旅人', '星環の姫']) await expect(page.locator('#proto-gallery')).toContainText(name);
+  const seen = new Set();
+  for (let i = 0; i < 12 && seen.size < 3; i++) {
+    seen.add(await page.locator('#proto-gallery').getAttribute('data-frame'));
+    await page.waitForTimeout(60);
+  }
+  expect([...seen].sort()).toEqual(['0', '1', '2']);
+  expect(await page.locator('#proto-gallery canvas').count()).toBe(8 * 4);
+  expect(errors).toEqual([]);
 });

@@ -24,7 +24,7 @@ const keys = [...placeholderEntries(), ...REGION_ENTRIES['region:plains']()].map
 
 describe('round 1 NPCs (the elder look 1, the watchman look 3)', () => {
   it('replace exactly their 12 walk frames each, at 32×56', () => {
-    const npc = names('npc').sort();
+    const npc = names('npc').filter((n) => /^npc\.(1|3)\./.test(n)).sort();  // round 1 only (round 2 has its own test)
     expect(npc).toEqual(keys.filter((k) => /^npc\.(1|3)\.walk\./.test(k)).sort());
     for (const n of npc) {
       const { w, h, alpha } = read('npc', n);
