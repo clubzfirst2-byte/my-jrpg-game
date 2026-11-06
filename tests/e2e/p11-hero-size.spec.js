@@ -57,3 +57,24 @@ test('?hd=0 shows the game as before the real art, even with ?hero=test', async 
   await open(page, '&hero=test&hd=0');
   expect(await api(page, 'art')).toMatchObject({ density: 1, overrides: 0, zoom: 1, hero: { w: 16, h: 16 } });
 });
+
+test('P12 hero prototype (?hero=proto): all 20 frames of 32×56, same feet and speed; not used by default', async ({ page }, testInfo) => {
+  const warnings = [];
+  page.on('console', (m) => {
+    if (m.text().startsWith('art:')) warnings.push(m.text());
+  });
+  const errors = await open(page, '&hero=proto');
+  // 12 walk frames (frame 0 is the idle pose) + 8 swim frames, every one used (no size warnings).
+  expect(await api(page, 'art')).toMatchObject({ density: 2, overrides: 20, zoom: 2, hero: { w: 16, h: 28, k: 1.75 } });
+  await api(page, 'standBy', 'elder');
+  const speed = await walkSpeed(page);
+  await page.screenshot({ path: testInfo.outputPath('hero-prototype.png') });
+  expect(warnings).toEqual([]);
+  expect(errors).toEqual([]);
+  // The same game: walking speed in game px per tick as with the placeholder.
+  const page2 = await page.context().newPage();
+  await open(page2, '');
+  await api(page2, 'standBy', 'elder');
+  expect(Math.abs(speed - (await walkSpeed(page2))) / speed).toBeLessThan(0.05);
+  expect((await api(page2, 'art')).hero).toMatchObject({ w: 16, h: 16 });
+});

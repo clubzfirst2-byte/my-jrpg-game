@@ -12,6 +12,18 @@
 | 参照シート一式（三面図・顔・表情・装備・ドット絵例・色見本） | `hero_design_reference.png` | **受領済み**（2026-11-05） |
 | 色見本 | `hero_palette.png`（仕様書 §3 の色） | P12 |
 
+## 仮素材の進捗（2026-11-06）
+
+| 素材 | 枚数 | 状態 | 見る方法 |
+|---|---|---|---|
+| 歩行 `player.walk.<向き>.0〜2`（`.0` は待機を兼ねる） | 12 | **仮素材・承認待ち** | `?hero=proto` |
+| 水泳 `player.swim.<向き>.0〜1` | 8 | **仮素材・承認待ち** | `?hero=proto` |
+
+- 置き場所：`src/art-proto/hero/`（ゲームの既定では使わない）。作り方：`tools/hero_proto/gen_hero_prototype.py`
+- 参考：`docs/hero/reference/sprite_prototype/hero_sprite_prototype_sheet.png`、全コマの一覧画像 `docs/hero/prototype_preview.png`、ゲーム画面 `docs/screenshots/p12-hero-prototype-ingame.png`
+- 既存の決まりに合わせた点：待機は独立したコマではなく歩行の `.0`（再生順 1→0→2→0、毎秒 8 コマ。止まっているときと空中は `.0`／`.1`）。左向きは右向きの左右反転。すべて 32×56・足元基準
+- 承認後：20 枚を `src/art/characters/hero/sprites/` に移す（そこで初めて正式素材）
+
 ## B. 表情（顔の拡大絵）
 
 置き場所 `src/art/characters/hero/portraits/`、名前 `hero.portrait.<表情>.png`、大きさは未決定（案 48×48）。参照シートの「表情バリエーション」（8 種）を元に描く。
