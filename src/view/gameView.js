@@ -25,6 +25,7 @@ import { NpcView } from './npcView.js';
 import { regionAt, outdoorAt } from '../game/world/world.js';
 import { seasonAt } from '../game/env/weather.js';
 import { SEASON_ENTRIES, seasonKeys } from './assets/placeholderPack.js';
+import { HeroAnimator } from './heroAnim.js';
 
 /** Chunk size in tiles (P8). */
 export const CHUNK = 32;
@@ -193,6 +194,12 @@ export class GameView {
     this.playerOccluded = false;
     /** How much taller the drawn hero is than the placeholder (P11.5). */
     this.heroK = 1;
+    /** The hero's animation (release art; heroAnim.js). */
+    this.heroAnim = new HeroAnimator();
+    /** @type {import('./heroAnim.js').HeroPose | null} */
+    this.heroPose = null;
+    /** The release texture drawn for the hero (null: the placeholder hero). @type {string | null} */
+    this.heroKey = null;
   }
 
   /** The texture name for the current season (P10.2: e.g. "obj.tree" -> "autumn.obj.tree"). @param {string} key */
@@ -619,10 +626,17 @@ export class GameView {
       : !p.grounded && !p.climbing
         ? 1
         : 0;
-    // Swimming: head and shoulders above the water line, ripples alternate.
-    const tex = p.swimming
-      ? this.assets.texture(`player.swim.${p.facing}.${Math.floor(p.walkTime * (p.moving ? 6 : 2)) % 2}`)
-      : this.assets.texture(`player.walk.${p.facing}.${frame}`);
+    // Release art (hero.<action>.<dir>.<frame>): the full animation set when it is loaded.
+    const pose = this.heroAnim.update(p, state, timeSec, dtSec * 1000);
+    this.heroPose = pose;
+    const releaseKey = this.heroAnim.textureKey(pose, p.facing, p.moving, (k) => this.assets.hasTexture(k));
+    this.heroKey = releaseKey;
+    // Otherwise the placeholder hero. Swimming: head and shoulders above the water, ripples alternate.
+    const tex = releaseKey
+      ? this.assets.texture(releaseKey)
+      : p.swimming
+        ? this.assets.texture(`player.swim.${p.facing}.${Math.floor(p.walkTime * (p.moving ? 6 : 2)) % 2}`)
+        : this.assets.texture(`player.walk.${p.facing}.${frame}`);
     this.player.texture = tex;
     // P11.5: the glider, the hidden-player check, the stamina wheel, the shield and the bow sit
     // relative to the hero's body, so they follow the drawn hero's height (not its hit box).
