@@ -16,6 +16,7 @@ import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES } from './view/as
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
+import { heroPrototypeFrames } from './view/assets/heroPrototype.js';
 import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
 import { InputManager } from './platform/inputManager.js';
@@ -104,6 +105,8 @@ async function boot() {
   /** @type {Map<string, string>} */
   const artOverrides = hdParam === '0' ? new Map() : new Map(ART_OVERRIDES);
   if (params.get('hero') === 'test' && hdParam !== '0') for (const [k, v] of testHeroFrames()) artOverrides.set(k, v);
+  //   ?hero=proto  the P12 hero prototype (仮素材, 32×56) — shown only when asked, until approved
+  if (params.get('hero') === 'proto' && hdParam !== '0') for (const [k, v] of await heroPrototypeFrames()) artOverrides.set(k, v);
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
 
   /** @type {import('pixi.js').Application} */
