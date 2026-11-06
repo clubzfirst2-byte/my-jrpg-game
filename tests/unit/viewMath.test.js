@@ -109,6 +109,22 @@ describe('computeResolution', () => {
     const c = computeResolution(852, 393, 3, 270);
     expect(c.width).toBeGreaterThan(a.width);
   });
+  it('P11.5: with 2 art pixels per game pixel the canvas has twice the pixels, the game view stays near the target', () => {
+    for (const target of RESOLUTION_CANDIDATES) {
+      const r = computeResolution(852, 393, 3, target, 2);
+      expect(Number.isInteger(r.scale)).toBe(true);
+      expect(r.artDensity).toBe(2);
+      expect(r.height * r.scale).toBeGreaterThanOrEqual(393 * 3);
+      // Game pixels across the short side: within a quarter of the target (even device scales only).
+      expect(Math.abs(r.gameHeight - target) / target).toBeLessThan(0.25);
+    }
+    // iPhone 15 Pro, target 216: 3 device px per canvas px, 6 per game px → 196 game px tall.
+    const r = computeResolution(852, 393, 3, 216, 2);
+    expect(r.scale).toBe(3);
+    expect(Math.round(r.gameHeight)).toBe(197);
+    // Without real art nothing changes.
+    expect(computeResolution(852, 393, 3, 216)).toMatchObject({ scale: 5, height: 236, artDensity: 1 });
+  });
   it('never scales below 1', () => {
     expect(computeResolution(100, 50, 1, 270).scale).toBe(1);
   });

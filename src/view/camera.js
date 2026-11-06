@@ -15,7 +15,7 @@ export const CAMERA_DEFAULTS = Object.freeze({
   snapDistanceViews: 1.5,
   zoom: 1,
   minZoom: 1,
-  maxZoom: 4,
+  maxZoom: 8,
 });
 
 export class Camera {

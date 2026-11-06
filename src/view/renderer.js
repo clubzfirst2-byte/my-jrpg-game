@@ -8,10 +8,11 @@ import { computeResolution } from './resolution.js';
  * The canvas is rendered at a small internal resolution and scaled up by an integer factor.
  * @param {HTMLElement} host
  * @param {number} targetHeight internal height candidate (DESIGN.md 2.1)
+ * @param {number} [artDensity] art pixels per game pixel (P11.5; see computeResolution)
  */
-export async function createRenderer(host, targetHeight) {
+export async function createRenderer(host, targetHeight, artDensity = 1) {
   const app = new Application();
-  const res = currentResolution(targetHeight);
+  const res = currentResolution(targetHeight, artDensity);
   await app.init({
     preference: 'webgl', // WebGPU / Canvas fallback are intentionally not managed (DESIGN.md 1.5)
     width: res.width,
@@ -32,20 +33,20 @@ export async function createRenderer(host, targetHeight) {
   return app;
 }
 
-/** @param {number} targetHeight */
-export function currentResolution(targetHeight) {
+/** @param {number} targetHeight @param {number} [artDensity] */
+export function currentResolution(targetHeight, artDensity = 1) {
   const vv = window.visualViewport;
   const w = vv ? vv.width : window.innerWidth;
   const h = vv ? vv.height : window.innerHeight;
-  return computeResolution(w, h, window.devicePixelRatio || 1, targetHeight);
+  return computeResolution(w, h, window.devicePixelRatio || 1, targetHeight, artDensity);
 }
 
 /**
  * Re-applies the internal resolution (after rotation, resize or switching candidates).
- * @param {Application} app @param {number} targetHeight
+ * @param {Application} app @param {number} targetHeight @param {number} [artDensity]
  */
-export function resizeRenderer(app, targetHeight) {
-  const res = currentResolution(targetHeight);
+export function resizeRenderer(app, targetHeight, artDensity = 1) {
+  const res = currentResolution(targetHeight, artDensity);
   if (app.renderer.width !== res.width || app.renderer.height !== res.height) {
     app.renderer.resize(res.width, res.height);
   }

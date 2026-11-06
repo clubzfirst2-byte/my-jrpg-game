@@ -13,7 +13,8 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The browser install sometimes stalls on the runner; it has its own limit and one retry below.
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -32,7 +33,13 @@ jobs:
       - name: Build
         run: npm run build
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium webkit
+        timeout-minutes: 16
+        run: |
+          for attempt in 1 2; do
+            timeout 420 npx playwright install --with-deps chromium webkit && exit 0
+            echo "Browser install attempt $attempt did not finish; trying again"
+          done
+          exit 1
       - name: E2E tests (iPhone viewport, Chromium + WebKit)
         run: npx playwright test
       - name: Test summary

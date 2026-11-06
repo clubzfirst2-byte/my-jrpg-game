@@ -1,9 +1,11 @@
-// P11.5: writes the art kit — every sprite the game draws, as a PNG of its exact size (the
-// placeholder art, to draw over), sorted into one folder per bundle, plus docs/ART.md with the list.
+// P11.5: writes the art kit — every sprite the game draws, as a PNG of the size the real art must
+// have (the standard: 2 art pixels per game pixel; tiles 32×32, characters 32×56), sorted into one
+// folder per bundle, plus LIST.md. The pictures are the placeholders ENLARGED — a size guide to draw
+// over, never finished art (docs/ART.md).
 // Run: node tools/export_art_kit.mjs
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
-import { placeholderEntries, REGION_ENTRIES } from '../src/view/assets/placeholderPack.js';
+import { placeholderEntries, REGION_ENTRIES, ART_SCALE } from '../src/view/assets/placeholderPack.js';
 import { PALETTE } from '../src/view/assets/placeholderArt.js';
 
 const OUT = new URL('../docs/art-kit/', import.meta.url);
@@ -26,15 +28,29 @@ const chunk = (type, data) => {
   crc.writeUInt32BE(crc32(td));
   return Buffer.concat([len, td, crc]);
 };
-/** @param {string[]} rows @param {number} scale */
-export function png(rows, scale = 1) {
-  const w = rows[0].length * scale;
-  const h = rows.length * scale;
+/** Characters (hero, villagers, humanoid enemies): one 32×56 frame for every animation. */
+export const CHARACTER_FRAME = { w: 32, h: 56 };
+const isCharacter = (key) => /^(player\.|npc\.|enemy\.archer\.)/.test(key);
+
+/**
+ * @param {string[]} rows @param {number} scale
+ * @param {{ w: number, h: number }} [frame] canvas size; the art is placed at its bottom centre (feet)
+ */
+export function png(rows, scale = 1, frame) {
+  const ow = rows[0].length * scale;
+  const oh = rows.length * scale;
+  const w = frame?.w ?? ow;
+  const h = frame?.h ?? oh;
+  const dx = Math.floor((w - ow) / 2);
+  const dy = h - oh;
   const raw = Buffer.alloc((w * 4 + 1) * h);
   for (let y = 0; y < h; y++) {
     raw[y * (w * 4 + 1)] = 0;
     for (let x = 0; x < w; x++) {
-      const c = rows[Math.floor(y / scale)][Math.floor(x / scale)];
+      const sx = x - dx;
+      const sy = y - dy;
+      if (sx < 0 || sy < 0 || sx >= ow || sy >= oh) continue;
+      const c = rows[Math.floor(sy / scale)][Math.floor(sx / scale)];
       if (c === '.') continue;
       const hex = PALETTE[c];
       const o = y * (w * 4 + 1) + 1 + x * 4;
@@ -60,12 +76,19 @@ const lines = [];
 let count = 0;
 for (const [bundle, entries] of BUNDLES) {
   mkdirSync(new URL(`${bundle}/`, OUT), { recursive: true });
-  lines.push(`\n### ${bundle}（${entries.length} 枚）\n`, '| 名前（ファイル名） | 大きさ | 基準点 |', '|---|---|---|');
+  lines.push(`\n### ${bundle}（${entries.length} 枚）\n`, '| 名前（ファイル名） | 作る大きさ（ドット） | 基準点 |', '|---|---|---|');
   for (const e of entries) {
-    writeFileSync(new URL(`${bundle}/${e.key}.png`, OUT), png(e.rows));
-    lines.push(`| \`${e.key}\` | ${e.rows[0].length}×${e.rows.length} | ${ANCHOR(e.anchor)} |`);
+    const frame = isCharacter(e.key) ? CHARACTER_FRAME : undefined;
+    writeFileSync(new URL(`${bundle}/${e.key}.png`, OUT), png(e.rows, ART_SCALE, frame));
+    const size = frame ? `${frame.w}×${frame.h}（キャラクター規格）` : `${e.rows[0].length * ART_SCALE}×${e.rows.length * ART_SCALE}${ANCHOR(e.anchor).startsWith('左上') ? '（固定）' : '（目安）'}`;
+    lines.push(`| \`${e.key}\` | ${size} | ${ANCHOR(e.anchor)} |`);
     count++;
   }
 }
-writeFileSync(new URL('LIST.md', OUT), `# 絵の一覧（${count} 枚、tools/export_art_kit.mjs で作成）\n${lines.join('\n')}\n`);
+writeFileSync(
+  new URL('LIST.md', OUT),
+  `# 絵の一覧（${count} 枚、tools/export_art_kit.mjs で作成）\n\n` +
+    '大きさは本番の絵の規格（ゲーム内 1 ドットにつき絵 2 ドット）。下絵の PNG は仮の絵を**拡大しただけ**の大きさの目安で、完成品として使わないこと（docs/ART.md）。\n' +
+    `${lines.join('\n')}\n`,
+);
 console.log(`${count} sprites written to docs/art-kit/`);
