@@ -17,7 +17,7 @@
 | 回 | 対象 | 状態 | 見る方法 |
 |---|---|---|---|
 | 第 1 回 | 老人（長老）・兵士（見張り）・獣・ゴブリン | **仮素材を制作、品質確認待ち**（2026-11-06）。一覧 `docs/characters/proto_round1_preview.png`、ゲーム画面 `docs/screenshots/p12-round1-ingame.png` | `?proto=all`（`?npc=proto` / `?enemy=proto` で個別） |
-| 第 2 回 | 残りの NPC（星環の姫を含む） | 第 1 回の確認後 | — |
+| 第 2 回 | 村人・商人・鍛冶屋・子ども・旅人・星環の姫 | **仮素材を制作、確認待ち**（2026-11-06、72 コマ）。一覧・拡大・歩行 GIF・ゲーム画面は `docs/characters/round2/` | `?gallery=1`、`?npc=proto&npclook=elder:9,guard:6` |
 | 第 3 回 | 残りの敵 | 第 2 回の確認後 | — |
 
 ## 0. いまのゲームの仕組み（調査結果）
