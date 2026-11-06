@@ -12,9 +12,11 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Pinned: on ubuntu-latest (26.04) the browsers' system packages download very slowly from the
+    # runner's mirror and the runs ran out of time; Playwright supports 24.04.
+    runs-on: ubuntu-24.04
     # The browser download sometimes stalls on the runner; it has its own limit and one retry below.
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -35,7 +37,7 @@ jobs:
       # System packages once (apt holds a lock, so it must not be cut off and retried), then the
       # browser download, which sometimes stalls: it has its own limit and one retry.
       - name: Install browser system packages
-        timeout-minutes: 10
+        timeout-minutes: 20
         run: npx playwright install-deps chromium webkit
       - name: Download Playwright browsers
         timeout-minutes: 12
