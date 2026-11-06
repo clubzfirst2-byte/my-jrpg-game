@@ -49,6 +49,43 @@ test('release hero: standing breathes (idle), walking and dashing use their own 
   expect(errors).toEqual([]);
 });
 
+test('release hero: sword, dodge, shield, bow and jump each show their own frames', async ({ page }, testInfo) => {
+  const errors = await open(page, '&hero=release');
+  await drawn(page, /^hero\.idle\.down\.\d$/);
+  // record every texture drawn (short actions last a few frames only)
+  await page.evaluate(() => {
+    const w = /** @type {any} */ (window);
+    w.__seen = new Set();
+    const tick = () => {
+      w.__seen.add(w.__debugApi.heroPose().texture);
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+  const seen = () => page.evaluate(() => [...(/** @type {any} */ (window).__seen)]);
+  const shows = (re) => expect.poll(async () => (await seen()).some((t) => re.test(t ?? '')), { message: String(re), timeout: 6000, intervals: [50] }).toBe(true);
+  await page.keyboard.press('KeyJ');
+  await shows(/^hero\.attack1\.down\.\d$/);
+  await page.waitForTimeout(600);
+  await page.keyboard.press('KeyL');
+  await shows(/^hero\.dodge\.down\.\d$/);
+  await page.waitForTimeout(600);
+  await page.keyboard.down('KeyI');
+  await shows(/^hero\.guard\.down\.1$/);
+  // the hero holds his own shield: the separate shield effect is hidden
+  await page.screenshot({ path: testInfo.outputPath('hero-guard.png') });
+  await page.keyboard.up('KeyI');
+  await page.waitForTimeout(300);
+  await page.keyboard.down('KeyU');
+  await shows(/^hero\.bow\.down\.3$/);
+  await page.screenshot({ path: testInfo.outputPath('hero-bow.png') });
+  await page.keyboard.up('KeyU');
+  await page.waitForTimeout(600);
+  await page.keyboard.press('Space');
+  await shows(/^hero\.jump\.down\.\d$/);
+  expect(errors).toEqual([]);
+});
+
 test('normal play does not use the release hero', async ({ page }) => {
   await open(page, '');
   await page.waitForTimeout(200);

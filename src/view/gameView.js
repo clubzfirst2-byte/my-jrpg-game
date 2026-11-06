@@ -892,13 +892,15 @@ export class GameView {
     }
 
     // Shield in front while guarding; bow and aim line while aiming.
-    this.shield.visible = !!p.guarding;
+    // The release hero holds his own shield and bow in his guard / bow frames: no second one on top.
+    const held = this.heroKey ? this.heroKey.split('.')[1] : '';
+    this.shield.visible = !!p.guarding && held !== 'guard';
     if (p.guarding) {
       this.shield.position.set(Math.round(sx + p.aimX * 7), Math.round(sy - 7 * this.heroK + p.aimY * 4));
       this.shield.zIndex = p.aimY < 0 ? py - 0.01 : py + 0.01;
     }
     const aiming = p.action === 'aim';
-    this.bow.visible = aiming;
+    this.bow.visible = aiming && held !== 'bow';
     this.aimLine.clear();
     if (aiming) {
       const drawn = p.actionMs >= COMBAT.bowDrawMs;
@@ -915,7 +917,8 @@ export class GameView {
     // Hurt: blink while invulnerable. Dodge: a little transparent. Dead: lying faded.
     const blink = p.invulnMs > 0 && Math.floor(timeSec * 12) % 2 === 0;
     this.player.alpha = p.dead ? 0.5 : blink ? 0.3 : p.action === 'dodge' ? 0.7 : 1;
-    this.player.rotation = p.dead ? Math.PI / 2 : 0;
+    // (the release hero has his own collapse frames: no turning the sprite on its side)
+    this.player.rotation = p.dead && held !== 'down' ? Math.PI / 2 : 0;
 
     // Slow motion tint (screen space).
     const slow = state.flurryMs > 0 || state.bulletTime;

@@ -23,6 +23,13 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "art_proto"))
 from pixel import Canvas, mirror, png  # noqa: E402
 
+sys.path.insert(0, os.path.dirname(__file__))
+import heads  # noqa: E402  (the hand-placed heads, option A)
+import actions  # noqa: E402  (stage 2: every other action, with hands and props)
+
+# the head: hand-placed pixel maps (heads.py) or the earlier shape-built head (kept for comparison)
+HAND_HEADS = os.environ.get("HERO_HEAD", "hand") == "hand"
+
 ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
 OUT = os.path.join(ROOT, "src", "art-release", "hero")
 W, H = 32, 56
@@ -38,6 +45,7 @@ RAMPS = {
     "trousers": ["#14141c", "#22222e", "#323244", "#44445a", "#585872"],
     "gold": ["#5a4018", "#a07a30", "#e8c060", "#f8dc88", "#fff4c8"],
     "gem": ["#0e2a60", "#1a5cb8", "#2a8de2", "#78c8ff", "#e0f6ff"],
+    "water": ["#0e3050", "#2a6a9a", "#5aa0d0", "#a8dcf8", "#f4fcff"],
 }
 EYE = {"lash": "#24223a", "iris": "#2a78d0", "iris_d": "#1a3c86", "shine": "#f0fbff"}
 MOUTH, BLUSH = "#a8584e", "#f0a888"
@@ -75,6 +83,12 @@ class Pose:
         self.breath = 0  # chest up (idle)
         self.glint = 0  # pendant highlight phase
         self.shift = 0  # front/back view: upper body sideways over the planted foot
+        self.blink = False  # eyes shut (hurt, collapsing)
+        # stage 2 (actions.py): the hands placed explicitly, props, the water line, the frame width
+        self.hands = None
+        self.props = ()
+        self.water = None
+        self.width = W
         self.__dict__.update(k)
 
 
@@ -243,8 +257,8 @@ def front(p, back=False):
         c.rect(15, 34 + p.bob, 16, 35 + p.bob, "gold")
         c.rect(18, 36 + p.bob, 20, 39 + p.bob, "leather")
         c.shade(18, 36 + p.bob, 4)
-    # arms swinging (the hand rises as the arm swings forward)
-    for side, x, swing in ((-1, 8, p.arm_near), (1, 22, p.arm_far)):
+    # arms swinging (the hand rises as the arm swings forward); actions place the hands themselves
+    for side, x, swing in ((-1, 8, p.arm_near), (1, 22, p.arm_far)) if p.hands is None else ():
         hand_y = 37 + b - abs(swing) - p.arm_bend
         c.rect(x, 28 + b, x + 1, hand_y - 1, "shirt" if not back else "lining")
         c.rect(x, hand_y, x + 1, hand_y + 2, "leather")
@@ -291,14 +305,17 @@ def front(p, back=False):
         pendant(c, 14, 25 + b, p.glint)
         c.put(15, 24 + b, "leather", 1)
     top = 1 + b
-    hair_mass(c, 15.5, top, sway=p.sway)
-    if back:
-        head_back_detail(c, top, p.sway)
+    if HAND_HEADS:
+        (heads.head_back(c, top, p.sway) if back else heads.head_front(c, top, p.sway, p.blink))
     else:
-        face_front(c, 15.5, top, sway=p.sway, blink=getattr(p, "blink", False))
+        hair_mass(c, 15.5, top, sway=p.sway)
+        if back:
+            head_back_detail(c, top, p.sway)
+        else:
+            face_front(c, 15.5, top, sway=p.sway, blink=getattr(p, "blink", False))
     # the forward-swinging hand comes out past the cloak's edge (running: fists pumping at the chest)
     for side, x, swing in ((-1, 11, p.arm_near), (1, 19, p.arm_far)):
-        if swing > 0 and not back:
+        if swing > 0 and not back and p.hands is None:
             hy = 36 + b - swing - p.arm_bend
             c.rect(x, hy, x + 1, hy + 2, "leather")
             c.shade(x, hy, 4)
@@ -347,7 +364,8 @@ def side(p):
         capsule(c, hx_, hy, hx_ + 0.5, hy + 1.2, 1.3, "leather", tone)
 
     leg(p.far[0], p.far[1], 1)
-    arm(p.arm_far, 1)
+    if p.hands is None:
+        arm(p.arm_far, 1)
     # torso: tunic leaning with the run, belt, pouch at the back
     c.poly([(13 + p.lean, 24 + b), (20 + p.lean, 24 + b), (21, 42 + p.bob), (13, 42 + p.bob)], "shirt")
     c.strand(17 + p.lean // 2, 30 + b, 17, 41 + p.bob, 1)
@@ -368,10 +386,14 @@ def side(p):
     c.poly([(9 + p.lean, 21 + b), (21 + p.lean, 21 + b), (21 + p.lean, 25 + b), (9 + p.lean, 26 + b)], "cloak")
     c.line(10 + p.lean, 21 + b, 20 + p.lean, 21 + b, "cloak", 3)
     pendant(c, 19 + p.lean, 25 + b, p.glint)
-    arm(p.arm_near, None, near=True)
+    if p.hands is None:
+        arm(p.arm_near, None, near=True)
     top = 1 + b
-    hair_mass(c, 14.5 + p.lean, top, side=True, sway=p.sway + (1 if p.flare else 0))
-    face_side(c, 14.5 + p.lean, top, sway=p.sway + (1 if p.flare else 0))
+    if HAND_HEADS:
+        heads.head_side(c, top, p.sway + (1 if p.flare else 0), dx=p.lean, blink=p.blink)
+    else:
+        hair_mass(c, 14.5 + p.lean, top, side=True, sway=p.sway + (1 if p.flare else 0))
+        face_side(c, 14.5 + p.lean, top, sway=p.sway + (1 if p.flare else 0))
     return c
 
 
@@ -390,10 +412,26 @@ def run(i):
     return gait(i, 6, stride=5, lift=5, bob_amp=1, arm=3, run=True)
 
 
-ACTIONS = {"idle": (4, idle), "walk": (6, walk), "run": (6, run)}
+ACTIONS = {"idle": (4, idle), "walk": (6, walk), "run": (6, run), **{k: (n, None) for k, (n, _) in actions.STAGE2.items()}}
 
 
 def draw(action, d, i):
+    if action in actions.STAGE2:
+        _, pose_of = actions.STAGE2[action]
+        view = "side" if d == "right" else d
+        k = pose_of(view, i)
+        if k.pop("_back", False):
+            view = "up"  # climbing: he faces the wall whichever way he goes
+            k = pose_of("up", i)
+            k.pop("_back", None)
+        k.pop("_up", None)
+        if view == "up" and action in actions.SHARED_BACK and k.get("hands"):
+            k["hands"] = {"R": k["hands"]["L"], "L": k["hands"]["R"]}
+        p = Pose(**k)
+        if view == "up":
+            p = Pose(**{**p.__dict__, "near": p.far, "far": p.near})
+        c = side(p) if view == "side" else front(p, back=view == "up")
+        return actions.finish(c, p, view).colours()
     count, pose_of = ACTIONS[action]
     p = pose_of(i)
     if d == "down":

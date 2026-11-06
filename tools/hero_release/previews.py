@@ -3,6 +3,8 @@
   docs/hero/release/frames.png      every frame, by action and direction, with labels
   docs/hero/release/anim.gif        idle / walk / run playing as in the game, in 4 directions
   docs/hero/release/compare_v2.png  approved v2 (prototype) next to the release frames
+  docs/hero/release/stage2.png      stage 2: every other action, down / up / right, with labels
+  docs/hero/release/stage2.gif      stage 2 playing (down and right)
 Run after gen_hero.py: python3 tools/hero_release/previews.py
 """
 
@@ -18,6 +20,11 @@ GRASS, BG, INK = (79, 138, 62), (34, 36, 46), (240, 240, 240)
 DIRS = ("down", "up", "right", "left")
 DJ = {"down": "下", "up": "上", "right": "右", "left": "左"}
 ACTIONS = (("idle", "待機", 4), ("walk", "歩行", 6), ("run", "走行", 6))
+
+
+STAGE2 = (("jump", "ジャンプ", 2), ("land", "着地", 2), ("glide", "滑空", 4), ("climb", "崖登り", 4), ("swim", "水泳", 4),
+          ("dodge", "回避", 4), ("attack1", "剣 1 段", 4), ("attack2", "剣 2 段", 4), ("attack3", "剣 3 段（決め）", 6),
+          ("bow", "弓", 4), ("guard", "盾", 2), ("hurt", "被弾", 2), ("down", "倒れる", 4))
 
 
 def font(n):
@@ -46,6 +53,47 @@ def frames(scale=4):
         for i in range(n):
             out.paste(tile(os.path.join(REL, f"hero.{a}.{d}.{i}.png"), scale), (150 + i * cw, y))
     out.save(os.path.join(OUT, "frames.png"))
+
+
+def place(out, path, scale, x, y):
+    """A frame centred in a 48-px-wide cell (frames are 32 or 48 wide, feet at the centre)."""
+    t = tile(path, scale)
+    out.paste(t, (x + (48 * scale - t.width) // 2, y))
+
+
+def stage2(scale=3):
+    cw, ch, gap = 48 * scale + 4, 56 * scale + 6, 24
+    width = 190 + 3 * (6 * cw + gap)
+    out = Image.new("RGB", (width, 40 + ch * len(STAGE2)), BG)
+    g = ImageDraw.Draw(out)
+    for k, d in enumerate(("down", "up", "right")):
+        g.text((190 + k * (6 * cw + gap), 8), f"{DJ[d]}向き（左向きは右向きの左右反転）" if d == "right" else f"{DJ[d]}向き", fill=INK, font=font(18))
+    for r, (a, ja, n) in enumerate(STAGE2):
+        y = 40 + r * ch
+        g.text((10, y + ch // 2 - 20), ja, fill=INK, font=font(20))
+        g.text((10, y + ch // 2 + 6), f"{n} コマ × 4 方向", fill=(180, 180, 190), font=font(15))
+        for k, d in enumerate(("down", "up", "right")):
+            for i in range(n):
+                place(out, os.path.join(REL, f"hero.{a}.{d}.{i}.png"), scale, 190 + k * (6 * cw + gap) + i * cw, y)
+    out.save(os.path.join(OUT, "stage2.png"))
+
+
+def stage2_anim(scale=3):
+    """Each action loops at about 8 frames per second, facing down and right."""
+    cw, ch = 48 * scale + 4, 56 * scale + 8
+    cols = 7
+    rows = (len(STAGE2) + cols - 1) // cols
+    frames_out = []
+    for k in range(12):
+        out = Image.new("RGB", (cols * cw * 2 + 20, rows * (ch + 30) + 10), BG)
+        g = ImageDraw.Draw(out)
+        for j, (a, ja, n) in enumerate(STAGE2):
+            x, y = 10 + (j % cols) * cw * 2, 10 + (j // cols) * (ch + 30)
+            g.text((x + 4, y), ja, fill=INK, font=font(16))
+            for m, d in enumerate(("down", "right")):
+                place(out, os.path.join(REL, f"hero.{a}.{d}.{k % n}.png"), scale, x + m * cw, y + 26)
+        frames_out.append(out)
+    frames_out[0].save(os.path.join(OUT, "stage2.gif"), save_all=True, append_images=frames_out[1:], duration=125, loop=0)
 
 
 def anim(scale=4):
@@ -86,4 +134,6 @@ if __name__ == "__main__":
     frames()
     anim()
     compare()
+    stage2()
+    stage2_anim()
     print("previews -> docs/hero/release/")

@@ -110,6 +110,30 @@ describe('release hero art (src/art-release/hero)', () => {
     }
   });
 
+  it('stage 2: every other action in all four directions; 56 high, 32 or 48 wide (sword and bow frames)', () => {
+    const wide = new Set(['attack1', 'attack2', 'attack3', 'bow', 'guard', 'hurt', 'down']);
+    for (const action of Object.keys(HERO_ANIMS).filter((a) => !['idle', 'walk', 'run'].includes(a))) {
+      for (const d of ['down', 'up', 'right', 'left']) {
+        for (let i = 0; i < HERO_ANIMS[action].frames; i++) {
+          const name = `hero.${action}.${d}.${i}`;
+          expect(files, name).toContain(name);
+          expect(size(name), name).toEqual([wide.has(action) ? 48 : 32, 56]);
+        }
+        expect(files, `${action} ${d}: no extra frames`).not.toContain(`hero.${action}.${d}.${HERO_ANIMS[action].frames}`);
+      }
+    }
+  });
+
+  it('frames of the same action differ from one another (every action moves)', () => {
+    for (const action of Object.keys(HERO_ANIMS)) {
+      for (const d of ['down', 'up', 'right']) {
+        const pics = new Set();
+        for (let i = 0; i < HERO_ANIMS[action].frames; i++) pics.add(readFileSync(new URL(`hero.${action}.${d}.${i}.png`, DIR)).toString('base64'));
+        expect(pics.size, `${action} ${d}`).toBeGreaterThan(1);
+      }
+    }
+  });
+
   it('only release names (no other files)', () => {
     for (const f of files) expect(f).toMatch(/^hero\.[a-z0-9]+\.(down|up|right|left)\.\d+$/);
   });
