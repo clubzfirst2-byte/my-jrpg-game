@@ -3,7 +3,6 @@ import { test, expect } from '@playwright/test';
 // P7: the 星環 abilities and the three trials (each also solved another way in tests/unit/trials.test.js).
 
 const api = (page, fn, ...args) => page.evaluate(([f, a]) => window.__debugApi[f](...a), [fn, args]);
-const ARROW = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
 
 async function open(page) {
   const errors = [];
@@ -14,12 +13,12 @@ async function open(page) {
   return errors;
 }
 
-/** Stand on a tile facing a direction (a short key tap turns the player, then back onto the tile). */
+/**
+ * Stand on a tile facing a direction. Turning is done with the debug API (facing and aim), not a
+ * key tap: a tap is wall-clock time, and on a slow browser the game catches up several ticks while
+ * the key is held — next to the chasm that walked the player into the pit before the test began.
+ */
 async function standAt(page, tx, ty, dir) {
-  await api(page, 'teleport', tx, ty);
-  await page.keyboard.down(ARROW[dir]);
-  await page.waitForTimeout(40);
-  await page.keyboard.up(ARROW[dir]);
   await api(page, 'teleport', tx, ty);
   await api(page, 'face', dir);
 }

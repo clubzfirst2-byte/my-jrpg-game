@@ -12,11 +12,11 @@ import { createOverlay } from './debug/overlay.js';
 import { createRenderer, resizeRenderer } from './view/renderer.js';
 import { RESOLUTION_CANDIDATES, DEFAULT_TARGET_HEIGHT, nextCandidate } from './view/resolution.js';
 import { AssetManager } from './view/assets/assetManager.js';
-import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES } from './view/assets/placeholderPack.js';
+import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES, placeholderEntries, releaseHeroEntries } from './view/assets/placeholderPack.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
-import { prototypeFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
+import { prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
 import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
 import { InputManager } from './platform/inputManager.js';
@@ -109,6 +109,8 @@ async function boot() {
   //   only when asked, until approved
   const protoGroups = requestedProtoGroups(params);
   if (protoGroups.length && hdParam !== '0') for (const [k, v] of await prototypeFrames(protoGroups)) artOverrides.set(k, v);
+  //   ?hero=release   the hero's release art under review (all actions; QUALITY_POLICY.md)
+  if (params.get('hero') === 'release' && hdParam !== '0') for (const [k, v] of await releaseFrames('hero')) artOverrides.set(k, v);
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
 
   /** @type {import('pixi.js').Application} */
@@ -129,7 +131,7 @@ async function boot() {
 
   // --- assets / logic / view ---
   const assets = new AssetManager();
-  assets.register('placeholder', () => buildPlaceholderPack(undefined, artOverrides));
+  assets.register('placeholder', () => buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides)], artOverrides));
   // P8: each region's art is its own bundle, loaded by the view near the region.
   for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name, artOverrides));
   await assets.load('placeholder');
@@ -908,6 +910,8 @@ async function boot() {
       for (let i = 0; i < n; i++) stepGame(state, input.sample());
     },
     resolution: () => ({ ...resolution, target: targetHeight }),
+    /** The hero's current animation (action and frame) and the texture drawn. */
+    heroPose: () => ({ ...view.heroPose, texture: view.heroKey }),
     /** P11.5: the art in use (density, how many real-art sprites) and the drawn hero's size in game px. */
     art: () => ({ density: artDensity, overrides: artOverrides.size, zoom: view.camera.zoom, hero: { w: view.player.texture.width, h: view.player.texture.height, k: view.heroK } }),
     /** P8: the auto tour (minutes may be fractional in tests). */

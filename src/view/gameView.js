@@ -25,6 +25,7 @@ import { NpcView } from './npcView.js';
 import { regionAt, outdoorAt } from '../game/world/world.js';
 import { seasonAt } from '../game/env/weather.js';
 import { SEASON_ENTRIES, seasonKeys } from './assets/placeholderPack.js';
+import { HeroAnimator } from './heroAnim.js';
 
 /** Chunk size in tiles (P8). */
 export const CHUNK = 32;
@@ -193,6 +194,12 @@ export class GameView {
     this.playerOccluded = false;
     /** How much taller the drawn hero is than the placeholder (P11.5). */
     this.heroK = 1;
+    /** The hero's animation (release art; heroAnim.js). */
+    this.heroAnim = new HeroAnimator();
+    /** @type {import('./heroAnim.js').HeroPose | null} */
+    this.heroPose = null;
+    /** The release texture drawn for the hero (null: the placeholder hero). @type {string | null} */
+    this.heroKey = null;
   }
 
   /** The texture name for the current season (P10.2: e.g. "obj.tree" -> "autumn.obj.tree"). @param {string} key */
@@ -619,10 +626,17 @@ export class GameView {
       : !p.grounded && !p.climbing
         ? 1
         : 0;
-    // Swimming: head and shoulders above the water line, ripples alternate.
-    const tex = p.swimming
-      ? this.assets.texture(`player.swim.${p.facing}.${Math.floor(p.walkTime * (p.moving ? 6 : 2)) % 2}`)
-      : this.assets.texture(`player.walk.${p.facing}.${frame}`);
+    // Release art (hero.<action>.<dir>.<frame>): the full animation set when it is loaded.
+    const pose = this.heroAnim.update(p, state, timeSec, dtSec * 1000);
+    this.heroPose = pose;
+    const releaseKey = this.heroAnim.textureKey(pose, p.facing, p.moving, (k) => this.assets.hasTexture(k));
+    this.heroKey = releaseKey;
+    // Otherwise the placeholder hero. Swimming: head and shoulders above the water, ripples alternate.
+    const tex = releaseKey
+      ? this.assets.texture(releaseKey)
+      : p.swimming
+        ? this.assets.texture(`player.swim.${p.facing}.${Math.floor(p.walkTime * (p.moving ? 6 : 2)) % 2}`)
+        : this.assets.texture(`player.walk.${p.facing}.${frame}`);
     this.player.texture = tex;
     // P11.5: the glider, the hidden-player check, the stamina wheel, the shield and the bow sit
     // relative to the hero's body, so they follow the drawn hero's height (not its hit box).
@@ -878,13 +892,15 @@ export class GameView {
     }
 
     // Shield in front while guarding; bow and aim line while aiming.
-    this.shield.visible = !!p.guarding;
+    // The release hero holds his own shield and bow in his guard / bow frames: no second one on top.
+    const held = this.heroKey ? this.heroKey.split('.')[1] : '';
+    this.shield.visible = !!p.guarding && held !== 'guard';
     if (p.guarding) {
       this.shield.position.set(Math.round(sx + p.aimX * 7), Math.round(sy - 7 * this.heroK + p.aimY * 4));
       this.shield.zIndex = p.aimY < 0 ? py - 0.01 : py + 0.01;
     }
     const aiming = p.action === 'aim';
-    this.bow.visible = aiming;
+    this.bow.visible = aiming && held !== 'bow';
     this.aimLine.clear();
     if (aiming) {
       const drawn = p.actionMs >= COMBAT.bowDrawMs;
@@ -901,7 +917,8 @@ export class GameView {
     // Hurt: blink while invulnerable. Dodge: a little transparent. Dead: lying faded.
     const blink = p.invulnMs > 0 && Math.floor(timeSec * 12) % 2 === 0;
     this.player.alpha = p.dead ? 0.5 : blink ? 0.3 : p.action === 'dodge' ? 0.7 : 1;
-    this.player.rotation = p.dead ? Math.PI / 2 : 0;
+    // (the release hero has his own collapse frames: no turning the sprite on its side)
+    this.player.rotation = p.dead && held !== 'down' ? Math.PI / 2 : 0;
 
     // Slow motion tint (screen space).
     const slow = state.flurryMs > 0 || state.bulletTime;
