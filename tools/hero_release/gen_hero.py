@@ -95,6 +95,7 @@ class Pose:
         # stage 5: arm poses chosen by name ({"R": "diag_up"}), and facing left drawn on its own
         self.arms = None
         self.swap = False
+        self.shown = None  # facing left: props drawn over the body although held in the far hand
         self.__dict__.update(k)
 
 
@@ -444,7 +445,7 @@ def draw(action, d, i):
         k = pose_of("side", i)
         k.pop("_back", None)
         k.pop("_up", None)
-        k = actions.for_left(k)
+        k = actions.for_left(k, action, i)
         p = Pose(**k, swap=True)
         return mirror(actions.finish(side(p), p, "side").colours())
     if action in actions.STAGE2:

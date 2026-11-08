@@ -298,7 +298,7 @@ def finish(c, p, view):
             fn = prop[1]
             key = prop[2] if len(prop) > 2 else None
             dx, dy = held.get(key, (0, 0))
-            if key in hidden:
+            if key in hidden and key not in (getattr(p, "shown", None) or ()):
                 layer = behind
             fn(layer.moved(round(dx), round(dy)) if (dx or dy) else layer, b)
 
@@ -468,7 +468,8 @@ def attack1(view, i):
             ("back", "down", 190, 13, dict(bob=1, lean=-1, near=(2, 0), far=(-2, 0), sway=1, _behind=True)),
             ("forward", "back", -5, 13, dict(bob=1, lean=2, near=(4, 0), far=(-3, 0), sway=2, flare=1)),
             ("diag_down", "back", 45, 13, dict(bob=2, lean=3, near=(4, 0), far=(-3, 0), sway=2, flare=1)),
-            ("down", "down", 100, 11, dict(bob=1, lean=1, near=(3, 0), far=(-2, 0), sway=1)),
+            # recovering: the blade lowered forward (stage 6: its tip clears the legs, facing left too)
+            ("down", "down", 65, 12, dict(bob=1, lean=1, near=(3, 0), far=(-2, 0), sway=1)),
         ])
     if view == "up":
         return swing(view, i, [
@@ -491,7 +492,8 @@ def attack2(view, i):
         return swing(view, i, [
             ("diag_down", "back", 135, 12, dict(bob=2, lean=2, near=(3, 0), far=(-3, 0), sway=2)),
             ("forward", "back", -25, 13, dict(bob=1, lean=2, near=(4, 0), far=(-3, 0), sway=1, flare=1)),
-            ("diag_up", "down", -50, 12, dict(bob=0, lean=1, near=(4, 0), far=(-2, 0), sway=0)),
+            # stage 6: the cut carried up onto the shoulder, the blade back past the neck (the face clear)
+            ("shoulder", "down", -170, 15, dict(bob=0, lean=1, near=(4, 0), far=(-2, 0), sway=0)),
             ("forward", "down", -35, 12, dict(bob=1, lean=1, near=(3, 0), far=(-2, 0), sway=1)),
         ])
     if view == "up":
@@ -516,10 +518,11 @@ def attack3(view, i):
         return swing(view, i, [
             ("back", "back", 200, 12, dict(bob=3, lean=0, near=(2, 0), far=(-3, 0), sway=1, _behind=True)),
             ("diag_up", "diag_up", -75, 13, dict(bob=0, lean=-1, near=(2, 0), far=(-2, 0), sway=0, _behind=True)),
-            ("diag_up", "diag_up", -60, 13, dict(bob=-2, lean=0, sway=-1, flare=2, _behind=True, **hop)),
+            # stage 6: in the hop the sword rests on the shoulder, ready to come down (the face clear)
+            ("shoulder", "diag_up", -168, 15, dict(bob=-2, lean=0, sway=-1, flare=2, **hop)),
             ("diag_down", "diag_down", 30, 14, dict(bob=4, lean=3, near=(4, 0), far=(-3, 0), sway=2, flare=3)),
             ("diag_down", "diag_down", 40, 14, dict(bob=5, lean=3, near=(4, 0), far=(-3, 0), sway=3, flare=2)),
-            ("down", "down", 80, 12, dict(bob=2, lean=1, near=(3, 0), far=(-2, 0), sway=1)),
+            ("down", "down", 65, 12, dict(bob=2, lean=1, near=(3, 0), far=(-2, 0), sway=1)),
         ])
     if view == "up":
         return swing(view, i, [
@@ -549,11 +552,15 @@ def bow_draw(view, i):
         return dict(bob=0, lean=0, near=(3, 0), far=(-3, 0), sway=0, hands={"L": (26, 27), "R": hand_at("side", "R", r)},
                     arms={"L": "forward", "R": r}, props=(_bow(26, 27, 0, d, to_hand=True),), width=WIDE)
     if view == "up":
-        # seen from behind (stage 5): the bow upright past his left side, the drawing elbow raised
+        # seen from behind (stage 6): the bow held out and raised on his left, past the body and beside
+        # the head; the right hand draws
+        # the string back to his right shoulder; the arrow lies across the back of the head, its
+        # point showing past the bow. Bow, string and arrow pass behind the head (only what shows
+        # beside it is drawn): the cape and the star are untouched.
         lh = hand_at("up", "L", "out")
-        r = "out" if i == 0 else "diag_up"
+        r = ("out", "diag_up", "diag_up", "diag_up")[i]
         return dict(bob=0, sway=0, hands={"L": lh, "R": hand_at("up", "R", r)}, arms={"L": "out", "R": r},
-                    props=(_bow(lh[0] - 1, lh[1], 180, 0, arrow=False, reach=9),), width=WIDE)
+                    props=(_bow(lh[0] - 1, lh[1] - 2, 180, d, when="behind", reach=10, to_hand=True),), width=WIDE)
     # facing the viewer: the bow upright in front of him, the arrow pointing out of the picture
     return dict(bob=0, sway=0, hands={"L": (17, 31), "R": (12 + round(-2 * d), 28 - round(2 * d))},
                 props=(_bow(17, 31, 0, 0, arrow=False, reach=9), ("front", lambda L, b: (L.put(16, 31 + b, "steel", 4), L.put(16, 30 + b, "gem", 3) if i else None), "L")), width=WIDE)
@@ -617,6 +624,20 @@ SHARED_BACK = {"jump", "land", "dodge", "hurt", "down"}
 OWN_LEFT = {"attack1", "attack2", "attack3", "guard", "bow"}
 
 
-def for_left(k):
-    """The facing-right pose of a weapon action, ready to be drawn with his left arm near."""
-    return dict(k)
+# facing left, frames whose blade would be hidden whole behind his body when held in the far hand:
+# the blade is drawn over the body instead (it still starts at the right hand)
+LEFT_SHOWN = {("attack2", 0)}
+
+
+def for_left(k, action=None, i=None):
+    """The facing-right pose of a weapon action, ready to be drawn with his left arm near.
+    Stage 6: where the sword arm reaches ahead, it goes to full stretch (reach), so the far hand
+    clears his chest and the hilt in it shows."""
+    k = dict(k)
+    if (action, i) in LEFT_SHOWN:
+        k["shown"] = ("R",)
+    arms = dict(k.get("arms") or {})
+    if arms.get("R") == "forward" and any(len(pr) > 2 and pr[2] == "R" for pr in k.get("props", ())):
+        arms["R"] = "reach"
+        k["arms"] = arms
+    return k
