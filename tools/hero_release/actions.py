@@ -18,8 +18,14 @@ hero's frames only show him holding / swinging. Pure drawing data, run from gen_
 """
 
 import math
+import os
 
 from pixel import Canvas
+
+import arms as hand_arms
+
+# the arms: hand-placed basic poses (arms.py, stage 4) or the earlier two-bone capsules
+HAND_ARMS = os.environ.get("HERO_ARMS", "hand") == "hand"
 
 WIDE = 48
 
@@ -42,17 +48,21 @@ def widen(c, w):
 class Layer:
     """Draws on a frame either over everything (front) or only into empty pixels (behind)."""
 
-    def __init__(self, c, ox, behind=False):
-        self.c, self.ox, self.behind = c, ox, behind
+    def __init__(self, c, ox, behind=False, oy=0):
+        self.c, self.ox, self.behind, self.oy = c, ox, behind, oy
+
+    def moved(self, dx, dy):
+        """The same layer, everything drawn shifted by (dx, dy)."""
+        return Layer(self.c, self.ox + dx, self.behind, self.oy + dy)
 
     def put(self, x, y, m, tone=None):
-        x, y = int(round(x)) + self.ox, int(round(y))
+        x, y = int(round(x)) + self.ox, int(round(y)) + self.oy
         if self.behind and self.c.m(x, y) is not None:
             return
         self.c.put(x, y, m, tone)
 
     def paint(self, x, y, rgb):
-        self.c.paint(int(round(x)) + self.ox, int(round(y)), rgb)
+        self.c.paint(int(round(x)) + self.ox, int(round(y)) + self.oy, rgb)
 
     def capsule(self, x0, y0, x1, y1, r, m, tone=None):
         dx, dy = x1 - x0, y1 - y0
@@ -199,6 +209,26 @@ def shoulders(view, p):
     return {k: (x + sx, y + b) for k, (x, y) in SHOULDER[view].items()}
 
 
+def default_hands(p, view):
+    """Stage 1 (idle / walk / run): where the hands are, from the arm swing (+ forward)."""
+    sh = shoulders(view, p)
+    if view == "side":
+        def at(k, swing):
+            x, y = sh[k]
+            if swing >= 2:
+                return (x + 6, y + 5 - p.arm_bend)
+            if swing <= -2:
+                return (x - 4, y + 8)
+            return (x, y + 9)
+        return {"R": at("R", p.arm_near), "L": at("L", p.arm_far)}
+    out = {}
+    for k, swing in (("R", p.arm_near), ("L", p.arm_far)):
+        x, y = sh[k]
+        inward = 1 if x < 15.5 else -1
+        out[k] = (x + inward * 3, y + 7) if (swing > 0 and view == "down") else (x, y + 10)
+    return out
+
+
 def finish(c, p, view):
     """Arms, props and the water line over the drawn body; returns the (possibly wider) frame."""
     c = widen(c, p.width)
@@ -206,10 +236,46 @@ def finish(c, p, view):
     front, behind = Layer(c, ox), Layer(c, ox, behind=True)
     sh = shoulders(view, p)
     b = p.bob - p.breath
-    for when, fn in p.props:  # props behind the body (or behind the arms) first
-        if when == "behind":
-            fn(behind, b)
-    if p.hands:
+    held = {}  # hand key -> (dx, dy): how far the drawn hand is from where the pose wanted it
+    hidden = set()  # hands whose arm passes behind the body / head: what they hold goes behind too
+    hands = p.hands
+    if HAND_ARMS and hands is None:
+        hands = {k: (x, y - b) for k, (x, y) in default_hands(p, view).items()}
+    if HAND_ARMS and hands:
+        for k in ("L", "R"):
+            if k not in hands:
+                continue
+            want = (hands[k][0], hands[k][1] + b)
+            pose = hand_arms.pick(view, k, sh[k], want)
+            if view == "side":
+                layer, darker = (behind, True) if k == "L" else (front, False)
+            elif view == "up":
+                layer = behind if pose == "forward" else front
+                darker = k == "R"
+            else:
+                layer, darker = front, k == "L"
+            if pose == "up":
+                layer = behind  # a raised arm passes behind the head: only what shows beside it is drawn
+            got = hand_arms.stamp(layer, view, k, pose, sh[k], darker=darker)
+            if layer is behind and (view != "side" or k == "R"):
+                hidden.add(k)
+            # an arm hidden in front of the body (back view) has no drawn hand: what it holds stays put
+            no_hand = view == "up" and pose == "forward"
+            held[k] = (0, 0) if no_hand else (got[0] - want[0], got[1] - want[1])
+
+    def draw_props(when, layer):
+        for prop in p.props:
+            if prop[0] != when:
+                continue
+            fn = prop[1]
+            key = prop[2] if len(prop) > 2 else None
+            dx, dy = held.get(key, (0, 0))
+            if key in hidden:
+                layer = behind
+            fn(layer.moved(round(dx), round(dy)) if (dx or dy) else layer, b)
+
+    draw_props("behind", behind)
+    if p.hands and not HAND_ARMS:
         for k in ("L", "R"):
             if k not in p.hands:
                 continue
@@ -218,22 +284,17 @@ def finish(c, p, view):
             if view == "side":
                 arm(behind if k == "L" else front, sh[k], hand, sleeve_tone=1 if k == "L" else None, cloak=k == "R")
             elif view == "up":
-                # from behind: an arm reaching forward is hidden by the body; raised ones show
                 arm(front if hand[1] < sh[k][1] + 4 or abs(hand[0] - 15.5) > 9 else behind, sh[k], hand, cloak_tone=3)
             else:
                 arm(front, sh[k], hand, cloak=False)
-    for when, fn in p.props:
-        if when == "front":
-            fn(front, b)
+    draw_props("front", front)
     if p.water is not None:
         wl = p.water
         for y in range(wl + 1, c.h):
             for x in range(c.w):
                 c.put(x, y, None)
                 c.mat[y][x] = None
-        for when, fn in p.props:
-            if when == "water":
-                fn(front, b)
+        draw_props("water", front)
     return c
 
 
@@ -241,15 +302,15 @@ def finish(c, p, view):
 # Each entry: the Pose fields for one frame. Hands are given before the body's bob (added in finish).
 
 def _sw(x, y, ang, length=13, when="front"):
-    return (when, lambda L, b: sword(L, x, y + b, ang, length))
+    return (when, lambda L, b: sword(L, x, y + b, ang, length), "R")
 
 
 def _bow(x, y, ang, draw, when="front", arrow=True, reach=10):
-    return (when, lambda L, b: bow(L, x, y + b, ang, draw, arrow, reach))
+    return (when, lambda L, b: bow(L, x, y + b, ang, draw, arrow, reach), "L")
 
 
 def _shield(x, y, rx, ry, when="front"):
-    return (when, lambda L, b: shield(L, x, y + b, rx, ry))
+    return (when, lambda L, b: shield(L, x, y + b, rx, ry), "L")
 
 
 def _ripple(cx, y, half, phase):
@@ -262,11 +323,11 @@ def jump(view, i):
         return [
             dict(bob=-1, lean=1, near=(3, 5), far=(-2, 3), sway=1, flare=1, hands={"R": (24, 31), "L": (9, 31)}),
             dict(bob=0, lean=0, near=(2, 1), far=(-1, 0), sway=-1, flare=0, hands={"R": (25, 27), "L": (8, 25)}),
-        ][i]
+        ][i] | {"width": WIDE}
     return [
         dict(bob=-1, near=(0, 4), far=(0, 2), sway=1, hands={"R": (4, 34), "L": (27, 34)}),
         dict(bob=0, near=(0, 1), far=(0, 0), sway=-1, hands={"R": (3, 25), "L": (28, 25)}),
-    ][i]
+    ][i] | {"width": WIDE}  # the arms spread for balance: wide frames, so the hands are not cut off
 
 
 def land(view, i):
@@ -432,7 +493,7 @@ def bow_draw(view, i):
                     props=(_bow(13, 30, -90, d, when="behind", arrow=False, reach=9),), width=WIDE)
     # facing the viewer: the bow upright in front of him, the arrow pointing out of the picture
     return dict(bob=0, sway=0, hands={"L": (17, 31), "R": (12 + round(-2 * d), 28 - round(2 * d))},
-                props=(_bow(17, 31, 0, 0, arrow=False, reach=9), ("front", lambda L, b: (L.put(16, 31 + b, "steel", 4), L.put(16, 30 + b, "gem", 3) if i else None))), width=WIDE)
+                props=(_bow(17, 31, 0, 0, arrow=False, reach=9), ("front", lambda L, b: (L.put(16, 31 + b, "steel", 4), L.put(16, 30 + b, "gem", 3) if i else None), "L")), width=WIDE)
 
 
 def guard(view, i):

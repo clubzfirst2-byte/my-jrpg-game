@@ -261,7 +261,7 @@ def front(p, back=False):
         c.rect(18, 36 + p.bob, 20, 39 + p.bob, "leather")
         c.shade(18, 36 + p.bob, 4)
     # arms swinging (the hand rises as the arm swings forward); actions place the hands themselves
-    for side, x, swing in ((-1, 8, p.arm_near), (1, 22, p.arm_far)) if p.hands is None else ():
+    for side, x, swing in ((-1, 8, p.arm_near), (1, 22, p.arm_far)) if p.hands is None and not actions.HAND_ARMS else ():
         hand_y = 37 + b - abs(swing) - p.arm_bend
         c.rect(x, 28 + b, x + 1, hand_y - 1, "shirt" if not back else "lining")
         c.rect(x, hand_y, x + 1, hand_y + 2, "leather")
@@ -328,7 +328,7 @@ def front(p, back=False):
             face_front(c, 15.5, top, sway=p.sway, blink=getattr(p, "blink", False))
     # the forward-swinging hand comes out past the cloak's edge (running: fists pumping at the chest)
     for side, x, swing in ((-1, 11, p.arm_near), (1, 19, p.arm_far)):
-        if swing > 0 and not back and p.hands is None:
+        if swing > 0 and not back and p.hands is None and not actions.HAND_ARMS:
             hy = 36 + b - swing - p.arm_bend
             c.rect(x, hy, x + 1, hy + 2, "leather")
             c.shade(x, hy, 4)
@@ -378,7 +378,7 @@ def side(p):
         capsule(c, hx_, hy, hx_ + 0.5, hy + 1.2, 1.3, "leather", tone)
 
     leg(p.far[0], p.far[1], 1)
-    if p.hands is None:
+    if p.hands is None and not actions.HAND_ARMS:
         arm(p.arm_far, 1)
     if HAND_BODY:
         body.body_side(c, b, p.lean, p.sway, p.flare)
@@ -404,7 +404,7 @@ def side(p):
         c.poly([(9 + p.lean, 21 + b), (21 + p.lean, 21 + b), (21 + p.lean, 25 + b), (9 + p.lean, 26 + b)], "cloak")
         c.line(10 + p.lean, 21 + b, 20 + p.lean, 21 + b, "cloak", 3)
     pendant(c, 19 + p.lean, 25 + b, p.glint)
-    if p.hands is None:
+    if p.hands is None and not actions.HAND_ARMS:
         arm(p.arm_near, None, near=True)
     top = 1 + b
     if HAND_HEADS:
@@ -453,11 +453,11 @@ def draw(action, d, i):
     count, pose_of = ACTIONS[action]
     p = pose_of(i)
     if d == "down":
-        return front(p).colours()
+        return actions.finish(front(p), p, "down").colours()
     if d == "up":
         p2 = Pose(**{**p.__dict__, "near": p.far, "far": p.near, "arm_near": p.arm_far, "arm_far": p.arm_near})
-        return front(p2, back=True).colours()
-    return side(p).colours()
+        return actions.finish(front(p2, back=True), p2, "up").colours()
+    return actions.finish(side(p), p, "side").colours()
 
 
 def all_frames():

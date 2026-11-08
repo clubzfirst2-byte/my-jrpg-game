@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
+import { inflateSync } from 'node:zlib';
 import { HERO_ANIMS, HeroAnimator, poseOf, LAND_MS } from '../../src/view/heroAnim.js';
 import { COMBAT, SWORD } from '../../src/game/entities/playerCombat.js';
 
@@ -111,7 +112,7 @@ describe('release hero art (src/art-release/hero)', () => {
   });
 
   it('stage 2: every other action in all four directions; 56 high, 32 or 48 wide (sword and bow frames)', () => {
-    const wide = new Set(['attack1', 'attack2', 'attack3', 'bow', 'guard', 'hurt', 'down']);
+    const wide = new Set(['jump', 'attack1', 'attack2', 'attack3', 'bow', 'guard', 'hurt', 'down']);
     for (const action of Object.keys(HERO_ANIMS).filter((a) => !['idle', 'walk', 'run'].includes(a))) {
       for (const d of ['down', 'up', 'right', 'left']) {
         for (let i = 0; i < HERO_ANIMS[action].frames; i++) {
@@ -131,6 +132,46 @@ describe('release hero art (src/art-release/hero)', () => {
         for (let i = 0; i < HERO_ANIMS[action].frames; i++) pics.add(readFileSync(new URL(`hero.${action}.${d}.${i}.png`, DIR)).toString('base64'));
         expect(pics.size, `${action} ${d}`).toBeGreaterThan(1);
       }
+    }
+  });
+
+  it('no frame drifts: on the ground the boots stand on the bottom rows, centred in the frame', () => {
+    const read = (name) => {
+      const buf = readFileSync(new URL(`${name}.png`, DIR));
+      const w = buf.readUInt32BE(16);
+      const h = buf.readUInt32BE(20);
+      const chunks = [];
+      for (let p = 8; p < buf.length; ) {
+        const n = buf.readUInt32BE(p);
+        if (buf.toString('ascii', p + 4, p + 8) === 'IDAT') chunks.push(buf.subarray(p + 8, p + 8 + n));
+        p += 12 + n;
+      }
+      const raw = inflateSync(Buffer.concat(chunks));
+      return { w, h, alpha: (x, y) => raw[y * (w * 4 + 1) + 1 + x * 4 + 3] };
+    };
+    // airborne or in water / on a wall: the feet are not on the ground line
+    const off = new Set(['jump', 'glide', 'climb', 'swim']);
+    for (const f of files) {
+      const action = f.split('.')[1];
+      // feet up on purpose (tools/hero_release/actions.py): the finisher's hop, the dodge's tucked roll
+      if (off.has(action) || /^hero\.(attack3\.\w+\.2|dodge\.\w+\.[12])$/.test(f)) continue;
+      const { w, h, alpha } = read(f);
+      let lowest = -1;
+      let sum = 0;
+      let n = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          if (!alpha(x, y)) continue;
+          lowest = y;
+          if (y >= h - 2) {
+            sum += x;
+            n++;
+          }
+        }
+      }
+      expect(lowest, `${f}: feet on the ground line`).toBeGreaterThanOrEqual(h - 2);
+      // a running stride plants a foot up to ~6 px ahead; more than 8 would be a frame out of place
+      expect(Math.abs(sum / n - w / 2), `${f}: feet centred`).toBeLessThan(8);
     }
   });
 
