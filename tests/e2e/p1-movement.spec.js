@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitTicks } from './ticks.js';
 
 async function open(page, query = '') {
   const errors = [];
@@ -32,9 +33,8 @@ test('keyboard moves the player and Shift dashes', async ({ page }) => {
   const start = await player(page);
   // walk for 36 logic ticks (0.6 s of game time): counted in ticks, not wall time, so a slow
   // renderer (the release hero draws at 2 pixels per game pixel) cannot shorten the walk
-  const t0 = await page.evaluate(() => window.__debugApi.tick());
   await page.keyboard.down('ArrowRight');
-  await expect.poll(() => page.evaluate(() => window.__debugApi.tick()), { timeout: 10_000, intervals: [20] }).toBeGreaterThanOrEqual(t0 + 36);
+  await waitTicks(page, 36);
   await page.keyboard.up('ArrowRight');
   const walked = await player(page);
   expect(walked.x).toBeGreaterThan(start.x + 20);

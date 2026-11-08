@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitTicks, ticksOf } from './ticks.js';
 
 // Height verification map (default). Tile coordinates refer to src/game/world/maps/heightTest.js.
 
@@ -49,7 +50,7 @@ test('climbs the tower side three levels up and uses stamina', async ({ page }, 
   await teleport(page, 28, 10); // ground east of the tower's 3rd tier (48px)
   await page.keyboard.down('ArrowLeft');
   await expect.poll(async () => (await player(page)).climbing, { timeout: 3000 }).toBe(true);
-  await page.waitForTimeout(800);
+  await waitTicks(page, ticksOf(800));
   const climbing = await player(page);
   expect(climbing.stamina).toBeLessThan(100);
   await page.screenshot({ path: testInfo.outputPath('stamina-wheel.png') });
@@ -63,7 +64,7 @@ test('the jump button lets go of the wall', async ({ page }) => {
   await teleport(page, 28, 10);
   await page.keyboard.down('ArrowLeft');
   await expect.poll(async () => (await player(page)).climbing, { timeout: 3000 }).toBe(true);
-  await page.waitForTimeout(400);
+  await waitTicks(page, ticksOf(400));
   expect((await player(page)).z).toBeGreaterThan(4);
   await page.locator('#jump-button').dispatchEvent('pointerdown', { pointerId: 5 });
   await page.waitForTimeout(80);

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitTicks } from './ticks.js';
 
 async function open(page, query = '') {
   const errors = [];
@@ -48,8 +49,7 @@ test('jumping does not bob the camera', async ({ page }) => {
   await teleport(page, 14, 13);
   // wait until the camera has finished following the teleport: it eases in over about half a second
   // of game time, so wait 90 logic ticks (counted in ticks: a slow renderer must not cut it short)
-  const t0 = await page.evaluate(() => window.__debugApi.tick());
-  await expect.poll(() => page.evaluate(() => window.__debugApi.tick()), { timeout: 15_000, intervals: [50] }).toBeGreaterThanOrEqual(t0 + 90);
+  await waitTicks(page, 90);
   const before = await camera(page);
   await page.keyboard.down('Space');
   let maxShift = 0;
