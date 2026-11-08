@@ -12,7 +12,7 @@ import { createOverlay } from './debug/overlay.js';
 import { createRenderer, resizeRenderer } from './view/renderer.js';
 import { RESOLUTION_CANDIDATES, DEFAULT_TARGET_HEIGHT, nextCandidate } from './view/resolution.js';
 import { AssetManager } from './view/assets/assetManager.js';
-import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES, placeholderEntries, releaseHeroEntries } from './view/assets/placeholderPack.js';
+import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES, placeholderEntries, releaseHeroEntries, releaseNpcEntries } from './view/assets/placeholderPack.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
@@ -111,6 +111,13 @@ async function boot() {
   if (protoGroups.length && hdParam !== '0') for (const [k, v] of await prototypeFrames(protoGroups)) artOverrides.set(k, v);
   //   ?hero=release   the hero's release art under review (all actions; QUALITY_POLICY.md)
   if (params.get('hero') === 'release' && hdParam !== '0') for (const [k, v] of await releaseFrames('hero')) artOverrides.set(k, v);
+  //   the villagers' release art (NPC batch 1: elder, merchant, guard; the others keep the
+  //   placeholder) goes with the hero's release art, which it is drawn to match (2 pixels per game
+  //   pixel): with ?hero=release, or alone with ?npc=release / ?hd=1. ?npc=placeholder leaves it out
+  //   (before/after comparison), and so do the prototype views (?…=proto)
+  const npcParam = params.get('npc');
+  const releaseNpcs = params.get('hero') === 'release' || npcParam === 'release' || hdParam === '1';
+  if (releaseNpcs && hdParam !== '0' && npcParam !== 'placeholder' && !protoGroups.length) for (const [k, v] of await releaseFrames('npc')) artOverrides.set(k, v);
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
 
   /** @type {import('pixi.js').Application} */
@@ -131,7 +138,7 @@ async function boot() {
 
   // --- assets / logic / view ---
   const assets = new AssetManager();
-  assets.register('placeholder', () => buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides)], artOverrides));
+  assets.register('placeholder', () => buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides)], artOverrides));
   // P8: each region's art is its own bundle, loaded by the view near the region.
   for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name, artOverrides));
   await assets.load('placeholder');
@@ -827,6 +834,9 @@ async function boot() {
     nearby: () => state.nearby,
     /** P9: villagers and conversations. */
     npcs: () => state.npcs.map((n) => ({ id: n.id, name: n.name, tx: Math.floor(n.x / 16), ty: Math.floor(n.y / 16) })),
+    /** NPC batch 1: the villagers' sprites (frame key, size, draw order) and their state. */
+    npcSprites: () => view.npcs.debug(),
+    npcState: () => state.npcs.map((n) => ({ id: n.id, facing: n.facing, moving: n.moving, x: n.x, y: n.y })),
     dialogue: () => dialogueView(state),
     talkTo: (/** @type {string} */ id) => {
       const n = state.npcs.find((x) => x.id === id);
