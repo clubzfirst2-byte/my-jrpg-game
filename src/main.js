@@ -109,8 +109,14 @@ async function boot() {
   //   only when asked, until approved
   const protoGroups = requestedProtoGroups(params);
   if (protoGroups.length && hdParam !== '0') for (const [k, v] of await prototypeFrames(protoGroups)) artOverrides.set(k, v);
-  //   ?hero=release   the hero's release art under review (all actions; QUALITY_POLICY.md)
-  if (params.get('hero') === 'release' && hdParam !== '0') for (const [k, v] of await releaseFrames('hero')) artOverrides.set(k, v);
+  // The hero's release art (src/art-release/hero, adopted 2026-11-08) is the hero of normal play.
+  //   ?hero=placeholder   the old 16×16 placeholder hero instead (comparison)
+  //   ?hero=test / ?hero=proto / ?proto=all   the size-test hero / the P12 prototype instead (they replace the
+  //                       placeholder frames, so the release art stays out of their way)
+  //   ?hero=release       still accepted (the same as no ?hero)
+  const heroParam = params.get('hero');
+  const releaseHero = hdParam !== '0' && (heroParam === null || heroParam === 'release') && !protoGroups.includes('hero');
+  if (releaseHero) for (const [k, v] of await releaseFrames('hero')) artOverrides.set(k, v);
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
 
   /** @type {import('pixi.js').Application} */
