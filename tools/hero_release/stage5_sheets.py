@@ -99,6 +99,11 @@ def main(before):
     table(["jump", "land", "glide", "climb", "swim", "dodge", "attack1"], "04a_actions_all_frames.png")
     table(["attack2", "attack3", "bow", "guard", "hurt", "down"], "04b_actions_all_frames.png")
     table(["idle", "walk", "run"], "05_idle_walk_run_all_frames.png")
+    # one sheet per action too (big enough to read on a page)
+    for k, a in enumerate(["jump", "land", "glide", "climb", "swim", "dodge", "attack1", "attack2", "attack3", "bow", "guard", "hurt", "down"]):
+        table([a], f"04_{k + 1:02d}_{a}.png", scale=4)
+    for a in ("idle", "walk", "run"):
+        table([a], f"05_{a}.png", scale=4)
     # 6 / right and left for the weapons
     rows = []
     for a in ("attack1", "attack2", "attack3", "guard", "bow"):
