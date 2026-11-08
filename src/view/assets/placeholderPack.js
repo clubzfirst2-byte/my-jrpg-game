@@ -257,6 +257,17 @@ export function buildRegionPack(name, overrides) {
   return buildPlaceholderPack(REGION_ENTRIES[name](), overrides);
 }
 
+/**
+ * The hero's release animation frames (hero.<action>.<dir>.<frame>, docs/hero/HERO_ANIMATION_SPEC.md)
+ * have no placeholder: they get a slot in the base bundle only when such art is given (?hero=release
+ * until approved), so normal play builds exactly the same bundle.
+ * @param {Map<string, string>} [overrides]
+ */
+export function releaseHeroEntries(overrides) {
+  if (!overrides?.size) return [];
+  return [...overrides.keys()].filter((k) => /^hero\.[a-z0-9]+\.(down|up|right|left)\.\d+$/.test(k)).map((key) => ({ key, rows: ['.'], anchor: FEET }));
+}
+
 /** Width and height of an entry: its PNG when one replaces it, else the placeholder. @param {{ rows: string[], image?: { width: number, height: number } }} e */
 const sizeOf = (e) => (e.image ? { w: e.image.width, h: e.image.height } : { w: e.rows[0].length, h: e.rows.length });
 

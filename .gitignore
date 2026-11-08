@@ -5,3 +5,6 @@ playwright-report/
 reports/
 *.log
 .DS_Store
+
+# Python caches (tools/*)
+__pycache__/

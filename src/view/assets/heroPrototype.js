@@ -28,3 +28,15 @@ export function requestedProtoGroups(params) {
   if (params.get('proto') === 'all') return [...PROTO_GROUPS];
   return PROTO_GROUPS.filter((g) => params.get(g) === 'proto');
 }
+
+// Release art under review (QUALITY_POLICY: made at release quality, adopted after approval):
+// src/art-release/<group>/*.png, loaded only with ?hero=release until it is approved.
+const releaseFiles = /** @type {Record<string, () => Promise<string>>} */ (import.meta.glob('../../art-release/*/*.png', { query: '?url', import: 'default' }));
+
+/** @param {string} group @returns {Promise<Map<string, string>>} sprite name → PNG URL */
+export async function releaseFrames(group) {
+  const picked = Object.entries(releaseFiles).filter(([path]) => path.split('/').at(-2) === group);
+  const entries = await Promise.all(picked.map(async ([path, load]) => [/** @type {string} */ (path.split('/').pop()).replace(/\.png$/i, ''), await load()]));
+  return new Map(/** @type {[string, string][]} */ (entries));
+}
+
