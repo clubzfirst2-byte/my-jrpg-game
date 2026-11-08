@@ -1,7 +1,8 @@
-"""Review sheets for stage 5 (docs/hero/release/stage5/). Every frame is labelled with its action,
-direction and frame number.
+"""Review sheets for stage 5 (docs/hero/release/stage5/) and stage 6 (docs/hero/release/stage6/).
+Every frame is labelled with its action, direction and frame number.
 
   python3 tools/hero_release/stage5_sheets.py <folder with the stage-4 frames>
+  python3 tools/hero_release/stage5_sheets.py <folder with the stage-5 frames> stage6
 """
 
 import os
@@ -114,5 +115,41 @@ def main(before):
     table(["glide"], "07_glide_all_frames.png", scale=4)
 
 
+def main6(before):
+    """Stage 6 review sheets (docs/hero/release/stage6/), against the stage-5 frames in `before`."""
+    global OUT
+    OUT = os.path.join(os.path.dirname(__file__), "..", "..", "docs", "hero", "release", "stage6")
+    os.makedirs(OUT, exist_ok=True)
+    title = ("修正前（第 5 段階）", "修正後（第 6 段階）")
+    compare(before, [("hero.attack2.right.2", "振り上げ"), ("hero.attack2.left.2", "振り上げ"), ("hero.attack3.right.2", "振り上げ"),
+                     ("hero.attack3.left.2", "振り上げ"), ("hero.attack1.left.1", "左・柄"), ("hero.attack2.left.1", "左・柄"),
+                     ("hero.bow.up.2", "背面の弓"), ("hero.bow.up.3", "背面の弓")], "01_before_after.png", scale=4, title=title)
+    # every frame that changed, before and after
+    changed = []
+    for f in sorted(os.listdir(REL)):
+        a, b = os.path.join(before, f), os.path.join(REL, f)
+        if not os.path.exists(a) or open(a, "rb").read() != open(b, "rb").read():
+            changed.append(f[:-4])
+    for k in range(0, len(changed), 8):
+        compare(before, [(c, "") for c in changed[k:k + 8]], f"02_changed_{k // 8 + 1}.png", scale=3, title=title)
+    with open(os.path.join(OUT, "02_changed_list.txt"), "w") as fh:
+        fh.write("\n".join(changed) + "\n")
+    strip(None, "03_four_directions.png", rows=[[(f"hero.{a}.{d}.{i}", f"{ACT[a]} {DJ[d]}向き {i}") for d in DIRS]
+                                                 for a, i in (("attack1", 1), ("attack2", 2), ("attack3", 2), ("guard", 1), ("bow", 3), ("glide", 0))], scale=3)
+    rows = []
+    for a in ("attack1", "attack2", "attack3", "guard", "bow"):
+        for d in ("right", "left"):
+            rows.append([(f"hero.{a}.{d}.{i}", f"{ACT[a]} {DJ[d]}向き {i}") for i in range(COUNT[a])])
+    strip(None, "04_weapons_right_left.png", rows=rows, scale=3)
+    strip(None, "05_back_weapons.png", rows=[[(f"hero.{a}.up.{i}", f"{ACT[a]} 上向き {i}") for i in range(COUNT[a])]
+                                              for a in ("attack1", "attack2", "attack3", "bow", "guard")], scale=3)
+    table(["glide"], "06_glide_all_frames.png", scale=4)
+    for a in ("idle", "walk", "run", "attack1", "attack2", "attack3", "jump", "land", "dodge"):
+        table([a], f"07_{a}.png", scale=4)
+
+
 if __name__ == "__main__":
-    main(sys.argv[1])
+    if len(sys.argv) > 2 and sys.argv[2] == "stage6":
+        main6(sys.argv[1])
+    else:
+        main(sys.argv[1])

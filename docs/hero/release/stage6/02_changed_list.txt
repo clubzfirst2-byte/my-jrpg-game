@@ -1,0 +1,16 @@
+hero.attack1.left.1
+hero.attack1.left.3
+hero.attack1.right.3
+hero.attack2.left.0
+hero.attack2.left.1
+hero.attack2.left.2
+hero.attack2.left.3
+hero.attack2.right.2
+hero.attack3.left.2
+hero.attack3.left.5
+hero.attack3.right.2
+hero.attack3.right.5
+hero.bow.up.0
+hero.bow.up.1
+hero.bow.up.2
+hero.bow.up.3

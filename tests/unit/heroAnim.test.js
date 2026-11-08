@@ -205,6 +205,42 @@ describe('release hero art (src/art-release/hero)', () => {
     }
   });
 
+  it('every weapon frame shows its weapon: the blade, the bow, the shield, in all four directions', () => {
+    const colours = (name) => {
+      const buf = readFileSync(new URL(`${name}.png`, DIR));
+      const w = buf.readUInt32BE(16);
+      const h = buf.readUInt32BE(20);
+      const chunks = [];
+      for (let p = 8; p < buf.length; ) {
+        const n = buf.readUInt32BE(p);
+        if (buf.toString('ascii', p + 4, p + 8) === 'IDAT') chunks.push(buf.subarray(p + 8, p + 8 + n));
+        p += 12 + n;
+      }
+      const raw = inflateSync(Buffer.concat(chunks));
+      const set = new Map();
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const o = y * (w * 4 + 1) + 1 + x * 4;
+          if (!raw[o + 3]) continue;
+          const hex = [raw[o], raw[o + 1], raw[o + 2]].map((v) => v.toString(16).padStart(2, '0')).join('');
+          set.set(hex, (set.get(hex) ?? 0) + 1);
+        }
+      }
+      return set;
+    };
+    // the blade's lit tones (tools/art_proto/pixel.py: steel), the bow's wood, the shield's wood face
+    const count = (set, list) => list.reduce((n, c) => n + (set.get(c) ?? 0), 0);
+    const BLADE = ['a8b2c0', 'e0e6ee', '7a8494'];
+    const WOOD = ['6e4424', '906038', 'b07e50', '4a2c16'];
+    for (const d of ['down', 'up', 'right', 'left']) {
+      for (const a of ['attack1', 'attack2', 'attack3']) {
+        for (let i = 0; i < HERO_ANIMS[a].frames; i++) expect(count(colours(`hero.${a}.${d}.${i}`), BLADE), `${a}.${d}.${i}: the blade shows`).toBeGreaterThanOrEqual(3);
+      }
+      for (let i = 0; i < HERO_ANIMS.bow.frames; i++) expect(count(colours(`hero.bow.${d}.${i}`), WOOD), `bow.${d}.${i}: the bow shows`).toBeGreaterThanOrEqual(6);
+      for (let i = 0; i < HERO_ANIMS.guard.frames; i++) expect(count(colours(`hero.guard.${d}.${i}`), WOOD), `guard.${d}.${i}: the shield shows`).toBeGreaterThanOrEqual(4);
+    }
+  });
+
   it('only release names (no other files)', () => {
     for (const f of files) expect(f).toMatch(/^hero\.[a-z0-9]+\.(down|up|right|left)\.\d+$/);
   });

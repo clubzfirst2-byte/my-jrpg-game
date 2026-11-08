@@ -23,6 +23,9 @@ Stage 5 adds, per view: grip (holding the glider's cords beside the head, the wh
 diag_up (raised diagonally: a sword drawn back for the swing), diag_down (swung through low across
 the body), bent (side view: the running arm, elbow bent, fist at the chest) and, seen from behind,
 across (the sword arm reaching across the front of the body: only the hand shows past its edge).
+Stage 6 adds, side view: shoulder (the sword carried over the shoulder, blade pointing back, so a
+raised sword never crosses the face) and reach (the arm at full stretch ahead: facing left, the far
+sword hand then clears the chest and the hilt shows).
 Which pose a frame uses follows from where its hand should be (pick()).
 """
 
@@ -318,6 +321,22 @@ vHxv..
 .acbavxxv
 .abccaav.
 ..aaaa...
+""",
+    "shoulder": """
+vxv.....
+vHxaa...
+.vacca..
+.2S3cba.
+23332aba
+2hhh1aa.
+""",
+    "reach": """
+.2S3.........
+23332........
+2332aaaaaa...
+2hh1acccccavv
+...abbbbbbvHv
+..........vv.
 """,
 }
 
