@@ -26,9 +26,12 @@ from pixel import Canvas, mirror, png  # noqa: E402
 sys.path.insert(0, os.path.dirname(__file__))
 import heads  # noqa: E402  (the hand-placed heads, option A)
 import actions  # noqa: E402  (stage 2: every other action, with hands and props)
+import body  # noqa: E402  (the hand-placed cloak, tunic and belt)
 
 # the head: hand-placed pixel maps (heads.py) or the earlier shape-built head (kept for comparison)
 HAND_HEADS = os.environ.get("HERO_HEAD", "hand") == "hand"
+# the body: hand-placed pixel maps (body.py) or the earlier shape-built cloak and tunic
+HAND_BODY = os.environ.get("HERO_BODY", "hand") == "hand"
 
 ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
 OUT = os.path.join(ROOT, "src", "art-release", "hero")
@@ -248,7 +251,7 @@ def front(p, back=False):
         c.line(x0 - 1, y_foot, x0 + 4, y_foot, "boot", 1)  # sole
         c.put(x0 + 1, y_foot - 4, "leather", 4)  # buckle
         c.put(x0 + 2, y_foot - 4, "leather", 3)
-    if not back:
+    if not back and not HAND_BODY:
         # tunic, folds, belt with a gold buckle, pouch
         c.poly([(11, 24 + b), (21, 24 + b), (22, 42 + p.bob), (10, 42 + p.bob)], "shirt")
         for x, y0, y1 in ((13, 37, 41), (18, 37, 41), (15, 27, 32)):
@@ -263,7 +266,17 @@ def front(p, back=False):
         c.rect(x, 28 + b, x + 1, hand_y - 1, "shirt" if not back else "lining")
         c.rect(x, hand_y, x + 1, hand_y + 2, "leather")
         c.shade(x, hand_y + 2, 1)
-    if back:
+    if HAND_BODY:
+        body.body_front(c, b, p.sway, back=back)
+        if back:  # the gold star on the back
+            cx, cy = 16 + (p.sway > 0), 36 + b
+            for dx, dy in ((0, -4), (0, -3), (0, 3), (0, 4), (-4, 0), (-3, 0), (3, 0), (4, 0), (-2, -2), (2, -2), (-2, 2), (2, 2), (-1, 0), (1, 0), (0, -1), (0, 1)):
+                c.put(cx + dx - 1, cy + dy, "gold", 3 if dy < 0 or dx < 0 else 2)
+            c.put(cx - 1, cy, "gem", 3 + (p.glint == 1))
+        else:
+            pendant(c, 14, 25 + b, p.glint)
+            c.put(15, 24 + b, "leather", 1)
+    elif back:
         # the whole back is cloak: folds, the gold star, the ragged gold hem, the folded hood
         c.poly([(8, 22 + b), (24, 22 + b), (28 + p.sway, hem), (24 + p.sway, hem + 1), (20, hem), (16, hem + 1), (12, hem), (8 + p.sway, hem + 1), (4 + p.sway, hem)], "cloak")
         for x0, x1 in ((10, 7), (13, 12), (19, 20), (22, 25)):
@@ -342,7 +355,8 @@ def side(p):
     hem = 45 + p.bob
     # the cloak behind him: it trails back (left) and flares when running
     tail = 3 - p.sway - p.flare
-    c.poly([(9 + p.lean, 23 + b), (15 + p.lean, 23 + b), (15, hem), (8 - p.sway - p.flare, hem + 1), (tail, hem - p.flare)], "cloak")
+    if not HAND_BODY:
+        c.poly([(9 + p.lean, 23 + b), (15 + p.lean, 23 + b), (15, hem), (8 - p.sway - p.flare, hem + 1), (tail, hem - p.flare)], "cloak")
     # far leg, far arm (behind, in shadow)
     def leg(fwd, lift, tone):
         ax, ay = hip[0] + fwd, 52 - lift
@@ -366,25 +380,29 @@ def side(p):
     leg(p.far[0], p.far[1], 1)
     if p.hands is None:
         arm(p.arm_far, 1)
-    # torso: tunic leaning with the run, belt, pouch at the back
-    c.poly([(13 + p.lean, 24 + b), (20 + p.lean, 24 + b), (21, 42 + p.bob), (13, 42 + p.bob)], "shirt")
-    c.strand(17 + p.lean // 2, 30 + b, 17, 41 + p.bob, 1)
-    c.rect(13, 34 + p.bob, 21, 35 + p.bob, "leather")
-    c.rect(19, 34 + p.bob, 20, 35 + p.bob, "gold")
-    c.rect(12, 36 + p.bob, 14, 39 + p.bob, "leather")
-    leg(p.near[0], p.near[1], None)
-    # folds and trim on the trailing cloak
-    for x0, x1 in ((11, 6), (13, 10)):
-        c.strand(x0 + p.lean, 27 + b, x1 - p.sway - p.flare, hem - 2, 1)
-    c.strand(12 + p.lean, 26 + b, 8 - p.sway - p.flare, hem - 4, 3)
-    c.line(15 + p.lean, 25 + b, 15, hem - 1, "gold", 2)
-    for x in range(0, 16):
-        if c.m(x, hem) == "cloak" or c.m(x, hem - p.flare) == "cloak":
-            c.put(x, hem if c.m(x, hem) == "cloak" else hem - p.flare, "gold", 2)
-    c.put(7 - p.sway - p.flare, 38 + p.bob, "gold", 3)
-    # hood / collar and the pendant
-    c.poly([(9 + p.lean, 21 + b), (21 + p.lean, 21 + b), (21 + p.lean, 25 + b), (9 + p.lean, 26 + b)], "cloak")
-    c.line(10 + p.lean, 21 + b, 20 + p.lean, 21 + b, "cloak", 3)
+    if HAND_BODY:
+        body.body_side(c, b, p.lean, p.sway, p.flare)
+        leg(p.near[0], p.near[1], None)
+    else:
+        # torso: tunic leaning with the run, belt, pouch at the back
+        c.poly([(13 + p.lean, 24 + b), (20 + p.lean, 24 + b), (21, 42 + p.bob), (13, 42 + p.bob)], "shirt")
+        c.strand(17 + p.lean // 2, 30 + b, 17, 41 + p.bob, 1)
+        c.rect(13, 34 + p.bob, 21, 35 + p.bob, "leather")
+        c.rect(19, 34 + p.bob, 20, 35 + p.bob, "gold")
+        c.rect(12, 36 + p.bob, 14, 39 + p.bob, "leather")
+        leg(p.near[0], p.near[1], None)
+        # folds and trim on the trailing cloak
+        for x0, x1 in ((11, 6), (13, 10)):
+            c.strand(x0 + p.lean, 27 + b, x1 - p.sway - p.flare, hem - 2, 1)
+        c.strand(12 + p.lean, 26 + b, 8 - p.sway - p.flare, hem - 4, 3)
+        c.line(15 + p.lean, 25 + b, 15, hem - 1, "gold", 2)
+        for x in range(0, 16):
+            if c.m(x, hem) == "cloak" or c.m(x, hem - p.flare) == "cloak":
+                c.put(x, hem if c.m(x, hem) == "cloak" else hem - p.flare, "gold", 2)
+        c.put(7 - p.sway - p.flare, 38 + p.bob, "gold", 3)
+        # hood / collar
+        c.poly([(9 + p.lean, 21 + b), (21 + p.lean, 21 + b), (21 + p.lean, 25 + b), (9 + p.lean, 26 + b)], "cloak")
+        c.line(10 + p.lean, 21 + b, 20 + p.lean, 21 + b, "cloak", 3)
     pendant(c, 19 + p.lean, 25 + b, p.glint)
     if p.hands is None:
         arm(p.arm_near, None, near=True)
