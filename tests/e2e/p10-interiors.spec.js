@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitTicks } from './ticks.js';
 
 // P10.1: inside the village houses — walk in through the door, shop across the counter, sleep in
 // the inn until morning, walk back out over the mat.
@@ -48,8 +49,10 @@ test('in through the shop door, buying across the counter, out over the mat', as
   await page.click('#shop-close');
   await expect(page.locator('#shop-menu')).toBeHidden();
   // Back out: down over the mat.
-  // The world resumes (and input is reset) on the next frame after the shop closes.
-  await page.waitForTimeout(150);
+  // The world resumes (and input is reset) on the next frame after the shop closes: wait until it
+  // has run a few ticks again, so the key below is not pressed before that reset (with slow frames a
+  // fixed 150 ms wait was not always one frame, and the reset swallowed the key).
+  await waitTicks(page, 3);
   await holdUntil(page, 'ArrowDown', async () => (await api(page, 'area')) === null);
   const p = await api(page, 'player');
   expect(Math.floor(p.x / 16)).toBe(16);
