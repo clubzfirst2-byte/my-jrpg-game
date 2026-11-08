@@ -92,6 +92,9 @@ class Pose:
         self.props = ()
         self.water = None
         self.width = W
+        # stage 5: arm poses chosen by name ({"R": "diag_up"}), and facing left drawn on its own
+        self.arms = None
+        self.swap = False
         self.__dict__.update(k)
 
 
@@ -434,6 +437,16 @@ ACTIONS = {"idle": (4, idle), "walk": (6, walk), "run": (6, run), **{k: (n, None
 
 
 def draw(action, d, i):
+    if action in actions.STAGE2 and d == "left" and action in actions.OWN_LEFT:
+        # facing left with a weapon: drawn facing right with his LEFT arm near and the sword arm far,
+        # then mirrored, so the sword stays in his right hand (not a plain mirror of facing right)
+        _, pose_of = actions.STAGE2[action]
+        k = pose_of("side", i)
+        k.pop("_back", None)
+        k.pop("_up", None)
+        k = actions.for_left(k)
+        p = Pose(**k, swap=True)
+        return mirror(actions.finish(side(p), p, "side").colours())
     if action in actions.STAGE2:
         _, pose_of = actions.STAGE2[action]
         view = "side" if d == "right" else d
@@ -467,7 +480,7 @@ def all_frames():
             for i in range(count):
                 out[f"hero.{action}.{d}.{i}"] = draw(action, d, i)
         for i in range(count):
-            out[f"hero.{action}.left.{i}"] = mirror(out[f"hero.{action}.right.{i}"])
+            out[f"hero.{action}.left.{i}"] = draw(action, "left", i) if action in actions.OWN_LEFT else mirror(out[f"hero.{action}.right.{i}"])
     return out
 
 
