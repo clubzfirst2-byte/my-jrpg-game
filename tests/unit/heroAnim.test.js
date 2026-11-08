@@ -175,6 +175,36 @@ describe('release hero art (src/art-release/hero)', () => {
     }
   });
 
+  it('facing left, the weapons stay in the right hands: sword, shield and bow frames are drawn on their own', () => {
+    const pixels = (name) => {
+      const buf = readFileSync(new URL(`${name}.png`, DIR));
+      const w = buf.readUInt32BE(16);
+      const h = buf.readUInt32BE(20);
+      const chunks = [];
+      for (let p = 8; p < buf.length; ) {
+        const n = buf.readUInt32BE(p);
+        if (buf.toString('ascii', p + 4, p + 8) === 'IDAT') chunks.push(buf.subarray(p + 8, p + 8 + n));
+        p += 12 + n;
+      }
+      const raw = inflateSync(Buffer.concat(chunks));
+      return { w, h, at: (x, y) => raw.readUInt32BE(y * (w * 4 + 1) + 1 + x * 4) };
+    };
+    const isMirror = (a, b) => {
+      const A = pixels(a);
+      const B = pixels(b);
+      for (let y = 0; y < A.h; y++) for (let x = 0; x < A.w; x++) if (A.at(x, y) !== B.at(A.w - 1 - x, y)) return false;
+      return true;
+    };
+    for (const action of ['attack1', 'attack2', 'attack3', 'guard', 'bow']) {
+      const mirrored = [...Array(HERO_ANIMS[action].frames).keys()].filter((i) => isMirror(`hero.${action}.left.${i}`, `hero.${action}.right.${i}`));
+      expect(mirrored, `${action}: left frames that are plain mirrors`).toEqual([]);
+    }
+    // everything else facing left is the mirror of facing right
+    for (const action of ['idle', 'walk', 'run', 'jump', 'glide', 'dodge']) {
+      for (let i = 0; i < HERO_ANIMS[action].frames; i++) expect(isMirror(`hero.${action}.left.${i}`, `hero.${action}.right.${i}`), `${action} ${i}`).toBe(true);
+    }
+  });
+
   it('only release names (no other files)', () => {
     for (const f of files) expect(f).toMatch(/^hero\.[a-z0-9]+\.(down|up|right|left)\.\d+$/);
   });

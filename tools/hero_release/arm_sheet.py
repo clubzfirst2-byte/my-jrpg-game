@@ -1,6 +1,6 @@
-"""The four basic arm poses (stage 4), in each view, on the standing hero.
+"""The basic arm poses (stage 4: four, stage 5: the added ones, marked ★), in each view, on the standing hero.
 
-  docs/hero/release/arm_poses.png
+  docs/hero/release/arm_poses.png (and docs/hero/release/stage5/02_arm_poses.png)
 Run after gen_hero.py: python3 tools/hero_release/arm_sheet.py
 """
 
@@ -16,21 +16,24 @@ import gen_hero as g  # noqa: E402
 from previews import BG, GRASS, INK, font  # noqa: E402
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "docs", "hero", "release", "arm_poses.png")
-# hand positions that pick each basic pose (both arms the same way)
-HANDS = {
-    "down": {"down": {"R": (9, 37), "L": (22, 37)}, "forward": {"R": (12, 34), "L": (19, 34)},
-             "up": {"R": (3, 19), "L": (28, 19)}, "out": {"R": (0, 30), "L": (31, 30)}},
-    "up": {"down": {"R": (22, 37), "L": (9, 37)}, "forward": {"R": (19, 34), "L": (12, 34)},
-           "up": {"R": (28, 19), "L": (3, 19)}, "out": {"R": (31, 30), "L": (0, 30)}},
-    "side": {"down": {"R": (17, 35), "L": (15, 35)}, "forward": {"R": (24, 32), "L": (22, 32)},
-             "up": {"R": (25, 19), "L": (23, 19)}, "back": {"R": (12, 34), "L": (11, 34)}},
+# every basic pose of each view (stage 4: the first four; stage 5: grip, diag_up, diag_down, bent, across)
+POSES = {
+    "down": ["down", "forward", "up", "out", "grip", "diag_up", "diag_down"],
+    "up": ["down", "forward", "up", "out", "grip", "diag_up", "diag_down", "across"],
+    "side": ["down", "forward", "up", "back", "grip", "diag_up", "diag_down", "bent"],
 }
-LABEL = {"down": "下ろす", "forward": "前に出す", "up": "上げる", "out": "横に広げる", "back": "後ろへ振る"}
+LABEL = {"down": "下ろす", "forward": "前に出す", "up": "上げる", "out": "横に広げる", "back": "後ろへ振る",
+         "grip": "握る（滑空）★", "diag_up": "斜め上 ★", "diag_down": "斜め下 ★", "bent": "肘を曲げる（走行）★",
+         "across": "体の前を横切る ★"}
 VIEW = {"down": "正面", "up": "背面", "side": "横"}
 
 
 def frame(view, pose):
-    p = g.Pose(hands=HANDS[view][pose], width=48)
+    # the sword-arm poses on his right arm only (the left one hanging), so the shape reads alone
+    left = pose if pose in ("down", "forward", "up", "out", "back", "grip") else "down"
+    arms = {"R": pose, "L": left}
+    hands = {k: actions.hand_at(view, k, arms[k]) for k in ("R", "L")}
+    p = g.Pose(hands=hands, arms=arms, width=48)
     c = g.side(p) if view == "side" else g.front(p, back=view == "up")
     img = actions.finish(c, p, view).colours()
     im = Image.new("RGBA", (len(img[0]), len(img)))
@@ -40,11 +43,11 @@ def frame(view, pose):
 
 def main(scale=5):
     cw, ch = 48 * scale + 10, 56 * scale + 40
-    out = Image.new("RGB", (120 + cw * 4, 10 + ch * 3), BG)
+    out = Image.new("RGB", (120 + cw * 8, 10 + ch * 3), BG)
     d = ImageDraw.Draw(out)
     for r, view in enumerate(("down", "up", "side")):
         d.text((10, 10 + r * ch + ch // 2 - 12), VIEW[view], fill=INK, font=font(24))
-        for c, pose in enumerate(HANDS[view]):
+        for c, pose in enumerate(POSES[view]):
             im = frame(view, pose)
             bg = Image.new("RGBA", im.size, GRASS + (255,))
             bg.alpha_composite(im)
@@ -52,6 +55,8 @@ def main(scale=5):
             d.text((x + 6, y), LABEL[pose], fill=INK, font=font(18))
             out.paste(bg.resize((im.width * scale, im.height * scale), Image.NEAREST), (x, y + 30))
     out.save(OUT)
+    os.makedirs(os.path.join(os.path.dirname(OUT), "stage5"), exist_ok=True)
+    out.save(os.path.join(os.path.dirname(OUT), "stage5", "02_arm_poses.png"))
 
 
 if __name__ == "__main__":

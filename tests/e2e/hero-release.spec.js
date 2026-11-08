@@ -86,6 +86,36 @@ test('release hero: sword, dodge, shield, bow and jump each show their own frame
   expect(errors).toEqual([]);
 });
 
+test('release hero facing left: the sword, shield and bow frames drawn for that side', async ({ page }) => {
+  const errors = await open(page, '&hero=release');
+  await drawn(page, /^hero\.idle\.down\.\d$/);
+  await page.evaluate(() => {
+    const w = /** @type {any} */ (window);
+    w.__seen = new Set();
+    const tick = () => {
+      w.__seen.add(w.__debugApi.heroPose().texture);
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+  const seen = () => page.evaluate(() => [...(/** @type {any} */ (window).__seen)]);
+  const shows = (re) => expect.poll(async () => (await seen()).some((t) => re.test(t ?? '')), { message: String(re), timeout: 6000, intervals: [50] }).toBe(true);
+  await page.keyboard.down('ArrowLeft');
+  await drawn(page, /^hero\.walk\.left\.\d$/);
+  await page.keyboard.up('ArrowLeft');
+  await page.keyboard.press('KeyJ');
+  await shows(/^hero\.attack1\.left\.\d$/);
+  await page.waitForTimeout(600);
+  await page.keyboard.down('KeyI');
+  await shows(/^hero\.guard\.left\.1$/);
+  await page.keyboard.up('KeyI');
+  await page.waitForTimeout(300);
+  await page.keyboard.down('KeyU');
+  await shows(/^hero\.bow\.left\.3$/);
+  await page.keyboard.up('KeyU');
+  expect(errors).toEqual([]);
+});
+
 test('normal play does not use the release hero', async ({ page }) => {
   await open(page, '');
   await page.waitForTimeout(200);

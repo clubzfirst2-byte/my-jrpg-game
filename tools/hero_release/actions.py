@@ -48,12 +48,13 @@ def widen(c, w):
 class Layer:
     """Draws on a frame either over everything (front) or only into empty pixels (behind)."""
 
-    def __init__(self, c, ox, behind=False, oy=0):
+    def __init__(self, c, ox, behind=False, oy=0, shift=(0, 0)):
         self.c, self.ox, self.behind, self.oy = c, ox, behind, oy
+        self.shift = shift  # how far this layer is moved from the frame (props following a hand)
 
     def moved(self, dx, dy):
         """The same layer, everything drawn shifted by (dx, dy)."""
-        return Layer(self.c, self.ox + dx, self.behind, self.oy + dy)
+        return Layer(self.c, self.ox + dx, self.behind, self.oy + dy, (self.shift[0] + dx, self.shift[1] + dy))
 
     def put(self, x, y, m, tone=None):
         x, y = int(round(x)) + self.ox, int(round(y)) + self.oy
@@ -138,8 +139,13 @@ def sword(L, hx, hy, ang, length=13, tone_shift=0):
     L.put(hx + ux * length, hy + uy * length, "steel", 4)
 
 
-def bow(L, hx, hy, ang, draw, arrow=True, reach=10):
-    """A recurve bow held at the hand, facing `ang`; `draw` 0..1 pulls the string back."""
+# the hands as drawn in the frame being finished (stage 5: the bowstring is pulled to the right hand)
+DRAWN_HANDS = {}
+
+
+def bow(L, hx, hy, ang, draw, arrow=True, reach=10, to_hand=False):
+    """A recurve bow held at the hand, facing `ang`; `draw` 0..1 pulls the string back.
+    to_hand: the string is pulled to where the right hand is drawn (side view)."""
     a = math.radians(ang)
     ux, uy = math.cos(a), math.sin(a)
     px, py = -uy, ux
@@ -152,6 +158,9 @@ def bow(L, hx, hy, ang, draw, arrow=True, reach=10):
         L.put(x, y, "wood", 3 if i < reach else 2)
     top, bot = pts[0], pts[-1]
     nock = (hx - ux * (1 + 7 * draw), hy - uy * (1 + 7 * draw))
+    if to_hand and "R" in DRAWN_HANDS:
+        rx, ry = DRAWN_HANDS["R"]
+        nock = (rx - L.shift[0], ry - L.shift[1])
     L.line(top[0], top[1], nock[0], nock[1], "bone", 4)
     L.line(bot[0], bot[1], nock[0], nock[1], "bone", 4)
     for x, y in (top, bot):
@@ -204,7 +213,9 @@ SHOULDER = {
 def shoulders(view, p):
     b = p.bob - p.breath
     if view == "side":
-        return {"R": (16.5 + p.lean, 26 + b), "L": (15 + p.lean, 26 + b)}
+        near, far = (16.5 + p.lean, 26 + b), (15 + p.lean, 26 + b)
+        # facing left (drawn facing right, then mirrored): his left arm is the near one
+        return {"R": far, "L": near} if getattr(p, "swap", False) else {"R": near, "L": far}
     sx = p.shift
     return {k: (x + sx, y + b) for k, (x, y) in SHOULDER[view].items()}
 
@@ -229,6 +240,13 @@ def default_hands(p, view):
     return out
 
 
+def default_arms(p, view):
+    """Stage 1: the running arm swung forward is bent at the elbow (side view)."""
+    if view != "side" or not p.arm_bend:
+        return {}
+    return {k: "bent" for k, swing in (("R", p.arm_near), ("L", p.arm_far)) if swing >= 2}
+
+
 def finish(c, p, view):
     """Arms, props and the water line over the drawn body; returns the (possibly wider) frame."""
     c = widen(c, p.width)
@@ -239,16 +257,21 @@ def finish(c, p, view):
     held = {}  # hand key -> (dx, dy): how far the drawn hand is from where the pose wanted it
     hidden = set()  # hands whose arm passes behind the body / head: what they hold goes behind too
     hands = p.hands
+    chosen = dict(getattr(p, "arms", None) or {})
     if HAND_ARMS and hands is None:
         hands = {k: (x, y - b) for k, (x, y) in default_hands(p, view).items()}
+        chosen = {**default_arms(p, view), **chosen}
+    DRAWN_HANDS.clear()
+    swap = getattr(p, "swap", False)
     if HAND_ARMS and hands:
         for k in ("L", "R"):
             if k not in hands:
                 continue
             want = (hands[k][0], hands[k][1] + b)
-            pose = hand_arms.pick(view, k, sh[k], want)
+            pose = chosen.get(k) or hand_arms.pick(view, k, sh[k], want)
             if view == "side":
-                layer, darker = (behind, True) if k == "L" else (front, False)
+                far = (k == "R") if swap else (k == "L")
+                layer, darker = (behind, True) if far else (front, False)
             elif view == "up":
                 layer = behind if pose == "forward" else front
                 darker = k == "R"
@@ -256,8 +279,13 @@ def finish(c, p, view):
                 layer, darker = front, k == "L"
             if pose == "up":
                 layer = behind  # a raised arm passes behind the head: only what shows beside it is drawn
+            if view == "up" and pose == "across":
+                layer = front  # only the hand shows, past the body's edge
             got = hand_arms.stamp(layer, view, k, pose, sh[k], darker=darker)
-            if layer is behind and (view != "side" or k == "R"):
+            DRAWN_HANDS[k] = got
+            # what a hidden hand holds goes behind too; in the side view the far arm is always behind, so
+            # only facing left (his sword arm is then the far one) does that hide what it holds
+            if layer is behind and (view != "side" or k == "R" or swap):
                 hidden.add(k)
             # an arm hidden in front of the body (back view) has no drawn hand: what it holds stays put
             no_hand = view == "up" and pose == "forward"
@@ -305,8 +333,8 @@ def _sw(x, y, ang, length=13, when="front"):
     return (when, lambda L, b: sword(L, x, y + b, ang, length), "R")
 
 
-def _bow(x, y, ang, draw, when="front", arrow=True, reach=10):
-    return (when, lambda L, b: bow(L, x, y + b, ang, draw, arrow, reach), "L")
+def _bow(x, y, ang, draw, when="front", arrow=True, reach=10, to_hand=False):
+    return (when, lambda L, b: bow(L, x, y + b, ang, draw, arrow, reach, to_hand), "L")
 
 
 def _shield(x, y, rx, ry, when="front"):
@@ -344,14 +372,17 @@ def land(view, i):
 
 
 def glide(view, i):
-    # hanging from the glider: both hands up at the cords, legs swaying, the cloak streaming back
+    # hanging from the glider: both hands grip the cords beside the head (stage 5: the whole arm in
+    # sight, the face clear), legs swaying, the cloak streaming back
     lift = ((1, 3), (2, 2), (3, 1), (2, 2))[i]
     sway = (-1, 0, 1, 0)[i]
+    bob = (0, -1, 0, 1)[i]
     if view == "side":
-        return dict(bob=(0, -1, 0, 1)[i], lean=1, near=(2, lift[0] + 2), far=(-2, lift[1] + 1), sway=2, flare=(3, 4, 3, 2)[i],
-                    hands={"R": (25, 19), "L": (23, 18)})
-    return dict(bob=(0, -1, 0, 1)[i], near=(0, lift[0]), far=(0, lift[1]), sway=sway,
-                hands={"R": (6, 17 + (i == 1)), "L": (25, 17 + (i == 3))})
+        return dict(bob=bob, lean=1, near=(2, lift[0] + 2), far=(-2, lift[1] + 1), sway=2, flare=(3, 4, 3, 2)[i],
+                    hands={"R": hand_at("side", "R", "grip", 1), "L": hand_at("side", "L", "grip", 1)}, arms={"R": "grip", "L": "grip"})
+    v = "up" if view == "up" else "down"
+    return dict(bob=bob, near=(0, lift[0]), far=(0, lift[1]), sway=sway,
+                hands={"R": hand_at(v, "R", "grip"), "L": hand_at(v, "L", "grip")}, arms={"R": "grip", "L": "grip"})
 
 
 def climb(view, i):
@@ -401,96 +432,128 @@ def dodge(view, i):
     ][i]
 
 
-# Sword swings. Front view: his right hand is on the image's left. The blade is shorter when it
-# points towards / away from the viewer (foreshortened).
-def attack1(view, i):
-    # a horizontal cut: wind up high on the sword side, sweep across, follow through low, recover
+# Sword swings (stage 5). Every frame names its arm poses (arms.py) and the sword's angle; the hand
+# is where that drawn pose puts it, so the hilt always sits in the glove. Front view: his right hand
+# is on the image's left. Seen from behind, the blade is kept where it shows: over the shoulder,
+# beside the head or past the body's edge (the arm reaching across shows only its hand).
+
+def hand_at(view, k, pose, lean=0, shift=0):
+    """Where the drawn hand of a basic pose is (before the body's bob)."""
     if view == "side":
-        return [
-            dict(bob=1, lean=-1, near=(2, 0), far=(-2, 0), sway=1, hands={"R": (13, 21), "L": (12, 32)}, props=(_sw(13, 21, -115),)),
-            dict(bob=1, lean=2, near=(4, 0), far=(-3, 0), sway=2, flare=1, hands={"R": (24, 28), "L": (13, 33)}, props=(_sw(24, 28, -8),)),
-            dict(bob=2, lean=3, near=(4, 0), far=(-3, 0), sway=2, flare=1, hands={"R": (23, 34), "L": (14, 34)}, props=(_sw(23, 34, 55),)),
-            dict(bob=1, lean=1, near=(3, 0), far=(-2, 0), sway=1, hands={"R": (21, 34), "L": (13, 34)}, props=(_sw(21, 34, 95, 11),)),
-        ][i] | {"width": WIDE}
+        sh = (16.5 + lean, 26) if k == "R" else (15 + lean, 26)
+    else:
+        x, y = SHOULDER[view][k]
+        sh = (x + shift, y)
+    g = hand_arms.VIEWS[view][pose]
+    (sx, sy), (hx, hy) = g["S"], g["H"]
+    mirror = view in ("down", "up") and k == "L"
+    return (round(sh[0]) + ((sx - hx) if mirror else (hx - sx)), round(sh[1]) + hy - sy)
+
+
+def swing(view, i, frames):
+    """frames: (R pose, L pose, sword angle, blade length, body fields) per frame."""
+    r, l_, ang, length, body = frames[i]
+    body = dict(body)
+    when = "behind" if body.pop("_behind", False) else "front"  # a blade held back, behind him
+    lean, shift = body.get("lean", 0), body.get("shift", 0)
+    hx, hy = hand_at(view, "R", r, lean, shift)
+    hands = {"R": (hx, hy), "L": hand_at(view, "L", l_, lean, shift)}
+    return {**body, "hands": hands, "arms": {"R": r, "L": l_}, "props": (_sw(hx, hy, ang, length, when),), "width": WIDE}
+
+
+def attack1(view, i):
+    # a horizontal cut: drawn back, swept across, carried through low, recovered
+    if view == "side":
+        return swing(view, i, [
+            ("back", "down", 190, 13, dict(bob=1, lean=-1, near=(2, 0), far=(-2, 0), sway=1, _behind=True)),
+            ("forward", "back", -5, 13, dict(bob=1, lean=2, near=(4, 0), far=(-3, 0), sway=2, flare=1)),
+            ("diag_down", "back", 45, 13, dict(bob=2, lean=3, near=(4, 0), far=(-3, 0), sway=2, flare=1)),
+            ("down", "down", 100, 11, dict(bob=1, lean=1, near=(3, 0), far=(-2, 0), sway=1)),
+        ])
     if view == "up":
-        return [
-            dict(bob=1, shift=1, sway=-1, hands={"R": (26, 22), "L": (9, 33)}, props=(_sw(26, 22, -60, 11),)),
-            dict(bob=1, sway=0, hands={"R": (17, 22), "L": (9, 33)}, props=(_sw(17, 22, -95, 9, when="behind"),)),
-            dict(bob=2, shift=-1, sway=1, hands={"R": (7, 26), "L": (10, 33)}, props=(_sw(7, 26, -165, 12),)),
-            dict(bob=1, shift=-1, sway=1, hands={"R": (7, 30), "L": (10, 34)}, props=(_sw(7, 30, 160, 11),)),
-        ][i] | {"width": WIDE}
-    return [
-        dict(bob=1, shift=-1, sway=1, hands={"R": (5, 22), "L": (22, 34)}, props=(_sw(5, 22, -120, 12, when="behind"),)),
-        dict(bob=1, sway=0, hands={"R": (13, 33), "L": (22, 34)}, props=(_sw(13, 33, 75, 9),)),
-        dict(bob=2, shift=1, sway=-1, hands={"R": (22, 35), "L": (24, 33)}, props=(_sw(22, 35, 15, 13),)),
-        dict(bob=1, shift=1, sway=-1, hands={"R": (21, 35), "L": (24, 34)}, props=(_sw(21, 35, 50, 12),)),
-    ][i] | {"width": WIDE}
+        return swing(view, i, [
+            ("diag_up", "down", -60, 12, dict(bob=1, shift=1, sway=-1)),
+            ("out", "down", -5, 13, dict(bob=1, sway=0)),
+            ("across", "down", 185, 13, dict(bob=2, shift=-1, sway=1)),
+            ("across", "down", 150, 12, dict(bob=1, shift=-1, sway=1)),
+        ])
+    return swing(view, i, [
+        ("diag_up", "down", -120, 12, dict(bob=1, shift=-1, sway=1)),
+        ("forward", "down", 85, 9, dict(bob=1, sway=0)),
+        ("diag_down", "down", 15, 13, dict(bob=2, shift=1, sway=-1)),
+        ("down", "down", 105, 11, dict(bob=1, shift=1, sway=-1)),
+    ])
 
 
 def attack2(view, i):
-    # the return cut: from low across to high on the other side
+    # the return cut: from low on the far side up across to high on the sword side
     if view == "side":
-        return [
-            dict(bob=2, lean=2, near=(3, 0), far=(-3, 0), sway=2, hands={"R": (22, 35), "L": (14, 34)}, props=(_sw(22, 35, 130, 12),)),
-            dict(bob=1, lean=2, near=(4, 0), far=(-3, 0), sway=1, flare=1, hands={"R": (25, 29), "L": (13, 33)}, props=(_sw(25, 29, -25),)),
-            dict(bob=0, lean=1, near=(4, 0), far=(-2, 0), sway=0, hands={"R": (24, 20), "L": (13, 31)}, props=(_sw(24, 20, -50, 12),)),
-            dict(bob=1, lean=1, near=(3, 0), far=(-2, 0), sway=1, hands={"R": (23, 25), "L": (13, 33)}, props=(_sw(23, 25, -30, 12),)),
-        ][i] | {"width": WIDE}
+        return swing(view, i, [
+            ("diag_down", "back", 135, 12, dict(bob=2, lean=2, near=(3, 0), far=(-3, 0), sway=2)),
+            ("forward", "back", -25, 13, dict(bob=1, lean=2, near=(4, 0), far=(-3, 0), sway=1, flare=1)),
+            ("diag_up", "down", -50, 12, dict(bob=0, lean=1, near=(4, 0), far=(-2, 0), sway=0)),
+            ("forward", "down", -35, 12, dict(bob=1, lean=1, near=(3, 0), far=(-2, 0), sway=1)),
+        ])
     if view == "up":
-        return [
-            dict(bob=2, shift=-1, sway=1, hands={"R": (8, 32), "L": (10, 34)}, props=(_sw(8, 32, 150, 11),)),
-            dict(bob=1, sway=0, hands={"R": (16, 24), "L": (9, 33)}, props=(_sw(16, 24, -90, 9, when="behind"),)),
-            dict(bob=0, shift=1, sway=-1, hands={"R": (26, 21), "L": (9, 32)}, props=(_sw(26, 21, -35, 12),)),
-            dict(bob=1, shift=1, sway=-1, hands={"R": (25, 27), "L": (9, 33)}, props=(_sw(25, 27, -15, 11),)),
-        ][i] | {"width": WIDE}
-    return [
-        dict(bob=2, shift=1, sway=-1, hands={"R": (22, 35), "L": (24, 33)}, props=(_sw(22, 35, 30, 12),)),
-        dict(bob=1, sway=0, hands={"R": (15, 34), "L": (23, 34)}, props=(_sw(15, 34, 100, 9),)),
-        dict(bob=0, shift=-1, sway=1, hands={"R": (5, 25), "L": (22, 33)}, props=(_sw(5, 25, -150, 13),)),
-        dict(bob=1, shift=-1, sway=1, hands={"R": (6, 29), "L": (22, 34)}, props=(_sw(6, 29, -130, 12),)),
-    ][i] | {"width": WIDE}
+        return swing(view, i, [
+            ("across", "down", 165, 12, dict(bob=2, shift=-1, sway=1)),
+            ("out", "down", 10, 13, dict(bob=1, sway=0)),
+            ("diag_up", "down", -45, 12, dict(bob=0, shift=1, sway=-1)),
+            ("out", "down", -25, 12, dict(bob=1, shift=1, sway=-1)),
+        ])
+    return swing(view, i, [
+        ("diag_down", "down", 25, 12, dict(bob=2, shift=1, sway=-1)),
+        ("forward", "down", 95, 9, dict(bob=1, sway=0)),
+        ("diag_up", "down", -150, 13, dict(bob=0, shift=-1, sway=1)),
+        ("out", "down", -140, 12, dict(bob=1, shift=-1, sway=1)),
+    ])
 
 
 def attack3(view, i):
-    # the finisher: crouch, both hands raise the sword high, a hop, the overhead slam, the impact, recover
+    # the finisher: crouch, raise the sword, a hop, the slam, the impact held, recover
+    hop = dict(near=(3, 4), far=(-2, 3)) if view == "side" else dict(near=(0, 4), far=(0, 3))
     if view == "side":
-        return [
-            dict(bob=3, lean=0, near=(2, 0), far=(-3, 0), sway=1, hands={"R": (15, 30), "L": (14, 31)}, props=(_sw(15, 30, 160, 12, when="behind"),)),
-            dict(bob=0, lean=-1, near=(2, 0), far=(-2, 0), sway=0, hands={"R": (12, 19), "L": (13, 20)}, props=(_sw(12, 19, -145, 13),)),
-            dict(bob=-2, lean=0, near=(3, 4), far=(-2, 3), sway=-1, flare=2, hands={"R": (12, 17), "L": (13, 18)}, props=(_sw(12, 17, -120, 13),)),
-            dict(bob=4, lean=3, near=(4, 0), far=(-3, 0), sway=2, flare=3, hands={"R": (24, 30), "L": (23, 31)}, props=(_sw(24, 30, 25, 14),)),
-            dict(bob=5, lean=3, near=(4, 0), far=(-3, 0), sway=3, flare=2, hands={"R": (24, 33), "L": (23, 34)}, props=(_sw(24, 33, 40, 14),)),
-            dict(bob=2, lean=1, near=(3, 0), far=(-2, 0), sway=1, flare=0, hands={"R": (21, 33), "L": (20, 34)}, props=(_sw(21, 33, 70, 12),)),
-        ][i] | {"width": WIDE}
+        return swing(view, i, [
+            ("back", "back", 200, 12, dict(bob=3, lean=0, near=(2, 0), far=(-3, 0), sway=1, _behind=True)),
+            ("diag_up", "diag_up", -75, 13, dict(bob=0, lean=-1, near=(2, 0), far=(-2, 0), sway=0, _behind=True)),
+            ("diag_up", "diag_up", -60, 13, dict(bob=-2, lean=0, sway=-1, flare=2, _behind=True, **hop)),
+            ("diag_down", "diag_down", 30, 14, dict(bob=4, lean=3, near=(4, 0), far=(-3, 0), sway=2, flare=3)),
+            ("diag_down", "diag_down", 40, 14, dict(bob=5, lean=3, near=(4, 0), far=(-3, 0), sway=3, flare=2)),
+            ("down", "down", 80, 12, dict(bob=2, lean=1, near=(3, 0), far=(-2, 0), sway=1)),
+        ])
     if view == "up":
-        return [
-            dict(bob=3, sway=1, hands={"R": (18, 33), "L": (14, 33)}, props=(_sw(16, 33, 90, 10, when="behind"),)),
-            dict(bob=0, sway=0, hands={"R": (17, 13), "L": (14, 13)}, props=(_sw(16, 12, -90, 11),)),
-            dict(bob=-2, near=(0, 4), far=(0, 3), sway=-1, hands={"R": (17, 11), "L": (14, 11)}, props=(_sw(16, 10, -95, 11),)),
-            dict(bob=4, sway=2, hands={"R": (18, 30), "L": (14, 30)}, props=(_sw(16, 27, -90, 10, when="behind"),)),
-            dict(bob=5, sway=2, hands={"R": (18, 32), "L": (14, 32)}, props=(_sw(16, 29, -90, 9, when="behind"),)),
-            dict(bob=2, sway=1, hands={"R": (21, 31), "L": (11, 33)}, props=(_sw(22, 31, -45, 10),)),
-        ][i] | {"width": WIDE}
-    return [
-        dict(bob=3, sway=1, hands={"R": (13, 34), "L": (18, 34)}, props=(_sw(15, 33, -150, 12, when="behind"),)),
-        dict(bob=0, shift=-1, sway=1, hands={"R": (5, 20), "L": (7, 21)}, props=(_sw(5, 20, -105, 13),)),
-        dict(bob=-2, near=(0, 4), far=(0, 3), sway=-1, hands={"R": (5, 18), "L": (7, 19)}, props=(_sw(5, 18, -80, 13),)),
-        dict(bob=4, sway=2, hands={"R": (14, 34), "L": (17, 34)}, props=(_sw(15.5, 34, 90, 12),)),
-        dict(bob=5, sway=2, hands={"R": (14, 36), "L": (17, 36)}, props=(_sw(15.5, 36, 90, 13),)),
-        dict(bob=2, sway=1, hands={"R": (11, 35), "L": (20, 34)}, props=(_sw(11, 35, 120, 12),)),
-    ][i] | {"width": WIDE}
+        return swing(view, i, [
+            ("down", "down", 70, 11, dict(bob=3, sway=1)),
+            ("diag_up", "down", -80, 12, dict(bob=0, sway=0)),
+            ("diag_up", "down", -70, 12, dict(bob=-2, sway=-1, **hop)),
+            ("out", "down", 55, 13, dict(bob=4, sway=2)),
+            ("out", "down", 65, 13, dict(bob=5, sway=2)),
+            ("down", "down", 85, 11, dict(bob=2, sway=1)),
+        ])
+    return swing(view, i, [
+        ("down", "down", 140, 12, dict(bob=3, sway=1)),
+        ("diag_up", "down", -125, 13, dict(bob=0, sway=0, _behind=True)),  # the blade out past the hair
+        ("diag_up", "down", -115, 13, dict(bob=-2, sway=-1, _behind=True, **hop)),
+        ("forward", "down", 90, 12, dict(bob=4, sway=2)),
+        ("forward", "down", 90, 13, dict(bob=5, sway=2)),
+        ("down", "down", 115, 11, dict(bob=2, sway=1)),
+    ])
 
 
 def bow_draw(view, i):
-    # 0-2 drawing the string back to the cheek, 3 fully drawn, aiming
+    # 0-2 drawing the string back, 3 fully drawn, aiming
     d = (0.15, 0.45, 0.8, 1.0)[i]
     if view == "side":
-        nx = 26 - round(9 * d)
-        return dict(bob=0, lean=0, near=(3, 0), far=(-3, 0), sway=0, hands={"L": (26, 27), "R": (nx, 26 + (i == 0))},
-                    props=(_bow(26, 27, 0, d),), width=WIDE)
+        # the bow arm reaches forward; the string comes back to the drawing (right) hand
+        r = ("forward", "bent", "bent", "down")[i]
+        return dict(bob=0, lean=0, near=(3, 0), far=(-3, 0), sway=0, hands={"L": (26, 27), "R": hand_at("side", "R", r)},
+                    arms={"L": "forward", "R": r}, props=(_bow(26, 27, 0, d, to_hand=True),), width=WIDE)
     if view == "up":
-        return dict(bob=0, sway=0, hands={"L": (13, 30), "R": (22 + round(3 * d), 27 + round(1 - d))},
-                    props=(_bow(13, 30, -90, d, when="behind", arrow=False, reach=9),), width=WIDE)
+        # seen from behind (stage 5): the bow upright past his left side, the drawing elbow raised
+        lh = hand_at("up", "L", "out")
+        r = "out" if i == 0 else "diag_up"
+        return dict(bob=0, sway=0, hands={"L": lh, "R": hand_at("up", "R", r)}, arms={"L": "out", "R": r},
+                    props=(_bow(lh[0] - 1, lh[1], 180, 0, arrow=False, reach=9),), width=WIDE)
     # facing the viewer: the bow upright in front of him, the arrow pointing out of the picture
     return dict(bob=0, sway=0, hands={"L": (17, 31), "R": (12 + round(-2 * d), 28 - round(2 * d))},
                 props=(_bow(17, 31, 0, 0, arrow=False, reach=9), ("front", lambda L, b: (L.put(16, 31 + b, "steel", 4), L.put(16, 30 + b, "gem", 3) if i else None), "L")), width=WIDE)
@@ -503,8 +566,10 @@ def guard(view, i):
         return dict(bob=1 + up, lean=1, near=(3, 0), far=(-3, 0), sway=up, hands={"R": (17, 34), "L": (22, 30 - up)},
                     props=(_shield(24 - (not up), 31 - up * 2, 2.6, 7 - (not up)),), width=WIDE)
     if view == "up":
-        return dict(bob=1 + up, sway=0, hands={"L": (11, 32 - up * 2), "R": (22, 34)},
-                    props=(_shield(15.5, 31 - up * 2, 6 + up, 7, when="behind"),), width=WIDE)
+        # seen from behind (stage 5): the shield's rim shows past his left side, on his left arm
+        lh = hand_at("up", "L", "out")
+        return dict(bob=1 + up, sway=0, hands={"L": lh, "R": hand_at("up", "R", "down")}, arms={"L": "out", "R": "down"},
+                    props=(_shield(lh[0] - 1, lh[1] + 1 - up * 2, 2.6, 7),), width=WIDE)
     return dict(bob=1 + up, sway=0, hands={"R": (8, 35), "L": (20, 32 - up * 2)},
                 props=(_shield(18 - up, 34 - up * 3, 5.5 + up * 0.5, 6.5 + up * 0.5),), width=WIDE)
 
@@ -546,4 +611,12 @@ STAGE2 = {
 }
 
 # actions whose back view uses the front view's pose (symmetric): the hands swap sides
-SHARED_BACK = {"jump", "land", "glide", "dodge", "hurt", "down"}
+SHARED_BACK = {"jump", "land", "dodge", "hurt", "down"}
+# facing left drawn on its own (gen_hero.draw): the sword stays in his right hand, the shield and
+# the bow in his left
+OWN_LEFT = {"attack1", "attack2", "attack3", "guard", "bow"}
+
+
+def for_left(k):
+    """The facing-right pose of a weapon action, ready to be drawn with his left arm near."""
+    return dict(k)
