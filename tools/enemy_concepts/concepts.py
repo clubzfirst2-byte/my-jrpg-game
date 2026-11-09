@@ -41,8 +41,8 @@ RAMPS = {
     "gobskin": ["#24201a", "#4e4636", "#7a6e54", "#a09474", "#c4ba98"],
     "plum": ["#1e1016", "#3e2430", "#5e3a46", "#80565e", "#a07a80"],
     # Ancient machine
-    # bleached stone (lightness 63): apart from the ruin floor (39) and the sandstone (50)
-    "oldstone": ["#2a2622", "#5e5850", "#a8a092", "#c8c2b6", "#e8e4da"],
+    # cool grey stone (hue 240, lightness 59): cool against the warm sandstone (28, 50), lighter than the ruin floor (39); dark bronze bands + dark outline
+    "oldstone": ["#1e1e26", "#4e4e5a", "#9696a0", "#bcbcc6", "#e2e2ea"],
     "bronze": ["#24140c", "#5a3418", "#8a5628", "#b0783e", "#d4a064"],
     # Forest core
     "rotwood": ["#1a120e", "#3a2a20", "#5e4636", "#846650", "#a88a70"],
@@ -53,7 +53,7 @@ RAMPS = {
     "ice": ["#1a3040", "#3e6e88", "#7ab4cc", "#b8e4f0", "#f0fcff"],
     # Desert core
     # sand soaked with murk: dark mauve-brown (hue 314, lightness 31), apart from the desert sand (20, 44)
-    "redsand": ["#1c1018", "#3e2a3a", "#5e4458", "#82666e", "#a88c88"],
+    "murksand": ["#1c1018", "#3e2a3a", "#5e4458", "#82666e", "#a88c88"],
     "mask": ["#2e2a26", "#6e665c", "#a89e90", "#d2cabc", "#f2ece2"],
     # Lake core
     # storm grey-lavender (hue 244, lightness 49): apart from the deep lake (206, 32) and shore grass
@@ -67,8 +67,8 @@ SHINY_TONE = 4
 
 NAMES = {
     "murk": "澱（からだ）＝ガイドの miasma", "glow": "澱の光（核・結晶・玉）＝ガイドの enemy.magic", "eye": "生き物の目（黄）", "ashfur": "灰の毛皮", "gobskin": "小鬼の肌",
-    "plum": "野盗の布", "oldstone": "古い石", "bronze": "古い青銅", "rotwood": "朽ち木",
-    "fungus": "きのこ", "frostfur": "霜の毛（黄みの灰）", "ice": "氷の角", "redsand": "澱の混ざった砂",
+    "plum": "野盗の布", "oldstone": "古い石（冷たい灰）", "bronze": "古い青銅", "rotwood": "朽ち木",
+    "fungus": "きのこ", "frostfur": "霜の毛（黄みの灰）", "ice": "氷の角", "murksand": "澱の混ざった砂",
     "mask": "石の面", "slate": "嵐の鱗（灰ラベンダー）", "spark": "雷の火花", "lake": "湖の水（ガイド lake.deep）",
     "ashring": "褪せた星環",
 }
@@ -292,9 +292,9 @@ def boss_sand(wind=False):
     c = Canvas(80, 96, RAMPS)
     for i, y in enumerate(range(60, 92, 5)):  # the whirl narrows to the ground
         w = 22 - i * 3
-        c.ellipse(40 + (2 if i % 2 else -2), y, max(w, 3), 3, "redsand", 2 if i % 2 else 1)
-    c.poly([(16, 28), (64, 28), (62, 60), (40, 66), (18, 60)], "redsand")
-    c.poly([(22, 26), (40, 6), (58, 26), (52, 34), (28, 34)], "redsand")  # hood
+        c.ellipse(40 + (2 if i % 2 else -2), y, max(w, 3), 3, "murksand", 2 if i % 2 else 1)
+    c.poly([(16, 28), (64, 28), (62, 60), (40, 66), (18, 60)], "murksand")
+    c.poly([(22, 26), (40, 6), (58, 26), (52, 34), (28, 34)], "murksand")  # hood
     c.ellipse(40, 26, 9, 10, "mask")
     for x in (34, 43):
         c.rect(x, 22, x + 3, 25, "murk", 0)
@@ -302,8 +302,8 @@ def boss_sand(wind=False):
     c.line(40, 29, 40, 33, "mask", 1)
     c.ellipse(40, 46, 5, 5, "glow", 3)
     arm = -10 if wind else 0
-    capsule(c, 18, 32, 6, 50 + arm, 4, "redsand")
-    capsule(c, 62, 32, 74, 50 + arm, 4, "redsand")
+    capsule(c, 18, 32, 6, 50 + arm, 4, "murksand")
+    capsule(c, 62, 32, 74, 50 + arm, 4, "murksand")
     c.poly([(2, 50 + arm), (10, 50 + arm), (6, 62 + arm)], "mask")  # sand blades
     c.poly([(70, 50 + arm), (78, 50 + arm), (74, 62 + arm)], "mask")
     for x, y in ((8, 20), (72, 18), (4, 72), (76, 74)):  # floating stones
@@ -520,7 +520,7 @@ def build_palette():
     groups = [
         ("澱（全部の敵に共通）", ["murk", "glow"]), ("獣・小鬼の目", ["eye"]), ("澱の獣", ["ashfur"]), ("小鬼の呪い手", ["gobskin", "plum"]),
         ("遺跡の番兵（新）", ["oldstone", "bronze"]), ("朽ち根のヌシ", ["rotwood", "fungus"]),
-        ("凍て角のヌシ", ["frostfur", "ice"]), ("砂嵐のヌシ", ["redsand", "mask"]),
+        ("凍て角のヌシ", ["frostfur", "ice"]), ("砂嵐のヌシ", ["murksand", "mask"]),
         ("雷鳴のヌシ", ["slate", "spark", "lake"]), ("淀みの源", ["ashring"]),
     ]
     rows = []
@@ -566,7 +566,7 @@ MEASURE = [  # (name, main colour = tone 2 of the body ramp, arena grounds)
     ("澱の光 glow", "glow", []), ("澱の体 murk（澱だまり）", "murk", ["#3c6a38", "#244834"]),
     ("獣 ashfur", "ashfur", ["#3c6a38"]), ("呪い手 plum", "plum", ["#3c6a38", "#585668"]),
     ("番兵 oldstone", "oldstone", ["#947a60", "#5a6468"]), ("朽ち根 rotwood", "rotwood", ["#244834"]),
-    ("凍て角 frostfur", "frostfur", ["#b8c8e0", "#585668"]), ("砂嵐 redsand", "redsand", ["#a8603c", "#947a60"]),
+    ("凍て角 frostfur", "frostfur", ["#b8c8e0", "#585668"]), ("砂嵐 murksand", "murksand", ["#a8603c", "#947a60"]),
     ("雷鳴 slate", "slate", ["#22608e", "#36684c"]), ("淀みの源 ashring", "ashring", []),
 ]
 
