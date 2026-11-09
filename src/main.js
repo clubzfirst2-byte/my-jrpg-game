@@ -311,7 +311,7 @@ async function boot() {
       if (!dialogueView(state)?.choices) advanceTalk();
       return;
     }
-    if ((e.code === 'KeyE' || e.code === 'Tab') && !inTitle && !paused) {
+    if ((e.code === 'KeyE' || e.code === 'Tab') && !inTitle && !paused && state.ending !== 'screen' && !state.opening) {
       e.preventDefault();
       if (menu.isOpen) menu.close();
       else menu.open(state.nearby === 'cook' || state.nearby === 'forge' ? state.nearby : undefined);
@@ -360,8 +360,13 @@ async function boot() {
     view.snapCamera(state);
   }
   // v1.0 (C9): a tap or a key skips the opening.
-  const skipOpeningNow = () => {
-    if (state.opening && !inTitle) skipOpening(state);
+  // The tap that skips it goes no further (not to the attack button or the stick).
+  const skipOpeningNow = (/** @type {Event} */ e) => {
+    if (!state.opening || inTitle) return;
+    skipOpening(state);
+    e.preventDefault();
+    e.stopPropagation();
+    input.clear();
   };
   window.addEventListener('pointerdown', skipOpeningNow, true);
   window.addEventListener('keydown', skipOpeningNow, true);
@@ -398,6 +403,8 @@ async function boot() {
   function announceEvents() {
     for (const e of state.events) {
       if (announced.has(e)) continue;
+      // v1.0 (C10): 「淀みの源」 is reported as her words end; its toast waits until the ending screen is over.
+      if (e.type === 'questDone' && state.ending === 'screen') continue;
       announced.add(e);
       const ev = /** @type {any} */ (e);
       audio.play(sfxFor(ev)); // P11.2
@@ -527,7 +534,8 @@ async function boot() {
   let resolution = applyResolution();
   installLifecycle(app.canvas, {
     onPause: () => {
-      if (!paused) pause('');
+      // (under the ending screen nothing is paused: it is only a screen with a timer; v1.0)
+      if (!paused && state.ending !== 'screen') pause('');
       void autosave.saveNow();
     },
     onContextLost: () => pause('描画が一時的に中断されました。戻らない場合は再読み込みしてください。'),

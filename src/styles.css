@@ -503,6 +503,8 @@ body {
 
 .ending-line {
   margin: 0 0 18px;
+  font-size: 17px;
+  line-height: 1.6;
   color: var(--text);
 }
 
@@ -514,7 +516,7 @@ body {
 }
 
 .ending-role {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--muted);
 }
 
@@ -547,12 +549,18 @@ body {
   right: calc(16px + var(--safe-right));
   bottom: calc(14px + var(--safe-bottom));
   min-width: 96px;
+  min-height: 44px;
   padding: 8px 16px;
   font-size: 15px;
 }
 
 #ui.text-large #ending-screen {
   zoom: 1.22;
+}
+
+/* (zoomed, the roll keeps within a 667 px wide phone) */
+#ui.text-large .ending-roll {
+  width: min(460px, 70vw);
 }
 
 @keyframes ending-in {

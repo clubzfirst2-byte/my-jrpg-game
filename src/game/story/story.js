@@ -116,10 +116,18 @@ export function stepEnding(state) {
     state.events.push({ type: 'endingScreen', tick: state.tick });
     return;
   }
-  if (state.endingAt != null && state.tick >= state.endingAt && !state.dialogue && !state.player.dead) {
+  if (state.endingAt != null && state.tick >= state.endingAt && !state.dialogue) {
     state.endingAt = null;
     startDialogue(state, ENDING.dialogue, ENDING.princess);
   }
+}
+
+/**
+ * The hero is down (stepGame's death sequence): if her words were still to come, she does not speak
+ * from afar — she waits by the ring, and talking to her there ends the game. @param {any} state
+ */
+export function endingOnDeath(state) {
+  state.endingAt = null;
 }
 
 /**
@@ -133,10 +141,13 @@ export function finishEnding(state) {
   pr.checkpoint = ENDING.checkpoint;
   const door = state.warps.find((/** @type {any} */ w) => w.id === ENDING.innDoor);
   const p = state.player;
-  const f = tileFeet(state.map, door.tx, door.ty + 1);
-  p.x = p.prevX = f.x;
-  p.y = p.prevY = f.y;
-  p.z = p.prevZ = p.groundZ = state.map.elev[(door.ty + 1) * state.map.width + door.tx];
+  if (door) {
+    // (a map without the village — test maps — keeps the hero where he is)
+    const f = tileFeet(state.map, door.tx, door.ty + 1);
+    p.x = p.prevX = f.x;
+    p.y = p.prevY = f.y;
+    p.z = p.prevZ = p.groundZ = state.map.elev[(door.ty + 1) * state.map.width + door.tx];
+  }
   p.vx = p.vy = p.vz = 0;
   p.facing = 'down';
   p.aimX = 0;

@@ -1,13 +1,13 @@
 // @ts-check
 // v1.0 (C10): the ending screen — the title, a few lines of the credits rolling up, then 「おわり」.
-// About 30 s; 「とばす」, a tap on the screen after the first moments, or Enter / Space / Escape ends
-// it at once. Calls `onDone` exactly once. DOM + CSS like the title screen (styles.css #ending-screen).
+// About 30 s; 「とばす」 or Enter / Escape ends it at once (not a stray tap: the taps that read the
+// dialogue through would skip it before its title is read). Calls `onDone` exactly once. DOM + CSS like the title screen (styles.css #ending-screen).
 
 /** The credits (who made what), shown in order. */
 export const CREDITS = [
-  ['企画・物語・プログラム', '星環のレガリア 制作チーム'],
-  ['キャラクターと世界の絵', '星環のレガリア 制作チーム'],
-  ['音楽と効果音', 'Web Audio による合成（制作チーム）'],
+  // (placeholders until the real names are given)
+  ['企画・物語・プログラム・絵', '星環のレガリア 制作チーム'],
+  ['音楽と効果音', 'Web Audio による合成'],
   ['使った道具', 'PixiJS ・ Vite'],
   ['', 'あそんでくれて、ありがとう'],
 ];
@@ -66,13 +66,10 @@ export class EndingScreen {
     });
 
     this.el.append(roll, end, skip);
-    // A tap anywhere ends it too, but not in its first moments (the tap that closed the dialogue).
+    // Keys, but not in its first moments (a key still held from the dialogue).
     const opened = performance.now();
-    this.el.addEventListener('pointerdown', () => {
-      if (performance.now() - opened > 800) this.finish();
-    });
     this.onKey = (/** @type {KeyboardEvent} */ e) => {
-      if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') && !e.repeat && performance.now() - opened > 800) {
+      if ((e.code === 'Enter' || e.code === 'Escape') && !e.repeat && performance.now() - opened > 800) {
         e.preventDefault();
         this.finish();
       }

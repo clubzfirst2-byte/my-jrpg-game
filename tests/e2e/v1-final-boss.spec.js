@@ -67,6 +67,9 @@ test('the source: invulnerable while inverted, staggers with four seats awake, p
   // The light seat is dark at the start.
   expect((await api(page, 'seats'))['source-light'].active).toBe(false);
   await page.screenshot({ path: testInfo.outputPath('source-inverted.png') });
+  // (this spec is about the fight, not the ending: without this the princess's words would open by
+  // themselves 2 s after the last blow and stop the world before the ring's body is gone, v1.0 C10)
+  await api(page, 'setFlag', 'ending_seen');
   for (const hpAfter of [60, 30, 0]) {
     // Wake all four seats (again, after the last wave put them out) until the ring turns back.
     await expect

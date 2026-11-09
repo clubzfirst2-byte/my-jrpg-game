@@ -243,6 +243,33 @@ describe('C10: the ending', () => {
     expect(t.enemies.some((e) => e.final)).toBe(false);
   });
 
+  it('down before her words (a stray shot): she does not speak from afar — she waits by the ring', () => {
+    const { s, b } = atTheSource();
+    purify(s, b);
+    expect(s.endingAt).not.toBe(null);
+    s.player.dead = true;
+    stepGame(s, none);
+    expect(s.endingAt).toBe(null);
+    run(s, none, 400); // (back on his feet at the record stone)
+    expect(s.player.dead).toBe(false);
+    expect(s.dialogue).toBe(null);
+    expect(s.npcs.some((n) => n.id === 'princess_end')).toBe(true);
+    startDialogue(s, 'ending', 'princess_end');
+    talkThrough(s, [0, 0]);
+    stepGame(s, none);
+    expect(s.ending).toBe('screen');
+  });
+
+  it('a map without the village (test maps): the ending still ends, the hero stays where he is', () => {
+    const s = world();
+    s.warps = s.warps.filter((w) => w.id !== 'inn-in');
+    const at = { x: s.player.x, y: s.player.y };
+    s.ending = 'screen';
+    expect(() => finishEnding(s)).not.toThrow();
+    expect(s.progress.flags.ending_seen).toBe(true);
+    expect([s.player.x, s.player.y]).toEqual([at.x, at.y]);
+  });
+
   it('closed during the ending screen: the choice is saved, so the screen comes back on continuing', () => {
     const t = world();
     applyProgress(t, { ...t.progress, flags: { princess_met: true, source_open: true, source_purified: true, regalia_joined: true }, quests: { star_ring_call: 'done', source_of_murk: 'done' } });

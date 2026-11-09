@@ -6,7 +6,7 @@ import { createPlayer, updatePlayer, respawn } from './entities/player.js';
 import { combatStep, initCombat, COMBAT } from './entities/playerCombat.js';
 import { createBoss, settleBosses } from './entities/bosses.js';
 import { placeFinalBoss, settleFinalBoss, FINAL_BOSS } from './entities/finalBoss.js';
-import { stepOpening, stepEnding } from './story/story.js';
+import { stepOpening, stepEnding, endingOnDeath } from './story/story.js';
 import { createEnemy, updateEnemy } from './entities/enemies.js';
 import { updateProjectiles } from './entities/projectiles.js';
 import { hitEnemy } from './combat/damage.js';
@@ -253,6 +253,7 @@ export function stepGame(state, input) {
 
   // Death sequence (P3): collapse, wait, get back up at the spawn point with enemies reset.
   if (p.dead) {
+    endingOnDeath(state); // v1.0 (C10)
     if (state.deathMs < 0) {
       state.deathMs = 0;
       state.events.push({ type: 'death', tick: state.tick, x: p.x, y: p.y });
