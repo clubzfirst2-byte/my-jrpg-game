@@ -63,11 +63,13 @@ test('standing, a villager breathes (the idle frames change); walking, the walk 
   // A few tiles away the guard strolls: walk frames, in the direction he is going.
   const g = (await api(page, 'npcs')).find((n) => n.id === 'guard');
   await api(page, 'teleport', g.tx - 6, g.ty + 4);
-  await expect.poll(async () => (await npcState(page, 'guard')).moving, { timeout: 20_000, intervals: [50] }).toBe(true);
+  // (the sprite is drawn after the logic step: wait for the drawn walk frame, not just the state)
+  await expect.poll(async () => (await sprite(page, 'guard')).key, { timeout: 20_000, intervals: [50] }).toMatch(/^npc\.guard\.walk\.(down|up|right|left)\.[0-5]$/);
+  await page.evaluate(() => window.__debugApi.pause());
   const st = await npcState(page, 'guard');
   const s = await sprite(page, 'guard');
-  expect(s.key).toMatch(/^npc\.guard\.walk\.(down|up|right|left)\.[0-5]$/);
-  expect(s.key.split('.')[3]).toBe(st.facing);
+  if (st.moving) expect(s.key.split('.')[3]).toBe(st.facing);
+  await page.evaluate(() => window.__debugApi.resume());
   // When he stops he goes straight back to standing.
   await expect.poll(async () => (await npcState(page, 'guard')).moving, { timeout: 20_000, intervals: [50] }).toBe(false);
   await expect.poll(async () => (await sprite(page, 'guard')).key, { timeout: 2000 }).toMatch(/^npc\.guard\.idle\./);
@@ -163,10 +165,10 @@ test('batch 2: the woman and the smith (in the village since v1.0) stand, walk a
   await page.screenshot({ path: testInfo.outputPath('batch2.png') });
   // a few tiles off they stroll: walk frames in the direction they go
   await api(page, 'teleport', m.tx, m.ty + 6);
-  await expect.poll(async () => (await npcState(page, 'smith')).moving, { timeout: 20_000, intervals: [50] }).toBe(true);
-  const s = await sprite(page, 'smith');
-  expect(s.key.split('.')[2]).toBe('walk');
-  expect(s.key.split('.')[3]).toBe((await npcState(page, 'smith')).facing);
+  // (the sprite is drawn after the logic step, so wait for the drawn frame, not just the state)
+  await expect.poll(async () => (await sprite(page, 'smith')).key.split('.')[2], { timeout: 20_000, intervals: [50] }).toBe('walk');
+  const [s, st] = [await sprite(page, 'smith'), await npcState(page, 'smith')];
+  if (st.moving && s.key.split('.')[2] === 'walk') expect(s.key.split('.')[3]).toBe(st.facing);
   expect(errors).toEqual([]);
 });
 

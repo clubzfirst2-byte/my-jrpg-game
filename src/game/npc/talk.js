@@ -151,6 +151,9 @@ export function startDialogue(state, dialogueId, npcId) {
   if (!d) throw new Error(`Unknown dialogue "${dialogueId}"`);
   const entry = d.start.find((/** @type {any} */ s) => (s.if ?? []).every((/** @type {Condition} */ c) => conditionHolds(state, c)));
   state.dialogue = { id: dialogueId, npc: npcId ?? null, node: entry.goto, line: 0 };
+  // The world waits while they talk, so the villager stops at once (else drawn mid-stride until the end).
+  const n = npcId ? state.npcs?.find((/** @type {any} */ x) => x.id === npcId) : null;
+  if (n) n.moving = false;
   enterNode(state);
   state.events.push({ type: 'talk', tick: state.tick, id: dialogueId });
 }
