@@ -23,6 +23,8 @@ export class AssetManager {
     this.builders = new Map();
     /** @type {Map<string, { refs: number, bundle: BuiltBundle }>} */
     this.loaded = new Map();
+    /** Goes up whenever a bundle comes or goes (what hasTexture answers may have changed). */
+    this.version = 0;
   }
 
   /** @param {string} name @param {BundleBuilder} builder */
@@ -41,6 +43,7 @@ export class AssetManager {
     if (!builder) throw new Error(`Unknown asset bundle "${name}"`);
     const bundle = await builder();
     this.loaded.set(name, { refs: 1, bundle });
+    this.version++;
   }
 
   /** Releases one reference; destroys the textures when nobody uses the bundle. @param {string} name */
@@ -51,6 +54,7 @@ export class AssetManager {
     if (entry.refs <= 0) {
       entry.bundle.destroy();
       this.loaded.delete(name);
+      this.version++;
     }
   }
 
