@@ -88,6 +88,7 @@ test('the bag is saved and comes back with つづきから', async ({ page }) =>
   await page.goto('/');
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
   await page.click('#title-new');
+  await api(page, 'skipOpening'); // v1.0: the opening (C9) is not what this test is about
   await api(page, 'give', 'hunter_bow');
   await api(page, 'give', 'red_berry', 3);
   await api(page, 'addMoney', 42);

@@ -67,6 +67,9 @@ test('the source: invulnerable while inverted, staggers with four seats awake, p
   // The light seat is dark at the start.
   expect((await api(page, 'seats'))['source-light'].active).toBe(false);
   await page.screenshot({ path: testInfo.outputPath('source-inverted.png') });
+  // (this spec is about the fight, not the ending: without this the princess's words would open by
+  // themselves 2 s after the last blow and stop the world before the ring's body is gone, v1.0 C10)
+  await api(page, 'setFlag', 'ending_seen');
   for (const hpAfter of [60, 30, 0]) {
     // Wake all four seats (again, after the last wave put them out) until the ring turns back.
     await expect
@@ -93,7 +96,7 @@ test('the source: invulnerable while inverted, staggers with four seats awake, p
   await stay();
   await page.waitForTimeout(500);
   expect(await api(page, 'finalBoss')).toBe(null);
-  // The beach ring is closed again.
+  // The beach ring is closed again (ending_seen is set above; without it, it stays open until the ending).
   // (and, back on the island, the source's bundle is released)
   await api(page, 'teleport', places.ring.tx, places.ring.ty + 1);
   await page.keyboard.down('ArrowUp');

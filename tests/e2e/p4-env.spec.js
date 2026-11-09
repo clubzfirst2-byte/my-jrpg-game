@@ -65,6 +65,7 @@ test('the vault opens when the islet crystal powers the receiver, and stays open
   await page.goto('/');
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
   await page.click('#title-new');
+  await api(page, 'skipOpening'); // v1.0: the opening (C9) is not what this test is about
   await api(page, 'clearEnemies');
   expect((await api(page, 'envTile', 75, 58)).solid).toBe(true); // a rune door
   await face(page, 'left', 85, 62); // the crystal is at (84,62)

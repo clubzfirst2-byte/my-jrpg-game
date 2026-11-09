@@ -469,6 +469,114 @@ body {
   color: var(--muted);
 }
 
+/* ---- v1.0 ending screen (src/ui/ending.js): the title and the credits roll up, then 「おわり」 ---- */
+#ending-screen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 40%, #24405a 0%, #101820 75%);
+  pointer-events: auto;
+  z-index: 6;
+  animation: ending-in 1.2s ease-out both;
+}
+
+.ending-roll {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: min(560px, 86vw);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  text-align: center;
+  animation: ending-roll var(--roll-ms, 24000ms) linear forwards;
+}
+
+.ending-roll h1 {
+  margin: 0 0 12px;
+  font-size: 30px;
+  letter-spacing: 0.12em;
+  text-shadow: 0 2px 0 #000;
+}
+
+.ending-line {
+  margin: 0 0 18px;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.ending-credit {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ending-role {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.ending-name {
+  font-size: 17px;
+  color: var(--text);
+}
+
+#ending-end {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  letter-spacing: 0.3em;
+  text-shadow: 0 2px 0 #000;
+  opacity: 0;
+  transition: opacity 1.5s ease-in;
+  pointer-events: none;
+}
+
+#ending-end.shown {
+  opacity: 1;
+}
+
+#ui #ending-skip {
+  position: absolute;
+  right: calc(16px + var(--safe-right));
+  bottom: calc(14px + var(--safe-bottom));
+  min-width: 96px;
+  min-height: 44px;
+  padding: 8px 16px;
+  font-size: 15px;
+}
+
+#ui.text-large #ending-screen {
+  zoom: 1.22;
+}
+
+/* (zoomed, the roll keeps within a 667 px wide phone) */
+#ui.text-large .ending-roll {
+  width: min(460px, 70vw);
+}
+
+@keyframes ending-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* From below the screen to above it (the roll is shorter than ~3 screens on a landscape phone). */
+@keyframes ending-roll {
+  to {
+    top: 0;
+    transform: translate(-50%, -100%);
+  }
+}
+
 /* ---- toast ---- */
 #toast {
   position: absolute;

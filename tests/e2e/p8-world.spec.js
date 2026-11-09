@@ -102,6 +102,7 @@ test('a broken jar stays broken after つづきから (the world is saved as dif
   await page.goto('/');
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 10_000 });
   await page.click('#title-new');
+  await api(page, 'skipOpening'); // v1.0: the opening (C9) is not what this test is about
   await api(page, 'clearEnemies');
   // The jar at the camp (73,36): hit it from the south.
   await api(page, 'teleport', 73, 37);
