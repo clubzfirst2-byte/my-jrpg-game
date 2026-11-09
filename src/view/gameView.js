@@ -696,7 +696,7 @@ export class GameView {
     this.env.update(state, o, this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom, timeSec);
     this.weather.update(state, o, this.camera.zoom, this.boundsArea ? areaAt(state, state.player.x, state.player.y) : null, timeSec, dtSec);
     this.items.update(state, timeSec);
-    this.npcs.update(state, alpha, { x, y });
+    this.npcs.update(state, alpha, { x, y }, timeSec);
     this.puzzles.update(state, timeSec);
     this.features.update(
       state,
