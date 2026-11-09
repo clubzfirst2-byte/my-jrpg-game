@@ -11,7 +11,7 @@ Feet anchor = the bottom centre: the lowest row of every "feet" sprite is the gr
 
 import math
 
-from draw import RAMPS, canvas, check_rows, clear, halo, hx, layers, legend, round_shade, stamp, to_rgba
+from draw import RAMPS, canvas, check_rows, clear, hx, layers, legend, round_shade, stamp, to_rgba
 
 
 # ------------------------------------------------------------------ helpers
@@ -43,25 +43,6 @@ def shade_px(c, x, y, t):
 
 def blend(a, b, k):
     return tuple(round(a[i] * (1 - k) + b[i] * k) for i in range(3))
-
-
-def spill(img, src_cols, tint, k=0.35, reach=2):
-    """Light spill: opaque pixels near a glowing colour are tinted towards it."""
-    h, w = len(img), len(img[0])
-    srcs = [(x, y) for y in range(h) for x in range(w) if img[y][x] and img[y][x][:3] in src_cols]
-    done = set()
-    for x, y in srcs:
-        for dy in range(-reach, reach + 1):
-            for dx in range(-reach, reach + 1):
-                X, Y = x + dx, y + dy
-                if (X, Y) in done or not (0 <= X < w and 0 <= Y < h):
-                    continue
-                p = img[Y][X]
-                if p and p[3] == 255 and p[:3] not in src_cols:
-                    kk = k if abs(dx) + abs(dy) <= reach else k / 2
-                    img[Y][X] = blend(p[:3], tint, kk) + (255,)
-                    done.add((X, Y))
-    return img
 
 
 # ------------------------------------------------------------------ obj.house (96 x 112)
@@ -119,11 +100,11 @@ def house():
     c.put(81, top + 1, "roof", 2)
     c.put(81, top + 2, "roof", 1)
     # the fascia board under the eave
-    c.rect(1, eave + 1, 94, eave + 3, "timber", 2)
-    hline(c, 1, 94, eave + 1, "timber", 3)
-    hline(c, 1, 94, eave + 3, "timber", 1)
+    c.rect(1, eave + 1, 94, eave + 3, "wood", 2)
+    hline(c, 1, 94, eave + 1, "wood", 3)
+    hline(c, 1, 94, eave + 3, "wood", 1)
     for x in range(6, 94, 12):
-        c.put(x, eave + 2, "timber", 1)
+        c.put(x, eave + 2, "wood", 1)
 
     # --- chimney (stone) on the right of the roof
     cx0, cx1 = 70, 79
@@ -153,12 +134,12 @@ def house():
         hline(c, 4, 91, y, "plaster", 1)
     # corner posts and door posts
     for x0 in (4, 88):
-        box(c, x0, wt, x0 + 3, wb, "timber")
+        box(c, x0, wt, x0 + 3, wb, "wood")
     # the top beam (under the eave shadow) and the mid rail
     for x0, x1 in ((8, 33), (62, 87)):
-        c.rect(x0, 64, x1, 66, "timber", 2)
-        hline(c, x0, x1, 64, "timber", 3)
-        hline(c, x0, x1, 66, "timber", 1)
+        c.rect(x0, 64, x1, 66, "wood", 2)
+        hline(c, x0, x1, 64, "wood", 3)
+        hline(c, x0, x1, 66, "wood", 1)
         hline(c, x0, x1, 67, "plaster", 1)  # the rail's shadow
     # diagonal braces in the lower panels
     for (xa, ya, xb, yb) in ((9, 99, 31, 69), (86, 99, 64, 69)):
@@ -166,9 +147,9 @@ def house():
         for i in range(n + 1):
             x = round(xa + (xb - xa) * i / n)
             y = round(ya + (yb - ya) * i / n)
-            c.put(x, y, "timber", 3)
-            c.put(x + 1, y, "timber", 2)
-            c.put(x + 2, y, "timber", 1)
+            c.put(x, y, "wood", 3)
+            c.put(x + 1, y, "wood", 2)
+            c.put(x + 2, y, "wood", 1)
     # plaster texture: a few lit flecks and hairline cracks
     for x, y in ((12, 74), (20, 82), (26, 92), (14, 90), (70, 76), (80, 88), (74, 95), (84, 78), (40, 44), (52, 46)):
         if c.m(x, y) == "plaster" and c.tone[y][x] == 2:
@@ -180,7 +161,7 @@ def house():
     # --- windows with shutters and flower boxes
     for wx in (11, 69):
         # frame
-        box(c, wx - 1, 42, wx + 16, 61, "timber", top=3, bottom=1)
+        box(c, wx - 1, 42, wx + 16, 61, "wood", top=3, bottom=1)
         # glass in four panes
         c.rect(wx + 1, 44, wx + 14, 59, "glass", 1)
         for y in range(44, 60):
@@ -194,10 +175,10 @@ def house():
         c.put(wx + 3, 45, "glass", 4)
         c.put(wx + 2, 46, "glass", 4)
         # mullions
-        vline(c, wx + 7, 44, 59, "timber", 2)
-        vline(c, wx + 8, 44, 59, "timber", 1)
-        hline(c, wx + 1, wx + 14, 51, "timber", 3)
-        hline(c, wx + 1, wx + 14, 52, "timber", 1)
+        vline(c, wx + 7, 44, 59, "wood", 2)
+        vline(c, wx + 8, 44, 59, "wood", 1)
+        hline(c, wx + 1, wx + 14, 51, "wood", 3)
+        hline(c, wx + 1, wx + 14, 52, "wood", 1)
         # shutters (painted teal), slatted
         for sx in (wx - 4, wx + 17):
             c.rect(sx, 42, sx + 2, 61, "glaze", 2)
@@ -206,7 +187,7 @@ def house():
             for y in range(44, 61, 3):
                 hline(c, sx, sx + 2, y, "glaze", 1)
         # flower box
-        box(c, wx - 1, 60, wx + 16, 63, "timber", top=3, bottom=1)
+        box(c, wx - 1, 60, wx + 16, 63, "wood", top=3, bottom=1)
         for i, fx in enumerate(range(wx, wx + 16, 3)):
             c.put(fx, 59, "leaf", 2)
             c.put(fx + 1, 59, "leaf", 3)
@@ -221,7 +202,7 @@ def house():
     dtop = wt + 1  # 38
     for y in range(dtop, wb + 1):
         for x in range(dx0 - 3, dx1 + 4):
-            c.put(x, y, "timber", 2)
+            c.put(x, y, "wood", 2)
     # arch: cut the frame's top corners round
     for y in range(dtop, dtop + 6):
         r = dtop + 6 - y
@@ -232,7 +213,7 @@ def house():
     # frame tones
     for y in range(dtop, wb + 1):
         for x in (dx0 - 3, dx0 - 2, dx0 - 1, dx1 + 1, dx1 + 2, dx1 + 3):
-            if c.m(x, y) == "timber":
+            if c.m(x, y) == "wood":
                 c.tone[y][x] = 3 if x in (dx0 - 3, dx1 + 1) else 1 if x in (dx0 - 1, dx1 + 3) else 2
     # the leaf: vertical planks
     for y in range(dtop + 3, wb + 1):
@@ -407,6 +388,9 @@ def chest():
             # a little gleam of light falling into the empty chest
             for x, y in ((9, 10), (10, 10), (11, 11), (18, 10)):
                 c.put(x, y, W, 1)
+            # the small glint of what was inside (guide 4.2: "開いた中身の光は小さな点だけ")
+            for x, y, t in ((15, 11, 4), (14, 11, 3), (16, 11, 3), (15, 10, 3), (20, 11, 3), (11, 10, 2)):
+                c.put(x, y, "gold", t)
             # gold bands on the front panel
             for bx in (6, 23):
                 for y in range(13, 26):
@@ -425,6 +409,9 @@ def chest():
             c.put(x0, 23, "gold", 3)
             hline(c, x0, x0 + 2, 25, "gold", 1)
         img = to_rgba(c)
+        # drawn with the outline on row 26; move it down one row so it stands on the last row (no floating)
+        assert all(p is None for p in img[27])
+        img = [[None] * 32] + img[:27]
         out["obj.chest." + ("open" if opened else "closed")] = img
     return out
 
@@ -536,7 +523,24 @@ RING = [  # the 星環 ring with a four-point star, carved into the stone (11 x 
 GLYPHS = [".x.", "x.x", ".x.", "...", "x.x", ".x.", ".x."]  # two small runes under the ring
 
 
+def lit_by(c, light_mats, mat, tone=3):
+    """Light falling on `mat` next to a glowing part: those pixels go up to a lighter tone of their own ramp
+    (no mixed colours outside the ramps)."""
+    marks = []
+    for y in range(c.h):
+        for x in range(c.w):
+            if c.m(x, y) != mat:
+                continue
+            if any(c.m(x + dx, y + dy) in light_mats for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                marks.append((x, y))
+    for x, y in marks:
+        if (c.tone[y][x] or 2) < tone:
+            c.tone[y][x] = tone
+
+
 def checkpoint():
+    """The record stone (a 星環 object: its light is the hero's gem blue). Off: the carving is dark.
+    On: the carving glows AND a star floats above the stone (the shape changes too, guide 4.2)."""
     out = {}
     for on in (False, True):
         c = canvas(24, 40)
@@ -547,43 +551,43 @@ def checkpoint():
         box(c, 4, 29, 19, 33, S, top=3, bottom=1)
         hline(c, 4, 19, 30, S, 4)
         hline(c, 2, 21, 35, S, 3)
-        # the stele, rounded on top
-        for y in range(2, 30):
-            x0, x1 = (8, 15) if y == 2 else (7, 16) if y == 3 else (6, 17)
+        hline(c, 1, 22, 39, S, 0)  # the ground line: feet on the last row
+        # the stele, rounded on top (rows 6..29: room above it for the star)
+        for y in range(6, 30):
+            x0, x1 = (8, 15) if y == 6 else (7, 16) if y == 7 else (6, 17)
             for x in range(x0, x1 + 1):
                 c.put(x, y, S, 2)
             c.put(x0, y, S, 3)
-            c.put(x0 + 1, y, S, 3 if y < 5 else 2)
+            c.put(x0 + 1, y, S, 3 if y < 9 else 2)
             c.put(x1, y, S, 1)
-        hline(c, 8, 15, 2, S, 4)
-        hline(c, 7, 13, 3, S, 3)
+        hline(c, 8, 15, 6, S, 4)
+        hline(c, 7, 13, 7, S, 3)
         hline(c, 6, 17, 28, S, 1)
         # chips and moss
-        for x, y in ((16, 9), (16, 10), (6, 22), (15, 26)):
+        for x, y in ((16, 21), (16, 22), (15, 26)):
             c.put(x, y, S, 0 if x == 16 else 1)
         for x, y in ((1, 36), (2, 37), (3, 37), (2, 36), (4, 33), (5, 33), (19, 37), (20, 37), (6, 28), (7, 27)):
             c.put(x, y, "moss", 3 if y in (33, 27, 36) else 2)
-        # carvings
-        cm, ct, st = ("glow", 3, 4) if on else (S, 0, 1)
+        # carvings: the 星環 ring and two runes
         for y, row in enumerate(RING):
             for x, ch in enumerate(row):
                 if ch == "x":
-                    c.put(6 + x, 7 + y, cm, ct if on else (0 if y > 5 or x > 5 else 1))
+                    c.put(6 + x, 9 + y, "gem", 3) if on else c.put(6 + x, 9 + y, S, 0 if y > 5 or x > 5 else 1)
                 elif ch in "sS":
-                    c.put(6 + x, 7 + y, cm, (4 if ch == "S" else 3) if on else (0 if ch == "S" else 1))
+                    if on:
+                        c.put(6 + x, 9 + y, "gem", 4 if ch == "S" else 3)
+                    else:
+                        c.put(6 + x, 9 + y, S, 0 if ch == "S" else 1)
         for i, row in enumerate(GLYPHS):
             for x, ch in enumerate(row):
                 if ch == "x":
-                    c.put(10 + x, 19 + i, cm, 2 if on else 1)
-        img = to_rgba(c)
+                    c.put(10 + x, 21 + i, "gem" if on else S, 2 if on else 1)
         if on:
-            g = c.ramps["glow"]
-            img = spill(img, {g[2], g[3], g[4]}, g[3], k=0.3, reach=1)
-            # a spark above the stone
-            for (x, y, t) in ((12, 0, 4), (11, 0, 2), (13, 0, 2), (12, 1, 3)):
-                if img[y][x] is None or img[y][x][3] < 255:
-                    img[y][x] = g[t] + (255 if t == 4 else 200,)
-        out["obj.checkpoint." + ("on" if on else "off")] = img
+            lit_by(c, {"gem"}, S, 3)
+            # the star floating above the stone (rows 1..3, outlined)
+            for x, y, t in ((12, 1, 3), (11, 2, 3), (12, 2, 4), (13, 2, 3), (12, 3, 3), (10, 2, 2), (14, 2, 2)):
+                c.put(x, y, "gem", t)
+        out["obj.checkpoint." + ("on" if on else "off")] = to_rgba(c)
     return out
 
 
@@ -687,19 +691,13 @@ def campfire():
         # glowing embers on the charred ends
         for x, y in ((14, 20), (18, 20), (16, 21), (13, 19), (19, 19)):
             if c.m(x, y) == "ash":
-                c.put(x, y, "ember", 4 if (x + i) % 2 else 3)
+                c.put(x, y, "fire", 4 if (x + i) % 2 else 3)
         for sx, sy in STONES_FRONT:
             stone_lump(c, sx, sy)
+        # firelight: the stones' sides next to the fire take their own lighter tone
+        lit_by(c, {"fire"}, "stone", 3)
         img = to_rgba(c)
         g = c.ramps["fire"]
-        st = set(c.ramps["stone"][1:])
-        # firelight on the stones only
-        h, w = len(img), len(img[0])
-        for y in range(h):
-            for x in range(w):
-                p = img[y][x]
-                if p and p[:3] in st and y < 24:
-                    img[y][x] = blend(p[:3], g[3], 0.12) + (255,)
         for (x, y, t) in (((6, 4, 3), (26, 1, 4)), ((25, 5, 3), (7, 1, 4)))[i]:
             img[y][x] = g[t] + (255,)
         out[f"obj.campfire.{i}"] = img
@@ -712,7 +710,7 @@ def plate():
     out = {}
     for down in (False, True):
         c = canvas(28, 20)
-        S = "stone"
+        S = "ruin_stone"  # a ruin mechanism: the ruin's stone and the ruin's teal light (guide 2.5, 4.2)
         # the frame set in the ground
         box(c, 1, 7, 26, 18, S, top=3, bottom=1)
         hline(c, 2, 25, 8, S, 3)
@@ -734,60 +732,57 @@ def plate():
             # pressed: flush with the frame, the ring lights up
             box(c, 4, 9, 23, 15, "steel", core=1, lit=2, dark=0, top=2, bottom=0)
             for x, y in ((11, 11), (12, 10), (13, 10), (14, 10), (15, 10), (16, 11), (16, 12), (16, 13), (15, 14), (14, 14), (13, 14), (12, 14), (11, 13), (11, 12)):
-                c.put(x, y, "glow", 3)
-            c.put(13, 12, "glow", 4)
-            c.put(14, 12, "glow", 4)
-            c.put(12, 10, "glow", 4)
+                c.put(x, y, "ruin_glow", 3)
+            c.put(13, 12, "ruin_glow", 4)
+            c.put(14, 12, "ruin_glow", 4)
+            c.put(12, 10, "ruin_glow", 4)
             for x in range(5, 23, 3):
-                c.put(x, 15, "glow", 2)
+                c.put(x, 15, "ruin_glow", 2)
+            lit_by(c, {"ruin_glow"}, "steel", 2)
         img = to_rgba(c)
-        if down:
-            g = c.ramps["glow"]
-            img = spill(img, {g[3], g[4]}, g[3], k=0.3, reach=1)
-            img = halo(img, g[3], alpha=90, reach=1, only={g[2]})
         out["sw.plate." + ("on" if down else "off")] = img
     return out
 
 
 # ------------------------------------------------------------------ icons (20 x 20, feet)
-# Drawn on the Canvas pixel by pixel (blade, guard, grip ...) and outlined by the selective outline.
+# Guide 6.1: content inside 18x18 (a clear 1 px margin), outlined all round, at most 3 materials,
+# 1-3 highlight (tone 4) pixels, laid on the diagonal. Drawn pixel by pixel on the Canvas.
 
 def icon_sword():
+    """Steel, gold, leather. A broad blade (4 px a row on the diagonal) so it reads on a dark panel."""
     c = canvas(20, 20)
-    # the blade: three pixels a row on the diagonal: lit edge, core, shaded edge
-    for i in range(10):
-        x, y = 8 + i, 11 - i
-        c.put(x - 1, y, "steel", 4 if 1 <= i <= 7 else 3)
-        c.put(x, y, "steel", 3 if i > 7 else 2)
-        c.put(x + 1, y, "steel", 1)
-    c.put(17, 1, "steel", 4)
-    for i in range(1, 7):  # the fuller: a darker groove down the core
-        c.shade(8 + i, 11 - i, 2 if i % 3 else 3)
-    # the guard: a gold bar across the blade, lit on its upper side
-    for k in range(-3, 4):
-        x, y = 8 + k, 12 + k
-        c.put(x, y, "gold", 4 if k == -3 else 3)
-        c.put(x, y + 1, "gold", 1 if k > -3 else 2)
-    c.put(8, 12, "gem", 4)
-    c.put(8, 13, "gem", 2)
-    # the grip, wrapped in leather
-    for k in range(1, 5):
-        x, y = 8 - k, 13 + k
+    for y in range(3, 12):  # the blade: lit edge, light, core, shaded edge
+        x = 18 - y
+        c.put(x - 1, y, "steel", 3)
+        c.put(x, y, "steel", 3 if y > 4 else 2)
+        c.put(x + 1, y, "steel", 2)
+        c.put(x + 2, y, "steel", 1)
+    for y in (5, 6, 7):
+        c.shade(18 - y - 1, y, 4)  # the shine: three pixels
+    c.put(16, 2, "steel", 3)  # the point
+    c.put(17, 2, "steel", 1)
+    for k in range(-3, 4):  # the guard across the blade
+        x, y = 7 + k, 12 + k
+        c.put(x, y, "gold", 3 if k < 3 else 2)
+        c.put(x, y + 1, "gold", 1)
+    c.put(4, 9, "gold", 3)
+    c.put(7, 12, "gold", 4)
+    for k in range(1, 4):  # the grip
+        x, y = 7 - k, 13 + k
         c.put(x, y, "leather", 3 if k % 2 else 2)
         c.put(x + 1, y, "leather", 1)
-    # the pommel
-    c.put(2, 18, "gold", 3)
-    c.put(3, 18, "gold", 2)
-    c.put(2, 17, "gold", 4)
-    c.put(3, 17, "gold", 3)
+    c.rect(2, 16, 3, 17, "gold", 2)  # the pommel
+    c.put(2, 16, "gold", 3)
+    c.put(3, 17, "gold", 1)
     return to_rgba(c)
 
 
 def leaf(c, cx, cy, rx, ry, rib_to, mat):
-    """One round leaf as its own material (same ramp), so the leaves in front can shade the ones behind."""
+    """One round leaf as its own material id (same ramp: still one material), so the leaves in front
+    can shade the ones behind."""
     c.ramps[mat] = c.ramps["leaf"]
     c.ellipse(cx, cy, rx, ry, mat)
-    round_shade(c, mat, cx, cy, rx, ry, cuts=(0.9, 0.62, 0.05))
+    round_shade(c, mat, cx, cy, rx, ry, cuts=(0.95, 0.62, 0.05))
     x0, y0 = int(cx), int(cy)
     x1, y1 = rib_to
     n = max(abs(x1 - x0), abs(y1 - y0), 1)
@@ -816,80 +811,68 @@ def overlap_shadow(c, order):
 
 
 def icon_herb():
+    """Leaf and twine only (2 materials)."""
     c = canvas(20, 20)
-    # the stem, gently curved
-    for x, y in ((10, 17), (10, 16), (10, 15), (10, 14), (9, 13), (9, 12), (9, 11), (9, 10), (9, 9), (9, 8), (9, 7), (9, 6), (10, 5)):
+    c.ramps["stem"] = c.ramps["leaf"]
+    for y in range(4, 16):  # the stem
+        x = 9 if y < 12 else 10
         c.put(x, y, "stem", 2)
         c.put(x + 1, y, "stem", 1)
-    c.ramps["stem"] = c.ramps["leaf"]
-    # round leaves, alternating up the stem (back to front)
     leaves = [
-        ("lf0", 10.0, 2.6, 1.9, 2.1, (10, 4)),
-        ("lf1", 13.9, 5.0, 2.9, 2.0, (11, 5)),
-        ("lf2", 5.8, 6.0, 3.1, 2.1, (9, 6)),
-        ("lf3", 14.4, 9.8, 3.4, 2.2, (10, 10)),
-        ("lf4", 5.4, 11.4, 3.5, 2.3, (9, 11)),
+        ("lf0", 10.0, 3.6, 1.8, 1.9, (10, 5)),
+        ("lf1", 13.9, 5.6, 2.8, 1.9, (10, 6)),
+        ("lf2", 5.9, 6.4, 3.0, 2.0, (9, 7)),
+        ("lf3", 14.2, 9.7, 3.2, 2.1, (10, 10)),
+        ("lf4", 5.6, 11.0, 3.3, 2.2, (9, 11)),
     ]
     for m, cx, cy, rx, ry, rib in leaves:
         leaf(c, cx, cy, rx, ry, rib, m)
     overlap_shadow(c, ["stem"] + [l[0] for l in leaves])
-    # a white flower bud on top
-    c.put(10, 0, "plaster", 4)
-    c.put(11, 1, "plaster", 3)
-    c.put(9, 1, "plaster", 3)
-    # the tie
-    hline(c, 9, 12, 14, "string", 3)
-    hline(c, 9, 12, 15, "string", 1)
-    c.put(13, 15, "string", 2)
-    c.put(14, 16, "string", 2)
-    # the cut ends of the stems
-    for x in (9, 10, 11):
-        c.put(x, 16, "stem", 2)
-        c.put(x, 17, "stem", 3 if x == 9 else 1)
-        c.put(x, 18, "fat", 2 if x != 11 else 1)
+    hline(c, 9, 12, 13, "string", 3)  # the tie
+    hline(c, 9, 12, 14, "string", 1)
+    c.put(13, 14, "string", 2)
+    c.put(14, 15, "string", 2)
+    for x in (9, 10, 11):  # the cut ends
+        c.put(x, 15, "stem", 3 if x == 9 else 2)
+        c.put(x, 16, "stem", 1)
     return to_rgba(c)
 
 
 def icon_meat():
+    """Meat, fat, bone (3 materials). Kept light (more tone 3) so it reads on a dark panel."""
     c = canvas(20, 20)
-    # the meat: an oval slab on the diagonal, the bone sticking out at the lower right
-    cx, cy, a, b = 8.2, 8.2, 7.6, 5.4
+    cx, cy, a, b = 7.6, 7.6, 7.0, 5.0
     for y in range(20):
         for x in range(20):
             px, py = x + 0.5 - cx, y + 0.5 - cy
             u, v = (px + py) / 1.4142, (py - px) / 1.4142
             if (u / a) ** 2 + (v / b) ** 2 <= 1:
                 c.put(x, y, "meat")
-    round_shade(c, "meat", cx, cy, 6.5, 6.5, cuts=(0.96, 0.7, 0.12))
-    # a rim of white fat along the upper-right side
-    for y in range(20):
+    round_shade(c, "meat", cx, cy, 6.0, 6.0, cuts=(0.97, 0.6, 0.05))
+    for y in range(20):  # a rim of white fat along the upper-right side
         for x in range(20):
             if c.m(x, y) != "meat":
                 continue
             px, py = x + 0.5 - cx, y + 0.5 - cy
             u, v = (px + py) / 1.4142, (py - px) / 1.4142
-            e = (u / a) ** 2 + (v / b) ** 2
-            if v < -1.5 and e > 0.55:
+            if v < -1.4 and (u / a) ** 2 + (v / b) ** 2 > 0.55:
                 c.put(x, y, "fat", 3 if u < 0 else 2)
-    # marbling: short streaks of fat
-    for x, y in ((5, 9), (6, 10), (9, 12), (10, 12), (8, 7)):
+    for x, y in ((5, 8), (6, 9), (9, 11), (10, 11), (8, 6)):  # marbling
         c.put(x, y, "fat", 2)
     c.put(4, 5, "meat", 4)
     c.put(3, 6, "meat", 4)
-    c.put(4, 6, "meat", 3)
-    # the bone: a shaft and a double knob
-    for k in range(4):
-        x, y = 13 + k, 13 + k
+    for k in range(3):  # the bone: a shaft and a double knob
+        x, y = 12 + k, 12 + k
         c.put(x, y, "bone", 3)
         c.put(x + 1, y, "bone", 2)
         c.put(x, y + 1, "bone", 1)
-    c.ellipse(17.6, 15.6, 1.5, 1.5, "bone", 2)
-    c.ellipse(15.6, 17.6, 1.5, 1.5, "bone", 2)
-    c.put(17, 15, "bone", 4)
-    c.put(15, 17, "bone", 3)
-    c.put(18, 16, "bone", 1)
-    c.put(16, 18, "bone", 1)
-    c.put(17, 17, "bone", 1)
+    c.ellipse(16.4, 14.6, 1.4, 1.4, "bone", 2)
+    c.ellipse(14.6, 16.4, 1.4, 1.4, "bone", 2)
+    c.put(16, 14, "bone", 4)
+    c.put(14, 16, "bone", 3)
+    c.put(17, 15, "bone", 1)
+    c.put(15, 17, "bone", 1)
+    c.put(16, 16, "bone", 1)
     return to_rgba(c)
 
 
@@ -900,13 +883,13 @@ def icons():
 # ------------------------------------------------------------------ fx.slash (32 x 40, centre, points right)
 
 def slash():
-    """A crescent sweep, bulging right (the game turns it to the aim). White leading edge, pale blue body,
-    fading to clear at the inner edge and towards both tips."""
+    """A crescent sweep, bulging right (the game turns it to the aim). Every pixel opaque (guide 6.2):
+    white leading edge, sky blue body, a dark blue outline all round so it reads on grass and on snow.
+    The tips thin out by width (3 -> 2 -> 1 px), not by transparency."""
     W, H = 32, 40
     cx, cy, R = 8.0, 20.0, 21.5
-    g = [hx(v) for v in RAMPS["slash"]]
-    img = [[None] * W for _ in range(H)]
-    amax = math.radians(62)
+    c = canvas(W, H)
+    amax = math.radians(60)
     for y in range(H):
         for x in range(W):
             px, py = x + 0.5 - cx, y + 0.5 - cy
@@ -915,16 +898,12 @@ def slash():
             if abs(a) > amax:
                 continue
             k = abs(a) / amax  # 0 at the middle, 1 at the tips
-            th = 9.0 * (1 - k ** 1.6) + 0.8
+            th = 8.0 * (1 - k ** 1.5) + 0.9
             u = (R - r) / th  # 0 on the outer (leading) edge, 1 on the inner
-            fade = 1 - 0.55 * k ** 2
-            if -1.2 / th <= u < 0:
-                img[y][x] = g[1] + (int(230 * fade),)  # a thin blue rim keeps it readable on light ground
-            elif 0 <= u <= 1:
-                t = 4 if u < 0.24 else 3 if u < 0.48 else 2 if u < 0.72 else 1
-                a8 = 255 if u < 0.72 else int(210 - 150 * (u - 0.72) / 0.28)
-                img[y][x] = g[t] + (int(a8 * fade),)
-    return {"fx.slash": img}
+            if 0 <= u <= 1:
+                t = 4 if u < 0.3 else 3 if u < 0.55 else 2 if u < 0.8 else 1
+                c.put(x, y, "slash", t)
+    return {"fx.slash": to_rgba(c)}
 
 
 def all_samples():

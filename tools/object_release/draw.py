@@ -8,7 +8,7 @@ On top of the Canvas this adds:
   * `stamp` — a hand-placed pixel map (one character per pixel, a legend per sprite);
   * `round_shade` — tones for a rounded part (jar belly, meat, stones) from a top-left light;
   * `layers` — tones by depth from the edge (flames, the sword trail: hot / bright inside);
-  * `to_rgba` / `halo` — the finished image as RGBA rows, and a soft glow around lit parts.
+  * `to_rgba` — the finished image as RGBA rows (every pixel fully opaque or fully clear: guide 1.1, 6.2).
 """
 
 import math
@@ -18,35 +18,37 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "art_proto"))
 from pixel import Canvas, hx  # noqa: E402,F401
 
-# Ramps for the objects (outline, shadow, core, light, highlight). The hero's own ramps
-# (wood, gold, steel, leather, gem, bone ...) come from pixel.BASE_RAMPS, so the world reads as one set.
-RAMPS = {
+# Ramps for the objects (outline, shadow, core, light, highlight).
+# Reused as they are (ART_STYLE_GUIDE.md 2.1 / 2.5 / 6.2): the hero's wood, gold, steel, leather, gem, bone
+# (pixel.BASE_RAMPS), ruin.stone, ruin.glow and the fire colours. Every other ramp here is NEW and is listed
+# in OBJECT_PROPOSAL.md for the art director to register in the guide (chapter 2) after approval.
+GUIDE = {
+    "ruin_stone": ["#1a1e22", "#3a4246", "#5a6468", "#7c8688", "#a2aaaa"],  # guide 2.5 ruin.stone
+    "ruin_glow": ["#08302e", "#146a64", "#22a49a", "#62d6c6", "#c6fff0"],  # guide 2.5 ruin.glow
+    "fire": ["#5a1a0a", "#c0461c", "#f08a3a", "#ffd060", "#fff4c8"],  # guide 6.2 flames
+}
+NEW = {
     # buildings
-    "roof": ["#2a0e10", "#6e2a26", "#9c4234", "#c4643f", "#e58f5f"],
-    "plaster": ["#3a2e24", "#b2a088", "#ddd0b4", "#efe6d0", "#fcf8ee"],
-    "timber": ["#1e1008", "#46291a", "#68422a", "#8a5e3a", "#a87a50"],
-    "stone": ["#22222a", "#565664", "#80808c", "#a8a8b2", "#d2d2d8"],
-    "glass": ["#101a2c", "#26425e", "#3c6890", "#78a8cc", "#d6eefa"],
-    "moss": ["#142010", "#2e4a22", "#4a6e30", "#6e9440", "#9cbc5c"],
+    "roof": ["#2a0e10", "#6e2a26", "#9c4234", "#c4643f", "#e58f5f"],  # village roof tiles
+    "plaster": ["#3a2e24", "#b2a088", "#ddd0b4", "#efe6d0", "#fcf8ee"],  # outside walls (lighter than room.plaster)
+    "stone": ["#22222a", "#565664", "#80808c", "#a8a8b2", "#d2d2d8"],  # village / field stone (not the ruin)
+    "glass": ["#101a2c", "#26425e", "#3c6890", "#78a8cc", "#d6eefa"],  # window panes
+    "moss": ["#142010", "#2e4a22", "#4a6e30", "#6e9440", "#9cbc5c"],  # small patches on stone
     # furniture and props
-    "chestwood": ["#2a0e08", "#5e2814", "#8a4220", "#b0623a", "#d08a5a"],
-    "clay": ["#2e140c", "#7a3a22", "#b45e36", "#d8845a", "#f0b088"],
-    "glaze": ["#0c2428", "#1e5258", "#2e7e80", "#5aaaa4", "#9cdad0"],
-    "crate": ["#24140a", "#5a3a1e", "#86592e", "#a87a44", "#c89c62"],
-    "ash": ["#141414", "#2c2626", "#463c38", "#5e524c", "#7a6c64"],
-    "rune_off": ["#14141c", "#2e2e3a", "#44445a", "#5c5c74", "#74748e"],
-    # light and fire (the outline tone is a deep red, not black: fire never reads as a dark shape)
-    "fire": ["#6a1606", "#cc3a14", "#f2801e", "#ffcc40", "#fff6c4"],
-    "ember": ["#3a0c06", "#8a2010", "#d0461a", "#f08a2a", "#ffd060"],
-    "glow": ["#0e2a60", "#2a7ad8", "#5ab8ff", "#a8e4ff", "#f0fcff"],
+    "chestwood": ["#2a0e08", "#5e2814", "#8a4220", "#b0623a", "#d08a5a"],  # red-brown furniture wood
+    "clay": ["#2e140c", "#7a3a22", "#b45e36", "#d8845a", "#f0b088"],  # terracotta
+    "glaze": ["#0c2428", "#1e5258", "#2e7e80", "#5aaaa4", "#9cdad0"],  # painted teal (jar band, shutters)
+    "crate": ["#24140a", "#5a3a1e", "#86592e", "#a87a44", "#c89c62"],  # light crate wood
+    "ash": ["#141414", "#2c2626", "#463c38", "#5e524c", "#7a6c64"],  # ash, charcoal, dark gaps
     # items
-    "leaf": ["#0e2210", "#24562a", "#3c8a3a", "#68b84a", "#a8e070"],
-    "meat": ["#3a0e10", "#8e2a28", "#c64a3c", "#e8786a", "#ffbcae"],
-    "fat": ["#5a3a2a", "#c89a7a", "#ecc8a8", "#f8e2cc", "#fff6ec"],
-    "string": ["#3a2a14", "#8a6a3a", "#c8a468", "#e2c890", "#f8ecc8"],
-    # the sword trail
+    "leaf": ["#0e2210", "#24562a", "#3c8a3a", "#68b84a", "#a8e070"],  # herbs, small plants
+    "meat": ["#3a0e10", "#8e2a28", "#c64a3c", "#e8786a", "#ffbcae"],  # raw meat
+    "fat": ["#5a3a2a", "#c89a7a", "#ecc8a8", "#f8e2cc", "#fff6ec"],  # fat on meat
+    "string": ["#3a2a14", "#8a6a3a", "#c8a468", "#e2c890", "#f8ecc8"],  # twine
+    # the sword trail (white and sky blue, the hero's colours: guide 6.2)
     "slash": ["#1a4a8a", "#6ab0f0", "#b8e4ff", "#e8f8ff", "#ffffff"],
 }
+RAMPS = {**GUIDE, **NEW}
 
 
 def canvas(w, h, extra=None):
@@ -162,24 +164,6 @@ def to_rgba(c, outline=True):
                 t = c.tone[y][x] if c.tone[y][x] is not None else 2
                 out[y][x] = c.ramps[m][t] + (255,)
     return out
-
-
-def halo(img, colour, alpha=90, reach=1, only=None):
-    """A soft glow: empty pixels within `reach` of a pixel whose colour is in `only` (or any pixel)."""
-    h, w = len(img), len(img[0])
-    rgb = hx(colour) if isinstance(colour, str) else colour
-    src = [(x, y) for y in range(h) for x in range(w) if img[y][x] and (only is None or img[y][x][:3] in only)]
-    add = {}
-    for x, y in src:
-        for dy in range(-reach, reach + 1):
-            for dx in range(-reach, reach + 1):
-                X, Y = x + dx, y + dy
-                if 0 <= X < w and 0 <= Y < h and img[Y][X] is None and abs(dx) + abs(dy) <= reach:
-                    a = alpha if abs(dx) + abs(dy) <= 1 else alpha // 2
-                    add[(X, Y)] = max(add.get((X, Y), 0), a)
-    for (x, y), a in add.items():
-        img[y][x] = rgb + (a,)
-    return img
 
 
 def check_rows(rows, w, name):

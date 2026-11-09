@@ -2,9 +2,11 @@
 
   1. a small village scene on grass with the approved hero for scale, at 1x (the release art size)
   2. the same scene at 3x
-  3. the icons in a dark UI panel (3x)
-  4. each sample next to the current placeholder (docs/art-kit/, the same size), 3x
-The grass and path here are only a stand-in backdrop for the review (tiles are not part of this wave).
+  3. the icons in a dark UI panel (#20242c, ART_STYLE_GUIDE.md 6.1), 3x
+  4. effects, icons and lit objects on snow (mount.snow), 3x: they must read on light ground too (guide 6.2)
+  5. each sample next to the current placeholder (docs/art-kit/, the same size), 3x
+The grass, path and snow are a backdrop drawn from the guide's provisional ramps (2.5 plains.grass,
+plains.path, mount.snow); the tiles themselves are not part of this wave.
 """
 
 import glob
@@ -19,9 +21,11 @@ ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
 OUT = os.path.join(ROOT, "docs", "art-candidates", "objects", "mock_scene.png")
 HERO = os.path.join(ROOT, "src", "art-release", "hero", "hero.idle.down.0.png")
 
-GRASS = [(0x3E, 0x74, 0x34), (0x4A, 0x84, 0x3A), (0x58, 0x94, 0x42), (0x6C, 0xA8, 0x4C), (0x2E, 0x5C, 0x2A)]
-PATH = [(0x9A, 0x7E, 0x58), (0xB0, 0x94, 0x6A), (0xC4, 0xA8, 0x7C), (0x80, 0x66, 0x46)]
-BG_UI = (0x16, 0x14, 0x22)
+# guide 2.5 plains.grass 1..4 / plains.path 1..4 / mount.snow 1..4 (indices: shadow, base, light, top, deep)
+GRASS = [(0x2A, 0x50, 0x30), (0x3C, 0x6A, 0x38), (0x52, 0x84, 0x46), (0x6C, 0x9E, 0x58), (0x2A, 0x50, 0x30)]
+PATH = [(0x6A, 0x52, 0x38), (0x8C, 0x70, 0x50), (0xA8, 0x8C, 0x68), (0x6A, 0x52, 0x38)]
+SNOW = [(0x7A, 0x8C, 0xAE), (0xB8, 0xC8, 0xE0), (0xDC, 0xE6, 0xF2), (0xF8, 0xFB, 0xFF)]
+BG_UI = (0x20, 0x24, 0x2C)  # guide 6.1
 
 
 def to_image(rows):
@@ -129,6 +133,23 @@ def scene(s):
     return im
 
 
+def snow_strip(s):
+    """Effects, icons and lit objects on snow (3x)."""
+    rnd = random.Random(7)
+    im = Image.new("RGBA", (300, 64), SNOW[1] + (255,))
+    px = im.load()
+    for _ in range(260):
+        x, y = rnd.randrange(300), rnd.randrange(64)
+        px[x, y] = rnd.choice((SNOW[0], SNOW[2], SNOW[2], SNOW[3])) + (255,)
+    S = {k: to_image(v) for k, v in s.items()}
+    x = 22
+    for n in ("fx.slash", "fx.fire.0", "obj.checkpoint.on", "obj.campfire.1", "obj.chest.open", "sw.plate.on", "icon.sword", "icon.herb", "icon.meat"):
+        im_ = S[n]
+        place(im, im_, x, 58 if ANCHOR[n] == "feet" else 34, ANCHOR[n])
+        x += im_.size[0] + 4
+    return im.resize((im.size[0] * 3, im.size[1] * 3), Image.NEAREST)
+
+
 def label(d, x, y, text, fill=(240, 240, 240)):
     d.text((x, y), text, fill=fill)
 
@@ -189,10 +210,9 @@ def ui_panel(s, scale=3):
     im = Image.new("RGBA", (w, h), BG_UI + (255,))
     d = ImageDraw.Draw(im)
     d.rectangle([0, 0, w - 1, h - 1], outline=(0x8A, 0x74, 0x3C, 255))
-    d.rectangle([1, 1, w - 2, h - 2], outline=(0x3A, 0x32, 0x48, 255))
     for i, n in enumerate(icons):
         x = pad + i * (slot + pad)
-        d.rectangle([x, pad, x + slot - 1, pad + slot - 1], fill=(0x2A, 0x26, 0x3A, 255), outline=(0x5A, 0x52, 0x70, 255))
+        d.rectangle([x, pad, x + slot - 1, pad + slot - 1], fill=BG_UI + (255,), outline=(0x4A, 0x52, 0x60, 255))
         ic = to_image(s[n])
         im.alpha_composite(ic, (x + (slot - 20) // 2, pad + (slot - 20) // 2))
     big = im.resize((w * scale, h * scale), Image.NEAREST)
@@ -204,14 +224,15 @@ def main(samples):
     sc3 = sc.resize((sc.size[0] * 3, sc.size[1] * 3), Image.NEAREST)
     ui = ui_panel(samples)
     cmp_ = compare(samples)
+    snow = snow_strip(samples)
     pad = 16
     W = max(sc3.size[0], cmp_.size[0], ui.size[0] + sc.size[0] + pad) + pad * 2
-    H = pad + 16 + sc.size[1] + pad + 16 + sc3.size[1] + pad + 16 + cmp_.size[1] + pad
+    H = pad + 16 + sc.size[1] + pad + 16 + sc3.size[1] + pad + 16 + snow.size[1] + pad + 16 + cmp_.size[1] + pad
     out = Image.new("RGBA", (W, H), (0x1C, 0x1C, 0x24, 255))
     d = ImageDraw.Draw(out)
     y = pad
     label(d, pad, y, "1x (release art size; the game shows it at half size on a 2x screen)")
-    label(d, pad + sc.size[0] + pad, y, "icons in a UI panel (3x)")
+    label(d, pad + sc.size[0] + pad, y, "icons in a UI panel #20242c (3x)")
     y += 16
     out.alpha_composite(sc, (pad, y))
     out.alpha_composite(ui, (pad + sc.size[0] + pad, y))
@@ -220,6 +241,10 @@ def main(samples):
     y += 16
     out.alpha_composite(sc3, (pad, y))
     y += sc3.size[1] + pad
+    label(d, pad, y, "on snow (mount.snow), 3x: effects and lit objects must read on light ground too")
+    y += 16
+    out.alpha_composite(snow, (pad, y))
+    y += snow.size[1] + pad
     label(d, pad, y, "placeholder (docs/art-kit, left) vs sample (right), 3x")
     y += 16
     out.alpha_composite(cmp_, (pad, y))
