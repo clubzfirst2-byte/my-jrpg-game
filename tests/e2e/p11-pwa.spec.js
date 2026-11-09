@@ -10,7 +10,8 @@ test('manifest and icons for the home screen', async ({ page, request }) => {
   await page.goto('/');
   const href = await page.locator('link[rel="manifest"]').getAttribute('href');
   const m = await (await request.get(new URL(href, page.url()).href)).json();
-  expect(m.name).toContain('星脈のワイルズ');
+  expect(m.name).toBe('星環のレガリア');
+  expect(m.short_name).toBe('星環のレガリア');
   expect(m.display).toBe('fullscreen');
   expect(m.orientation).toBe('landscape');
   expect(m.start_url).toBe('./');
