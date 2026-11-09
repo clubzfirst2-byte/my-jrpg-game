@@ -29,6 +29,7 @@ GROUPS = [
     ("furniture", ["obj.lowwall", "obj.bed", "obj.table", "obj.shelf", "obj.charm_shelf", "obj.charm_shelf.on",
                    "obj.counter", "obj.stove", "obj.barrel", "obj.mat", "obj.anvil"]),
     ("props", ["obj.chest.closed", "obj.chest.open", "obj.jar", "obj.crate", "obj.campfire.0", "obj.campfire.1",
+               "obj.star_ring.off", "obj.star_ring.on",
                ]),
     ("puzzle / ruin", ["obj.checkpoint.off", "obj.checkpoint.on", "obj.brazier.0", "obj.brazier.1", "obj.crystal",
                        "obj.receiver.off", "obj.receiver.on", "obj.sconce.off", "obj.sconce.on", "obj.stone.off",
