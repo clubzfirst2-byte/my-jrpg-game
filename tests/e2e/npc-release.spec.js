@@ -4,6 +4,8 @@ import { waitTicks } from './ticks.js';
 // NPC batch 1 (docs/npc/NPC_RELEASE_PLAN.md): the elder, the merchant and the guard drawn from their
 // release art (src/art-release/npc/) beside the release hero; every other villager keeps the
 // placeholder; walking, turning to talk, the shop and the draw order work as before.
+// The art overrides count the hero's 248 frames and the villagers' 360 (batches 1–3: 9 villagers ×
+// 40; batch 3 adds the princess and the traveller, who are not placed in the village yet).
 
 const api = (page, fn, ...args) => page.evaluate(([f, a]) => window.__debugApi[f](...a), [fn, args]);
 
@@ -35,7 +37,7 @@ test('all five villagers (batch 1: elder, merchant, guard; batch 2: cook, child)
     if (m.text().startsWith('art:')) warnings.push(m.text());
   });
   const errors = await open(page);
-  expect(await api(page, 'art')).toMatchObject({ density: 2, overrides: 248 + 280, hero: { w: 16, h: 28 } });
+  expect(await api(page, 'art')).toMatchObject({ density: 2, overrides: 248 + 360, hero: { w: 16, h: 28 } });
   for (const id of ['elder', 'guard', 'merchant', 'cook', 'child']) {
     await api(page, 'standBy', id);
     await waitTicks(page, 10);
@@ -120,7 +122,7 @@ test('?npc=placeholder keeps the placeholder villagers; normal play shows the re
   // normal play (no ?hero, since PR #43): the release hero and the release villagers together
   const page2 = await page.context().newPage();
   await open(page2, '');
-  expect(await api(page2, 'art')).toMatchObject({ density: 2, overrides: 248 + 280 });
+  expect(await api(page2, 'art')).toMatchObject({ density: 2, overrides: 248 + 360 });
   await api(page2, 'standBy', 'elder');
   await waitTicks(page2, 10);
   expect((await sprite(page2, 'elder')).key).toMatch(/^npc\.elder\./);
@@ -131,7 +133,7 @@ test('?npc=placeholder keeps the placeholder villagers; normal play shows the re
   // the villagers' release art alone (without the hero's) can be asked for
   const page3 = await page.context().newPage();
   await open(page3, '&hero=placeholder&npc=release');
-  expect(await api(page3, 'art')).toMatchObject({ density: 2, overrides: 280 });
+  expect(await api(page3, 'art')).toMatchObject({ density: 2, overrides: 360 });
 });
 
 test('iPhone landscape: the three villagers and the hero together on screen', async ({ page }, testInfo) => {
@@ -170,7 +172,7 @@ test('batch 2: the woman and the smith (not in the village yet) stand, walk and 
 
 test('?npc=revision shows batch 1 with the review\'s fixes (a separate set); without it, the approved frames', async ({ page }) => {
   await open(page, '&hero=release&npc=revision');
-  expect((await api(page, 'art')).overrides).toBe(248 + 280);
+  expect((await api(page, 'art')).overrides).toBe(248 + 360);
   await api(page, 'standBy', 'guard');
   await waitTicks(page, 10);
   expect((await sprite(page, 'guard')).key).toMatch(/^npc\.guard\./);
@@ -187,7 +189,7 @@ test('?npc=revision shows batch 1 with the review\'s fixes (a separate set); wit
 
 test('?npc=revision-b2 shows the batch 2 fixes (woman, child, smith); the cook and batch 1 as submitted', async ({ page }) => {
   await open(page, '&hero=release&npc=revision-b2');
-  expect((await api(page, 'art')).overrides).toBe(248 + 280);
+  expect((await api(page, 'art')).overrides).toBe(248 + 360);
   await api(page, 'standBy', 'child');
   await waitTicks(page, 10);
   expect((await sprite(page, 'child')).key).toMatch(/^npc\.child\./);

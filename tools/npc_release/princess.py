@@ -9,11 +9,18 @@ Long silver hair to the waist (cool blue shadows), straight-cut bangs parted in 
 braid on each side hanging in front of the shoulders; dawn-sky eyes (deep indigo at the top, sky blue
 at the bottom, a star-shaped shine), the outer corners a little raised; a small smile. A star-ring
 circlet: a thin gold band round the head with the hero's stone at the front (the same blue
-four-pointed star in gold as his pendant). A white knee-length travelling dress with a blue border at the hem, white stockings,
+four-pointed star in gold as his pendant), set in a small gold ring (the star ring) rather than
+hanging from the band. A white knee-length travelling dress with a blue border at the hem, white stockings,
 soft brown boots; a deep star-blue short cape with a gold rim and a small gold star clasp (to the
-chest in front, above the waist at the back); a blue sash with gold star veins. Nothing in her hands:
-she holds them together in front of her (her bearing, not a weapon). A thin gold bracelet on her
-LEFT wrist, so facing left and facing right are drawn apart.
+chest in front, above the waist at the back), lit at the top left with a few folds; a blue sash
+with gold star veins. Nothing in her hands: she holds them together in front of her (her bearing,
+not a weapon). A thin gold bracelet on her LEFT wrist: facing left is facing right mirrored (she is
+symmetrical: two braids, the hands together) with the bracelet on the near wrist; facing right it
+is on the far wrist, hidden behind the near hand.
+
+Revision 1 (the review of 2026-11-09): from the front the long hair falls behind and past the
+shoulders to the waist (behind_front); from behind and the side it ends at the waist (not near the
+knee) in locks with a sheen and dark partings; the cape has lit faces and folds.
 
 Map characters (one per pixel; see npc_common):
   0-4 hair (silver)   a-d skin 1-4   e lash  o i iris (indigo)  j u iris (sky)  k star shine  l eye white
@@ -79,21 +86,21 @@ HEAD_BACK = half("""
 .....23434433212
 .....23433432122
 ....2343QRRRRRRR
-....234334321233
-....234443432344
-....234334321233
-....233432331232
-....233432321232
-....233322321222
-....232322321222
-....232321221221
-....232221221221
-....232221221211
-....222211221211
-....222211121111
-....221111121111
-.....21111111111
-.....2111.1111.1
+....234223322332
+....234223422332
+....233213421342
+....233213321342
+....233213321332
+....233213321332
+....233213321332
+....233213321332
+....233213321332
+....232213221322
+....232213221322
+....232213221322
+....122112211221
+....122112211221
+.....22112211221
 """)
 
 # facing right: the face on the right, the hair falling behind on the left
@@ -108,33 +115,33 @@ HEAD_SIDE = rows_of("""
 ..23433333QRRRRRRRRRRSR
 ..2343323323233233233322
 ..23443443443332332332332
-..23433233233232332bc2332
-..233332332323bcccc12212
-..233322322323bccccnnncc
-..233322322323bccceccccc
-..233322322323bcccceeeecc
-..232322322322bccccoiklccd
-...3232232232bcccccijucccdd
-...322223222bcccccccjjccccb
-...322223222bccccccccrrccb
-...32222322bacccccccccccmc
-....222222211aaccccccccb
-....2222221111aabbbbbb
-....2222221111..aab
+..23441334133232332bc2332
+..234413341322bcccc12212
+..234313341322bccccnnncc
+..233313341322bccceccccc
+..233313321322bcccceeeecc
+..233313321322bccccoiklccd
+...3321332122bcccccijucccdd
+...332133212bcccccccjjccccb
+...322133212bccccccccrrccb
+...32213321bacccccccccccmc
+....221222111aaccccccccb
+....2212221111aabbbbbb
+....2212221111..aab
 """)
 
 # ------------------------------------------------------------------ body (rows from body_top = 24)
 
 BODY_FRONT = half("""
 .............aab
-..........LMMNCD
-........LMNNMMMM
-.......LMNNMMMMM
-......LMNNMMMMMM
-......LMNMMMMMLM
-......LMNMMMMLMM
-......LMMMMMLMMM
-......QRSRMMMMMM
+..........LNNNCD
+........LNOONMMM
+.......LNOONMMNM
+......LMNNMMMNLM
+......LMNMMMNLMM
+......LMNMMNLMMM
+......LMMMMNLMMM
+......QRSRMNLMMM
 .........QRSRRMM
 ..........BCDQRS
 ..........UVWXXX
@@ -153,15 +160,15 @@ BODY_FRONT = half("""
 
 BODY_BACK = half("""
 ................
-..........LMMMMM
-........LMNNMMMM
-.......LMNNMMMMM
-......LMNNMMMMMM
-......LMNMMMMMMM
-......LMNMMMMMMM
-......LMMMMMMMML
-......LMMMMMMMLM
-......LMMMMMMLMM
+..........LNNNNM
+........LNOONNMM
+.......LNOONMMMM
+......LMNNMMMNLM
+......LMNMMMNLMM
+......LMNMMMNLMM
+......LMMMMNLMMM
+......LMMMNLMMNL
+......LMMNLMMMNL
 ......QRRSRRRRRR
 .........BCDCCCC
 ..........UVWXXX
@@ -213,6 +220,17 @@ def star(c, x, y, glint):
     c.put(x + (0, 1, 2)[glint], y + 2, "gem", 4)
 
 
+RING = ((12, 8, 2), (12, 9, 2), (12, 10, 1), (13, 7, 2), (14, 6, 3), (15, 6, 3), (16, 6, 2), (17, 7, 2),
+        (18, 8, 1), (18, 9, 1), (18, 10, 1), (13, 11, 1), (14, 12, 1), (15, 12, 1), (16, 12, 1), (17, 11, 1))
+
+
+def ring(c, cx, cy):
+    """The star ring (星環) round the stone: a thin gold ring set in the circlet, lit at the top left.
+    The stone sits in the ring like a compass star, not hanging from the band as a drop."""
+    for x, y, tone in RING:
+        c.put(cx - 15 + x, cy - 9 + y, "gold", tone)
+
+
 class Princess(Villager):
     id = "princess"
     ramps = RAMPS
@@ -252,7 +270,13 @@ class Princess(Villager):
 
     # the long hair from the front: (column, first row, last row, tone) for the left side; the
     # right side is its mirror, a tone darker (the light is from the top left)
-    FLANK = ((3, 23, 33, 2), (4, 20, 39, 3), (5, 20, 41, 3), (6, 20, 37, 2), (7, 20, 27, 1))
+    FLANK = ((3, 22, 34, 2), (4, 20, 37, 3), (5, 20, 38, 3), (6, 20, 36, 2), (7, 20, 27, 1))
+
+    def behind_front(self, c, p, b, up, back):
+        if back:
+            self.hair_flank_back(c, p, b, up)
+        else:
+            self.hair_behind_front(c, p, b, up, back)
 
     def hair_behind_front(self, c, p, b, up, back):
         """The long hair: down both sides behind the shoulders to the waist, framing her; the tips
@@ -262,25 +286,43 @@ class Princess(Villager):
             for y in range(y0, y1 + 1):
                 lag = round(p.sway * max(0, y - 31) / 9)
                 tt = tone if y < y1 - 1 else max(1, tone - 1)
+                if x == 6 and y >= 29:
+                    tt = 1  # the shadow where the hair falls behind the sleeve
+                if x == 5 and y >= 31 and y < y1 - 1:
+                    tt = 2  # two locks: the outer one lit, the inner one in shadow
                 if y in (26, 27) and x == 4:
                     tt = 4  # the sheen where the hair turns over the shoulder
                 c.put(x - lag, y + t, "hair", tt)
                 c.put(31 - x + lag, y + t, "hair", tt - 1 if tt >= 3 else tt)
 
+    # the locks below the cape from behind: (column, last row, tone); the three locks of the head map
+    # (lit on their left, a dark parting between them) come out under the cape and end at the waist
+    FALL = ((9, 36, 3), (10, 37, 3), (11, 37, 2), (12, 36, 1), (13, 37, 3), (14, 38, 4), (15, 38, 2),
+            (16, 38, 2), (17, 38, 2), (18, 37, 2), (19, 36, 1), (20, 37, 2), (21, 37, 2), (22, 36, 1))
+
     def hair_fall_back(self, c, p, t):
         """From behind: the cape's blue band crosses the hair (design: the hair runs under the short
-        cape); below its gold rim the hair comes out again and ends in uneven tips at the waist."""
-        tips = (39, 41, 42, 41, 43, 42, 43, 43, 42, 43, 41, 42)  # the last row of columns 10..21
-        for x in range(10, 22):
-            for y in range(35, tips[x - 10] + 1):
-                lag = round(p.sway * max(0, y - 35) / 5)
-                k = (x - 10) % 3
-                tone = (3, 2, 2)[k] if x < 16 else (2, 2, 1)[k]
-                if x == 21:
-                    tone = 1
-                if y >= tips[x - 10] - 1:
-                    tone = 1 if k == 2 else 2
-                c.put(x - lag, y + t, "hair", tone)
+        cape); below its gold rim the hair comes out again in three locks and ends in uneven tips at
+        the waist, so the sash and the white skirt show below it."""
+        for x, last, tone in self.FALL:
+            for y in range(35, last + 1):
+                lag = round(p.sway * max(0, y - 35) / 3)
+                tt = tone if y < last else max(1, min(tone, 3) - 1)
+                if tone == 4 and y > 35:
+                    tt = 3 if y < last else 2
+                c.put(x - lag, y + t, "hair", tt)
+
+    # from behind the long hair also falls at both sides of the cape, to the waist
+    BACK_FLANK = ((3, 25, 32, 2), (4, 24, 35, 3), (5, 24, 34, 2))
+
+    def hair_flank_back(self, c, p, b, up):
+        t = b + up
+        for x, y0, y1, tone in self.BACK_FLANK:
+            for y in range(y0, y1 + 1):
+                lag = round(p.sway * max(0, y - 30) / 5)
+                tt = tone if y < y1 else 1
+                c.put(x - lag, y + t, "hair", tt)
+                c.put(31 - x + lag, y + t, "hair", max(1, tt - 1) if tt >= 3 else min(tt, 2) if tt > 1 else 1)
 
     def arms_front(self, c, p, b, up, back):
         """The sleeves come out from under the cape; the hands are held together in front, at the top
@@ -348,6 +390,7 @@ class Princess(Villager):
             self.braid(c, self.braid_path(5, top + 12, 18, 3, -sw))
             right = [(30 - x, y) for x, y in self.braid_path(5, top + 12, 18, 3, sw)]
             self.braid(c, right, far=True)
+            ring(c, 15, top + 7)
             star(c, 14, top + 5, p.glint)
             if not p.blink:  # the right eye as the left (not its mirror): both shine on the light's side
                 for dy, row in ((14, "oikl"), (15, "ijuj"), (16, ".jj.")):
@@ -414,8 +457,8 @@ class Princess(Villager):
         return shift
 
     # the long hair down her back, facing right: (row, left, right) edges; it trails when she walks
-    BACK_HAIR = ((24, 4, 11), (26, 4, 10), (28, 5, 10), (30, 6, 10), (32, 6, 10), (34, 7, 10), (36, 7, 10),
-                 (38, 8, 10), (40, 8, 9), (42, 9, 9))
+    BACK_HAIR = ((24, 4, 11), (26, 4, 10), (28, 5, 10), (30, 6, 10), (32, 6, 10), (34, 7, 10), (36, 8, 10),
+                 (38, 9, 9))
 
     def back_hair_side(self, c, p, b, up):
         t = b + up
@@ -424,15 +467,21 @@ class Princess(Villager):
             for y in range(ya, yb):
                 f = (y - ya) / (yb - ya)
                 edges[y] = (round(la + (lb - la) * f), round(ra + (rb - ra) * f))
-        edges[42] = (9, 9)
+        edges[38] = (9, 9)
         for y, (l, r) in edges.items():
-            lag = round(p.sway * max(0, y - 30) / 8)
+            lag = round(p.sway * max(0, y - 30) / 6)
             for x in range(l, r + 1):
                 k = x - l
-                tone = 3 if k == 1 else 2
-                if x == r:
+                # the head's locks go on down the back: the outer one lit on its edge (a sheen over
+                # the shoulder blade), a dark parting, the inner ones against the cape in shadow
+                tone = 3 if k in (1, 3) else 2
+                if k == 1 and 27 <= y <= 29:
+                    tone = 4
+                if (k == 2 and r - l >= 3) or (x == r - 1 and r - l >= 6):
                     tone = 1
-                if y >= 39:
+                if x == r:
+                    tone = 1 if y < 30 else 2
+                if y >= 36:
                     tone = 2 if k == 0 else 1
                 c.put(x - lag, y + t, "hair", tone)
 

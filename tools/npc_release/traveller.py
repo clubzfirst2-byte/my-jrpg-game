@@ -13,6 +13,12 @@ held upright at the side in the right hand, a water gourd tied near its top (unl
 staff, held out in front). The stick, the scarf's end and the gourd are one-sided, so facing left is
 drawn on its own.
 
+Revision 1 (the review of 2026-11-09): from the front only the bedroll's small ends show, above the
+shoulders behind the neck, with the pack's straps over the shoulders (they read as shoulder pads
+before); the skin a tone lighter and the hat's shadow on the one row under the brim (the face was
+the darkest of the villagers); the cheek lines joined into short lines (no scattered dots); the
+stick stands still when they stand and is planted, passed, lifted and set down when they walk.
+
 Map characters (one per pixel; see npc_common):
   0-4 hair (grey)   a-d skin 1-4   e eye line  o iris (grey-green)  l lines (wrinkles)  m mouth
   A-E coat (dull brown) 0-4   K-O jacket (grey) 0-4   P-T hat 0-4   F-J scarf (crimson) 0-4
@@ -22,7 +28,7 @@ Map characters (one per pixel; see npc_common):
 from npc_common import Npc, Pose, capsule, gait, half, legend, rows_of, stamp
 
 RAMPS = {
-    "skin": ["#4a2616", "#9a5c3a", "#c4865c", "#d8a076", "#ecbe94"],
+    "skin": ["#5a2e1c", "#bc7c56", "#daa47a", "#ecbc92", "#f8d2aa"],
     "hair": ["#34343c", "#6e6e78", "#9c9ca4", "#c2c2c8", "#e6e6ea"],
     "hat": ["#16140e", "#363226", "#524c3a", "#6e6850", "#8c866a"],
     "coat": ["#241e16", "#4c4030", "#6a5a44", "#86745c", "#a49278"],
@@ -55,15 +61,15 @@ HEAD_FRONT = half("""
 ....QRRSSSSSRRRR
 ..PQQQQQQRRRRRRR
 ...PPPPP11aaaaaa
-........23abbbbb
-........34bccccc
+........23bcdddd
+........34bcccdd
 ........23b333cc
 ........2bbeoecc
-........2bclcccc
-.........abccccc
+........2bcdcccc
+.........abldccc
 ..........blcccc
-..........blclcc
-...........ablmm
+..........blcccc
+...........abbmm
 ............abbb
 .............aaa
 """)
@@ -101,11 +107,11 @@ HEAD_SIDE = rows_of("""
 ....QRRSSSSSSRRRRRRRR
 ...PQQQQQQQQRRRRRRRRRQ
 .....PPP234PPaaaaaaPPP
-........3432bbcccccc
+........3432bccccccc
 ........2342bcc22bcc
 .........232bcbeocccd
-.........232bcblccccdd
-.........232bbcccccccc
+.........232bcbcccccdd
+.........232bblccccccc
 ..........22bclccccbc
 ...........2abclcccmm
 ............abcccccc
@@ -216,11 +222,24 @@ BODY_SIDE = rows_of("""
 """)
 
 
-def stick(c, x, top, ground=55, tone=None):
-    """The walking stick: straight, a knot at the top; the water gourd hangs from a cord below it."""
+def stick(c, x, top, ground=55, tone=None, tip=None):
+    """The walking stick: straight, a knot at the top; the water gourd hangs from a cord below it.
+    tip: the x of its foot when it leans (the top at x, the foot at tip)."""
+    tip = x if tip is None else tip
     for y in range(top, ground + 1):
-        c.put(x, y, "wood", tone if tone is not None else (3 if y % 6 == 0 else 2))
+        sx = round(x + (tip - x) * (y - top) / max(1, ground - top))
+        c.put(sx, y, "wood", tone if tone is not None else (3 if y % 6 == 0 else 2))
     c.put(x, top - 1, "wood", 1 if tone is not None else 3)
+
+
+def lean_x(x, top, ground, tip, y):
+    """Where a leaning stick is at row y."""
+    return round(x + (tip - x) * (y - top) / max(1, ground - top))
+
+
+# walking, the stick is planted and the walker passes it, then it is lifted and swung ahead:
+# per walk frame (top x offset, foot x offset, lift) facing right; front / back use the lift only
+STICK_WALK = ((0, 1, 0), (0, 0, 0), (1, -1, 0), (1, -2, 0), (1, 0, 2), (1, 1, 1))
 
 
 def gourd(c, x, y, side, tone=None, swing=0):
@@ -248,8 +267,11 @@ class Traveller(Npc):
     def pose(self, action, i):
         if action == "idle":
             # breathing; the scarf's end stirs; the hand on the stick shifts its grip on the 3rd frame
-            return Pose(breath=(0, 1, 1, 0)[i], sway=(0, 1, 0, -1)[i], blink=i == 3, glint=(0, 1, 2, 1)[i], prop=(0, 0, 1, 0)[i])
-        return gait(i, 6, **self.walk_gait)
+            return Pose(breath=(0, 1, 1, 0)[i], sway=(0, 1, 0, -1)[i], blink=i == 3, glint=(0, 1, 2, 1)[i], prop=(0, 0, 1, 0)[i],
+                        staff=(0, 0, 0))
+        p = gait(i, 6, **self.walk_gait)
+        p.staff = STICK_WALK[i]
+        return p
 
     # -------------------------------------------------------------- front / back
     def legs_front(self, c, p, b, back):
@@ -265,8 +287,21 @@ class Traveller(Npc):
                 c.put(x0 + 1, y - 2, "boot", 3)
 
     def bedroll_front(self, c, t, back):
-        """The bedroll across the top of the pack, behind the neck: its rolled ends (spirals) stick
-        out past the shoulders. From behind the pack shows under it."""
+        """The bedroll across the top of the pack. From behind it lies over the pack, its rolled ends
+        (spirals) past the shoulders. From the front only its ends show, small, behind the neck and
+        above the shoulders (tucked under the hat's brim), with the pack's straps over the shoulders."""
+        if not back:
+            y = 14 + t
+            c.rect(7, y, 24, y + 2, "bedroll", 1)
+            for x, d in ((5, 1), (26, -1)):  # the roll's ends: a light ring round a dark middle
+                x0, x1 = min(x, x + 2 * d), max(x, x + 2 * d)
+                c.rect(x0, y, x1, y + 2, "bedroll", 2 if d > 0 else 1)
+                c.put(x0, y, "bedroll", 4 if d > 0 else 3)
+                c.put(x0 + 1, y, "bedroll", 3 if d > 0 else 2)
+                c.put(x0, y + 1, "bedroll", 3 if d > 0 else 2)
+                c.put(x0 + 1, y + 1, "bedroll", 0)  # the spiral's core
+                c.put(x1, y + 2, "bedroll", 1)
+            return
         y = 16 + t
         c.rect(5, y, 26, y + 3, "bedroll")
         c.line(6, y, 25, y, "bedroll", 3)
@@ -311,10 +346,17 @@ class Traveller(Npc):
         stamp(c, BODY_BACK if back else BODY_FRONT, 0, BODY_TOP, LEG, mirrored=True, shift=shift)
         if back:
             self.bedroll_front(c, t, back)
+        else:  # the pack's straps come over the shoulders: it is carried on the back
+            for x, tone in ((8, 2), (23, 1)):
+                c.line(x, 20 + t, x + (1 if x < 16 else -1), 22 + t, "pack", tone)
+                c.line(x + (1 if x < 16 else -1), 23 + t, x + (1 if x < 16 else -1), 27 + t, "pack", tone)
         # the arms: the right (image left in front) holds the stick at its side; the left hangs and swings
         stick_side = 0 if not back else 1  # 0: image left
-        sx = (4 if stick_side == 0 else 27) + max(0, p.prop) * (1 if stick_side == 0 else -1) // 2
-        hand_y = 33 + t - (1 if p.prop > 0 and not self.walking else 0)
+        # the stick stands still when they stand (only the hand shifts its grip); walking it is
+        # planted, then lifted and set down again
+        sx = 4 if stick_side == 0 else 27
+        lift = p.staff[2]
+        hand_y = 33 + t - lift - (1 if p.prop > 0 and not self.walking else 0)
         for side in (0, 1):
             holds = side == stick_side
             far = side == (1 if not back else 0)
@@ -336,12 +378,12 @@ class Traveller(Npc):
                 c.line(hx - 1, hy - 2, hx + 1, hy - 2, "coat", 1)
                 c.rect(hx - 1, hy - 1, hx + 1, hy, "skin", 1 if far else 2)
                 c.put(hx, hy + 1, "skin", 1 if far else 2)
-        stick(c, sx, 3 + t, tone=None)
+        stick(c, sx, 3 + t - lift, ground=55 - lift, tone=None)
         hx, hy = self.hand
         c.rect(sx - 1, hy - 1, sx + 1, hy + 1, "skin", 2)
         c.put(sx - 1, hy - 1, "skin", 3)
         c.put(sx + 1, hy + 1, "skin", 1)
-        gourd(c, sx, 10 + t, -1 if stick_side == 0 else 1, swing=0)
+        gourd(c, sx, 10 + t - lift, -1 if stick_side == 0 else 1, swing=0)
         stamp(c, HEAD_BACK if back else HEAD_FRONT, 0, HEAD_TOP + t, LEG, mirrored=True)
         if back:
             self.tail_back(c, p, t)
@@ -417,9 +459,15 @@ class Traveller(Npc):
             if tone is None:
                 c.put(int(ax) + 1, ay, "boot", 3)
 
-        # the stick: in the right hand, planted ahead; it moves forward as the step goes on
-        stick_x = 24 + ((1 if p.prop > 0 else 0) + (1 if p.prop > 1 else 0) if self.walking else 0)
-        hand = (stick_x - 1, 32 + t - (1 if p.prop > 0 and not self.walking else 0))
+        # the stick in the right hand: walking it is planted ahead, the walker passes it (it leans
+        # forward, its foot stays on the ground), then it is lifted and swung ahead (STICK_WALK)
+        top_dx, tip_dx, lift = p.staff
+        s_top, s_ground = 3 + t - lift, 55 - lift
+        stick_x = 24 + top_dx
+        tip_x = 24 + tip_dx
+        hand_y = 32 + t - lift - (1 if p.prop > 0 and not self.walking else 0)
+        hand_x = lean_x(stick_x, s_top, s_ground, tip_x, hand_y)  # where the hand holds it
+        hand = (hand_x - 1, hand_y)
         sh = (17, 22 + t)
 
         def arm_stick(far):
@@ -431,9 +479,9 @@ class Traveller(Npc):
 
         def hand_on_stick(far):
             tone = 1 if far else 2
-            c.rect(stick_x - 1, hand[1] - 1, stick_x + 1, hand[1] + 1, "skin", tone)
+            c.rect(hand_x - 1, hand[1] - 1, hand_x + 1, hand[1] + 1, "skin", tone)
             if not far:
-                c.put(stick_x - 1, hand[1] - 1, "skin", 3)
+                c.put(hand_x - 1, hand[1] - 1, "skin", 3)
 
         def arm_free(swing, far):
             tone = 1 if far else None
@@ -447,8 +495,8 @@ class Traveller(Npc):
         # far side
         leg(p.far[0], p.far[1], 1)
         if swap:  # facing left: the stick and its hand are on the far side
-            stick(c, stick_x, 3 + t, tone=1)
-            gourd(c, stick_x, 10 + t, 1, tone=1)
+            stick(c, stick_x, s_top, ground=s_ground, tone=1, tip=tip_x)
+            gourd(c, stick_x, s_top + 7, 1, tone=1)
             arm_stick(True)
             hand_on_stick(True)
         else:
@@ -473,8 +521,8 @@ class Traveller(Npc):
                 c.put(x, top + 11, "skin", 2)
                 c.paint(x, top + 11, INK["e"])
         if not swap:
-            stick(c, stick_x, 3 + t)
-            gourd(c, stick_x, 10 + t, 1)
+            stick(c, stick_x, s_top, ground=s_ground, tip=tip_x)
+            gourd(c, stick_x, s_top + 7, 1)
             arm_stick(False)
             hand_on_stick(False)
             self.scarf_end_side(c, p, t)
