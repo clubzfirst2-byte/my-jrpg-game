@@ -52,6 +52,13 @@ export const objectsReleaseGroups = (params, art) => (wantsObjectsArt(params, ar
 /** The item icon keys the game draws (icon.*). */
 export const ICON_KEYS = Object.freeze(Object.keys(itemIcons()));
 
+/**
+ * Sharp pixels for the menu icons: `pixelated` where it is known, with the older spellings first for
+ * Safari before 17 / WebKit (`-webkit-optimize-contrast`) and others (`crisp-edges`), each later
+ * declaration winning where the browser understands it.
+ */
+export const PIXELATED = 'image-rendering:-webkit-optimize-contrast;image-rendering:crisp-edges;image-rendering:pixelated;';
+
 /** Icon size in the menus, CSS px (the art's own 20×20: crisp at any device pixel ratio). */
 const ICON_CSS_PX = 20;
 
@@ -95,11 +102,11 @@ export function iconBackground(key, src, rows) {
  */
 export function installItemIcons(overrides, doc = document) {
   const icons = itemIcons();
-  const rules = [`.item-icon{display:inline-block;flex:none;width:${ICON_CSS_PX}px;height:${ICON_CSS_PX}px;vertical-align:middle;image-rendering:pixelated;}`];
+  const rules = [`.item-icon{display:inline-block;flex:none;width:${ICON_CSS_PX}px;height:${ICON_CSS_PX}px;vertical-align:middle;${PIXELATED}}`];
   const used = [];
   for (const key of ICON_KEYS) {
     const src = overrides.get(key);
-    rules.push(`.item-icon[data-icon="${key}"]{background:${iconBackground(key, src, icons[key])};image-rendering:pixelated;}`);
+    rules.push(`.item-icon[data-icon="${key}"]{background:${iconBackground(key, src, icons[key])};${PIXELATED}}`);
     used.push({ key, release: !!src });
   }
   let style = /** @type {HTMLStyleElement | null} */ (doc.getElementById('item-icons'));

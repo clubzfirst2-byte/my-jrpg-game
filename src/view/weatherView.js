@@ -84,6 +84,13 @@ export function createLightMap() {
  */
 export const starRingOpen = (state) => (!!state.progress.flags.source_open && !state.progress.flags.ending_seen) || !!openingView(state)?.flash;
 
+/**
+ * The shock crystal's night light: the placeholder's cyan, or with the release art (a pale-yellow
+ * crystal) the shock ramp's 3rd step #eeea88, the colour of its lit faces (v1.0).
+ * @param {import('pixi.js').Texture} tex the crystal's texture in use
+ */
+export const crystalLightColor = (tex) => (tex.source.resolution >= 2 ? 0xeeea88 : 0x60d8ff);
+
 /** The lit ring's light: the hero's gem blue, about the size of the ring's glow (v1.0). */
 export const STAR_RING_LIGHT = Object.freeze({ radius: 40, color: 0x7fe8ff });
 
@@ -97,6 +104,8 @@ export class WeatherView {
     this.app = app;
     this.renderer = app.renderer;
     this.makeSprite = makeSprite;
+    /** The shock crystals' light colour (crystalLightColor; set by the game view from the art in use). */
+    this.crystalLight = 0x60d8ff;
     // Light map.
     this.lightTex = lightTexture();
     this.lightScene = new Container();
@@ -277,7 +286,7 @@ export class WeatherView {
       else if (ob.type === 'stove') add(x, y - 4, 40 * flicker(i), 0xffa860);
       else if (ob.type === 'stone' && ob.glow) add(x, y - 8, 30, 0x7fe8ff);
       else if (ob.type === 'pillar' || ob.type === 'altar') add(x, y - 10, 30, 0x7fe8ff);
-      else if (ob.type === 'crystal') add(x, y - 8, 26, 0x60d8ff);
+      else if (ob.type === 'crystal') add(x, y - 8, 26, this.crystalLight);
       else if (ob.type === 'receiver' && ob.on) add(x, y - 8, 22, 0x60d8ff);
       else if (ob.type === 'star_ring' && ringOpen) add(x, y - 12, STAR_RING_LIGHT.radius, STAR_RING_LIGHT.color);
     }

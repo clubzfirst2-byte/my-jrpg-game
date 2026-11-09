@@ -20,7 +20,7 @@ import { areaAt } from '../game/world/features.js';
 import { sourceFrameKey, drawSourceTelegraphs, drawSeatLights } from './sourceView.js';
 import { FeatureView } from './featureView.js';
 import { EnvView } from './envView.js';
-import { WeatherView, starRingOpen } from './weatherView.js';
+import { WeatherView, starRingOpen, crystalLightColor } from './weatherView.js';
 import { ItemView } from './itemView.js';
 import { PuzzleView } from './puzzleView.js';
 import { NpcView } from './npcView.js';
@@ -172,6 +172,7 @@ export class GameView {
     );
     // Time of day and weather (P5): light map, rain, lightning, above the world.
     this.weather = new WeatherView(app, (key) => this.makeSprite(key), this.actors);
+    this.weather.crystalLight = crystalLightColor(assets.texture('obj.crystal'));
     this.weather.attach(app.stage, app.stage.getChildIndex(this.world) + 1);
     // (v1.0 attack warnings stay in the world, sorted with their enemy, so trees in front hide them;
     // at night the light map lights each winding-up enemy instead: weatherView.js warningLights.)

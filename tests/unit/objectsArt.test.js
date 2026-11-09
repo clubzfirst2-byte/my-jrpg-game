@@ -21,7 +21,7 @@ const covered = (k) => ART.has(k) || fallback.has(k);
 
 describe('objects release art: names → the game keys', () => {
   it('every release sprite is a key the game draws (no renaming needed)', () => {
-    expect(ART.size).toBe(64); // 62 + the beach ring's 2
+    expect(ART.size).toBe(66); // 62 + the beach ring's 2 + the v1.0 icons (star shard, charm)
     for (const k of ART) expect(KEYS.has(k), k).toBe(true);
   });
 
@@ -55,13 +55,17 @@ describe('objects release art: names → the game keys', () => {
 
   it('every item has an icon with release art (on the ground and in the menus)', () => {
     const items = JSON.parse(readFileSync(new URL('../../data/items.json', import.meta.url), 'utf8')).items;
-    expect(ICON_KEYS).toHaveLength(12);
+    expect(ICON_KEYS).toHaveLength(14);
     for (const k of ICON_KEYS) expect(ART.has(k), k).toBe(true);
     for (const it of items) expect(ART.has(iconFor(it.id)), it.id).toBe(true);
-    // key items: the star shard uses the crystal icon; the elder's charm has no fitting icon yet and
-    // keeps the type fallback (icon.food)
-    expect(iconFor('star_shard')).toBe('icon.shard');
-    expect(iconFor('lost_charm')).toBe('icon.food');
+    // key items have their own icons (v1.0), on the ground and in the menus
+    expect(iconFor('star_shard')).toBe('icon.star_shard');
+    expect(iconFor('lost_charm')).toBe('icon.charm');
+    // the star's drawing ends higher (row 14): its feet sit at row 16 like the other icons' (row 18 + 1 empty row)
+    const icons = placeholderEntries().filter((e) => e.key.startsWith('icon.'));
+    expect(icons).toHaveLength(14);
+    expect(icons.find((e) => e.key === 'icon.star_shard').anchor).toEqual([0.5, 0.8]);
+    for (const e of icons.filter((x) => x.key !== 'icon.star_shard')) expect(e.anchor, e.key).toEqual([0.5, 1]);
   });
 });
 
@@ -82,12 +86,18 @@ describe('objects release art: when it is loaded', () => {
 });
 
 describe('objects release art: whole art pixels', () => {
-  it('a burning tree draws its flames at 1.5x with the release art (3 canvas px per art px), 1.6x with the placeholder', async () => {
+  it('a burning tree draws its flames at a whole scale with the release art (2x), 1.6x with the placeholder', async () => {
     const { bigFireScale } = await import('../../src/view/envView.js');
-    expect(bigFireScale(/** @type {any} */ ({ source: { resolution: 2 } }))).toBe(1.5);
+    expect(bigFireScale(/** @type {any} */ ({ source: { resolution: 2 } }))).toBe(2);
     expect(bigFireScale(/** @type {any} */ ({ source: { resolution: 1 } }))).toBe(1.6);
-    // 24x28 art px at 1.5 on a 2-px-per-game-px canvas: every art px is 3 canvas px, the sprite 36x42
-    expect([1.5 * 24, 1.5 * 28].every(Number.isInteger)).toBe(true);
+    // art 2 px per game px, canvas 2 px per game px: at scale s one art px is s canvas px, so s must be
+    // a whole number (1.5 would give art pixels 1 and 2 canvas px wide in turn)
+    expect(Number.isInteger(bigFireScale(/** @type {any} */ ({ source: { resolution: 2 } })))).toBe(true);
+  });
+  it('the shock crystal lights the night in its own pale yellow with the release art, cyan with the placeholder', async () => {
+    const { crystalLightColor } = await import('../../src/view/weatherView.js');
+    expect(crystalLightColor(/** @type {any} */ ({ source: { resolution: 2 } }))).toBe(0xeeea88);
+    expect(crystalLightColor(/** @type {any} */ ({ source: { resolution: 1 } }))).toBe(0x60d8ff);
   });
 });
 

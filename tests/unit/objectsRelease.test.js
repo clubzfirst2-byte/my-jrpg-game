@@ -63,8 +63,6 @@ const SIZES = {
   'icon.star_shard': [20, 20], 'icon.charm': [20, 20],
 };
 const NAMES = Object.keys(SIZES).sort();
-// v1.0 icons the game asks for before they have a placeholder of their own (it falls back to icon.shard / icon.food)
-const NEW_ICONS = new Set(['icon.star_shard', 'icon.charm']);
 const CENTRE = new Set(['fx.slash', 'fx.shadow', 'fx.arrow', 'fx.orb', 'fx.shield', 'fx.bow', 'fx.smoke', 'fx.light', 'ui.marker']);
 
 describe('release objects (src/art-release/objects)', () => {
@@ -73,7 +71,7 @@ describe('release objects (src/art-release/objects)', () => {
     expect(files).toEqual(NAMES.map((n) => `${n}.png`).sort());
     expect(NAMES).toHaveLength(66); // 62 + the star ring (2) + the v1.0 icons (2)
     const keys = new Set([...placeholderEntries(), ...Object.values(REGION_ENTRIES).flatMap((f) => f())].map((e) => e.key));
-    for (const n of NAMES.filter((k) => !NEW_ICONS.has(k))) expect(keys.has(n), n).toBe(true);
+    for (const n of NAMES) expect(keys.has(n), n).toBe(true);
   });
 
   it('has each sprite at its release size (2x the placeholder; the house 96x112)', () => {
