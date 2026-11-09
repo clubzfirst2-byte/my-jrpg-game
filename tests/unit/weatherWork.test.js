@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Container, Sprite, Texture } from 'pixi.js';
 import { WeatherView } from '../../src/view/weatherView.js';
 import { CLOCK } from '../../src/game/env/weather.js';
@@ -6,10 +6,25 @@ import { CLOCK } from '../../src/game/env/weather.js';
 // v1.0 iPhone perf: at night in the rain the view must not redo work that did not change.
 // Counts what WeatherView does per frame with a fake renderer (no GPU in unit tests).
 
+/** A stand-in for the Pixi renderer: render() is counted; context restores and resizes can be fired. */
+function fakeRenderer(/** @type {any[]} */ renders) {
+  /** @type {any[]} */
+  const ctxListeners = [];
+  /** @type {Record<string, Function[]>} */
+  const events = {};
+  return {
+    render: (/** @type {any} */ o) => renders.push(o),
+    runners: { contextChange: { add: (/** @type {any} */ o) => ctxListeners.push(o) } },
+    on: (/** @type {string} */ name, /** @type {Function} */ fn) => (events[name] ||= []).push(fn),
+    restoreContext: () => ctxListeners.forEach((o) => o.contextChange({})),
+    emit: (/** @type {string} */ name) => (events[name] || []).forEach((fn) => fn()),
+  };
+}
+
 function setup({ hour = 23, weather = 'rain', objects = /** @type {[number, any][]} */ ([]) } = {}) {
   /** @type {any[]} */
   const renders = [];
-  const app = /** @type {any} */ ({ renderer: { render: (/** @type {any} */ o) => renders.push(o) }, screen: { width: 1024, height: 472 } });
+  const app = /** @type {any} */ ({ renderer: fakeRenderer(renders), screen: { width: 1024, height: 472 } });
   const view = new WeatherView(app, () => new Sprite(Texture.WHITE), new Container());
   view.lightTex = Texture.WHITE; // the radial texture needs a DOM canvas
   const W = 8;
@@ -26,7 +41,7 @@ function setup({ hour = 23, weather = 'rain', objects = /** @type {[number, any]
     t += dt;
     view.update(state, { x: 0, y: 0 }, 2, null, t, dt);
   };
-  return { view, state, renders, frame };
+  return { view, state, renders, frame, renderer: app.renderer };
 }
 
 describe('weather view work per frame', () => {
@@ -53,6 +68,41 @@ describe('weather view work per frame', () => {
     expect(renders).toHaveLength(4);
     frame();
     expect(renders).toHaveLength(4);
+  });
+
+  it('redraws a still night after the WebGL context is restored (iOS background) or the renderer resizes', () => {
+    const { renders, frame, renderer } = setup();
+    frame();
+    frame();
+    expect(renders).toHaveLength(1);
+    renderer.restoreContext(); // the light map texture is empty again
+    frame();
+    expect(renders).toHaveLength(2);
+    frame();
+    expect(renders).toHaveLength(2);
+    renderer.emit('resize');
+    frame();
+    expect(renders).toHaveLength(3);
+  });
+
+  it('redraws a still night when the page becomes visible again', () => {
+    /** @type {Function[]} */
+    const listeners = [];
+    const doc = { visibilityState: 'hidden', addEventListener: (/** @type {string} */ t, /** @type {Function} */ fn) => t === 'visibilitychange' && listeners.push(fn) };
+    vi.stubGlobal('document', doc);
+    try {
+      const { renders, frame } = setup();
+      frame();
+      listeners.forEach((fn) => fn()); // hidden: nothing to do
+      frame();
+      expect(renders).toHaveLength(1);
+      doc.visibilityState = 'visible';
+      listeners.forEach((fn) => fn());
+      frame();
+      expect(renders).toHaveLength(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('a flickering campfire in view redraws every frame (the flicker is kept)', () => {

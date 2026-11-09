@@ -155,6 +155,23 @@ export class WeatherView {
     this.rainDrops = 0;
     /** Work counters (unit tests and profiling): light map renders and skips, flash rebuilds. */
     this.stats = { lightRenders: 0, lightSkips: 0, flashRebuilds: 0 };
+    // The light map is redrawn only when its inputs change, but its pixels live on the GPU: when
+    // iOS drops the WebGL context (the app in the background) and Pixi restores it, the texture
+    // comes back empty while the hero may still be standing still. Redraw after a context restore,
+    // when the page becomes visible again and after the renderer is resized.
+    const r = /** @type {any} */ (this.renderer);
+    r.runners?.contextChange?.add({ contextChange: () => this.invalidateLightMap() });
+    r.on?.('resize', () => this.invalidateLightMap());
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') this.invalidateLightMap();
+      });
+    }
+  }
+
+  /** Forgets what the light map was drawn from, so the next update draws it again. */
+  invalidateLightMap() {
+    this.lastLightSig.length = 0;
   }
 
   /** Adds the screen-space layers in order: light map, rain, snow, bolt, flash. @param {Container} stage @param {number} index */

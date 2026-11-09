@@ -294,8 +294,9 @@ body {
 #ui #dash-button {
   right: calc(160px * var(--btn) + var(--safe-right));
   bottom: calc(104px * var(--btn) + var(--safe-bottom));
-  width: calc(48px * var(--btn));
-  height: calc(48px * var(--btn));
+  /* ≥ 44 pt at every button size (小 would be 40.8); at 小 it still clears 能力 above it by ~2 px */
+  width: max(44px, calc(48px * var(--btn)));
+  height: max(44px, calc(48px * var(--btn)));
   font-size: calc(12px * var(--btn));
   letter-spacing: -0.12em; /* 4 characters inside a 48 px circle */
 }
@@ -514,7 +515,9 @@ body {
   position: absolute;
   left: 50%;
   top: 100%;
-  width: min(560px, 86vw);
+  /* v1.0 (iPhone): narrow enough that the credits never pass under とばす (bottom right; its
+     right offset + width + a gap = 128 px), kept centred so both sides lose the same. */
+  width: min(560px, 86vw, calc(100% - 2 * (128px + max(var(--safe-left), var(--safe-right)))));
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
@@ -590,7 +593,7 @@ body {
 
 /* (zoomed, the roll keeps within a 667 px wide phone) */
 #ui.text-large .ending-roll {
-  width: min(460px, 70vw);
+  width: min(460px, 70vw, calc(100% - 2 * (128px + max(var(--safe-left), var(--safe-right)))));
 }
 
 @keyframes ending-in {
@@ -904,6 +907,37 @@ body {
   font-weight: bold;
   color: #ffd28a;
   white-space: nowrap;
+}
+
+/* v1.0 (iPhone): a list that scrolls shows there is more below it (src/ui/scrollCue.js): its
+   bottom edge fades out and a small ▼ sits there, both gone once the list is at its end. */
+.more-below > .inv-body {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), rgba(0, 0, 0, 0.25));
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), rgba(0, 0, 0, 0.25));
+}
+#inv-menu.more-below::after,
+#shop-menu.more-below::after {
+  content: '▼';
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: #8cc4ff;
+  text-shadow: 0 0 4px #000;
+  pointer-events: none;
+  animation: more-below-bob 1.4s ease-in-out infinite;
+}
+@keyframes more-below-bob {
+  50% {
+    transform: translate(-50%, 2px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #inv-menu.more-below::after,
+  #shop-menu.more-below::after {
+    animation: none;
+  }
 }
 
 /* P10.4: boss health */

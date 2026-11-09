@@ -58,6 +58,11 @@ for (const vp of VIEWPORTS) {
         expect(px, id).toBeGreaterThanOrEqual(12);
       }
 
+      // Button size 小: ダッシュ stays ≥ 44 (48 × 0.85 would be 40.8), the others are ≥ 44 already.
+      await page.evaluate(() => document.getElementById('ui')?.classList.add('btn-small'));
+      expect(await smallTargets(page)).toEqual([]);
+      await page.evaluate(() => document.getElementById('ui')?.classList.remove('btn-small'));
+
       // The pause screen.
       await page.click('#pause-button');
       await expect(page.locator('#pause-overlay')).toBeVisible();
