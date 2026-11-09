@@ -7,8 +7,10 @@ export const DEFAULT_TARGET_HEIGHT = 216;
 
 /**
  * Computes the internal render size for a viewport.
- * - Every game pixel becomes exactly `scale` x `scale` device pixels (crisp, even pixels).
- * - `scale` is chosen so the internal height is as close as possible to the target.
+ * - Every game pixel becomes exactly `scale` x `scale` device pixels (crisp, even game pixels).
+ * - `scale` is chosen so the visible height in game pixels is as close as possible to the target.
+ *   It does not depend on `artDensity`, so the release (HD) art shows exactly the same part of the
+ *   world as the placeholder art (docs/perf/hd-view-size.md).
  * - The internal size is then grown to cover the whole viewport (no black bars). The overshoot is
  *   less than one game pixel and is cropped evenly at the edges.
  * @param {number} cssWidth   viewport width in CSS px
@@ -17,27 +19,35 @@ export const DEFAULT_TARGET_HEIGHT = 216;
  * @param {number} targetHeight
  * @param {number} [artDensity] P11.5: art pixels per game pixel (2 for the real art in src/art:
  *   tiles 32×32, characters 32×56). The canvas then has that many pixels per game pixel and the
- *   camera zooms by the same factor, so the world keeps its size on screen and the finer art keeps
- *   every pixel. `targetHeight` stays in game pixels.
+ *   camera zooms by the same factor, so the finer art keeps every pixel. `targetHeight` stays in
+ *   game pixels. One canvas pixel covers `scale / artDensity` device pixels: an integer when `scale`
+ *   is even; when it is odd (e.g. 5) art pixels alternate 2 and 3 device pixels while game pixels
+ *   (tiles, positions) still land exactly on `scale` device pixels.
  */
 export function computeResolution(cssWidth, cssHeight, dpr, targetHeight, artDensity = 1) {
   const deviceW = Math.max(1, Math.round(cssWidth * dpr));
   const deviceH = Math.max(1, Math.round(cssHeight * dpr));
   // Base the scale on the shorter side so portrait screens still get a sensible zoom.
   const shortSide = Math.min(deviceW, deviceH);
-  const scale = Math.max(1, Math.round(shortSide / (targetHeight * artDensity)));
-  const width = Math.ceil(deviceW / scale);
-  const height = Math.ceil(deviceH / scale);
+  const scale = Math.max(1, Math.round(shortSide / targetHeight));
+  // Visible size in game pixels (covers the viewport; overshoot < 1 game px).
+  const gameW = Math.ceil(deviceW / scale);
+  const gameH = Math.ceil(deviceH / scale);
+  const width = gameW * artDensity;
+  const height = gameH * artDensity;
   return {
     width,
     height,
+    /** Device pixels per game pixel (always an integer). */
     scale,
+    /** Device pixels per canvas pixel (`scale / artDensity`; may be x.5 with HD art). */
+    canvasScale: scale / artDensity,
     artDensity,
     /** Game pixels visible across the shorter side (what `targetHeight` aims for). */
-    gameHeight: Math.min(width, height) / artDensity,
+    gameHeight: Math.min(gameW, gameH),
     /** Canvas size in CSS px (may exceed the viewport by < 1 game pixel). */
-    cssCanvasWidth: (width * scale) / dpr,
-    cssCanvasHeight: (height * scale) / dpr,
+    cssCanvasWidth: (gameW * scale) / dpr,
+    cssCanvasHeight: (gameH * scale) / dpr,
   };
 }
 

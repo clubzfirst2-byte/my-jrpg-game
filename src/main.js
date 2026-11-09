@@ -595,7 +595,7 @@ async function boot() {
       errors: errorLog.total - r.errorsAtStart,
       load: timing,
       device: {
-        内部解像度: `${resolution.width}×${resolution.height}（目標 ${targetHeight}、×${resolution.scale}）`,
+        内部解像度: `${resolution.width}×${resolution.height}（目標 ${targetHeight}、×${resolution.canvasScale}、見える高さ ${resolution.gameHeight}）`,
         ...collectDeviceInfo(gl, app.renderer.name),
       },
     });
@@ -642,7 +642,7 @@ async function boot() {
             `フレーム 平均${s.avgMs.toFixed(1)} / 遅い5% ${s.p95Ms.toFixed(1)} / 最大${s.maxMs.toFixed(1)} ms`,
             `JS ${s.avgCpuMs.toFixed(2)}ms   描画 ${lastDraws}回${drawCounter.supported ? '' : '(未対応)'}`,
             `表示物 ${objectCount}   テクスチャ ${textureCount()}   負荷 ${bench.count}`,
-            `内部 ${resolution.width}×${resolution.height} ×${resolution.scale}  DPR ${window.devicePixelRatio}`,
+            `内部 ${resolution.width}×${resolution.height} ×${resolution.canvasScale} 見える高さ${resolution.gameHeight}  DPR ${window.devicePixelRatio}`,
             `位置 ${p.x.toFixed(0)},${p.y.toFixed(0)} 高さ ${p.z.toFixed(0)}（地面 ${p.groundZ.toFixed(0)}）${p.grounded ? '' : ' 空中'}`,
             `体力 ${p.hp}/${p.maxHp}  スタミナ ${p.stamina.toFixed(0)}${p.exhausted ? '（疲労）' : ''}${p.climbing ? ' 登攀中' : ''}${p.gliding ? ' 滑空中' : ''}${p.swimming ? ' 水泳中' : ''}`,
             `${p.facing}${p.dashing ? ' ダッシュ' : ''}  エラー ${errorLog.total}`,
