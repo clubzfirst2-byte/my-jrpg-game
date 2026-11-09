@@ -42,7 +42,7 @@ def front_leg(r, sx, sy, px, py, **k):
     wx, wy = px - 0.5, py - 2
     m = r.mask_of(r.m_limb(sx, sy, ex, ey, 2.6, 1.6), r.m_ellipse(ex, ey, 1.7, 1.5), r.m_limb(ex, ey, wx, wy, 1.3, 1.0),
                   r.m_ellipse(wx - 0.3, wy, 1.3, 1.1), r.m_ellipse(px + 0.6, py - 0.6, 2.0, 1.2))
-    return r.add(m, "ashfur", tex=("fur", 95, 4), **k)
+    return r.add(m, "ashfur", **k)
 
 
 def hind_leg(r, hx_, hy, px, py, **k):
@@ -51,7 +51,7 @@ def hind_leg(r, hx_, hy, px, py, **k):
     hkx, hky = px - 2.2, py - 4.5
     m = r.mask_of(r.m_limb(hx_, hy, kx, ky, 3.4, 2.0), r.m_limb(kx, ky, hkx, hky, 1.8, 1.3),
                   r.m_limb(hkx, hky, px, py - 1, 1.2, 1.0), r.m_ellipse(hkx - 0.4, hky, 1.4, 1.3), r.m_ellipse(px + 0.6, py - 0.6, 2.0, 1.2))
-    return r.add(m, "ashfur", tex=("fur", 95, 5), **k)
+    return r.add(m, "ashfur", **k)
 
 
 def draw(p):
@@ -129,7 +129,9 @@ def draw(p):
         r.px([(round(hx_ + 7), fy_ + 1), (round(hx_ + 6), jy), (round(hx_ + 3), jy + 1)], "bone", 2)
     # eye: hand-placed yellow eye with a dark lid
     ex, ey = round(hx_ + 1.5), round(hy - 1.6)
-    r.stamp(ex, ey, ["ab", "c."], {"a": ("eye", 3), "b": ("eye", 2), "c": ("eye", 0)})
+    # hand-drawn: a heavy dark brow slanting down to the snout over a bright 2x2 eye with a dark rim
+    r.stamp(ex - 1, ey - 1, ["00..", ".000", ".ab0", ".c0."], {"0": ("ashfur", 0), "a": ("eye", 4), "b": ("eye", 2), "c": ("eye", 1)})
+    r.add(r.m_line(hx_ + 3.5, hy - 2.6, hx_ + 8, hy - 1.4), "ashfur", tone=3, cast=False)  # lit bridge of the muzzle
     # spine crystals (glow, the enemy.magic magenta): 5 shards, tallest over the shoulders
     for i, (ox, h) in enumerate(((-2, 3), (3, 5), (8, 6), (12, 5), (16, 3))):
         cx = hip[0] + 1 + ox + p.stretch * (ox / 18)

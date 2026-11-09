@@ -97,16 +97,11 @@ def draw(p):
     # the stone mask (hand-placed details on a shaded oval)
     ms = 1 + p.lean * 0.04
     r.add(r.m_ellipse(cx, hy + 1, 8.5 * ms, 10 * ms), "mask", soft=2)
-    for s in (-1, 1):  # eye holes
-        ex = round(cx + s * 4 * ms) - (2 if s < 0 else 0)
-        ey = round(hy - 1)
-        r.add(r.m_rect(ex - 0, ey, ex + 2, ey + 2), "murk", tone=0)
-        if p.eyes == "open":
-            r.stamp(ex, ey + 1, ["ab", ".c"] if s < 0 else ["ab", "c."], {"a": ("glow", 4), "b": ("glow", 3), "c": ("glow", 2)})
-        elif p.eyes == "shut":
-            r.px([(ex + 1, ey + 2)], "glow", 1)
-    r.add(r.m_rect(cx - 0.5, hy + 4, cx + 0.5, hy + 8), "mask", tone=1)  # carved nose ridge
-    r.px([(cx - 2, hy + 9), (cx - 1, hy + 9), (cx + 1, hy + 9), (cx + 2, hy + 9)], "mask", 1)  # mouth groove
+    # the carved face, hand-placed (v1.0 finish): heavy brow ridges slanting in, deep slanted eye
+    # holes with the glow in them, a nose ridge, two tear grooves and a mouth slit
+    face = MASK_FACE_SHUT if p.eyes == "shut" else MASK_FACE
+    r.stamp(round(cx) - 6, round(hy) - 4, face, {"1": ("mask", 1), "3": ("mask", 3), "0": ("murk", 0), "a": ("glow", 4),
+                                                   "b": ("glow", 3), "c": ("glow", 2), "d": ("glow", 1)})
     if p.phase2 or c:
         cracks(r, [(cx - 6, hy - 7, cx - 3, hy - 2), (cx + 3, hy + 3, cx + 6, hy + 8)])
     # floating pebbles around it
@@ -137,6 +132,28 @@ def remains(r):
     return r
 
 
+MASK_FACE = [
+    "11.........11",
+    ".111.....111.",
+    "..0000.0000..",
+    "..0abc.cba0..",
+    "...000.000...",
+    "...1..3..1...",
+    "...1..1..1...",
+    "....00000....",
+]
+MASK_FACE_SHUT = [
+    "11.........11",
+    ".111.....111.",
+    "..0000.0000..",
+    "..00d0.0d00..",
+    "...000.000...",
+    "...1..3..1...",
+    "...1..1..1...",
+    "....00000....",
+]
+
+
 def frames():
     f = {}
     f["idle.0"] = Pose(spin=0)
@@ -144,12 +161,12 @@ def frames():
     f["move.0"] = Pose(spin=2, shift=-3, arms="rest")
     f["move.1"] = Pose(spin=3, shift=3, arms="rest", dy=1)
     # volley: arms raised, grains gather in front; then the arms sweep forward and the fan flies
-    f["windup_volley.0"] = Pose(arms="up", grains=3, spin=0, dy=-1)
+    f["windup_volley.0"] = Pose(arms="up", grains=3, spin=0, dy=-3)
     f["windup_volley.1"] = Pose(arms="up", grains=5, spin=1, dy=-2)
     f["attack_volley.0"] = Pose(arms="forward", spin=2, dy=1, lean=2)
     f["attack_volley.1"] = Pose(arms="rest", spin=3)
     # charge: tilts toward the camera, the whirl tightens and spins fast; then the rush
-    f["windup_charge.0"] = Pose(arms="brace", lean=2, tight=2, spin=0)
+    f["windup_charge.0"] = Pose(arms="brace", lean=3, tight=3, spin=0)
     f["windup_charge.1"] = Pose(arms="brace", lean=3, tight=3, spin=2)
     f["attack_charge.0"] = Pose(arms="forward", lean=4, tight=3, spin=1, dy=2)
     f["attack_charge.1"] = Pose(arms="forward", lean=3, tight=2, spin=3, dy=1)
