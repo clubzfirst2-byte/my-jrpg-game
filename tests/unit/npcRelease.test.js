@@ -9,6 +9,7 @@ import { NPC_ANIM, npcFrameKey, idleOffset } from '../../src/view/npcAnim.js';
 //   batch 2  the village woman, the inn's cook, the village child and the blacksmith
 //   revision batch 1 with the review's fixes, in its own folder (src/art-release/npc-revision/)
 //   revision-b2  batch 2 with the review's fixes (woman, child, smith), in src/art-release/npc-revision-b2/
+//   batch 3  the princess of the star ring and the traveller (new files only; nothing pinned yet)
 // and how the game picks the frames.
 
 const DIR = new URL('../../src/art-release/npc/', import.meta.url);
@@ -16,7 +17,8 @@ const HERO = new URL('../../src/art-release/hero/', import.meta.url);
 const REVISION = new URL('../../src/art-release/npc-revision/', import.meta.url);
 const BATCH1 = ['elder', 'merchant', 'guard'];
 const BATCH2 = ['woman', 'cook', 'child', 'smith'];
-const IDS = [...BATCH1, ...BATCH2];
+const BATCH3 = ['princess', 'traveller'];
+const IDS = [...BATCH1, ...BATCH2, ...BATCH3];
 const PINNED = JSON.parse(readFileSync(new URL('./fixtures/npc-batch1-sha256.json', import.meta.url), 'utf8'));
 const PINNED_B2 = JSON.parse(readFileSync(new URL('./fixtures/npc-batch2-sha256.json', import.meta.url), 'utf8'));
 const REVISION_B2 = new URL('../../src/art-release/npc-revision-b2/', import.meta.url);
@@ -46,11 +48,12 @@ const expected = IDS.flatMap((id) => Object.entries(NPC_ANIM).flatMap(([a, { fra
 const BODY = { x0: 8, x1: 24 };
 
 describe('NPC release art, batch 1 (src/art-release/npc)', () => {
-  it('280 frames: 7 villagers × (idle 4 + walk 6) × 4 directions (batch 2 adds 160), named npc.<id>.<idle|walk>.<dir>.<n>, nothing else', () => {
-    expect(expected).toHaveLength(280);
+  it('360 frames: 9 villagers × (idle 4 + walk 6) × 4 directions (batch 2 adds 160, batch 3 adds 80), named npc.<id>.<idle|walk>.<dir>.<n>, nothing else', () => {
+    expect(expected).toHaveLength(360);
     expect(expected.filter((f) => BATCH2.includes(f.split('.')[1]))).toHaveLength(160);
+    expect(expected.filter((f) => BATCH3.includes(f.split('.')[1]))).toHaveLength(80);
     expect([...files].sort()).toEqual([...expected].sort());
-    for (const f of files) expect(f).toMatch(/^npc\.(elder|merchant|guard|woman|cook|child|smith)\.(idle|walk)\.(down|up|right|left)\.\d$/);
+    for (const f of files) expect(f).toMatch(/^npc\.(elder|merchant|guard|woman|cook|child|smith|princess|traveller)\.(idle|walk)\.(down|up|right|left)\.\d$/);
   });
 
   it('batch 1 (approved) is unchanged: all 120 files byte for byte as approved', () => {
@@ -167,7 +170,7 @@ describe('NPC release art, batch 1 (src/art-release/npc)', () => {
     }
   });
 
-  it('facing left, what is held or worn on one side (staff, book, spear, basket, ladle, towel, pinwheel, bag, hammer) stays on that side: left frames are drawn on their own', () => {
+  it('facing left, what is held or worn on one side (staff, book, spear, basket, ladle, towel, pinwheel, bag, hammer, bracelet, walking stick, scarf end) stays on that side: left frames are drawn on their own', () => {
     const isMirror = (a, b) => {
       const A = frame(a);
       const B = frame(b);
@@ -195,6 +198,11 @@ describe('NPC release art, batch 1 (src/art-release/npc)', () => {
     expect(t.guard).toBeLessThanOrEqual(hero + 1);
     expect(t.child).toBeGreaterThan(t.elder + 3);
     expect(t.woman).toBeGreaterThan(t.cook);
+    // batch 3: the traveller is the tallest (the hat's crown at the top of the frame); the princess
+    // is two pixels shorter than the hero
+    for (const id of IDS) expect(t.traveller, `traveller at least as tall as ${id}`).toBeLessThanOrEqual(t[id]);
+    expect(t.traveller).toBe(0);
+    expect(t.princess).toBe(hero + 2);
     // bulk: the figure's area (the guard's spear and the elder's staff aside, the smith is the biggest)
     const bulk = (id) => {
       const img = read(new URL(`npc.${id}.idle.down.0.png`, DIR));
@@ -267,12 +275,15 @@ describe('npcFrameKey: which frame a villager shows', () => {
   });
 
   it('a villager without release art keeps the placeholder frames (npc.<look>.walk.<dir>.<0..2>)', () => {
-    expect(npcFrameKey(npc({ id: 'traveller', look: 2 }), 5, has)).toBe('npc.2.walk.down.0');
+    expect(npcFrameKey(npc({ id: 'stranger', look: 2 }), 5, has)).toBe('npc.2.walk.down.0');
     const walking = new Set();
-    for (let w = 0; w < 1; w += 0.05) walking.add(npcFrameKey(npc({ id: 'princess', look: 5, moving: true, walkTime: w }), 0, has));
+    for (let w = 0; w < 1; w += 0.05) walking.add(npcFrameKey(npc({ id: 'pilgrim', look: 5, moving: true, walkTime: w }), 0, has));
     expect([...walking].sort()).toEqual(['npc.5.walk.down.0', 'npc.5.walk.down.1', 'npc.5.walk.down.2']);
     // batch 2: the cook and the child (in the village) now have their own
     expect(npcFrameKey(npc({ id: 'cook', look: 2 }), 0, has)).toMatch(/^npc\.cook\.idle\.down\./);
+    // batch 3: the princess and the traveller have their own (not placed in the game yet)
+    expect(npcFrameKey(npc({ id: 'princess', look: 5, facing: 'left' }), 0, has)).toMatch(/^npc\.princess\.idle\.left\./);
+    expect(npcFrameKey(npc({ id: 'traveller', look: 2, moving: true, walkTime: 0.01 }), 0, has)).toBe('npc.traveller.walk.down.0');
     // with no release art at all (?npc=placeholder), everyone keeps it
     expect(npcFrameKey(npc({}), 0, () => false)).toBe('npc.1.walk.down.0');
   });
