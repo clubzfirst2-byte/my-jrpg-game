@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createGameState, stepGame, respawnPlayer } from '../../src/game/state.js';
 import { WORLD } from '../../src/game/world/world.js';
-import { tileFeet, applyProgress, areaAt } from '../../src/game/world/features.js';
+import { tileFeet, applyProgress, areaAt, warpOpen } from '../../src/game/world/features.js';
 import { hitEnemy } from '../../src/game/combat/damage.js';
 import { STEP_SEC } from '../../src/game/core/fixedStep.js';
 import { hourOf } from '../../src/game/env/weather.js';
@@ -258,6 +258,36 @@ describe('C10: the ending', () => {
     talkThrough(s, [0, 0]);
     stepGame(s, none);
     expect(s.ending).toBe('screen');
+  });
+
+  it('purified, then out through the antechamber before her words: the beach ring stays open, back to her, the ending, then it closes', () => {
+    const { s, b } = atTheSource();
+    purify(s, b);
+    s.endingAt = null; // (as after a death in those 2 s, or a save made in between)
+    const ring = s.warps.find((w) => w.id === 'source-gate');
+    // Out: walk down from the antechamber's south end → the sand in front of the beach ring.
+    place(s, 104, OY + 31, 'down');
+    run(s, { ...none, moveY: 1 }, 40);
+    expect(areaAt(s, s.player.x, s.player.y)).toBe(null);
+    expect(Math.hypot(s.player.x / 16 - ring.tx, s.player.y / 16 - ring.ty)).toBeLessThan(4);
+    expect(warpOpen(s, ring)).toBe(true);
+    // Back in through the ring, through the antechamber into the arena, to her.
+    place(s, ring.tx, ring.ty + 1);
+    run(s, { ...none, moveY: -1 }, 30);
+    expect(areaAt(s, s.player.x, s.player.y)?.id).toBe('source_gate');
+    place(s, 104, OY + 22);
+    run(s, { ...none, moveY: -1 }, 30);
+    expect(areaAt(s, s.player.x, s.player.y)?.id).toBe('source_arena');
+    const her = s.npcs.find((n) => n.id === 'princess_end');
+    expect(her).toBeTruthy();
+    place(s, Math.floor(her.x / 16), Math.floor(her.y / 16) + 1);
+    stepGame(s, { ...none, attack: true });
+    expect(s.dialogue).toMatchObject({ id: 'ending', npc: 'princess_end' });
+    talkThrough(s, [0, 0]);
+    stepGame(s, none);
+    expect(s.ending).toBe('screen');
+    finishEnding(s);
+    expect(warpOpen(s, ring)).toBe(false); // closed once the ending is seen
   });
 
   it('a map without the village (test maps): the ending still ends, the hero stays where he is', () => {

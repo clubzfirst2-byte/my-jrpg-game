@@ -108,7 +108,7 @@ describe('C5: the small 星環 on the beach', () => {
     expect(beach.tx - ring.tx).toBeGreaterThanOrEqual(5);
     expect(ring.facing).toBe('up');
     expect(WORLD.envObjects.some((o) => o.type === 'star_ring' && o.tx === ring.tx && o.ty === ring.ty)).toBe(true);
-    expect(ring.if).toEqual([{ flag: 'source_open' }, { flag: 'source_purified', is: false }]);
+    expect(ring.if).toEqual([{ flag: 'source_open' }, { flag: 'ending_seen', is: false }]);
     // It leads into the antechamber, and the antechamber's way out leads to the sand in front of it.
     const into = { x: ring.toTx * 16 + 8, y: ring.toTy * 16 + 8 };
     expect(areaAt(s, into.x, into.y)?.id).toBe('source_gate');
@@ -145,10 +145,11 @@ describe('C5: the small 星環 on the beach', () => {
     expect(areaAt(s, s.player.x, s.player.y)?.id).toBe('source_gate');
   });
 
-  it('is only a ring until source_open; then a gate; closed again once the source is purified', () => {
+  it('is only a ring until source_open; then a gate (still after the source falls, until the ending is seen)', () => {
     expect(walkIn({})).toBe(null);
     expect(walkIn({ source_open: true })).toBe('source_gate');
-    expect(walkIn({ source_open: true, source_purified: true })).toBe(null);
+    expect(walkIn({ source_open: true, source_purified: true })).toBe('source_gate'); // the way back to her
+    expect(walkIn({ source_open: true, source_purified: true, ending_seen: true })).toBe(null);
     const s = createGameState(WORLD);
     expect(warpOpen(s, ring)).toBe(false);
     s.progress.flags.source_open = true;

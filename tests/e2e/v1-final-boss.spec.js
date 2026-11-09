@@ -96,7 +96,7 @@ test('the source: invulnerable while inverted, staggers with four seats awake, p
   await stay();
   await page.waitForTimeout(500);
   expect(await api(page, 'finalBoss')).toBe(null);
-  // The beach ring is closed again.
+  // The beach ring is closed again (ending_seen is set above; without it, it stays open until the ending).
   // (and, back on the island, the source's bundle is released)
   await api(page, 'teleport', places.ring.tx, places.ring.ty + 1);
   await page.keyboard.down('ArrowUp');

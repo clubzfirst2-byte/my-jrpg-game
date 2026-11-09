@@ -775,7 +775,8 @@ export class GameView {
     }
     // v1.0 (C5): the beach ring glows while it is the gate to the source.
     // v1.0 (C9): it flashes once in the opening.
-    const ringOpen = (!!state.progress.flags.source_open && !state.progress.flags.source_purified) || !!openingView(state)?.flash;
+    // (open — and glowing — until the ending is seen: the way back to the princess by the source)
+    const ringOpen = (!!state.progress.flags.source_open && !state.progress.flags.ending_seen) || !!openingView(state)?.flash;
     if (ringOpen !== this.ringOpen) {
       this.ringOpen = ringOpen;
       this.envVersion = -1;
