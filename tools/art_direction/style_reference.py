@@ -277,17 +277,14 @@ def ground_tile(ramp, seed=1, tufts=7, path_ramp=None):
         put(x + 1, y, 1)
     if path_ramp:
         p = [hx(c) for c in path_ramp]
+        # straight edges, no grass fringe inside the tile (a path tile is laid in every direction)
         for y in range(32):
             for x in range(10, 22):
-                edge = x in (10, 21) and rnd.random() < 0.5
-                if not edge:
-                    im.putpixel((x, y), p[2] + (255,))
-            im.putpixel((10, y), r[1] + (255,)) if y % 3 else None  # grass shadow on the path's left lip
-            im.putpixel((21, y), p[3] + (255,)) if y % 4 == 0 else None
-        for _ in range(8):  # pebbles: light on top, shadow under
-            x, y = rnd.randrange(12, 20), rnd.randrange(32)
-            im.putpixel((x, y), p[3] + (255,))
-            im.putpixel((x, (y + 1) % 32), p[1] + (255,))
+                im.putpixel((x, y), p[2] + (255,))
+        for x0, y0 in ((13, 6), (17, 21)):  # two pebbles of 2-3 px: light on top, shadow under
+            for dx in range(3 if x0 == 13 else 2):
+                im.putpixel((x0 + dx, y0), p[3] + (255,))
+                im.putpixel((x0 + dx, y0 + 1), p[1] + (255,))
     return im
 
 
@@ -460,7 +457,7 @@ def main():
     field.paste(path, (32, 0))
     field.paste(path, (32, 32))
     S.sprite(field, (1026, 568), 2)
-    S.text((1026, 700), "grass x6 + path x2 (repeat with no seam)", F_S, SUB)
+    S.text((1026, 700), "grass x6 + path x2 (straight path edges)", F_S, SUB)
     face = cliff_face(REGION["earth.face"], REGION["plains.grass"])
     S.sprite(face, (1230, 568), 2)
     S.text((1230, 636), "cliff face:", F_S, SUB)
