@@ -12,7 +12,8 @@ import { createOverlay } from './debug/overlay.js';
 import { createRenderer, resizeRenderer } from './view/renderer.js';
 import { RESOLUTION_CANDIDATES, DEFAULT_TARGET_HEIGHT, nextCandidate } from './view/resolution.js';
 import { AssetManager } from './view/assets/assetManager.js';
-import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES, placeholderEntries, releaseHeroEntries, releaseNpcEntries } from './view/assets/placeholderPack.js';
+import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES, placeholderEntries, releaseHeroEntries, releaseNpcEntries, SOURCE_BUNDLE, sourceEntries } from './view/assets/placeholderPack.js';
+import { finalBossDebugApi, finalBossToast } from './debug/finalBossDebug.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
@@ -157,7 +158,9 @@ async function boot() {
   assets.register('placeholder', () => buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides)], artOverrides));
   // P8: each region's art is its own bundle, loaded by the view near the region.
   for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name, artOverrides));
-  await assets.load('placeholder');
+  // v1.0: the final boss and the beach ring (a common bundle, always loaded).
+  assets.register(SOURCE_BUNDLE, () => buildPlaceholderPack(sourceEntries(), artOverrides));
+  await Promise.all([assets.load('placeholder'), assets.load(SOURCE_BUNDLE)]);
   performance.mark('art');
   // Without ?map= the game starts at the title on the first island and saves its progress.
   // ?map=... (tests, height/field test maps) skips the title and never touches the save.
@@ -358,6 +361,8 @@ async function boot() {
       announced.add(e);
       const ev = /** @type {any} */ (e);
       audio.play(sfxFor(ev)); // P11.2
+      const sourceMsg = finalBossToast(ev); // v1.0: the final boss
+      if (sourceMsg) toast.show(sourceMsg.text, { ms: sourceMsg.ms });
       if (ev.type === 'chest') {
         toast.show(
           ev.reward === 'heart'
@@ -965,6 +970,7 @@ async function boot() {
     },
     assets: () => assets.stats(),
   };
+  Object.assign(api, finalBossDebugApi(state, api.teleport)); // v1.0: the source (flags, arena, seats)
   /** @type {any} */ (window).__debugApi = api;
   // ?tour=60 starts the auto tour right away (with ?map=..., which skips the title).
   if (params.get('tour') && !withTitle) startTour(Number.parseFloat(params.get('tour') ?? '') || 60);

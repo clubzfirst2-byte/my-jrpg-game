@@ -14,8 +14,10 @@ import { lerp } from '../game/core/math.js';
 import { Camera } from './camera.js';
 import { windupProgress } from '../game/entities/enemies.js';
 import { BOSS_KINDS } from '../game/entities/bosses.js';
+import { FINAL_BOSS } from '../game/entities/finalBoss.js';
 import { COMBAT } from '../game/entities/playerCombat.js';
 import { areaAt } from '../game/world/features.js';
+import { sourceFrameKey, drawSourceTelegraphs, drawSeatLights } from './sourceView.js';
 import { FeatureView } from './featureView.js';
 import { EnvView } from './envView.js';
 import { WeatherView } from './weatherView.js';
@@ -141,6 +143,12 @@ export class GameView {
     );
     this.envVersion = -1;
     this.charmHome = false;
+    /** v1.0: the beach ring glows while it is a gate */
+    this.ringOpen = false;
+    /** @type {Graphics | null} v1.0: the source's telegraphs (ground) and seat lights */
+    this.sourceGround = null;
+    /** @type {Graphics | null} */
+    this.sourceMarks = null;
     /** @type {Graphics | null} P10.4: slam telegraph */
     this.bossRing = null;
     this.items = new ItemView((key) => this.makeSprite(key), this.actors);
@@ -557,6 +565,7 @@ export class GameView {
       if (r === 'forest' || r === 'mountains') return `${r}.pine`;
     }
     if (o.type === 'charm_shelf') return this.charmHome ? 'obj.charm_shelf.on' : 'obj.charm_shelf'; // P10.1
+    if (o.type === 'star_ring') return this.ringOpen ? 'obj.star_ring.on' : 'obj.star_ring.off'; // v1.0
     return `obj.${o.type}`;
   }
 
@@ -680,6 +689,12 @@ export class GameView {
     const charmHome = state.progress.quests.lost_charm === 'done';
     if (charmHome !== this.charmHome) {
       this.charmHome = charmHome;
+      this.envVersion = -1;
+    }
+    // v1.0 (C5): the beach ring glows while it is the gate to the source.
+    const ringOpen = !!state.progress.flags.source_open && !state.progress.flags.source_purified;
+    if (ringOpen !== this.ringOpen) {
+      this.ringOpen = ringOpen;
       this.envVersion = -1;
     }
     if (state.env.version !== this.envVersion || this.hasBraziers) {
@@ -822,26 +837,28 @@ export class GameView {
       // P10.4: a core of the murk is drawn by its region's art, only while that is loaded.
       if (e.boss && !this.assets.hasTexture(`enemy.${e.kind}.0`)) continue;
       seen.add(e.id);
+      // v1.0: the source has a frame for each action (front-facing: never flipped).
+      const sourceKey = e.final ? sourceFrameKey(e, timeSec, (k) => this.assets.hasTexture(k)) : null;
       let spr = this.enemySprites.get(e.id);
       if (!spr) {
-        spr = this.makeSprite(`enemy.${e.kind}.0`);
+        spr = this.makeSprite(sourceKey ?? `enemy.${e.kind}.0`);
         this.enemySprites.set(e.id, spr);
         this.actors.addChild(spr);
       }
       const ex = lerp(e.prevX, e.x, alpha);
       const ey = lerp(e.prevY, e.y, alpha);
       const moving = Math.hypot(e.x - e.prevX, e.y - e.prevY) > 0.01;
-      spr.texture = this.assets.texture(`enemy.${e.kind}.${moving ? Math.floor(timeSec * 6) % 2 : 0}`);
+      spr.texture = this.assets.texture(sourceKey ?? `enemy.${e.kind}.${moving ? Math.floor(timeSec * 6) % 2 : 0}`);
       spr.position.set(Math.round(ex), Math.round(ey - e.z));
       spr.zIndex = ey;
-      spr.scale.x = e.faceX < -0.2 ? -1 : 1;
+      spr.scale.x = !e.final && e.faceX < -0.2 ? -1 : 1;
       // Telegraph: the wind-up pulses red, faster as the attack nears. Stunned: pale blue.
       if (e.state === 'windup') {
         const k = windupProgress(e);
         spr.tint = Math.sin(timeSec * (12 + 24 * k)) > 0 ? 0xff7070 : 0xffffff;
       } else if (e.state === 'stun') spr.tint = 0xa8b8ff;
       else spr.tint = 0xffffff;
-      spr.alpha = e.state === 'dead' ? Math.max(0, 1 - e.t / 600) : 1;
+      spr.alpha = e.state === 'dead' ? Math.max(0, 1 - e.t / (e.final ? FINAL_BOSS.defeatMs : 600)) : 1;
     }
     // P10.4: a core winding up its slam shows the shockwave's reach on the ground.
     if (!this.bossRing) {
@@ -857,6 +874,18 @@ export class GameView {
       this.bossRing.circle(Math.round(e.x), Math.round(e.y - e.z), r * k).fill({ color: 0xd0202a, alpha: 0.18 });
       this.bossRing.zIndex = e.y - r;
     }
+    // v1.0: the source's slam / wave reach (on the ground) and its awake seats (above everything).
+    if (!this.sourceGround) {
+      this.sourceGround = new Graphics();
+      this.sourceGround.zIndex = -1e6;
+      this.actors.addChild(this.sourceGround);
+      this.sourceMarks = new Graphics();
+      this.overlay.addChild(this.sourceMarks);
+    }
+    this.sourceGround.clear();
+    /** @type {Graphics} */ (this.sourceMarks).clear();
+    drawSourceTelegraphs(this.sourceGround, state);
+    drawSeatLights(/** @type {Graphics} */ (this.sourceMarks), state, timeSec);
     for (const [id, spr] of this.enemySprites) {
       if (!seen.has(id)) {
         spr.destroy();

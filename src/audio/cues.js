@@ -43,6 +43,14 @@ export const EVENT_SFX = Object.freeze({
   bossPhase: 'bossRoar',
   bossStun: 'parry',
   bossDown: 'fanfare',
+  // v1.0: 淀みの源 (sounds of the cores' fight).
+  sourceAwake: 'bossRoar',
+  sourcePhase: 'bossRoar',
+  seatOn: 'switch',
+  sourceStagger: 'gate',
+  sourceGuard: 'block',
+  sourceWave: 'warn',
+  sourcePurified: 'fanfare',
   broke: 'break',
 });
 

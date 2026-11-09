@@ -86,6 +86,7 @@ import {
   bossSprite,
   stairsSprite,
 } from './placeholderArt.js';
+import { sourceFrames, starRingSprite } from './sourceArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
 const TOP_LEFT = /** @type {[number, number]} */ ([0, 0]);
@@ -250,6 +251,24 @@ const bossFrames = (/** @type {'root' | 'frost' | 'sand' | 'storm'} */ kind) => 
 for (const [region, kind] of /** @type {const} */ ([['region:forest', 'root'], ['region:mountains', 'frost'], ['region:desert', 'sand'], ['region:lake', 'storm']])) {
   const make = REGION_ENTRIES[region];
   REGION_ENTRIES[region] = () => [...make(), ...bossFrames(kind)];
+}
+
+/**
+ * v1.0 (C5-C7): the art of 淀みの源 and of the small 星環 on the beach, a bundle of its own that is
+ * always loaded like the base one (a common bundle): the source fights in the desert's strip of
+ * rooms and the ring stands on the island, which has no region bundle (docs/story/V1_STORY_PROPOSAL.md
+ * C6). It is apart from the base atlas only because the 64 × 64 frames do not fit that 256 × 256 atlas.
+ * The seats reuse the base bundle's sconce, sensor, plate, crate, stone, crystal and brazier.
+ * Names: the release art's (enemy.boss_source.<action>.<frame>), so that art drops in under them.
+ */
+export const SOURCE_BUNDLE = 'common:source';
+/** @returns {{ key: string, rows: string[], anchor: [number, number] }[]} */
+export function sourceEntries() {
+  return [
+    ...Object.entries(sourceFrames()).map(([key, rows]) => ({ key, rows, anchor: FEET })),
+    { key: 'obj.star_ring.off', rows: starRingSprite(false), anchor: FEET },
+    { key: 'obj.star_ring.on', rows: starRingSprite(true), anchor: FEET },
+  ];
 }
 
 /** @param {string} name @param {Map<string, string>} [overrides] */

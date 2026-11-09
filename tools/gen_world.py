@@ -539,6 +539,75 @@ M.features['warps'].append({'id': 'mine-in', 'tx': mx, 'ty': my, 'facing': 'up',
 M.features['warps'].append({'id': 'mine-out', 'tx': 104, 'ty': MINE[0] + 12, 'facing': 'down', 'toTx': mx, 'toTy': my + 1})
 M.features['landmarks'].append({'id': 'mine', 'name': '白嶺の坑道', 'tx': mx, 'ty': my, 'always': False})
 
+# ---------------- v1.0 (C6): 淀みの源, in the desert's strip of rooms (rows below the dark trial) ----------------
+# The island's strip is full (rows 2-69) and making the island taller would shift every region below
+# it (and break saves), so the source lives in the desert's strip, in the same west column as the
+# island's beach. The small 星環 on the beach (gen_island.py) leads into the antechamber; the
+# antechamber's way out leads back to the sand in front of that ring.
+#
+#   antechamber (rows 20-33): a record stone; walk north into the opening to enter the arena
+#   arena       (rows 36-57): the inverted ring floats in the middle; four seats (座) around it
+#
+# Seats (each takes at least two ways, at least one without any 星環 ability; tests/unit/finalBoss.test.js):
+#   fire      sconce (100,40): a fire arrow shot north through the brazier at (100,44) / the fire blade
+#   light     sensor (108,39): a light orb (灯火) / a fire arrow shot north through the brazier at (108,43)
+#             sets the grass under the north wall (107-109,37) alight. 3+ tiles from every brazier and
+#             sconce, so it is never lit from the start and the fire seat never lights it too.
+#   weight    plate  (99,54) with a crate at (101,54): push it there with the sword / 念動 / stand on it.
+#             The ring floats in rows 40-45 only: it never reaches the plate (and never counts as weight).
+#   resonance stone  (109,53): strike the crystal at (106,54) (the current runs along the metal floor
+#             under the stone) / 共鳴
+ANTE = 20
+S.puzzle_box('source_gate', '星環の前室', ANTE)
+S.features['checkpoints'].append({'id': 'source', 'tx': 104, 'ty': ANTE + 7})  # on the way through: touched in passing
+# Back out: walk down from the south end; you come out on the sand in front of the beach ring.
+S.extra['passes'] = [{'id': 'source-out', 'tx': 104, 'ty': ANTE + 12, 'facing': 'down', 'to': {'region': 'island', 'tx': 42, 'ty': 68}}]
+AR0, AR1 = 36, 57  # the arena's walls (top) and its line of rocks (bottom)
+for y in range(AR0, AR1 + 3):
+    for X in range(98, 111):
+        S.sg(X, y, 'u', 48)
+for y in range(AR0 + 1, AR1 + 3):
+    for X in range(99, 110):
+        S.sg(X, y, 'u', 0)
+for X in range(99, 110):
+    S.sg(X, AR1, '#')
+S.features['areas'].append({'id': 'source_arena', 'name': '淀みの源', 'tx': 98, 'ty': AR0, 'tw': 13, 'th': AR1 - AR0 + 1})
+# Into the arena from the north end of the antechamber (a dark opening in its wall), and back.
+S.features['warps'].append({'id': 'source-arena-in', 'tx': 104, 'ty': ANTE + 1, 'facing': 'up', 'toTx': 104, 'toTy': AR1 - 2})
+S.features['warps'].append({'id': 'source-arena-out', 'tx': 104, 'ty': AR1 - 1, 'facing': 'down', 'toTx': 104, 'toTy': ANTE + 2})
+# Fire.
+S.obj('sconce', 100, 40); S.obj('brazier', 100, 44)
+S.switch('source-fire', 'sconce', 100, 40, 'source', 'fire', ['fire'])
+# Light: the grass under the north wall catches the fire arrows.
+for X in (107, 108, 109):
+    S.sg(X, AR0 + 1, '.')
+S.obj('brazier', 108, 43)
+S.switch('source-light', 'sensor', 108, 39, 'source', 'light', ['light'])
+# Weight.
+S.obj('crate', 101, 54)
+S.switch('source-weight', 'plate', 99, 54, 'source', 'weight', ['weight'])
+# Resonance.
+for X in (107, 108, 109):
+    S.sg(X, 54, 'm')
+S.obj('crystal', 106, 54)
+S.obj('stone', 109, 53)
+S.switch('source-echo', 'stone', 109, 53, 'source', 'resonance', ['resonance', 'shock'])
+for sw in S.features['switches']:
+    if sw['link'] == 'source': sw['seat'] = True
+S.extra['finalBoss'] = {
+    'id': 'source', 'tx': 104, 'ty': 43,
+    'arena': {'tx': 99, 'ty': AR0 + 1, 'tw': 11, 'th': AR1 - AR0 - 1},  # wakes when the player is in here
+    'roam': {'tx': 102, 'ty': 40, 'tw': 5, 'th': 6},                    # and floats only in here
+    'seats': ['source-fire', 'source-light', 'source-weight', 'source-echo'],
+    'crate': {'tx': 101, 'ty': 54},
+}
+# The rules the spec sets for the seats (C6).
+def tiles(a, b): return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
+_fires = [(o['tx'], o['ty']) for o in S.features['envObjects'] if o['type'] in ('brazier', 'sconce') and 98 <= o['tx'] <= 110 and AR0 <= o['ty'] <= AR1]
+assert all(tiles((108, 39), f) >= 3 for f in _fires), 'the light seat must be 3+ tiles from braziers and sconces'
+_roam = S.extra['finalBoss']['roam']
+assert not (_roam['tx'] - 3 <= 99 <= _roam['tx'] + _roam['tw'] + 2 and _roam['ty'] - 3 <= 54 <= _roam['ty'] + _roam['th'] + 2), 'the plate is out of the ring\'s reach'
+
 # The passes between the columns.
 PASS_PF = range(52, 55)
 PASS_SL = range(46, 49)
@@ -546,7 +615,7 @@ carve_pass(P, PASS_PF, 'east'); carve_pass(F, PASS_PF, 'west')
 carve_pass(S, PASS_SL, 'east'); carve_pass(L, PASS_SL, 'west')
 P.extra['passes'] = [{'id': 'pass-forest', 'tx': RW - 1, 'ty': 53, 'facing': 'right', 'to': {'region': 'forest', 'tx': 1, 'ty': 53}}]
 F.extra['passes'] = [{'id': 'pass-plains', 'tx': 0, 'ty': 53, 'facing': 'left', 'to': {'region': 'plains', 'tx': RW - 2, 'ty': 53}}]
-S.extra['passes'] = [{'id': 'pass-lake', 'tx': RW - 1, 'ty': 47, 'facing': 'right', 'to': {'region': 'lake', 'tx': 1, 'ty': 47}}]
+S.extra['passes'] = [{'id': 'pass-lake', 'tx': RW - 1, 'ty': 47, 'facing': 'right', 'to': {'region': 'lake', 'tx': 1, 'ty': 47}}] + S.extra.get('passes', [])
 L.extra['passes'] = [{'id': 'pass-desert', 'tx': 0, 'ty': 47, 'facing': 'left', 'to': {'region': 'desert', 'tx': RW - 2, 'ty': 47}}]
 
 regions = [P.out(), S.out(), M.out(), F.out(), L.out()]
@@ -554,8 +623,11 @@ for r in regions:
     assert len(r['ground']) == RH and all(len(row) == RW + EW for row in r['ground'])
     walk = lambda x, y: r['ground'][y][x] in '.s=wum' and not any(o['tx'] == x and o['ty'] == y for o in r['envObjects'] if o['type'] not in ('mat', 'stairs'))
     for w in r.get('passes', []):
-        assert r['ground'][w['ty']][w['tx']] in '=.s', ('pass blocked', r['id'], w)
-        assert r['ground'][w['ty']][w['tx'] + (-1 if w['facing'] == 'right' else 1)] in '=.s', ('pass approach blocked', r['id'], w)
+        if w['facing'] in ('left', 'right'):
+            assert r['ground'][w['ty']][w['tx']] in '=.s', ('pass blocked', r['id'], w)
+            assert r['ground'][w['ty']][w['tx'] + (-1 if w['facing'] == 'right' else 1)] in '=.s', ('pass approach blocked', r['id'], w)
+        else:  # v1.0: a doorway to another region (the source's antechamber back to the island)
+            assert walk(w['tx'], w['ty']), ('doorway blocked', r['id'], w)
     for w in r['warps']:
         assert walk(w['tx'], w['ty']), ('warp tile blocked', r['id'], w)
         assert walk(w['toTx'], w['toTy']), ('warp arrival blocked', r['id'], w)
@@ -567,8 +639,8 @@ out = """// @ts-check
 // Each region is 96 x 96 tiles plus a 16-column strip of rooms to the east (P10.1); coordinates are local to the region (src/game/world/world.js
 // stacks the regions under the island and offsets them).
 
-/** @typedef {{ id: string, tx: number, ty: number, facing: 'up' | 'down' | 'left' | 'right', to: { region: string, tx: number, ty: number } }} PassDef */
-/** @typedef {import('../tilemap.js').IslandDef & { id: string, name: string, climate: 'temperate' | 'dry' | 'cold', bundle: string, col?: number, passes?: PassDef[] }} RegionDef */
+/** @typedef {{ id: string, tx: number, ty: number, facing: 'up' | 'down' | 'left' | 'right', to: { region: string, tx: number, ty: number }, if?: import('../features.js').FlagCondition[] }} PassDef */
+/** @typedef {import('../tilemap.js').IslandDef & { id: string, name: string, climate: 'temperate' | 'dry' | 'cold', bundle: string, col?: number, passes?: PassDef[], finalBoss?: import('../../entities/finalBoss.js').FinalBossDef }} RegionDef */
 
 /** @type {RegionDef[]} */
 export const REGIONS = %s;

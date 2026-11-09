@@ -71,18 +71,26 @@ export function stitchWorld(island, regions) {
     }
     // P10.4: bosses and their arenas.
     for (const b of r.bosses ?? []) def.bosses.push({ ...at(b), arena: at(b.arena) });
+    // v1.0 (C7): 淀みの源, the final boss, in its own list (not one of the four cores).
+    if (r.finalBoss) {
+      const fb = r.finalBoss;
+      def.finalBoss = { ...at(fb), arena: at(fb.arena), roam: at(fb.roam), crate: at(fb.crate) };
+    }
     // P10.1: house doors lead to rooms in the region's east strip (both ends move with the region).
     for (const w of r.warps ?? []) def.warps.push({ ...w, tx: w.tx + ox, ty: w.ty + oy, toTx: w.toTx + ox, toTy: w.toTy + oy });
     // The region (its climate and art bundle) includes its strip of rooms.
     def.regions.push({ id: r.id, name: r.name, tx: ox, ty: oy, tw: r.ground[0].length, th: r.ground.length, climate: r.climate, bundle: r.bundle });
   }
   // P10.3: passes between the columns (each end is given in its own region's coordinates).
-  for (const r of regions) {
+  // v1.0 (C5/C6): the island has one too (the beach ring to the source's antechamber), and a pass
+  // may be conditional (`if`: flags, see features.js warpOpen).
+  delete def.passes;
+  for (const r of [...regions, { id: 'island', passes: island.passes }]) {
     for (const p of r.passes ?? []) {
       const from = placed[r.id];
       const to = placed[p.to.region];
       if (!to) throw new Error(`Pass ${p.id}: unknown region ${p.to.region}`);
-      def.warps.push({ id: p.id, tx: p.tx + from.ox, ty: p.ty + from.oy, facing: p.facing, toTx: p.to.tx + to.ox, toTy: p.to.ty + to.oy });
+      def.warps.push({ id: p.id, tx: p.tx + from.ox, ty: p.ty + from.oy, facing: p.facing, toTx: p.to.tx + to.ox, toTy: p.to.ty + to.oy, ...(p.if ? { if: p.if } : {}) });
     }
   }
   const twoCols = cols[1].length > 0;

@@ -5,6 +5,7 @@ import { groundHeightUnder } from './physics/collision.js';
 import { createPlayer, updatePlayer, respawn } from './entities/player.js';
 import { combatStep, initCombat, COMBAT } from './entities/playerCombat.js';
 import { createBoss, settleBosses } from './entities/bosses.js';
+import { placeFinalBoss, settleFinalBoss, FINAL_BOSS } from './entities/finalBoss.js';
 import { createEnemy, updateEnemy } from './entities/enemies.js';
 import { updateProjectiles } from './entities/projectiles.js';
 import { hitEnemy } from './combat/damage.js';
@@ -62,6 +63,7 @@ const ENEMY_CORPSE_MS = 600;
  * @property {number} nextId
  * @property {import('./world/tilemap.js').EnemySpawn[]} enemySpawns
  * @property {import('./entities/bosses.js').BossDef[]} bossDefs  P10.4
+ * @property {import('./entities/finalBoss.js').FinalBossDef | null} finalBossDef  v1.0 (C7): 淀みの源
  * @property {any[]} chests
  * @property {any[]} checkpointDefs
  * @property {any[]} campfires
@@ -118,6 +120,7 @@ export function createGameState(def = HEIGHT_TEST) {
     nextId: 1,
     enemySpawns: f.enemies ?? [],
     bossDefs: f.bosses ?? [],
+    finalBossDef: f.finalBoss ?? null,
     chests: f.chests ?? [],
     checkpointDefs: f.checkpoints ?? [],
     campfires: f.campfires ?? [],
@@ -266,10 +269,11 @@ export function stepGame(state, input) {
 
   swordHitsObjects(state);
 
+  placeFinalBoss(state); // v1.0: the source appears when the player steps into its arena
   const enemyDt = STEP_SEC * enemyScale;
   fireDamage(state, enemyDt * 1000);
   for (const e of state.enemies) updateEnemy(e, state, enemyDt);
-  state.enemies = state.enemies.filter((e) => !(e.state === 'dead' && e.t > ENEMY_CORPSE_MS));
+  state.enemies = state.enemies.filter((e) => !(e.state === 'dead' && e.t > (e.final ? FINAL_BOSS.defeatMs : ENEMY_CORPSE_MS)));
   pushApart(state);
   updateProjectiles(state, enemyDt);
   itemStep(state);
@@ -278,6 +282,7 @@ export function stepGame(state, input) {
   stepSwitches(state);
   learnAbilities(state);
   settleBosses(state);
+  settleFinalBoss(state);
 }
 
 /**

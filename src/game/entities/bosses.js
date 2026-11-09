@@ -334,7 +334,7 @@ export function settleBosses(state) {
   }
 }
 
-/** The boss the player is fighting now (awake, alive), if any. @param {any} state */
+/** The boss the player is fighting now (awake, alive), if any (v1.0: the source too). @param {any} state */
 export function activeBoss(state) {
-  return state.enemies.find((/** @type {any} */ e) => e.boss && e.awake && e.state !== 'dead') ?? null;
+  return state.enemies.find((/** @type {any} */ e) => (e.boss || e.final) && e.awake && e.state !== 'dead') ?? null;
 }

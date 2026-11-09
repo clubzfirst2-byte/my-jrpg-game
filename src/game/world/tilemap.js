@@ -51,6 +51,8 @@ const HEIGHT_DIGITS = '0123456789abcdefghijklmnopqrstuv';
  * @property {{ id: string, name: string, dialogue: string, look?: number, tx: number, ty: number, stay?: boolean, reach?: number }[]} [npcs]  P9: villagers
  * @property {import('../entities/bosses.js').BossDef[]} [bosses]  P10.4: cores of the murk and their arenas
  * @property {import('./features.js').LandmarkDef[]} [landmarks]
+ * @property {import('./maps/regions.js').PassDef[]} [passes]  v1.0: doorways to another region (the island's beach ring)
+ * @property {import('../entities/finalBoss.js').FinalBossDef} [finalBoss]  v1.0 (C7): 淀みの源 (not one of `bosses`)
  * @typedef {string[] | IslandDef} MapDef
  */
 

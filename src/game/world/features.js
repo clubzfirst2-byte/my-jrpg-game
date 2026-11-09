@@ -14,7 +14,8 @@ const OPEN_RANGE = 20;
 /**
  * @typedef {{ id: string, tx: number, ty: number, reward: 'heart' | 'money' | 'item', money?: number, item?: string, count?: number }} ChestDef
  * @typedef {{ id: string, tx: number, ty: number }} CheckpointDef
- * @typedef {{ id: string, tx: number, ty: number, facing: 'up' | 'down' | 'left' | 'right', toTx: number, toTy: number, reveal?: boolean }} WarpDef  reveal: draw a cave opening on the cliff above
+ * @typedef {{ flag: string, is?: boolean }} FlagCondition  v1.0: a flag is set (or, with is: false, not set)
+ * @typedef {{ id: string, tx: number, ty: number, facing: 'up' | 'down' | 'left' | 'right', toTx: number, toTy: number, reveal?: boolean, if?: FlagCondition[] }} WarpDef  reveal: draw a cave opening on the cliff above; v1.0 if: open only while these hold (the beach ring)
  * @typedef {{ id: string, tx: number, ty: number, tw: number, th: number, grants?: string, name?: string, dark?: boolean, home?: boolean }} AreaDef  P7: trials grant an ability; dark rooms; P10.1: home = a lived-in room (warm light)
  * @typedef {{ id: string, name: string, tx: number, ty: number, always: boolean }} LandmarkDef
  *
@@ -137,7 +138,7 @@ export function checkWarps(state) {
   const tx = Math.floor(p.x / ts);
   const ty = Math.floor((p.y - p.height / 2) / ts);
   for (const w of state.warps) {
-    if (w.tx !== tx || w.ty !== ty || p.facing !== w.facing) continue;
+    if (w.tx !== tx || w.ty !== ty || p.facing !== w.facing || !warpOpen(state, w)) continue;
     const f = tileFeet(state.map, w.toTx, w.toTy);
     p.x = p.prevX = f.x;
     p.y = p.prevY = f.y;
@@ -147,6 +148,17 @@ export function checkWarps(state) {
     return true;
   }
   return false;
+}
+
+/**
+ * Whether a doorway leads anywhere now (v1.0, C5: the beach ring opens with `source_open` and closes
+ * again once the source is purified). Doorways without conditions are always open.
+ * @param {any} state @param {WarpDef} w
+ */
+export function warpOpen(state, w) {
+  if (!w.if) return true;
+  const flags = state.progress.flags ?? {};
+  return w.if.every((c) => !!flags[c.flag] === (c.is ?? true));
 }
 
 /**
@@ -217,6 +229,8 @@ export function applyProgress(state, saved) {
   state.pickupsStale = true; // placed again on the next step (taken ones stay away for a day)
   // P10.4: purified cores stay gone.
   if (state.enemies) state.enemies = state.enemies.filter((/** @type {any} */ e) => !e.boss || !pr.bosses.includes(e.bossId));
+  // v1.0 (C7): so does the source.
+  if (state.enemies && pr.flags.source_purified) state.enemies = state.enemies.filter((/** @type {any} */ e) => !e.final);
   if (state.env) {
     for (const link of pr.gates) openDoors(state.env, state.map, link);
     if (typeof pr.worldMs === 'number') setWorldTime(state.env, pr.worldMs);
