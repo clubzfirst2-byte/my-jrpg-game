@@ -3,7 +3,7 @@ a domed head with a narrow visor slit where one murk-tainted magenta eye glows; 
 in a huge stone fist. Right-facing (mirrored by the game), 40x56, feet on row 54, outline row 55.
 
 Frames (ENEMY_BOSS_DESIGN.md 2.4): idle 2, move 4, windup 2, attack (slam) 2, hurt 1, defeat 3
-(crumbles). Wind-up shows by SHAPE: the fist raised over the head. The red ring is the program's.
+(crumbles). Wind-up shows by SHAPE: the fist raised over the head (it clears the dome, behind it). The red ring is the program's.
 """
 
 from rig import Rig
@@ -62,8 +62,9 @@ def draw(p):
     torso = r.m_poly([(cx - 10, top), (cx + 10, top - 1), (cx + 11, top + 5), (cx + 8, hip_y - 3), (cx - 7, hip_y - 3), (cx - 10, top + 5)])
     r.add(torso, "oldstone", soft=3)
     r.add(r.m_poly([(cx - 9, top + 11), (cx + 10, top + 10), (cx + 9.6, top + 13), (cx - 8.6, top + 14)]), "bronze", soft=1)
-    # the chest plate rune: a dim line of the murk glow (tainted), hand-placed
-    r.stamp(cx - 3, top + 3, ["a.a..", "aaaa.", "..a..", "..aaa"], {"a": ("glow", 1)})
+    # the chest plate emblem: a dim diamond with a centre point (the light gone out, tainted glow).
+    # Symmetric left-right, so it reads the same when the game mirrors the sprite (no letter shape)
+    r.stamp(cx - 2, top + 3, ["..a..", ".a.a.", "a.b.a", ".a.a.", "..a.."], {"a": ("glow", 1), "b": ("glow", 2)})
     # cracks in the stone (2-px groups)
     r.px([(cx + 6, top + 4), (cx + 6, top + 5), (cx + 7, top + 6)], "oldstone", 1)
     # head: a dome on a bronze collar, visor slit with the eye
@@ -84,8 +85,8 @@ def draw(p):
         fist_arm(r, sx, sy, sx + 3, sy + 8, sx + 5, sy + 16)
     elif f == "mid":
         fist_arm(r, sx, sy, sx + 5, sy - 3, sx + 6, sy - 11)
-    elif f == "high":
-        fist_arm(r, sx - 1, sy, sx + 1, sy - 8, sx - 2, sy - 14)
+    elif f == "high":  # over the head and a little behind it: the fist clears the top of the dome
+        fist_arm(r, sx - 1, sy, sx + 2, sy - 9, hx_ + 1, 4.5, inline=True)
     elif f == "slam":
         fist_arm(r, sx, sy, sx + 5, sy + 6, sx + 8, sy + 25)
     elif f == "follow":
@@ -128,7 +129,7 @@ def frames():
     f["move.3"] = Pose(nf=(22, G), ff=(15, G - 3), dy=0)
     # windup: the fist rises (to the shoulder, then over the head), the head tips back
     f["windup.0"] = Pose(fist="mid", tilt=-1, nf=(23, G), ff=(12, G))
-    f["windup.1"] = Pose(fist="high", tilt=-2, dy=-1, nf=(23, G), ff=(11, G))
+    f["windup.1"] = Pose(fist="high", tilt=-2, dy=2, nf=(24, G), ff=(10, G))
     # attack: the slam into the ground in front, then the follow-through (body bent over it)
     f["attack.0"] = Pose(fist="slam", tilt=2, dy=2, x=-2, nf=(23, G), ff=(10, G))
     f["attack.1"] = Pose(fist="follow", tilt=1, dy=1, x=-2, nf=(23, G), ff=(10, G))

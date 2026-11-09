@@ -100,6 +100,51 @@ function decodeFile(name) {
   return { w, h, depth, type, px };
 }
 
+// The 5-tone ramps of tools/enemy_release/rig.py (the design's and the guide's colours, tone 0 = outline).
+const RAMPS = {
+  murk: ['120a1a', '2e1a3e', '4a2a62', '6e4490', '9a70c0'],
+  glow: ['2a0a2a', '6a1e6a', 'b040b0', 'e070e0', 'ffc8ff'],
+  eye: ['4a2a08', 'b06a10', 'ffd84a', 'fff2a8', 'fffbe0'],
+  ashfur: ['1a1418', '3a3036', '5a4c50', '7e6e6e', 'a69690'],
+  gobskin: ['24201a', '4e4636', '7a6e54', 'a09474', 'c4ba98'],
+  plum: ['1e1016', '3e2430', '5e3a46', '80565e', 'a07a80'],
+  oldstone: ['1e1e26', '4e4e5a', '9696a0', 'bcbcc6', 'e2e2ea'],
+  bronze: ['24140c', '5a3418', '8a5628', 'b0783e', 'd4a064'],
+  rotwood: ['1a120e', '3a2a20', '5e4636', '846650', 'a88a70'],
+  fungus: ['3a1a0a', '8a4420', 'd07a3a', 'eaa868', 'f8d4a8'],
+  frostfur: ['261e1a', '55483e', '8a7a6c', 'b0a294', 'dcd2c6'],
+  ice: ['1a3040', '3e6e88', '7ab4cc', 'b8e4f0', 'f0fcff'],
+  murksand: ['1c1018', '3e2a3a', '5e4458', '82666e', 'a88c88'],
+  mask: ['2e2a26', '6e665c', 'a89e90', 'd2cabc', 'f2ece2'],
+  slate: ['1c1a26', '46445a', '7a7896', 'a4a2bc', 'cccade'],
+  spark: ['4a3a08', 'b08a10', 'ffe14a', 'fff59a', 'ffffff'],
+  lake: ['081c34', '143e66', '22608e', '3a84b2', '6aaed2'],
+  ashring: ['24201e', '4e4844', '7c7470', 'a8a09a', 'd6d0ca'],
+  bone: ['3a3226', '9a8c70', 'd0c4a4', 'e8dec4', 'fff8e4'],
+  wood: ['1e1008', '4a2c16', '6e4424', '906038', 'b07e50'],
+  leather: ['24160c', '4a3020', '704c30', '946c46', 'b88c5e'],
+};
+const RAMP_COLOURS = new Set(Object.values(RAMPS).flat());
+const OUTLINE_COLOURS = new Set(Object.values(RAMPS).map((r) => r[0]));
+// reserved for the program's cues (ART_STYLE_GUIDE 2.6): the wind-up warning red and the flinch blue
+const RESERVED = [
+  [0xff, 0x3a, 0x3a],
+  [0x60, 0xa0, 0xff],
+];
+const hex = (px, i) => [px[i], px[i + 1], px[i + 2]].map((v) => v.toString(16).padStart(2, '0')).join('');
+/** share of pixels whose opacity differs between two frames, over the opaque pixels of the first */
+function silhouetteChange(a, b) {
+  const A = decode(a);
+  const B = decode(b);
+  let op = 0;
+  let diff = 0;
+  for (let i = 3; i < A.px.length; i += 4) {
+    if (A.px[i]) op++;
+    if (!A.px[i] !== !B.px[i]) diff++;
+  }
+  return diff / op;
+}
+
 describe('enemy & boss release art (src/art-release/enemy)', () => {
   it('the minimal set keeps the names the current code draws (enemy.<kind>.0 / .1)', () => {
     for (const kind of MINIMAL) {
@@ -155,12 +200,96 @@ describe('enemy & boss release art (src/art-release/enemy)', () => {
     for (const name of expected.keys()) {
       if (name.startsWith('enemy.shot.')) continue;
       // in the air on purpose: the beast's leap, the slime's hop and lunge; the final boss hovers
-      // (its tendrils lift off the ground while it winds up a slam, transforms, or falls apart)
-      if (/^enemy\.(beast\.attack\.0|slime\.(move\.[12]|attack\.0)|boss_source\.(windup_slam\.\d|transform\.[12]|defeat\.3))$/.test(name)) continue;
+      // (its tendrils lift off the ground while it winds up a slam, reach out sideways for a volley,
+      // tuck up under the ring for a charge, transform, or fall apart)
+      if (/^enemy\.(beast\.attack\.0|slime\.(move\.[12]|attack\.0)|boss_source\.(windup_(slam|volley|charge)\.\d|transform\.[12]|defeat\.3))$/.test(name)) continue;
       const { w, h, px } = decode(name);
       let lowest = -1;
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (px[(y * w + x) * 4 + 3]) lowest = y;
       expect(lowest, `${name}: on the ground line`).toBeGreaterThanOrEqual(h - 2);
+    }
+  });
+
+  it('colours: only the ramps of the design (no colour outside them), none near the reserved cue colours', () => {
+    for (const c of RESERVED) expect(RAMP_COLOURS.has(c.map((v) => v.toString(16).padStart(2, '0')).join(''))).toBe(false);
+    for (const name of expected.keys()) {
+      const { px } = decode(name);
+      const off = new Set();
+      let near = 0;
+      for (let i = 0; i < px.length; i += 4) {
+        if (!px[i + 3]) continue;
+        const h = hex(px, i);
+        if (!RAMP_COLOURS.has(h)) off.add(h);
+        for (const [r, g, b] of RESERVED) if (Math.abs(px[i] - r) + Math.abs(px[i + 1] - g) + Math.abs(px[i + 2] - b) < 60) near++;
+      }
+      expect([...off], `${name}: colours outside the ramps`).toEqual([]);
+      expect(near, `${name}: pixels close to the warning red / flinch blue`).toBe(0);
+    }
+  });
+
+  it('outline: every outer edge pixel is a tone-0 colour (shots excepted: their glow rims are lit)', () => {
+    for (const name of expected.keys()) {
+      if (name.startsWith('enemy.shot.')) continue;
+      const { w, h, px } = decode(name);
+      const a = (x, y) => px[(y * w + x) * 4 + 3] > 0;
+      let bad = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          if (!a(x, y)) continue;
+          const edge = [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+          ].some(([dx, dy]) => {
+            const X = x + dx;
+            const Y = y + dy;
+            return X >= 0 && Y >= 0 && X < w && Y < h && !a(X, Y);
+          });
+          if (edge && !OUTLINE_COLOURS.has(hex(px, (y * w + x) * 4))) bad++;
+        }
+      }
+      expect(bad, `${name}: outer edge pixels that are not tone 0`).toBe(0);
+    }
+  });
+
+  it('the minimal set is byte-identical to the frames it mirrors (frames.json "minimal")', () => {
+    const fj = JSON.parse(readFileSync(new URL('../../docs/art-release/enemy/frames.json', import.meta.url), 'utf8'));
+    expect(Object.keys(fj.minimal).length).toBe(MINIMAL.length * 2);
+    for (const [copy, src] of Object.entries(fj.minimal)) {
+      expect(readFileSync(new URL(`${copy}.png`, DIR)).equals(readFileSync(new URL(`${src}.png`, DIR))), `${copy} = ${src}`).toBe(true);
+    }
+  });
+
+  it('boss wind-ups show by pose: every wind-up frame changes the silhouette by 20% or more vs idle', () => {
+    for (const [kind, k] of Object.entries(KINDS)) {
+      if (!kind.startsWith('boss_')) continue;
+      for (const [action, n] of Object.entries(k.actions)) {
+        if (!action.startsWith('windup_')) continue;
+        for (let i = 0; i < n; i++) {
+          const c = silhouetteChange(`enemy.${kind}.idle.0`, `enemy.${kind}.${action}.${i}`);
+          expect(c, `${kind} ${action}.${i}: silhouette change vs idle.0`).toBeGreaterThanOrEqual(0.2);
+        }
+      }
+    }
+  });
+
+  it('wind-ups of different patterns are different poses (no frame reused between patterns)', () => {
+    for (const [kind, k] of Object.entries(KINDS)) {
+      if (!kind.startsWith('boss_')) continue;
+      const wind = Object.keys(k.actions).filter((a) => a.startsWith('windup_'));
+      const atk = Object.keys(k.actions).filter((a) => a.startsWith('attack_'));
+      for (const a of wind) {
+        for (const b of [...wind, ...atk]) {
+          if (b === a || b === a.replace('windup_', 'attack_')) continue;
+          for (let i = 0; i < 2; i++) {
+            for (let j = 0; j < 2; j++) {
+              const c = silhouetteChange(`enemy.${kind}.${a}.${i}`, `enemy.${kind}.${b}.${j}`);
+              expect(c, `${kind} ${a}.${i} vs ${b}.${j}`).toBeGreaterThanOrEqual(0.08);
+            }
+          }
+        }
+      }
     }
   });
 });

@@ -40,8 +40,9 @@ def front_leg(r, sx, sy, px, py, **k):
     """Shoulder (sx,sy) to paw (px,py): elbow tucked back, a thin foreleg, a small paw."""
     ex, ey = sx - 1.5 + (px - sx) * 0.3, sy + (py - sy) * 0.45
     wx, wy = px - 0.5, py - 2
-    m = r.mask_of(r.m_limb(sx, sy, ex, ey, 2.5, 1.7), r.m_limb(ex, ey, wx, wy, 1.5, 1.2), r.m_ellipse(px + 0.6, py - 0.6, 2.0, 1.2))
-    return r.add(m, "ashfur", **k)
+    m = r.mask_of(r.m_limb(sx, sy, ex, ey, 2.6, 1.6), r.m_ellipse(ex, ey, 1.7, 1.5), r.m_limb(ex, ey, wx, wy, 1.3, 1.0),
+                  r.m_ellipse(wx - 0.3, wy, 1.3, 1.1), r.m_ellipse(px + 0.6, py - 0.6, 2.0, 1.2))
+    return r.add(m, "ashfur", tex=("fur", 95, 4), **k)
 
 
 def hind_leg(r, hx_, hy, px, py, **k):
@@ -49,8 +50,8 @@ def hind_leg(r, hx_, hy, px, py, **k):
     kx, ky = hx_ + 2.5 + (px - hx_) * 0.4, hy + (py - hy) * 0.38
     hkx, hky = px - 2.2, py - 4.5
     m = r.mask_of(r.m_limb(hx_, hy, kx, ky, 3.4, 2.0), r.m_limb(kx, ky, hkx, hky, 1.8, 1.3),
-                  r.m_limb(hkx, hky, px, py - 1, 1.3, 1.1), r.m_ellipse(px + 0.6, py - 0.6, 2.0, 1.2))
-    return r.add(m, "ashfur", **k)
+                  r.m_limb(hkx, hky, px, py - 1, 1.2, 1.0), r.m_ellipse(hkx - 0.4, hky, 1.4, 1.3), r.m_ellipse(px + 0.6, py - 0.6, 2.0, 1.2))
+    return r.add(m, "ashfur", tex=("fur", 95, 5), **k)
 
 
 def draw(p):
@@ -84,10 +85,11 @@ def draw(p):
     # belly tucked up between chest and haunch
     belly_cut = r.m_ellipse((hip[0] + sh[0]) / 2, hip[1] + 4.5, 6.5, 3.2)
     body &= ~belly_cut
-    r.add(body, "ashfur")
+    r.add(body, "ashfur", tex=("fur", 172, 1))
     # mane ruff on the neck and shoulders (paler, tufted)
     rx, ry = sh[0] + 2, sh[1] - 6
-    r.add(r.m_poly([(rx - 6, ry - 1), (rx - 3, ry - 4), (rx + 2, ry - 5), (rx + 5, ry - 1), (rx + 2, ry + 2), (rx - 4, ry + 2)]), "ashfur", lit=1, soft=1)
+    r.add(r.m_poly([(rx - 7, ry), (rx - 5, ry - 2), (rx - 3, ry - 4), (rx - 1, ry - 3), (rx + 2, ry - 5), (rx + 5, ry - 1), (rx + 3, ry + 1),
+                    (rx + 2, ry + 3), (rx, ry + 1), (rx - 2, ry + 3), (rx - 4, ry + 1)]), "ashfur", lit=1, soft=1)
     # murk melting on the flank: a patch on the haunch with drips
     fx, fy = hip[0] + 3, hip[1] - 1
     r.ellipse(fx, fy, 5.0, 2.6, "murk", soft=1)
@@ -107,7 +109,10 @@ def draw(p):
         mouth = r.m_poly([(hx_ + 0.5, hy + 1.4), (hx_ + 9, hy + 1.2), (hx_ + 7.6, hy + 1.6 + jaw * 1.5)])
         r.add(mouth, "murk", tone=0)
         head &= ~r.m_poly([(hx_ + 0.5, hy + 1.4), (hx_ + 10, hy + 1.2), (hx_ + 10, hy + 4), (hx_ + 0.5, hy + 4)])
-    r.add(head, "ashfur", soft=2)
+    r.add(head, "ashfur", soft=2, tex=("fur", 180, 6))
+    # brow ridge and stop (breaks the box of the head): a dark crease from the eye down the muzzle
+    r.shade(r.m_line(hx_ + 0.5, hy - 2.6, hx_ + 3, hy - 2.2), lambda t: max(1, t - 1))
+    r.shade(r.m_line(hx_ + 4, hy + 0.6, hx_ + 8, hy + 0.4), lambda t: max(1, t - 1))
     # cheek ruff, paler, pointing back
     r.add(r.m_poly([(hx_ - 3.5, hy + 0.5), (hx_ - 6.8, hy + 3.4), (hx_ - 0.5, hy + 3.4)]), "ashfur", lit=1, soft=1)
     # the ear: a tall triangle in front of the crown, dark inside
@@ -187,11 +192,12 @@ def frames():
     # idle: breathing (body bobs 1 px), the tail sways, the head lifts a little
     f["idle.0"] = Pose()
     f["idle.1"] = Pose(dy=1, tail=1, head=(0, 1), ff=(29, G), nf=(27, G))
-    # move (trot, 4): diagonal pairs swing; body bobs on the passing frames
+    # move (4 poses): contact, gathered (legs under the body, back up), the other contact, extended
+    # (forelegs reaching, hind legs pushed back): move.1 and move.3 are different poses, not a mirror
     f["move.0"] = Pose(nf=(31, G), fh=(15, G), ff=(25, G - 2), nh=(8, G - 1), dy=0, tail=1, head=(1, 0))
-    f["move.1"] = Pose(nf=(28, G - 2), fh=(12, G - 2), ff=(28, G), nh=(12, G), dy=-1, tail=0)
+    f["move.1"] = Pose(nf=(26, G - 2), ff=(24, G - 1), nh=(17, G - 1), fh=(15, G), dy=-1, pitch=1, tail=0, head=(0, 1))  # gathered
     f["move.2"] = Pose(ff=(31, G), nh=(15, G), nf=(25, G - 2), fh=(8, G - 1), dy=0, tail=-1, head=(1, 0))
-    f["move.3"] = Pose(ff=(28, G - 2), nh=(12, G - 2), nf=(28, G), fh=(12, G), dy=-1, tail=0)
+    f["move.3"] = Pose(nf=(34, G - 3), ff=(32, G - 1), nh=(7, G - 2), fh=(5, G), dy=-2, pitch=-1, tail=2, head=(1, -1))  # extended
     # windup: crouch low, head down, jaw opens, crystals bristle (2 frames, deeper)
     f["windup.0"] = Pose(dy=2, pitch=2, head=(-1, 3), jaw=1, ear=1, spike=1, tail=1, nf=(30, G), ff=(32, G), nh=(14, G), fh=(12, G))
     f["windup.1"] = Pose(dy=3, pitch=3, x=-1, head=(-2, 4), jaw=2, ear=1, spike=2, tail=2, nf=(30, G), ff=(32, G), nh=(12, G), fh=(10, G))

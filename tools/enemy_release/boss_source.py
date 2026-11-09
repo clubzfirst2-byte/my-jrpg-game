@@ -7,7 +7,8 @@ seats of the four cores; murk tendrils reach down to the ground; stone shards ci
 Frames (ENEMY_BOSS_DESIGN.md 3.5, 34): idle 2, idle2 (phase 2) 2, windup 2 x 4 patterns,
 attack 2 x 4 patterns, hurt 1, transform (phase 1 -> 2) 4, defeat (purified) 6, and a separate
 tendril sprite (32x48) 3. The four patterns are named after the cores' own (volley, ring, slam,
-charge) and are told apart by HOW MANY SOCKETS OPEN in the wind-up (1, 2, 3, 4) and by pose.
+charge) and are told apart by HOW MANY SOCKETS OPEN in the wind-up (1, 2, 3, 4: big 6x6 glows in black
+rims; a closed socket is a stone plug) and by the pose of the tendrils.
 """
 
 import math
@@ -67,14 +68,16 @@ def ring(r, cx, cy, s, p):
         x, y = cx + (sx - CX) * s, cy + (sy - CY) * s
         if p.broken >= 2 and i == 0:
             continue
-        r.ellipse(x, y, 5.2 * s, 5.2 * s, "ashring", soft=1, dark=1)
-        if i < p.open or (p.phase2 and p.open == 0 and not p.broken):
-            r.ellipse(x, y, 3.6 * s, 3.6 * s, "murk", tone=0)
-            big = i < p.open
-            r.stamp(round(x) - 2, round(y) - 2, [".ab.", "abbc", "bbcd", ".cd."] if big else ["....", ".ab.", ".bd.", "...."],
+        r.ellipse(x, y, 6.2 * s, 6.2 * s, "ashring", soft=1, dark=1)
+        if i < p.open:  # an OPEN socket: a black rim around a big bright glow (6x6, reads at half size)
+            r.ellipse(x, y, 4.6 * s, 4.6 * s, "murk", tone=0)
+            r.stamp(round(x) - 3, round(y) - 3, ["..aa..", ".aabb.", "aabbbc", "abbbcc", ".bbcc.", "..cd.."],
                     {"a": ("glow", 4), "b": ("glow", 3), "c": ("glow", 2), "d": ("glow", 1)})
-        else:
-            r.ellipse(x, y, 3.0 * s, 3.0 * s, "murk", tone=0)
+        elif p.phase2 and p.open == 0 and not p.broken:  # phase 2 idle: all four smoulder dimly
+            r.ellipse(x, y, 4.0 * s, 4.0 * s, "murk", tone=0)
+            r.stamp(round(x) - 1, round(y) - 1, ["ab", "bd"], {"a": ("glow", 3), "b": ("glow", 2), "d": ("glow", 1)})
+        else:  # CLOSED: a domed stone plug, no hole
+            r.ellipse(x, y, 3.8 * s, 3.8 * s, "ashring", soft=1)
     # cracks (phase 2 / transform / defeat)
     segs = [(cx - 30 * s, cy - 26 * s, cx - 22 * s, cy - 18 * s), (cx + 26 * s, cy + 22 * s, cx + 33 * s, cy + 29 * s),
             (cx + 8 * s, cy - 40 * s, cx + 5 * s, cy - 33 * s), (cx - 38 * s, cy + 12 * s, cx - 33 * s, cy + 6 * s),
@@ -127,6 +130,12 @@ def draw(p):
             x1, y1, b = cx + dx * 2.4 + sgn * 14, cy + 18 - abs(dx) * 0.4, sgn * 6
         elif p.tendrils == "slam":
             x1, y1, b = cx + dx * 2.1 + sgn * 14, G - 1, -sgn * 4
+        elif p.tendrils == "aim":  # volley: raised up beside the ring like arms, tips curled in
+            x1, y1, b = cx + sgn * (44 + abs(dx) * 0.4), cy - 6 - abs(dx) * 0.9, sgn * 8
+        elif p.tendrils == "spread":  # ring: planted far apart, bracing
+            x1, y1, b = cx + sgn * (34 + abs(dx) * 1.2), G - 1, sgn * 9
+        elif p.tendrils == "tuck":  # charge: pulled up tight under the ring, ready to spring
+            x1, y1, b = cx + dx * 0.9 + sgn * 3, cy + 50 - abs(dx) * 0.3, -sgn * 7
         elif p.tendrils == "limp":
             x1, y1, b = cx + dx * 1.2 + sgn * 2, G - 1, sgn * 1
         else:
@@ -188,21 +197,23 @@ def frames():
     f["idle.1"] = Pose(spin=1, dy=1, look=(1, 0))
     f["idle2.0"] = Pose(phase2=True, spin=0, crack=3, shards=6)
     f["idle2.1"] = Pose(phase2=True, spin=1, dy=1, crack=3, shards=6, look=(-1, 0))
-    # each pattern opens 1 / 2 / 3 / 4 sockets in its wind-up; the eye narrows
-    f["windup_volley.0"] = Pose(eye="narrow", open=1, spin=0)
-    f["windup_volley.1"] = Pose(eye="narrow", open=1, spin=1, orbs=3, dy=-1)
+    # each pattern opens 1 / 2 / 3 / 4 sockets in its wind-up (big glowing holes) and has its own pose:
+    # volley = tendrils reach out sideways; ring = tendrils brace far apart, shards drawn in;
+    # slam = tendrils lifted, the ring rises; charge = tendrils tucked up, the ring draws back (smaller)
+    f["windup_volley.0"] = Pose(eye="narrow", open=1, spin=0, tendrils="aim", dy=-2)
+    f["windup_volley.1"] = Pose(eye="narrow", open=1, spin=1, orbs=3, dy=-3, tendrils="aim")
     f["attack_volley.0"] = Pose(eye="wide", open=1, spin=2, orbs=5)
     f["attack_volley.1"] = Pose(eye="open", open=1, spin=3)
-    f["windup_ring.0"] = Pose(eye="narrow", open=2, shards=6, orbit=-6, spin=0)
-    f["windup_ring.1"] = Pose(eye="narrow", open=2, shards=8, orbit=-10, spin=1, dy=-1)
+    f["windup_ring.0"] = Pose(eye="narrow", open=2, shards=6, orbit=-6, spin=0, tendrils="spread", dy=3)
+    f["windup_ring.1"] = Pose(eye="narrow", open=2, shards=8, orbit=-10, spin=1, dy=4, tendrils="spread")
     f["attack_ring.0"] = Pose(eye="wide", open=2, shards=8, orbit=4, spin=2)
     f["attack_ring.1"] = Pose(eye="open", open=2, shards=8, orbit=8, spin=3)
     f["windup_slam.0"] = Pose(eye="narrow", open=3, tendrils="lift", dy=-3, spin=0)
     f["windup_slam.1"] = Pose(eye="narrow", open=3, tendrils="lift", dy=-6, spin=1)
     f["attack_slam.0"] = Pose(eye="wide", open=3, tendrils="slam", dy=2, spin=2)
     f["attack_slam.1"] = Pose(eye="open", open=3, tendrils="slam", dy=1, spin=3)
-    f["windup_charge.0"] = Pose(eye="narrow", open=4, scale=0.94, dy=-2, look=(0, 2))
-    f["windup_charge.1"] = Pose(eye="narrow", open=4, scale=0.9, dy=-4, look=(0, 3), shards=2)
+    f["windup_charge.0"] = Pose(eye="narrow", open=4, scale=0.92, dy=-4, look=(0, 2), tendrils="tuck")
+    f["windup_charge.1"] = Pose(eye="narrow", open=4, scale=0.86, dy=-6, look=(0, 3), shards=2, tendrils="tuck")
     f["attack_charge.0"] = Pose(eye="wide", open=4, scale=1.12, dy=4, shards=0)
     f["attack_charge.1"] = Pose(eye="open", open=4, scale=1.06, dy=2, shards=2)
     f["hurt.0"] = Pose(eye="shut", dy=-2, spin=1, tendrils="limp")

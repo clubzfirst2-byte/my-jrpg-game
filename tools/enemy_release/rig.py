@@ -82,12 +82,45 @@ def _blur(a, r):
     return out
 
 
-class Part:
-    __slots__ = ("mask", "mat", "tone", "tones", "dark", "soft", "cast", "inline", "lit")
+def _hash(a, b, seed=0):
+    h = (a.astype(np.int64) * 73856093) ^ (b.astype(np.int64) * 19349663) ^ (seed * 83492791)
+    h = (h ^ (h >> 13)) * 1274126177
+    return ((h ^ (h >> 16)) & 0xFFFF) / 65535.0
 
-    def __init__(self, mask, mat, tone=None, tones=None, dark=0, soft=None, cast=True, inline=False, lit=0):
+
+TEX = {  # kind -> (strand length, jitter of the light bands, share of dark strokes, share of lit strokes)
+    "fur": (4, 0.30, 0.10, 0.05),
+    "shag": (6, 0.36, 0.13, 0.06),
+    "bark": (8, 0.26, 0.16, 0.04),
+}
+
+
+def _texture(tex, I, oy, ox):
+    """Fur / bark: the light is broken along strands. tex = (kind, angle in degrees of the strands,
+    seed). Strands are 1 px wide and L px long, anchored to the part (they move with it), so the
+    band edges become tufts and the core gets a few hand-like hair / grain strokes."""
+    kind, ang = tex[0], math.radians(tex[1])
+    seed = tex[2] if len(tex) > 2 else 0
+    L, amp, dark, lit = TEX[kind]
+    h, w = I.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    yy, xx = yy - oy, xx - ox
+    u = xx * math.cos(ang) + yy * math.sin(ang)  # along the strand
+    v = np.round(-xx * math.sin(ang) + yy * math.cos(ang)).astype(int)  # across: one strand per px
+    off = _hash(v, np.zeros_like(v), seed + 7) * L
+    seg = np.floor((u + off) / L).astype(int)
+    n = _hash(v, seg, seed)
+    I = I + (n - 0.5) * amp
+    return I, (n > 1 - dark, n < lit)
+
+
+class Part:
+    __slots__ = ("mask", "mat", "tone", "tones", "dark", "soft", "cast", "inline", "lit", "tex")
+
+    def __init__(self, mask, mat, tone=None, tones=None, dark=0, soft=None, cast=True, inline=False, lit=0, tex=None):
         self.mask, self.mat, self.tone, self.tones = mask, mat, tone, tones
         self.dark, self.soft, self.cast, self.inline, self.lit = dark, soft, cast, inline, lit
+        self.tex = tex
 
 
 class Rig:
@@ -247,6 +280,9 @@ class Rig:
             nx, ny, nz = -gx * S, -gy * S, np.ones_like(B)
             nn = np.sqrt(nx * nx + ny * ny + nz * nz)
             I = (nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2]) / nn
+            strands = None
+            if p.tex:
+                I, strands = _texture(p.tex, I, ys.min() - y0, xs.min() - x0)
             t = np.full(B.shape, 2)
             t[I > 0.62] = 3
             t[I < 0.30] = 1
@@ -260,6 +296,10 @@ class Rig:
             right = ~np.pad(m, ((0, 0), (0, 1)))[:, 1:]
             t[m & (down | right) & ~(up | left)] = 1
             t[m & (up | left) & ~(down | right) & (t < 3)] = 3
+            if strands is not None:  # hand-like strokes: dark hairs / grain in the core, a few lit ones
+                dk, lt = strands
+                t[dk & (t == 2) & m] = 1
+                t[lt & (t == 2) & m] = 3
             t = np.clip(t - p.dark + p.lit, 1, 4)
             if p.mat not in SHINY:
                 t = np.minimum(t, 3)

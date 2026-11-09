@@ -32,6 +32,8 @@ class Pose:
         self.collapse = 0  # defeat 0..4
         self.chips = False
         self.spikes = 0  # spikes bristle (+ longer)
+        self.fan = 0  # spikes fan out sideways (+), bristling
+        self.raise_ = 0  # front legs raised above the body (rearing) 0..1
         self.__dict__.update(k)
 
 
@@ -47,36 +49,52 @@ def draw(p):
     # hind legs: short and thick, seen between the front legs (they carry it when it rears)
     if c < 3:
         for s in (-1, 1):
-            r.limb(cx + s * 12, by + 8, CX + s * 14, G - 3, 5.0, 3.6, "rotwood", dark=1)
+            r.limb(cx + s * 12, by + 8, CX + s * 14, G - 3, 5.0, 3.6, "rotwood", dark=1, tex=("bark", 90, 1))
             r.ellipse(CX + s * 14, G - 2.5, 4.4, 1.6, "rotwood", tone=0)
     # splayed front legs ending in root toes (behind the body), each a bent root
-    for s, lf in ((-1, p.legs[0]), (1, p.legs[1])):
-        sx_, sy_ = cx + s * 20, by + 10
-        kx, ky = CX + s * (30 + p.spread * 0.6), 56 + dy * 0.5 - lf * 0.7
-        fx, fy = CX + s * (35 + p.spread * 0.5), G - 3 - lf
-        r.chain([(sx_, sy_), (kx, ky), (fx, fy)], [6.5, 5.0, 4.0], "rotwood", dark=0 if s < 0 else 0)
-        # root toes: three spreading fingers
-        for t, (dx, ln) in enumerate(((-6, 4), (0, 5), (6, 4))):
-            r.limb(fx, fy, fx + dx * 0.8 + s * 1.0, fy + 1.4 + (ln - 4) * 0.4, 2.4, 1.1, "rotwood", soft=1, dark=1 if t == 1 else 0)
+    def front_legs():
+        for s, lf in ((-1, p.legs[0]), (1, p.legs[1])):
+            sx_, sy_ = cx + s * 20, by + 10
+            kx, ky = CX + s * (30 + p.spread * 0.6), 56 + dy * 0.5 - lf * 0.7
+            fx, fy = CX + s * (35 + p.spread * 0.5), G - 3 - lf
+            up = 1
+            if p.raise_:  # rearing: the root legs swing out and up above the shoulders, toes clawing
+                k = p.raise_
+                sx_, sy_ = cx + s * 22, by + 2
+                kx, ky = kx + (cx + s * 37 - kx) * k, ky + (by + 2 - ky) * k
+                fx, fy = fx + (cx + s * 40 - fx) * k, fy + (by - 20 - fy) * k
+                up = 1 - 2 * k
+            r.chain([(sx_, sy_), (kx, ky), (fx, fy)], [6.5, 5.0, 4.0], "rotwood", tex=("bark", 70 if s < 0 else 110, 2))
+            # root toes: three spreading fingers
+            for t, (dx, ln) in enumerate(((-6, 4), (0, 5), (6, 4))):
+                r.limb(fx, fy, fx + dx * 0.8 + s * 1.0, fy + (1.4 + (ln - 4) * 0.4) * up - (4 if up < 0 else 0), 2.4, 1.1, "rotwood", soft=1, dark=1 if t == 1 else 0)
+    if not p.raise_:
+        front_legs()
     # back spikes: long roots of different lengths, curving back
     for x, h in ((22, 10), (30, 16), (38, 20), (48, 22), (58, 20), (66, 16), (74, 10)):
         h = min(h + p.spikes, by - 12.5)
         bx = cx + (x - CX) * 1.0
-        r.chain([(bx, by - 10), (bx + (x - CX) * 0.08, by - 10 - h * 0.6), (bx + (x - CX) * 0.2, by - 10 - h)], [3.4, 2.2, 0.8], "rotwood", soft=1)
+        fan = (x - CX) * 0.06 * p.fan
+        r.chain([(bx, by - 10), (bx + (x - CX) * 0.08 + fan * 0.5, by - 10 - h * 0.6), (bx + (x - CX) * 0.2 + fan, by - 10 - h + abs(fan) * 0.4)],
+                [3.4, 2.2, 0.8], "rotwood", soft=1)
     # the body: a broad hunched mass
     body = r.mask_of(r.m_ellipse(cx, by, 30, 17), r.m_ellipse(cx, by + 6, 24, 13))
-    r.add(body, "rotwood", soft=4)
+    r.add(body, "rotwood", soft=4, tex=("bark", 90, 3))
     # shoulder spikes pointing out
     for s in (-1, 1):
         r.chain([(cx + s * 24, by - 2), (cx + s * 32, by - 7), (cx + s * 40, by - 10)], [4.2, 2.6, 0.8], "rotwood", soft=1)
     # root grain: dark grooves sweeping over the body
     for s in (-1, 1):
-        for i in range(3):
-            r.shade(r.m_line(cx + s * (10 + i * 6), by - 14 + i, cx + s * (16 + i * 6), by + 8 + i), lambda t: max(1, t - 1))
+        for i in range(4):
+            x0, x1 = cx + s * (9 + i * 5), cx + s * (14 + i * 6)
+            r.shade(r.m_line(x0, by - 15 + i, x1, by + 9 + i), lambda t: max(1, t - 1))
+            r.shade(r.m_line(x0 - s, by - 14 + i, x1 - s, by + 4 + i), lambda t: min(3, t + 1) if t >= 2 else t)
     # fungus caps
     for fx_, fy_, rr in ((cx - 22, by - 4, 3.5), (cx + 21, by - 2, 3.0), (cx - 15, by + 7, 2.4), (cx + 25, by + 6, 2.0)):
         r.ellipse(fx_, fy_, rr, rr * 0.6, "fungus", soft=1)
         r.px([(round(fx_ - rr * 0.4), round(fy_) - 1)], "fungus", 4)
+    if p.raise_:  # raised in front of the body
+        front_legs()
     # the core between root ribs
     ky = by - 3
     core(r, cx, ky, 9 if p.phase2 or c else 7, bright=not c >= 3)
@@ -143,19 +161,20 @@ def frames():
     f["idle.1"] = Pose(dy=1, lift=1, spikes=1)
     f["move.0"] = Pose(legs=(5, 0), shift=-2, dy=0)
     f["move.1"] = Pose(legs=(0, 5), shift=2, dy=0)
-    # charge: back rises, head drops, tusks forward; the lunge (head bigger = closer)
-    f["windup_charge.0"] = Pose(lift=-3, head=3, spikes=2, spread=1)
-    f["windup_charge.1"] = Pose(lift=-5, head=5, spikes=3, spread=2, jaw=1)
-    f["attack_charge.0"] = Pose(lift=-2, head=6, hs=1.15, spread=3, jaw=2, legs=(2, 2))
-    f["attack_charge.1"] = Pose(lift=-1, head=4, hs=1.1, spread=2, jaw=1)
-    # slam: rears up on the hind legs (front legs lifted), then crashes down wide
-    f["windup_slam.0"] = Pose(dy=-4, lift=-2, head=-3, legs=(8, 8), spread=-2)
-    f["windup_slam.1"] = Pose(dy=-7, lift=-3, head=-5, legs=(14, 14), spread=-3, jaw=1)
+    # charge: back rises, spikes bristle and fan, head drops low, tusks forward; the lunge
+    f["windup_charge.0"] = Pose(lift=-4, head=9, spikes=3, fan=4, spread=4)
+    f["windup_charge.1"] = Pose(lift=-5, head=11, hs=1.08, spikes=4, fan=5, spread=5, jaw=1)
+    f["attack_charge.0"] = Pose(lift=-2, head=8, hs=1.15, spread=3, jaw=2, legs=(2, 2), fan=2)
+    f["attack_charge.1"] = Pose(lift=-1, head=5, hs=1.1, spread=2, jaw=1, fan=1)
+    # slam: rears up on the hind legs, front legs lifted above the body, head up; then crashes down
+    f["windup_slam.0"] = Pose(dy=-5, lift=-2, head=-5, raise_=0.55, spread=-2, jaw=1)
+    f["windup_slam.1"] = Pose(dy=-8, lift=-3, head=-8, raise_=0.9, spread=-3, jaw=2)
     f["attack_slam.0"] = Pose(dy=3, head=3, spread=4, jaw=2, chips=True)
     f["attack_slam.1"] = Pose(dy=2, head=2, spread=3, jaw=1)
-    # volley: mouth opens, orbs line up before the core; then the fan leaves (recoil)
-    f["windup_volley.0"] = Pose(jaw=2, orbs=3, head=1, phase2=True)
-    f["windup_volley.1"] = Pose(jaw=3, orbs=5, head=2, lift=-1, phase2=True)
+    # volley: the head throws up, the mouth gapes, the front legs brace wide, the spikes fan;
+    # orbs line up before the bared core; then the fan leaves (recoil)
+    f["windup_volley.0"] = Pose(jaw=3, orbs=3, head=-6, spread=7, fan=4, spikes=2, phase2=True)
+    f["windup_volley.1"] = Pose(jaw=4, orbs=5, head=-9, spread=9, fan=6, spikes=3, lift=-2, phase2=True)
     f["attack_volley.0"] = Pose(jaw=3, head=-2, dy=-1, phase2=True)
     f["attack_volley.1"] = Pose(jaw=1, head=0, phase2=True)
     f["hurt.0"] = Pose(head=-4, eyes="shut", dy=-1, jaw=1)

@@ -31,6 +31,10 @@ class Pose:
         self.phase2 = False
         self.collapse = 0
         self.crest = 0  # crest flicker (0/1)
+        self.crest_up = 1.0  # crest raised (ring wind-up: bristles tall)
+        self.fin = 15  # dorsal fin length (bristle: longer)
+        self.pull = 0  # neck drawn back to the left (volley wind-up)
+        self.coil = 0  # body pulled down into a tight coil (ring wind-up)
         self.__dict__.update(k)
 
 
@@ -56,9 +60,9 @@ def draw(p):
     # a coil breaking the water behind (an arch)
     r.add(r.m_chain([(60, G - 4), (64, G - 14 + sink * 0.5), (72, G - 15 + sink * 0.5), (77, G - 4)], [5.0, 5.0, 4.6, 4.2]) & ~water, "slate", dark=1)
     # the S body: base in the water, bending left then right up to the neck
-    sw, rz = p.sway, p.raise_
-    pts = [(30, G - 4), (24 + sw * 0.5, 74 - rz * 0.2 + sink), (30 + sw, 58 - rz * 0.5 + sink), (42 + sw, 46 - rz * 0.8 + sink),
-           (50 + sw * 0.6, 34 - rz + sink + p.drop * 0.4)]
+    sw, rz, pl, co = p.sway, p.raise_, p.pull, p.coil
+    pts = [(30, G - 4), (24 + sw * 0.5 - co * 0.6, 74 - rz * 0.2 + sink + co * 0.3), (30 + sw - pl * 0.4 - co * 0.8, 58 - rz * 0.5 + sink + co * 0.7),
+           (42 + sw - pl * 0.9, 46 - rz * 0.8 + sink + co), (50 + sw * 0.6 - pl * 1.4, 34 - rz + sink + p.drop * 0.4 + co * 1.1 + pl * 0.3)]
     radii = [9.5, 9.0, 8.6, 8.0, 7.4]
     pts = [(x, min(y, G - 4)) for x, y in pts]
     # dorsal fins along the back (left side of the S), behind the body
@@ -70,7 +74,8 @@ def draw(p):
         nx, ny = dy / L, -dx / L  # left normal
         if nx > 0:
             nx, ny = -nx, -ny
-        r.poly([(mx - dx / L * 4, my - dy / L * 4), (mx + nx * 15, my + ny * 15 - 3), (mx + dx / L * 4, my + dy / L * 4)], "spark", soft=1, dark=1)
+        fl = p.fin + (3 if p.phase2 else 0)
+        r.poly([(mx - dx / L * 4, my - dy / L * 4), (mx + nx * fl, my + ny * fl - 3), (mx + dx / L * 4, my + dy / L * 4)], "spark", soft=1, dark=1)
     body = r.m_chain(pts, radii) & ~water
     r.add(body, "slate", soft=4)
     # pale belly scutes down the front of the S
@@ -85,9 +90,13 @@ def draw(p):
             x, y = x0 + (x1 - x0) * t, y0 + (y1 - y0) * t
             r.shade(r.m_line(x - 4, y, x - 1, y + 2), lambda tt: max(1, tt - 1))
     if p.phase2 or c:
+        # phase 2: a 2-px band of sparks down the body, forking at each bend (reads at half size)
         for i in range(len(pts) - 1):
             (x0, y0), (x1, y1) = pts[i], pts[i + 1]
-            r.add(r.m_line(x0 - 3, y0, x1 - 3, y1), "spark", tone=3, cast=False)
+            r.add(r.m_line(x0 - 4, y0, x1 - 4, y1), "spark", tone=3, cast=False)
+            r.add(r.m_line(x0 - 3, y0, x1 - 3, y1), "spark", tone=2, cast=False)
+            if i:
+                r.add(r.m_line(x0 - 3, y0, x0 + 2, y0 + 3) | r.m_line(x0 - 3, y0 + 1, x0 + 2, y0 + 4), "spark", tone=2, cast=False)
     # the core on the chest of the S
     kx, ky = pts[2][0] + 2, pts[2][1] + 2
     r.ellipse(kx, ky, 5, 5, "murk", soft=2)
@@ -97,7 +106,7 @@ def draw(p):
     hs = p.hs
     hx_, hy = pts[-1][0] + 4, pts[-1][1] - 6 + p.drop * 0.6
     for i, (dx, h) in enumerate(((-10, 9), (-5, 14), (0, 16), (5, 12), (9, 7))):  # jagged spark crest
-        h = h * hs + (1 if (i + p.crest) % 2 else -1)
+        h = h * hs * (p.crest_up + (0.2 if p.phase2 else 0)) + (1 if (i + p.crest) % 2 else -1)
         x = hx_ + dx * hs
         r.poly([(x - 3, hy - 6 * hs), (x - 1, hy - 6 * hs - h * 0.6), (x + 1, hy - 6 * hs - h * 0.45), (x + 0.5, hy - 6 * hs - h), (x + 3, hy - 6 * hs)], "spark", soft=1)
     if p.jaw:
@@ -111,7 +120,22 @@ def draw(p):
     if p.mouth_spark:
         zig(r, round(hx_ + 7), round(hy + 3), 1)
         zig(r, round(hx_ + 12), round(hy + 4), -1)
-    glow_eyes(r, hx_ + 1, hy - 1, round(5 * hs), p.eyes)
+    # fangs: two hooked bone fangs hang over the lower lip, a row more when the jaw opens
+    fangs = [(hx_ + 6 * hs, 3), (hx_ + 13 * hs, 3)] + ([(hx_ + 9.5 * hs, 2), (hx_ + 16.5 * hs, 2)] if p.jaw else [])
+    for fx, fl in fangs:
+        r.poly([(fx - 1.2, hy + 3.6), (fx + 1.2, hy + 3.6), (fx + 0.4, hy + 3.6 + fl), (fx - 0.2, hy + 3.6 + fl)], "bone", soft=1)
+    # a heavy brow ridge over slanted eyes (the eyes glare down toward the snout)
+    ex, ey = hx_ + 1, hy - 1
+    for sgn in (-1, 1):
+        r.add(r.m_poly([(ex + sgn * 2 - 1.5, ey - 3.2 - (0 if sgn > 0 else 1.2)), (ex + sgn * 8 + 1, ey - 4.8 - (0 if sgn > 0 else 1.2)),
+                        (ex + sgn * 8 + 1, ey - 2.4), (ex + sgn * 2 - 1.5, ey - 1.2)]), "slate", dark=1, soft=1)
+    if p.eyes == "open":
+        for sgn in (-1, 1):
+            x = round(ex + sgn * 5) - 1
+            y = round(ey)
+            r.stamp(x - 1, y - 1, ["ab..", ".bcc"] if sgn < 0 else ["..ba", "ccb."], {"a": ("glow", 4), "b": ("glow", 3), "c": ("glow", 2)})
+    else:
+        glow_eyes(r, ex, ey, round(5 * hs), p.eyes)
     # sparks crawling around it (ring) / thrown out
     ring = [(6, 30), (78, 40), (8, 66), (80, 62), (36, 4), (66, 14), (4, 48), (82, 82)]
     for i, (x, y) in enumerate(ring[:p.sparks]):
@@ -140,19 +164,21 @@ def frames():
     f["idle.1"] = Pose(sway=1, raise_=1, crest=1)
     f["move.0"] = Pose(sway=-3, crest=1)
     f["move.1"] = Pose(sway=3, raise_=1)
-    # ring: sparks run around it (4, then 8); then it rears and they fly out
-    f["windup_ring.0"] = Pose(sparks=4, crest=1, jaw=1)
-    f["windup_ring.1"] = Pose(sparks=8, raise_=2, jaw=1)
+    # ring: it pulls down into a tight coil, the crest and fins bristle tall, sparks run around it;
+    # then it rears and they fly out
+    f["windup_ring.0"] = Pose(sparks=4, crest=1, coil=7, crest_up=1.5, fin=19, jaw=1)
+    f["windup_ring.1"] = Pose(sparks=8, coil=11, crest_up=1.8, fin=22, jaw=1, sway=-2)
     f["attack_ring.0"] = Pose(sparks=8, fly=6, raise_=4, jaw=2, crest=1)
     f["attack_ring.1"] = Pose(sparks=4, fly=12, raise_=2)
-    # volley: the jaw opens with sparks inside; then the head lunges as the fan leaves
-    f["windup_volley.0"] = Pose(jaw=2, mouth_spark=True, drop=-2)
-    f["windup_volley.1"] = Pose(jaw=3, mouth_spark=True, drop=-3, raise_=1, crest=1)
+    # volley: the neck draws back to the left, the head tips up, the jaw gapes with sparks inside;
+    # then the head lunges as the fan leaves
+    f["windup_volley.0"] = Pose(jaw=3, mouth_spark=True, pull=8, drop=-3)
+    f["windup_volley.1"] = Pose(jaw=4, mouth_spark=True, pull=13, drop=-5, raise_=2, crest=1)
     f["attack_volley.0"] = Pose(jaw=3, drop=6, hs=1.08, sway=1)
     f["attack_volley.1"] = Pose(jaw=1, drop=3)
     # slam (phase 2): rears up high; then crashes down into the water (a splash)
-    f["windup_slam.0"] = Pose(raise_=6, phase2=True, jaw=1, crest=1)
-    f["windup_slam.1"] = Pose(raise_=9, phase2=True, jaw=2, sway=-1)
+    f["windup_slam.0"] = Pose(raise_=9, phase2=True, jaw=1, crest=1, sway=-2)
+    f["windup_slam.1"] = Pose(raise_=12, phase2=True, jaw=2, sway=-4)
     f["attack_slam.0"] = Pose(drop=16, raise_=-6, hs=1.08, phase2=True, splash=True, jaw=2)
     f["attack_slam.1"] = Pose(drop=10, raise_=-3, phase2=True, jaw=1)
     f["hurt.0"] = Pose(sway=-2, drop=-3, eyes="shut", jaw=2)
