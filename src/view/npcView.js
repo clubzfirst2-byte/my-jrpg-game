@@ -24,6 +24,8 @@ export class NpcView {
     this.sprites = new Map();
     /** The frame each villager shows (tests, ?debug). @type {Map<string, string>} */
     this.keys = new Map();
+    /** The ids there this frame (reused: no garbage per frame). @type {Set<string>} */
+    this.present = new Set();
   }
 
   /**
@@ -34,7 +36,9 @@ export class NpcView {
   update(state, alpha, center, timeSec = 0) {
     const has = (/** @type {string} */ key) => this.assets.hasTexture(key);
     // Someone who left (v1.0 appearance conditions): no sprite.
-    for (const id of [...this.sprites.keys()]) if (!state.npcs.some((n) => n.id === id)) this.drop(id);
+    this.present.clear();
+    for (const n of state.npcs) this.present.add(n.id);
+    for (const id of this.sprites.keys()) if (!this.present.has(id)) this.drop(id); // (deleting while iterating a Map is safe)
     for (const n of state.npcs) {
       const near = Math.hypot(n.x - center.x, n.y - center.y) < NEAR_PX;
       const key = near ? npcFrameKey(n, timeSec, has) : null;

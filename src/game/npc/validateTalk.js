@@ -6,8 +6,8 @@
 // (C2), and a villager's appearance condition `if` and see-through `ghost` (C3).
 
 const QUEST_STATES = ['none', 'active', 'ready', 'done'];
-const COND_KEYS = ['flag', 'is', 'quest', 'state', 'item', 'count', 'money', 'cores', 'boss'];
-const NPC_KEYS = ['id', 'name', 'dialogue', 'look', 'tx', 'ty', 'stay', 'reach', 'if', 'ghost'];
+const COND_KEYS = ['flag', 'is', 'quest', 'state', 'item', 'count', 'money', 'cores', 'boss', 'slots'];
+const NPC_KEYS = ['id', 'name', 'dialogue', 'look', 'tx', 'ty', 'stay', 'reach', 'if', 'ghost', 'art'];
 const EFFECT_KEYS = ['setFlag', 'clearFlag', 'startQuest', 'completeQuest', 'giveItem', 'count', 'giveMoney', 'openShop', 'sleep'];
 
 /**
@@ -36,6 +36,7 @@ export function validateTalk(data, world = {}) {
       if (!QUEST_STATES.includes(c.state)) err(`${at}: quest state must be ${QUEST_STATES.join(' / ')}`);
     }
     if (c.item !== undefined && !items.has(c.item)) err(`${at}: unknown item "${c.item}"`);
+    if (c.slots !== undefined && !['weapon', 'bow'].includes(c.slots)) err(`${at}: slots must be weapon / bow`);
     if (c.cores !== undefined && !coreCount(c.cores)) err(`${at}: cores must be a whole number 1..${maxCores}`);
     if (c.boss !== undefined && !(cores ? cores.has(c.boss) : typeof c.boss === 'string' && c.boss.startsWith('core_'))) err(`${at}: unknown core of the murk "${c.boss}"`);
   };
@@ -137,6 +138,10 @@ export function validateTalk(data, world = {}) {
       else for (const [k, c] of n.if.entries()) checkCond(c, `npc ${n.id}.if[${k}]`);
     }
     if (n.ghost !== undefined && typeof n.ghost !== 'boolean') err(`npc ${n.id}: ghost must be true or false`);
+    // Release art npc.<art>.* (the id when not given): lowercase letters only, like the art files.
+    if (n.art !== undefined && !(typeof n.art === 'string' && /^[a-z]+$/.test(n.art))) err(`npc ${n.id}: art must be a name of lowercase letters`);
+    if (n.art === undefined && !/^[a-z]+$/.test(String(n.id))) err(`npc ${n.id}: an id that is not a plain name needs an art name`);
+    if (n.reach !== undefined && !(n.reach > 0)) err(`npc ${n.id}: reach must be above 0`);
   }
   return errors;
 }

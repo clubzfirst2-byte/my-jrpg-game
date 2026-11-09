@@ -418,9 +418,10 @@ for e in features['enemies']:
 
 # v1.0 (docs/story/V1_STORY_PROPOSAL.md C4): the princess's 写し身 beside the beach record stone, where she
 # is first met (east of it: the beach gate of C5 is to the west). Placed last so nothing else moves.
+# Drawn from npc.princess.*; a short talk range (18 px) as by the other stones (tools/gen_world.py).
 bx, by = features['checkpoints'][0]['tx'], features['checkpoints'][0]['ty']
 assert free(bx + 1, by, h[by][bx]) and (bx + 1, by) not in taken and g[by][bx + 1] != '=', 'princess_beach spot'
-features['npcs'] = [{'id': 'princess_beach', 'name': '星環の姫', 'dialogue': 'princess', 'look': 9, 'tx': bx + 1, 'ty': by, 'stay': True,
+features['npcs'] = [{'id': 'princess_beach', 'name': '星環の姫', 'dialogue': 'princess', 'look': 9, 'art': 'princess', 'tx': bx + 1, 'ty': by, 'stay': True, 'reach': 18,
                      'if': [{'flag': 'source_purified', 'is': False}, {'flag': 'ending_seen', 'is': False}], 'ghost': True}]
 
 fmt = lambda rows: ',\n'.join("    '" + r + "'" for r in rows)

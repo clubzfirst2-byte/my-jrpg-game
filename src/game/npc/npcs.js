@@ -27,14 +27,15 @@ export const NPC = Object.freeze({
 /**
  * @typedef {{ id: string, name: string, dialogue: string, look: number, x: number, y: number, z: number,
  *   prevX: number, prevY: number, homeX: number, homeY: number, tx: number, ty: number, waitMs: number,
- *   facing: string, moving: boolean, walkTime: number, halfWidth: number, height: number, stay: boolean, reach: number, ghost: boolean }} Npc
+ *   facing: string, moving: boolean, walkTime: number, halfWidth: number, height: number, stay: boolean, reach: number, ghost: boolean, art: string }} Npc
  * stay: never strolls (a shopkeeper behind the counter, P10.1); reach: talk range (across a counter);
- * ghost: drawn see-through (v1.0)
+ * ghost: drawn see-through (v1.0); art: the name of its release frames npc.<art>.* (v1.0: the
+ * princess stands in seven places under seven ids, all drawn from npc.princess.*)
  */
 
 /**
  * @typedef {{ id: string, name: string, dialogue: string, look?: number, tx: number, ty: number, stay?: boolean, reach?: number,
- *   if?: import('./talk.js').Condition[], ghost?: boolean }} NpcDef
+ *   if?: import('./talk.js').Condition[], ghost?: boolean, art?: string }} NpcDef
  * if: there only while all these conditions hold (v1.0)
  */
 
@@ -71,13 +72,21 @@ export function createNpcs(map, defs) {
       stay: !!d.stay,
       reach: d.reach ?? NPC.talkRange,
       ghost: !!d.ghost,
+      art: d.art ?? d.id,
     };
   });
 }
 
 /** Whether a villager is there now (all of its `if` conditions hold). @param {any} state @param {NpcDef} def */
 export function npcPresent(state, def) {
-  return (def.if ?? []).every((c) => conditionHolds(state, c));
+  for (const c of def.if ?? []) if (!conditionHolds(state, c)) return false;
+  return true;
+}
+
+/** @param {Npc[]} npcs @param {string} id */
+function indexOfNpc(npcs, id) {
+  for (let k = 0; k < npcs.length; k++) if (npcs[k].id === id) return k;
+  return -1;
 }
 
 /**
@@ -93,7 +102,7 @@ export function syncNpcs(state) {
   for (const d of defs) {
     if (!d.if) continue;
     const want = npcPresent(state, d);
-    const k = state.npcs.findIndex((/** @type {Npc} */ n) => n.id === d.id);
+    const k = indexOfNpc(state.npcs, d.id);
     if (want && k < 0) {
       state.npcs.push(...createNpcs(state.map, [d]));
       changed = true;

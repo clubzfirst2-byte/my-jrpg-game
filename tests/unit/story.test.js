@@ -3,10 +3,11 @@ import { createGameState, stepGame } from '../../src/game/state.js';
 import { WORLD } from '../../src/game/world/world.js';
 import { startDialogue, dialogueView, advance, questState, conditionHolds, coresPurified, completeQuest, TALK_DATA } from '../../src/game/npc/talk.js';
 import { validateTalk } from '../../src/game/npc/validateTalk.js';
-import { npcPresent, syncNpcs, npcAlpha, NPC } from '../../src/game/npc/npcs.js';
+import { npcPresent, syncNpcs, npcAlpha, npcInReach, NPC } from '../../src/game/npc/npcs.js';
 import { markNewGame, noticeOnLoad, noticeOnCore, NOTICE, STORY_FLAG } from '../../src/game/npc/storyNotices.js';
 import { addItem } from '../../src/game/items/inventory.js';
-import { applyProgress, emptyProgress } from '../../src/game/world/features.js';
+import { applyProgress, emptyProgress, respawnPoint } from '../../src/game/world/features.js';
+import { npcFrameKey } from '../../src/view/npcAnim.js';
 import ITEMS from '../../data/items.json';
 
 // v1.0 story (docs/story/V1_STORY_PROPOSAL.md, C2 / C3 / C4 / C8 / C14 and their part of C15):
@@ -184,12 +185,68 @@ describe('C3: villagers who come and go (if) and the see-through princess (ghost
     expect(s.dialogue).toBe(null);
   });
 
+  it('every princess is drawn from npc.princess.* (art), whatever her id; others from their id', () => {
+    const s = world();
+    s.progress.flags.princess_met = true;
+    stepGame(s, none);
+    const art = new Set(['npc.princess.idle.down.0', 'npc.woman.idle.down.0']);
+    const has = (k) => art.has(k) || k.startsWith('npc.princess.') || k.startsWith('npc.woman.');
+    const princesses = s.npcs.filter((n) => n.name === '星環の姫');
+    expect(princesses).toHaveLength(6);
+    for (const n of princesses) {
+      expect(n.art, n.id).toBe('princess');
+      expect(npcFrameKey(n, 0, has), n.id).toMatch(/^npc\.princess\.idle\.down\.\d$/);
+      expect(npcFrameKey(n, 0, () => false), n.id).toBe('npc.9.walk.down.0'); // the placeholder until her art is in
+    }
+    expect(WORLD.npcs.find((n) => n.id === 'princess_home').art).toBe('princess');
+    const woman = s.npcs.find((n) => n.id === 'woman');
+    expect(woman.art).toBe('woman');
+    expect(npcFrameKey(woman, 0, has)).toMatch(/^npc\.woman\.idle\./);
+  });
+
+  it('coming back to life by a record stone, an attack swings: the 写し身 is out of talk range there', () => {
+    const s = world();
+    s.progress.flags.princess_met = true;
+    stepGame(s, none);
+    for (const n of s.npcs.filter((x) => x.ghost)) {
+      s.progress.checkpoint = n.id.replace('princess_', '');
+      const at = respawnPoint(s);
+      expect(Math.hypot(n.x - at.x, n.y - at.y), n.id).toBeGreaterThan(n.reach);
+      // …but standing right in front of her (south, facing up) she can be spoken to.
+      expect(14, n.id).toBeLessThan(n.reach);
+      Object.assign(s.player, { x: at.x, y: at.y, z: n.z, facing: 'up', aimX: 0, aimY: -1 });
+      s.dialogue = null;
+      s.player.action = 'none';
+      for (const [aimX, aimY] of [[0, -1], [1, 0], [-1, 0]]) {
+        Object.assign(s.player, { aimX, aimY });
+        expect(npcInReach(s)?.id ?? null, `${n.id} ${aimX},${aimY}`).not.toBe(n.id);
+      }
+      Object.assign(s.player, { x: n.x, y: n.y + 14, aimX: 0, aimY: -1 });
+      expect(npcInReach(s)?.id, n.id).toBe(n.id);
+    }
+  });
+
+  it('the princess in the village stays in front of the inn (never on its doorstep)', () => {
+    const s = world();
+    s.progress.flags.ending_seen = true;
+    stepGame(s, none);
+    const n = s.npcs.find((x) => x.id === 'princess_home');
+    expect(n.stay).toBe(true);
+    s.player.x = 5 * 16;
+    s.player.y = 5 * 16;
+    for (let i = 0; i < 60 * 20; i++) stepGame(s, none);
+    expect([n.x, n.y]).toEqual([n.homeX, n.homeY]);
+  });
+
   it('the checker reads appearance conditions like a dialogue’s, and catches bad ones', () => {
     const npcs = [
       { id: 'a', name: 'a', dialogue: 'princess', tx: 1, ty: 1, if: [{ flag: 'x', iz: true }] },
       { id: 'b', name: 'b', dialogue: 'princess', tx: 1, ty: 1, if: [] },
       { id: 'c', name: 'c', dialogue: 'princess', tx: 1, ty: 1, ghost: 'yes' },
       { id: 'd', name: 'd', dialogue: 'princess', tx: 1, ty: 1, if: [{ quest: 'nope', state: 'done' }], colour: 1 },
+      { id: 'e_1', name: 'e', dialogue: 'princess', tx: 1, ty: 1 },
+      { id: 'f_1', name: 'f', dialogue: 'princess', tx: 1, ty: 1, art: 'Princess-1', reach: 0 },
+      { id: 'g', name: 'g', dialogue: 'princess', tx: 1, ty: 1, if: [{ slots: 'shield' }] },
     ];
     const text = validateTalk({ ...TALK_DATA, items: ITEMS }, { npcs }).join('\n');
     expect(text).toMatch(/npc a\.if\[0\]: unknown condition "iz"/);
@@ -197,6 +254,10 @@ describe('C3: villagers who come and go (if) and the see-through princess (ghost
     expect(text).toMatch(/npc c: ghost must be true or false/);
     expect(text).toMatch(/npc d\.if\[0\]: unknown quest "nope"/);
     expect(text).toMatch(/npc d: unknown field "colour"/);
+    expect(text).toMatch(/npc e_1: an id that is not a plain name needs an art name/);
+    expect(text).toMatch(/npc f_1: art must be a name of lowercase letters/);
+    expect(text).toMatch(/npc f_1: reach must be above 0/);
+    expect(text).toMatch(/npc g\.if\[0\]: slots must be weapon \/ bow/);
   });
 });
 
@@ -301,17 +362,22 @@ describe('C14: the story in data', () => {
     expect(talk(s, 'woman')[0]).toMatch(/空がこんなに青かった/);
   });
 
-  it('the smith forges the 星鋼の剣 from three crystals (and keeps it for you while your hands are full)', () => {
+  it('the smith forges the 星鋼の剣 from three crystals — with the hands full, he says to come back', () => {
     const s = world();
     talk(s, 'smith', [0]);
     addItem(s.progress.inv, 'murk_crystal', 3);
     while (s.progress.inv.weapons.length < ITEMS.limits.weapons) addItem(s.progress.inv, 'wood_sword');
-    talk(s, 'smith');
+    expect(conditionHolds(s, { slots: 'weapon', is: false })).toBe(true);
+    const said = talk(s, 'smith');
+    expect(said.join('')).toMatch(/手がいっぱい/);
+    expect(said.join('')).not.toMatch(/打ち上がった/); // he does not say he hands it over
     expect(questState(s, 'murk_steel')).toBe('ready'); // nothing lost: the crystals are still in the bag
     expect(s.progress.inv.items.murk_crystal).toBe(3);
+    // (and completing it some other way never loses the sword either)
+    expect(completeQuest(s, 'murk_steel')).toBe(false);
     expect(s.events.some((e) => e.type === 'full' && e.item === 'star_steel_sword')).toBe(true);
     s.progress.inv.weapons.pop();
-    talk(s, 'smith');
+    expect(talk(s, 'smith').join('')).toMatch(/打ち上がった/);
     expect(questState(s, 'murk_steel')).toBe('done');
     expect(s.progress.inv.weapons.at(-1)).toMatchObject({ id: 'star_steel_sword', dur: 45, lvl: 0 });
     expect(s.progress.inv.items.murk_crystal).toBeUndefined();

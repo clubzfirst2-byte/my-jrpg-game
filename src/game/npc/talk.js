@@ -14,8 +14,9 @@ import { sleepUntil } from '../world/interiors.js';
 export const TALK_DATA = { dialogue: DIALOGUE, quests: QUESTS, shops: SHOPS };
 
 /**
- * @typedef {{ flag?: string, is?: boolean, quest?: string, state?: string, item?: string, count?: number, money?: number, cores?: number, boss?: string }} Condition
- * v1.0 (C2): cores — at least that many cores of the murk purified; boss — that core purified.
+ * @typedef {{ flag?: string, is?: boolean, quest?: string, state?: string, item?: string, count?: number, money?: number, cores?: number, boss?: string, slots?: string }} Condition
+ * v1.0 (C2): cores — at least that many cores of the murk purified; boss — that core purified;
+ * slots: 'weapon' | 'bow' — a free slot for one more (with is: false, none free).
  */
 /** @typedef {{ setFlag?: string, clearFlag?: string, startQuest?: string, completeQuest?: string, giveItem?: string, count?: number, giveMoney?: number, openShop?: string, sleep?: number }} Effect  sleep: until that hour (P10.1) */
 
@@ -34,7 +35,14 @@ export const CORE_PREFIX = 'core_';
  * before v1.0 are right as they are). @param {any} state
  */
 export function coresPurified(state) {
-  return (state.progress.bosses ?? []).filter((/** @type {string} */ id) => id.startsWith(CORE_PREFIX)).length;
+  let n = 0;
+  for (const id of state.progress.bosses ?? []) if (id.startsWith(CORE_PREFIX)) n++;
+  return n;
+}
+
+/** Whether there is a free slot for one more weapon / bow (v1.0: the smith's sword). @param {any} inv @param {string} kind */
+export function hasFreeSlot(inv, kind) {
+  return kind === 'bow' ? inv.bows.length < ITEMS.limits.bows : inv.weapons.length < ITEMS.limits.weapons;
 }
 
 /** @param {any} state @param {any} q */
@@ -68,6 +76,7 @@ export function conditionHolds(state, c) {
   if (c.money !== undefined) return pr.inv.money >= c.money;
   if (c.cores !== undefined) return coresPurified(state) >= c.cores;
   if (c.boss !== undefined) return (pr.bosses ?? []).includes(c.boss);
+  if (c.slots !== undefined) return hasFreeSlot(pr.inv, c.slots) === (c.is ?? true);
   return true;
 }
 

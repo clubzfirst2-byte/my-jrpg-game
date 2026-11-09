@@ -35,7 +35,7 @@ test('the 写し身 on the beach: see-through, spoken to with the attack button;
   await api(page, 'standBy', 'princess_beach');
   await waitTicks(page, 10);
   const s = await sprite(page, 'princess_beach');
-  expect(s.key).toMatch(/^npc\.(princess\.(idle|walk)|9\.walk)\./); // her release art once it is in, a placeholder until then
+  expect(s.key).toMatch(/^npc\.(princess\.(idle|walk)|9\.walk)\./); // npc.princess.* (her art name) once it is in, a placeholder until then
   expect(s.alpha).toBeGreaterThan(0.3);
   expect(s.alpha).toBeLessThan(1);
   await page.screenshot({ path: testInfo.outputPath('princess-beach.png') });

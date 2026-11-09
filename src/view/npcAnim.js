@@ -21,20 +21,22 @@ export function idleOffset(id) {
 }
 
 /**
- * @param {{ id: string, look: number, facing: string, moving: boolean, walkTime: number }} n
+ * The release frames are npc.<art>.* (art: the villager's art name, v1.0; its id when not given).
+ * @param {{ id: string, art?: string, look: number, facing: string, moving: boolean, walkTime: number }} n
  * @param {number} timeSec real time (the breathing loop)
  * @param {(key: string) => boolean} has whether a texture exists
  * @returns {string} the sprite key
  */
 export function npcFrameKey(n, timeSec, has) {
   const dir = n.facing;
-  if (has(`npc.${n.id}.idle.${dir}.0`)) {
+  const art = n.art ?? n.id;
+  if (has(`npc.${art}.idle.${dir}.0`)) {
     if (n.moving) {
       const f = Math.floor(n.walkTime * NPC_ANIM.walk.fps) % NPC_ANIM.walk.frames;
-      return `npc.${n.id}.walk.${dir}.${f}`;
+      return `npc.${art}.walk.${dir}.${f}`;
     }
     const f = Math.floor(timeSec * NPC_ANIM.idle.fps + idleOffset(n.id) * NPC_ANIM.idle.frames) % NPC_ANIM.idle.frames;
-    return `npc.${n.id}.idle.${dir}.${f}`;
+    return `npc.${art}.idle.${dir}.${f}`;
   }
   const frame = n.moving ? PLACEHOLDER_CYCLE[Math.floor(n.walkTime * PLACEHOLDER_FPS) % PLACEHOLDER_CYCLE.length] : 0;
   return `npc.${n.look}.walk.${dir}.${frame}`;
