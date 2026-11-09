@@ -64,12 +64,12 @@ LAKE = {  # variant: (shift of the tuft layout, feature, position)
 }
 
 
-def lake_grass(variant):
+def lake_grass(variant, winter=False):
     (dx, dy), feat, pos = LAKE[variant]
     t = new_tile(32, 32, base=("lake.grass", 2))
     stamps(t, [(x + dx, y + dy, p) for x, y, p in LAKE_TUFTS], "lake.grass")
     if feat == "reeds":
-        t.stamp(*pos, REEDS, {**tones("reed"), "g": ("lake.grass", 1)})
+        t.stamp(*pos, REEDS[:4] if winter else REEDS, {**tones("reed"), "g": ("lake.grass", 1)})  # winter: the tops only
     elif feat == "stones":
         t.stamp(*pos, SHORE_STONES, {**tones("lake.shore"), "g": ("lake.grass", 1)})
     elif feat == "clover":
@@ -132,15 +132,19 @@ def forest_grass(variant, winter=False):
     (dx, dy), feats = FOREST[variant]
     t = new_tile(32, 32, base=("forest.moss", 2))
     stamps(t, [(x + dx, y + dy, p) for x, y, p in FOREST_BASE], "forest.moss")
-    for kind, (x, y) in feats:
+    for i, (kind, (x, y)) in enumerate(feats):
+        if winter and i > 0:
+            continue  # under snow: one dark feature per tile at most (design inspection 1)
         if kind == "needles":
             t.stamp(x, y, NEEDLES, tones("forest.pine"))
         elif kind == "needles2":
             t.stamp(x, y, NEEDLES_2, tones("forest.pine"))
+        elif kind == "fern" and winter:  # only the fern's tips show above the snow
+            t.stamp(x, y, SHRUB_TIP[:2], tones("forest.pine"))
         elif kind == "fern":
             t.stamp(x, y, FERN, tones("forest.pine"))
         elif kind == "mushrooms" and winter:  # under snow: a buried shrub's tips instead
-            t.stamp(x, y, SHRUB_TIP, {**tones("forest.pine"), "s": ("forest.moss", 1)})
+            t.stamp(x, y, SHRUB_TIP[:2], tones("forest.pine"))
         elif kind == "mushrooms":
             t.stamp(x, y, MUSHROOMS, {"a": ("tree.bark", 4), "b": ("tree.bark", 3), "c": ("tree.bark", 1),
                                       "s": ("shell", 2), "m": ("forest.moss", 1)})
@@ -223,8 +227,7 @@ def mountains_snow(variant):
         t.stamp(6, 4, SNOW_ROCK, {**tones("mount.rock"), "a": ("mount.snow", 3), "b": ("mount.snow", 4), "s": ("mount.snow", 1)})
     elif variant == 2:
         t.stamp(11, 14, ICE, tones("mount.ice"))
-    elif variant == 3:
-        t.stamp(25, 6, SHRUB_TIP, {**tones("forest.pine"), "s": ("mount.snow", 1)})
+    # variant 3 stays plain drifts: only 2 tiles in 4 carry an object (design inspection 2)
     return t
 
 

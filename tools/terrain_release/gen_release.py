@@ -84,7 +84,7 @@ POKE = {  # per summer layout: (x, y, stamp)
 FLOWER_AT = {1: (20, 20), 2: (8, 6), 3: (26, 8)}
 
 
-def summer_ground(name):
+def summer_ground(name, winter=False):
     """(tile, ground material) for a summer ground that has seasons."""
     kind, v = name.rsplit(".", 1)
     v = int(v)
@@ -94,9 +94,9 @@ def summer_ground(name):
         layout, (dx, dy), _, _ = S.MEADOW[v]
         return S.grass_tile(layout, mat="meadow", dx=dx, dy=dy), "meadow"  # the flower is replaced per season
     if kind == "lake.grass":
-        return lake_grass(v), "lake.grass"
+        return lake_grass(v, winter=winter), "lake.grass"
     if kind == "forest.grass":
-        return forest_grass(v, winter=True), "forest.moss"
+        return forest_grass(v, winter=winter), "forest.moss"
     raise KeyError(name)
 
 
@@ -118,17 +118,45 @@ def autumn_ground(name):
 
 
 def winter_ground(name):
-    t, mat = summer_ground(name)
+    t, mat = summer_ground(name, winter=True)
     _ensure(t, "grass_g", "mount.snow")
     green = {"grass": "grass_g", "meadow": "grass_g", "lake.grass": "lakeg", "forest.moss": "forest.pine"}[mat]
     _ensure(t, green)
     set_ramp(t, mat, "mount.snow")
+    # On snow the summer tufts would have ~3x the contrast ("dirty snow", design inspection 1): keep the
+    # tufts as soft lit humps only (tone 3, same places as summer), no shadow tone, every second one gone.
+    marks = {(x, y) for y in range(t.h) for x in range(t.w) if t.px[y][x] and t.px[y][x][0] == mat and t.px[y][x][1] != 2}
+    seen, n = set(), 0
+    for start in sorted(marks, key=lambda p: (p[1], p[0])):  # each tuft = one 8-connected group (wrapping)
+        if start in seen:
+            continue
+        group, todo = set(), [start]
+        while todo:
+            x, y = todo.pop()
+            if (x, y) in group:
+                continue
+            group.add((x, y))
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    q = ((x + dx) % t.w, (y + dy) % t.h)
+                    if q in marks and q not in group:
+                        todo.append(q)
+        seen |= group
+        keep = n % 2 == 0
+        n += 1
+        lit = {p for p in group if t.px[p[1]][p[0]][1] >= 3}
+        # no lone pixel: a lit pixel stays only with a lit neighbour (marks of 2+ px, guide 3.2)
+        lit = {(x, y) for x, y in lit if any(((x + dx) % t.w, (y + dy) % t.h) in lit
+                                             for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx or dy)}
+        for x, y in group:
+            t.px[y][x] = (mat, 3) if keep and (x, y) in lit else (mat, 2)
     kind, v = name.rsplit(".", 1)
     if kind == "plains.grass" and int(v) in FLOWER_AT:
         x, y = FLOWER_AT[int(v)]
         t.stamp(x - 1, y, MOUND, tones(mat))
-    for x, y, p in POKE.get(name, []):
-        t.stamp(x, y, p, {**tones(green), "s": (mat, 1)})
+    pokes = [] if kind == "forest.grass" and v != "0" else POKE.get(name, [])[:1]  # forest 1-3 already show a plant
+    for x, y, p in pokes:  # one tuft of blades out of the snow per tile
+        t.stamp(x, y, p[:2], tones(green))
     return t
 
 
@@ -292,7 +320,11 @@ def checks(images):
                         for x in range(31)),
                     max(sum(abs(lightness(im.getpixel((x, y))) - lightness(im.getpixel((x, y + 1)))) for x in range(32)) / 32
                         for y in range(31)))
-        flag = "" if t4 <= 3 else "  ← 4 番が多い"
+        ls = [lightness(p) for p in px]
+        mean = sum(ls) / len(ls)
+        rough = (sum((v - mean) ** 2 for v in ls) / len(ls)) ** 0.5
+        flag = f"  ざらつき {rough:3.1f}"
+        flag += "" if t4 <= 3 else "  ← 4 番が多い"
         if max(seam_x, seam_y) > inner + 0.5:
             flag += "  ← 端の差が中より大きい"
         lines.append(f"  {n:<26} {'#%02x%02x%02x' % rgb[:3]} {100 * cnt / 1024:3.0f}%  4番 {t4:3.1f}%  "

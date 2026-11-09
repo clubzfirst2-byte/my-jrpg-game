@@ -118,18 +118,27 @@ RUIN_COURSES = {  # (y0, height, start x, widths) per segment
 def ruin_face(kind, seg):
     h, is_top, is_base, short = _dims(kind, seg)
     t = new_tile(32, h, base=("ruin.stone", 2), wrap_y=False)
-    slab_rows(t, "ruin.stone", RUIN_COURSES[(kind, h)], joint=0)
+    courses = RUIN_COURSES[(kind, h)]
+    slab_rows(t, "ruin.stone", courses, joint=0)
+    # top -> bottom 3 -> 2 -> 1 (design inspection 4): from the second course down the blocks lose
+    # their lit bevel (3 -> 2), so a tall stack darkens downwards
+    for i, (y0, hc, _, _) in enumerate(courses):
+        for y in range(y0, min(h, y0 + hc)):
+            for x in range(32):
+                if t.tone_of(x, y) == 3 and (i > 0 or (not is_top and y > y0)):
+                    t.put(x, y, "ruin.stone", 2)
     if is_top:
         for x in range(32):
             t.put(x, 0, "ruin.stone", 4 if x % 11 in (3, 4) else 3)
             t.put(x, 1, "ruin.stone", 3)
             t.put(x, 2, "ruin.stone", 0)  # under the capstone's overhang
         for x in range(32):  # lit band right under the cap (3 -> 2 -> 1 from top to bottom)
-            if t.tone_of(x, 4) == 2:
-                t.put(x, 4, "ruin.stone", 3)
+            for yy in (4, 5) if h == 16 else (4,):
+                if t.tone_of(x, yy) == 2:
+                    t.put(x, yy, "ruin.stone", 3)
     if is_base:
         for x in range(32):
-            for y in range(max(3, h - 4), h - 1):
+            for y in range(max(3, h - 7 if h == 16 else h - 4), h - 1):
                 t.shift(x, y, -1, lo=1)
             t.put(x, h - 1, "ruin.stone", 0)
     if (kind, h) == ("mid", 16):  # a carved line motif (the lamp-folk): groove (1) with a lit lower lip (3)

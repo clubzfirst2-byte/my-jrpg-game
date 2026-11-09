@@ -159,6 +159,13 @@ def pine(snow=0, slim=False):
         x = int(cx - hw * 0.85)
         t.put(x, y1 - 1, "forest.pine", 4)
         t.put(x + 1, y1 - 1, "forest.pine", 3)
+    # lit rim: needles facing up / left (an empty pixel above or to the left) catch the light, so the
+    # dark pine reads against the dark forest moss at 1x (design inspection 3)
+    rim = [(x, y) for y in range(h) for x in range(w)
+           if t.px[y][x] and t.px[y][x][0] == "forest.pine" and x + 0.5 < cx + 3
+           and (t.get(x - 1, y) is None or t.get(x, y - 1) is None)]
+    for x, y in rim:
+        t.put(x, y, "forest.pine", 4 if (x + 0.5 < cx - 4 and y % 3 == 0) else 3)
     for x, y, tn in NEEDLE_MARKS:
         if slim:
             x = int(cx + (x - cx) * 0.8)
@@ -237,7 +244,8 @@ def rock():
 def bramble():
     """obj.bramble 32 x 24: a thorny bush (forest.swamp leaves, tree.bark stems with thorns, berries)."""
     t = new_tile(32, 24, base=None, wrap_x=False, wrap_y=False)
-    owner = _blob(t, "forest.swamp", [(8, 15, 7, 7), (24, 15, 7, 7), (16, 11, 9, 8), (16, 17, 10, 5.5)], w=32, h=23)
+    owner = _blob(t, "forest.swamp", [(8, 15, 7, 7), (24, 15, 7, 7), (16, 11, 9, 8), (16, 17, 10, 5.5)], w=32, h=23,
+                  base_tone=3)  # one tone up: reads on the forest moss at 1x (design inspection 3)
     for pts in ([(3, 18), (8, 12), (14, 9), (19, 6)], [(28, 18), (24, 11), (18, 8), (12, 5)], [(5, 9), (11, 14), (17, 17), (25, 19)]):
         _line(t, pts, "tree.bark", 3, under=1)
     for x, y in [(2, 7), (30, 7), (9, 2), (23, 2), (1, 13), (31, 13)]:  # thorny shoots poking out (2-3 px)
