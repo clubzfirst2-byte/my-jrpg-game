@@ -42,7 +42,7 @@ def front_leg(r, sx, sy, px, py, **k):
     wx, wy = px - 0.5, py - 2
     m = r.mask_of(r.m_limb(sx, sy, ex, ey, 2.6, 1.6), r.m_ellipse(ex, ey, 1.7, 1.5), r.m_limb(ex, ey, wx, wy, 1.3, 1.0),
                   r.m_ellipse(wx - 0.3, wy, 1.3, 1.1), r.m_ellipse(px + 0.6, py - 0.6, 2.0, 1.2))
-    return r.add(m, "ashfur", tex=("fur", 95, 4), **k)
+    return r.add(m, "ashfur", **k)
 
 
 def hind_leg(r, hx_, hy, px, py, **k):
@@ -51,7 +51,7 @@ def hind_leg(r, hx_, hy, px, py, **k):
     hkx, hky = px - 2.2, py - 4.5
     m = r.mask_of(r.m_limb(hx_, hy, kx, ky, 3.4, 2.0), r.m_limb(kx, ky, hkx, hky, 1.8, 1.3),
                   r.m_limb(hkx, hky, px, py - 1, 1.2, 1.0), r.m_ellipse(hkx - 0.4, hky, 1.4, 1.3), r.m_ellipse(px + 0.6, py - 0.6, 2.0, 1.2))
-    return r.add(m, "ashfur", tex=("fur", 95, 5), **k)
+    return r.add(m, "ashfur", **k)
 
 
 def draw(p):
@@ -90,6 +90,15 @@ def draw(p):
     rx, ry = sh[0] + 2, sh[1] - 6
     r.add(r.m_poly([(rx - 7, ry), (rx - 5, ry - 2), (rx - 3, ry - 4), (rx - 1, ry - 3), (rx + 2, ry - 5), (rx + 5, ry - 1), (rx + 3, ry + 1),
                     (rx + 2, ry + 3), (rx, ry + 1), (rx - 2, ry + 3), (rx - 4, ry + 1)]), "ashfur", lit=1, soft=1)
+    # fur locks, hand-drawn (v1.0 finish 2): four big locks flowing back along the back under the
+    # crystals, and two on the ruff -- a lit stroke over a dark underside, read at 1x
+    leg_ = {"3": ("ashfur", 3), "1": ("ashfur", 1), "2": ("ashfur", 2)}
+    for i, ox in enumerate((1, 6, 11, 16)):
+        lx = round(hip[0] + ox - 1 + p.stretch * (ox / 18))
+        ly = round(by - 2 + p.pitch * (ox / 16))
+        r.stamp(lx, ly, ["...333", ".333.1", "31.11."] if i % 2 else ["..333.", "3333.1", "1.11.."], leg_)
+    r.stamp(round(rx) - 5, round(ry) + 1, ["..33.", "3311.", "1...."], leg_)
+    r.stamp(round(rx) - 1, round(ry) - 2, [".33", "31.", "1.."], leg_)
     # murk melting on the flank: a patch on the haunch with drips
     fx, fy = hip[0] + 3, hip[1] - 1
     r.ellipse(fx, fy, 5.0, 2.6, "murk", soft=1)
@@ -129,7 +138,9 @@ def draw(p):
         r.px([(round(hx_ + 7), fy_ + 1), (round(hx_ + 6), jy), (round(hx_ + 3), jy + 1)], "bone", 2)
     # eye: hand-placed yellow eye with a dark lid
     ex, ey = round(hx_ + 1.5), round(hy - 1.6)
-    r.stamp(ex, ey, ["ab", "c."], {"a": ("eye", 3), "b": ("eye", 2), "c": ("eye", 0)})
+    # hand-drawn: a heavy dark brow slanting down to the snout over a bright 2x2 eye with a dark rim
+    r.stamp(ex - 1, ey - 1, ["00..", ".000", ".ab0", ".c0."], {"0": ("ashfur", 0), "a": ("eye", 4), "b": ("eye", 2), "c": ("eye", 1)})
+    r.add(r.m_line(hx_ + 3.5, hy - 2.6, hx_ + 8, hy - 1.4), "ashfur", tone=3, cast=False)  # lit bridge of the muzzle
     # spine crystals (glow, the enemy.magic magenta): 5 shards, tallest over the shoulders
     for i, (ox, h) in enumerate(((-2, 3), (3, 5), (8, 6), (12, 5), (16, 3))):
         cx = hip[0] + 1 + ox + p.stretch * (ox / 18)

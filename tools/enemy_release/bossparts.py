@@ -30,11 +30,23 @@ def core(r, cx, cy, size=7, bright=True):
     r.stamp(round(cx) - 4, round(cy) - len(rows) // 2, rows, leg)
 
 
-def glow_eyes(r, cx, cy, gap, state="open"):
-    """Two glowing eyes, `gap` px from the centre each."""
+# a hand-drawn angry eye in a dark socket (right eye; the left one is its mirror): 0 = the
+# socket / brow (tone 0 of the face's own material), a/b/c = the glow from bright to core
+SOCKET_EYE = ["...00", "000ab", "0abc0", ".000."]
+SOCKET_NARROW = ["...00", "00000", "0abc0", "....."]
+
+
+def glow_eyes(r, cx, cy, gap, state="open", socket=None):
+    """Two glowing eyes, `gap` px from the centre each. With `socket` (a material), each eye is a
+    hand-drawn slanted eye in a dark socket under a heavy brow (reads at 1x on a light or dark face)."""
     for s in (-1, 1):
         x = round(cx + s * gap) - (1 if s < 0 else 0)
         y = round(cy)
+        if socket and state in ("open", "narrow"):
+            rows = SOCKET_EYE if state == "open" else SOCKET_NARROW
+            leg = {"0": (socket, 0), "a": ("glow", 4), "b": ("glow", 3), "c": ("glow", 2)}
+            r.stamp(x - 2, y - 2, rows, leg, flip=s < 0)
+            continue
         if state == "open":
             r.stamp(x - 1, y - 1, ["ab", "bc"] if s < 0 else ["ab", "bc"], {"a": ("glow", 4), "b": ("glow", 3), "c": ("glow", 2)})
             r.px([(x - 2 if s < 0 else x + 1, y - 2), (x - 1 if s < 0 else x, y - 2)], "murk", 0)  # a heavy brow
