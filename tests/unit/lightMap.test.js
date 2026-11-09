@@ -3,6 +3,7 @@ import { RenderTexture, Sprite } from 'pixi.js';
 import { createLightMap, warningLights, WARNING_LIGHT } from '../../src/view/weatherView.js';
 import { ENEMY_KINDS } from '../../src/game/entities/enemies.js';
 import { BOSS_KINDS } from '../../src/game/entities/bosses.js';
+import { FINAL_BOSS } from '../../src/game/entities/finalBoss.js';
 
 // Final QA A-1: started from the title, nights and dark rooms were never dark. The app draws frames
 // while boot waits for the save; the light map was drawn then at its starting size (8×8) and its
@@ -51,5 +52,28 @@ describe('warning lights (final QA B-1: the wind-up warning stays in the world, 
     expect(slam.r).toBeGreaterThan(BOSS_KINDS.frost.slamRadius);
     const [ring] = warningLights([{ boss: true, bossKind: 'frost', kind: 'boss_frost', pattern: 'ring', state: 'windup', x: 0, y: 0, z: 0 }]);
     expect(ring.r).toBe(WARNING_LIGHT.bossRadius);
+  });
+});
+
+describe('the final boss lights its slam ring and its wave (v1.0 final)', () => {
+  const at = { final: true, kind: 'boss_source', x: 100, y: 200, z: 0 };
+  it('winding up a slam or a wave: a ground light centred on the ring covers all of it, plus its body light', () => {
+    for (const [pattern, reach] of [['slam', FINAL_BOSS.slamRadius], ['wave', FINAL_BOSS.waveRadius]]) {
+      const lights = warningLights([{ ...at, pattern, state: 'windup' }]);
+      const ground = lights.find((l) => l.y === at.y - at.z);
+      expect(ground, pattern).toBeTruthy();
+      expect(ground.x).toBe(at.x);
+      // the ring sits well inside the light (where its falloff still adds about 40%)
+      expect(reach / ground.r).toBeLessThanOrEqual(WARNING_LIGHT.ringCover);
+      expect(lights.some((l) => l.r === WARNING_LIGHT.bossRadius)).toBe(true);
+    }
+  });
+
+  it('the shockwave itself stays lit; the orb attacks and resting get no ring light', () => {
+    expect(warningLights([{ ...at, pattern: 'wave', state: 'attack' }])).toHaveLength(1);
+    expect(warningLights([{ ...at, pattern: 'slam', state: 'recover' }])).toHaveLength(0);
+    const volley = warningLights([{ ...at, pattern: 'volley', state: 'windup' }]);
+    expect(volley).toHaveLength(1);
+    expect(volley[0].r).toBe(WARNING_LIGHT.bossRadius);
   });
 });

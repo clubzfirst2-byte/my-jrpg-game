@@ -10,9 +10,23 @@ import { ambientAt, isDark, isRaining } from '../game/env/weather.js';
 import { playerWeather } from '../game/env/weatherActions.js';
 import { ENEMY_KINDS } from '../game/entities/enemies.js';
 import { BOSS_KINDS } from '../game/entities/bosses.js';
+import { FINAL_BOSS } from '../game/entities/finalBoss.js';
 
-/** A winding-up enemy's warning light (world px): the colour added to the light map. */
-export const WARNING_LIGHT = Object.freeze({ color: 0xffd0c0, enemyRadius: 26, bossRadius: 44, ringMargin: 10 });
+/**
+ * A winding-up enemy's warning light (world px): the colour added to the light map.
+ * `ringCover`: a ground light reaches the ring (plus `ringMargin`) at this fraction of its radius,
+ * where its falloff still adds about 40% (at the very edge of a light it adds nothing).
+ */
+export const WARNING_LIGHT = Object.freeze({ color: 0xffd0c0, enemyRadius: 26, bossRadius: 44, ringMargin: 10, ringCover: 0.62 });
+
+/**
+ * 淀みの源's ground reach for its slam / inversion wave (the ring sourceView.js draws), or 0.
+ * @param {any} e
+ */
+export function sourceReach(e) {
+  if (!e.final) return 0;
+  return e.pattern === 'slam' ? FINAL_BOSS.slamRadius : e.pattern === 'wave' ? FINAL_BOSS.waveRadius : 0;
+}
 
 /**
  * v1.0 (final QA B-1): the wind-up warning is drawn in the world, sorted with its enemy, so a tree
@@ -21,11 +35,20 @@ export const WARNING_LIGHT = Object.freeze({ color: 0xffd0c0, enemyRadius: 26, b
  * overlay and the ring then show at about daylight strength, and the glow itself says "about to
  * strike". (Drawing the warning above the light map instead kept it bright but floated it over
  * trees.)
+ *
+ * v1.0 final: 淀みの源 (`final`, no `bossKind`) used to get only its 44 px body light, so most of its
+ * slam ring (44) and inversion wave (64) lay in the dark. Its slam and wave now add a light on the
+ * ground centred on the ring, wide enough to light all of it, and kept on while the shockwave goes
+ * out (`attack`), so the hit itself reads too.
  * @param {any[]} enemies @returns {{ x: number, y: number, r: number }[]}
  */
 export function warningLights(enemies) {
   const out = [];
   for (const e of enemies) {
+    const reach = sourceReach(e);
+    if (reach > 0 && (e.state === 'windup' || e.state === 'attack')) {
+      out.push({ x: e.x, y: e.y - e.z, r: Math.ceil((reach + WARNING_LIGHT.ringMargin) / WARNING_LIGHT.ringCover) });
+    }
     if (e.state !== 'windup') continue;
     const slam = e.boss && e.bossKind ? (e.pattern === 'slam' ? BOSS_KINDS[e.bossKind]?.slamRadius : 0) : e.kind === 'sentinel' ? ENEMY_KINDS.sentinel.slamRadius : 0;
     const body = e.boss || e.final ? WARNING_LIGHT.bossRadius : WARNING_LIGHT.enemyRadius;

@@ -68,13 +68,16 @@ export class PauseOverlay {
       });
       sound.append(toTitle);
     }
-    this.overlay.append(title, this.message, sound, resume);
+    this.overlay.append(title);
+    // v1.0 final: the version sits in the centred column under the title (it used to be pinned
+    // to the top-left corner, where it overlapped the pause button).
     if (handlers.version) {
       const v = document.createElement('div');
       v.className = 'pause-version';
       v.textContent = handlers.version;
       this.overlay.append(v);
     }
+    this.overlay.append(this.message, sound, resume);
     this.refresh();
     this.overlay.addEventListener('click', () => handlers.onResume());
 

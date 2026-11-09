@@ -8,7 +8,7 @@
 // Sort keys: characters/objects use their feet y; an elevated terrain row uses its NORTH edge.
 // That one rule puts a character behind a cliff when north of it, on top of it when standing on it,
 // and in front of it when south of it.
-import { Container, Graphics, Sprite } from 'pixi.js';
+import { Container, Graphics, Rectangle, Sprite } from 'pixi.js';
 import { Ground, Shape, LEVEL_PX, inBounds, northEdgeHeight, southEdgeHeight } from '../game/world/tilemap.js';
 import { lerp } from '../game/core/math.js';
 import { Camera } from './camera.js';
@@ -35,6 +35,27 @@ import { EnemySlots } from './enemySlots.js';
 
 /** Chunk size in tiles (P8). */
 export const CHUNK = 32;
+
+/**
+ * The area a chunk's flat ground is cached over (world px): always the whole chunk, never just the
+ * part that has flat ground in it.
+ *
+ * v1.0 final (QA C-1, "a thin black line across the grass north of the beach ring"): the cache
+ * texture used to be sized to the flat ground's bounds. A chunk whose top rows are raised (drawn in
+ * the Y-sorted rows instead) then asked for e.g. 512×384, and PixiJS's texture pool (8.21+) gave it a
+ * texture backed at the SCREEN's height (394 at 852×393, DPR 2) rather than a power of two. With a
+ * backing taller than the frame, the tiles' pixel snapping in that render lands a few tile edges one
+ * texel off, leaving 1-texel rows of the cache transparent: a dark line across the whole chunk
+ * (island chunk 1,1: world rows 46 and 58). It only showed at screen sizes whose height a chunk's flat
+ * part fits under. A whole chunk is 512×512 (CHUNK × 16 px, a power of two): the pool always backs
+ * that at exactly 512×512, so frame and backing match at every screen size. (Also a chunk at the
+ * edge of a map whose size is not a whole number of chunks: the area past the edge stays transparent.)
+ * @param {number} cx @param {number} cy @param {number} ts tile size (px)
+ */
+export function chunkCacheArea(cx, cy, ts) {
+  const size = CHUNK * ts;
+  return { x: cx * size, y: cy * size, width: size, height: size };
+}
 
 /**
  * @typedef {import('../game/world/world.js').RegionInfo} RegionInfo
@@ -418,7 +439,10 @@ export class GameView {
     }
     base.tint = levelTint(0);
     this.base.addChild(base);
-    // A chunk's flat ground -> one textured quad per frame.
+    // A chunk's flat ground -> one textured quad per frame, cached over the whole chunk (see
+    // chunkCacheArea: a partial area could get a screen-sized texture and seams).
+    const area = chunkCacheArea(cx, cy, ts);
+    base.boundsArea = new Rectangle(area.x, area.y, area.width, area.height);
     base.cacheAsTexture({ scaleMode: 'nearest', antialias: false });
 
     // Objects standing in this chunk now.
