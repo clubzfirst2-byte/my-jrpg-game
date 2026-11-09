@@ -104,8 +104,15 @@ def door():
         c.put(15, y, "ruin_glow", 2 if y < 19 else 1)
     for x, y in ((13, 19), (14, 19), (17, 20), (18, 20)):
         c.put(x, y, "ruin_glow", 1)
-    for x, y in ((14, 34), (15, 33), (16, 34), (17, 33), (18, 34), (11, 11), (20, 11)):
+    # one connected rune (inspection 5: no separate dots or wave, which read as eyes and a mouth): the bar
+    # runs on through the ring as a staff, from a point above to a diamond foot below
+    for y in list(range(11, 15)) + list(range(25, 33)):
+        c.put(16, y, "ruin_glow", 1)
+        c.put(15, y, "ruin_glow", 2 if y < 15 else 1)
+    for x, y in ((15, 10), (16, 10), (14, 32), (17, 32), (14, 33), (17, 33), (15, 34), (16, 34)):
         c.put(x, y, "ruin_glow", 1)
+    c.put(15, 33, "ruin_glow", 2)
+    c.put(16, 33, "ruin_glow", 1)
     # chips, moss at the foot
     for x, y in ((3, 37), (4, 37), (27, 37), (28, 36), (8, 37), (9, 37)):
         c.put(x, y, "moss", 2)
@@ -871,7 +878,8 @@ def altar():
 
 def sensor():
     """sw.sensor.off / .on 24x28: the light sensor (ruin mechanism): an eye in a stone. Off: the lid is
-    shut. On: the lid is open, the teal iris looks out and two marks light on the brow (shape + light)."""
+    shut: one large closed-eye carving (no brow marks, no second line: it must not read as a face). On: the lid
+    is open, the teal iris looks out and sparks rise beside the stone (shape + light)."""
     out = {}
     S = "ruin_stone"
     for on in (False, True):
@@ -885,6 +893,7 @@ def sensor():
         round_shade(c, S, 11, 12, 11, 16, cuts=(0.96, 0.72, 0.2))
         box(c, 1, 22, 22, 25, S, top=3, bottom=1)
         hline(c, 1, 22, 22, S, 4)
+        bare = [row[:] for row in c.tone]  # the stone's own tones (the shut lid gives some back)
         # the eye socket (almond)
         for y in range(8, 17):
             for x in range(4, 20):
@@ -904,22 +913,26 @@ def sensor():
             round_shade(c, "ruin_glow", 12, 12.5, 3.2, 3.2)
             c.rect(11, 12, 12, 13, "ash", 0)
             c.put(10, 11, "ruin_glow", 4)
-            for x, y in ((8, 5), (9, 5), (14, 5), (15, 5)):
-                c.put(x, y, "ruin_glow", 3)
+            # no marks on the brow (inspection: two marks over the eye read as a face)
             lit_by(c, {"ruin_glow"}, S, 3)
             # sparks beside the brow: the silhouette changes too (guide 4.2)
             for x, y, t in ((3, 3, 4), (2, 4, 3), (20, 3, 3), (21, 4, 2), (12, 0, 4)):
                 c.put(x, y, "ruin_glow", t)
         else:
-            # the shut lid: stone, a dark slit
+            # the shut lid: ONE large closed eye (inspection 1: no brow marks and no second line under it, which
+            # read as a sleeping face). The socket is filled back with stone; one wide carved groove curves down
+            # from corner to corner (the closed lid), its lower lip catching the light, with three short lashes.
             for y in range(8, 17):
                 for x in range(4, 20):
                     if c.m(x, y) == S and c.tone[y][x] == 0:
-                        c.tone[y][x] = 2 if y < 12 else 1
-            hline(c, 6, 17, 12, S, 0)
-            hline(c, 7, 16, 11, S, 3)
-            for x, y in ((8, 5), (9, 5), (14, 5), (15, 5)):
-                c.put(x, y, S, 1)
+                        c.tone[y][x] = bare[y][x]
+
+            lid = dict(zip(range(4, 20), (10, 11, 11, 12, 12, 12, 13, 13, 13, 13, 12, 12, 12, 11, 11, 10)))
+            for x, y in lid.items():
+                c.put(x, y, S, 0)
+                c.put(x, y + 1, S, 3 if x < 14 else 2)
+            for x, y in ((6, 13), (5, 14), (9, 14), (9, 15), (14, 14), (14, 15), (17, 13), (18, 14)):
+                c.put(x, y, S, 0)
         out["sw.sensor." + ("on" if on else "off")] = drop(to_rgba(c))
     return out
 
@@ -937,10 +950,10 @@ def icon_bow():
         y = (1 - t) ** 2 * P0[1] + 2 * t * (1 - t) * P1[1] + t * t * P2[1]
         pts.append((int(x), int(y), t))
     for x, y, t in pts:  # the limb: two pixels thick toward the string, the outer side lit
-        c.put(x + 1, y + 1, "wood", 1)
-    for x, y, t in pts:
-        c.put(x, y + 1, "wood", 2)
-        c.put(x + 1, y, "wood", 2)
+        c.put(x + 1, y + 1, "wood", 2 if t < 0.75 else 1)  # the inner face: core, shade only at the far tip
+    for x, y, t in pts:  # the middle of the limb is lit too (inspection 3, guide 6.1: dark wood, more tone 3)
+        c.put(x, y + 1, "wood", 3)
+        c.put(x + 1, y, "wood", 3)
     for x, y, t in pts:
         c.put(x, y, "wood", 3)
     for x, y in ((5, 6), (6, 5), (4, 8)):
@@ -967,7 +980,10 @@ def icon_armor():
         else:
             x0, x1 = 4, 15
         for x in range(x0, x1 + 1):
-            c.put(x, y, L, 3 if x <= x0 + 2 else 1 if x >= x1 - 1 else 2)
+            # the lit face is wide (inspection 3, guide 6.1: a dark material needs more of tone 3): the chest
+            # and the left of the skirt take the light, only the right edge falls into shade
+            lit = x <= x0 + 2 or (y <= 10 and x <= x1 - 2) or (y >= 13 and x <= x1 - 3)
+            c.put(x, y, L, 3 if lit else 1 if x >= x1 else 2)
     for y, w in ((4, 2), (5, 2), (6, 1), (7, 0)):  # the V neck
         for x in range(10 - w - 1, 10 + w):
             c.mat[y][x] = None
@@ -991,9 +1007,13 @@ def icon_armor():
                 if dx * dx + dy * dy <= 1 and 2 <= x <= 17:
                     c.put(x, y, "steel")
     round_shade(c, "steel", 9.5, 6, 9, 5, cuts=(0.96, 0.6, 0.15))
+    for y in range(2, 6):  # the right guard keeps its shade only on its outer column (inspection 3)
+        for x in range(12, 17):
+            if c.m(x, y) == "steel" and c.tone[y][x] == 1:
+                c.tone[y][x] = 2
     for x in range(2, 18):
-        if c.m(x, 6) == "steel":
-            c.tone[6][x] = 1
+        if c.m(x, 6) == "steel":  # the guards' lower rim: in shade on the right only (inspection 3)
+            c.tone[6][x] = 1 if x >= 14 else 2
     c.put(3, 3, "steel", 4)
     return to_rgba(c)
 
@@ -1133,11 +1153,16 @@ def icon_food():
     hline(c, 7, 13, 17, "clay", 1)
     c.ellipse(10, 9, 7.4, 2.6, "stew", 2)
     hline(c, 4, 15, 8, "stew", 3)
+    hline(c, 5, 10, 8, "stew", 4)  # the heap catches the light on the left (inspection 3)
     for x, y in ((6, 9), (12, 10), (9, 8), (14, 9)):
         c.put(x, y, "stew", 1)
     for x, y in ((7, 8), (11, 8)):
         c.put(x, y, "stew", 4)
-    hline(c, 3, 16, 11, "clay", 3)
+    # the rim: a bright lip (inspection 3: the bowl melted into the path and the red sand, whose brightness
+    # is the clay's middle tones), the lit front of the rim under it, dark where it turns away on the right
+    hline(c, 3, 15, 11, "clay", 4)
+    c.put(16, 11, "clay", 3)
+    hline(c, 4, 11, 12, "clay", 3)
     for x, y, t in ((12, 6, 3), (13, 6, 2), (13, 5, 3), (14, 5, 2), (11, 7, 2), (12, 7, 1)):
         c.put(x, y, "leaf", t)
     return to_rgba(c)
