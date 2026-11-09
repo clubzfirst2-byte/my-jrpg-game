@@ -1,4 +1,5 @@
-"""The villagers — RELEASE art, batch 1 (elder, merchant, guard). QUALITY_POLICY.md: made at release
+"""The villagers — RELEASE art, batch 1 (elder, merchant, guard); batch 2 (woman, cook, child, smith);
+batch 3 (princess, traveller). QUALITY_POLICY.md: made at release
 quality, adopted after approval. Plan: docs/npc/NPC_RELEASE_PLAN.md.
 
 Writes src/art-release/npc/npc.<id>.<idle|walk>.<down|up|right|left>.<n>.png (32x56, feet at the
@@ -21,10 +22,14 @@ import woman  # noqa: E402
 import cook  # noqa: E402
 import child  # noqa: E402
 import smith  # noqa: E402
+import princess  # noqa: E402
+import traveller  # noqa: E402
 
 NPCS = [elder.NPC, merchant.NPC, guard.NPC]  # batch 1 (approved; not regenerated differently)
 BATCH2 = [woman.NPC, cook.NPC, child.NPC, smith.NPC]
 NPCS = NPCS + BATCH2
+BATCH3 = [princess.NPC, traveller.NPC]  # batch 3 (new files only: npc.princess.*, npc.traveller.*)
+NPCS = NPCS + BATCH3
 BY_ID = {n.id: n for n in NPCS}
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "src", "art-release", "npc")
 # batch 1, revision 1: the same names in their own folder (the approved frames stay as they are)
