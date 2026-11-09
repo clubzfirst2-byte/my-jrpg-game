@@ -237,6 +237,17 @@ BODY_SIDE = rows_of("""
 
 
 class Merchant(Npc):
+    # the maps, as attributes so a revision (a subclass) can replace them
+    HEAD_FRONT = HEAD_FRONT
+    HEAD_BACK = HEAD_BACK
+    BODY_FRONT = BODY_FRONT
+    BODY_BACK = BODY_BACK
+    ARM_DOWN = ARM_DOWN
+    ARM_BOOK = ARM_BOOK
+    PURSE = PURSE
+    HEAD_SIDE = HEAD_SIDE
+    BODY_SIDE = BODY_SIDE
+    purse_front, purse_back = (2, 37), (25, 37)  # where the purse hangs (front / back view)
     id = "merchant"
     ramps = RAMPS
     walk_gait = dict(stride=3, lift=2, bob=1, arm=2)
@@ -265,26 +276,26 @@ class Merchant(Npc):
         def shift(row, col, ch):
             y = BODY_TOP + row
             return 0, b + (up if y < 38 else 0)
-        stamp(c, BODY_BACK if back else BODY_FRONT, 0, BODY_TOP, LEG, mirrored=True, shift=shift)
+        stamp(c, self.BODY_BACK if back else self.BODY_FRONT, 0, BODY_TOP, LEG, mirrored=True, shift=shift)
         top = 4 + b + up
         sh_r = (6, 25 + b + up) if not back else (25, 25 + b + up)
         sh_l = (25, 25 + b + up) if not back else (6, 25 + b + up)
         swing = max(0, p.arm_near if not back else p.arm_far)
         # the purse on his right hip
-        px = 2 if not back else 25
-        stamp(c, PURSE, px, 37 + b, LEG)
-        c.put(px + (1, 2, 3)[p.glint], 39 + b, "gold", 4)  # the clasp catches the light
+        px, py = self.purse_back if back else self.purse_front
+        stamp(c, self.PURSE, px, py + b, LEG)
+        c.put(px + (1, 2, 3)[p.glint], py + 2 + b, "gold", 4)  # the clasp catches the light
         # the right arm hangs (and swings), the left holds the book
-        stamp_at(c, ARM_DOWN, "@", "*", (sh_r[0], sh_r[1] - swing), LEG, flip=back)
+        stamp_at(c, self.ARM_DOWN, "@", "*", (sh_r[0], sh_r[1] - swing), LEG, flip=back)
         if not back:
             stamp(c, BOOK_FRONT, 17, 28 + b + up, LEG)
-            stamp_at(c, ARM_BOOK, "@", "*", sh_l, LEG)
+            stamp_at(c, self.ARM_BOOK, "@", "*", sh_l, LEG)
         else:
-            stamp_at(c, ARM_BOOK, "@", "*", sh_l, LEG, flip=True, darker=True)
+            stamp_at(c, self.ARM_BOOK, "@", "*", sh_l, LEG, flip=True, darker=True)
         if not back:  # the pen: only its ends show past his head
             for x, y, ch in PEN_FRONT:
                 c.put(x, y + top - 4, *LEG[ch][:2])
-        stamp(c, HEAD_BACK if back else HEAD_FRONT, 0, top, LEG, mirrored=True)
+        stamp(c, self.HEAD_BACK if back else self.HEAD_FRONT, 0, top, LEG, mirrored=True)
         return c
 
     # -------------------------------------------------------------- side
@@ -323,7 +334,7 @@ class Merchant(Npc):
             stamp(c, BOOK_SIDE, 24, 28 + b + up, LEG) if not far else stamp(c, BOOK_SIDE, 24, 28 + b + up, LEG)
 
         def purse(far):
-            stamp(c, PURSE, 9 if not far else 11, 37 + b, LEG)
+            stamp(c, self.PURSE, 9 if not far else 11, 37 + b, LEG)
             if not far:
                 c.put(10 + (0, 1, 2)[p.glint], 39 + b, "gold", 4)
 
@@ -339,10 +350,10 @@ class Merchant(Npc):
         def shift(row, col, ch):
             y = BODY_TOP + row
             return 0, b + (up if y < 38 else 0)
-        stamp(c, BODY_SIDE, 0, BODY_TOP, LEG, shift=shift)
+        stamp(c, self.BODY_SIDE, 0, BODY_TOP, LEG, shift=shift)
         leg(p.near[0], p.near[1], None)
         top = 4 + b + up
-        stamp(c, HEAD_SIDE, 0, top, LEG)
+        stamp(c, self.HEAD_SIDE, 0, top, LEG)
         c.put(19 + p.glint, top + 10, "skin", 2)  # light moving across the lens
         c.paint(19 + p.glint, top + 10, "#f4fbff")
         if swap:

@@ -265,6 +265,16 @@ def staff(c, x, top, ground=55, tone=None):
 
 
 class Elder(Npc):
+    # the maps, as attributes so a revision (a subclass) can replace them
+    HEAD_FRONT = HEAD_FRONT
+    HEAD_BACK = HEAD_BACK
+    BODY_FRONT = BODY_FRONT
+    BODY_BACK = BODY_BACK
+    ARM_DOWN = ARM_DOWN
+    ARM_HOLD = ARM_HOLD
+    KNOT = KNOT
+    shoulders_x = (8, 23)  # front / back view: where the sleeves hang from
+    free_arm_shaded = False  # the free arm (image right in front) one tone darker: the shaded side
     id = "elder"
     ramps = RAMPS
     walk_gait = dict(stride=2, lift=1, bob=1, arm=1)
@@ -300,25 +310,26 @@ class Elder(Npc):
             dy = b + (up if y < 37 else 0)
             dx = round(p.sway * (y - 44) / 8) if y > 44 else 0
             return dx, dy
-        stamp(c, BODY_BACK if back else BODY_FRONT, 0, BODY_TOP, LEG, mirrored=True, shift=shift)
+        stamp(c, self.BODY_BACK if back else self.BODY_FRONT, 0, BODY_TOP, LEG, mirrored=True, shift=shift)
         if not back:
-            for x, y, ch in KNOT:
+            for x, y, ch in self.KNOT:
                 xx = x + (round(p.sway * 0.5) if y > 40 else 0)
                 c.put(xx, y + b, *LEG[ch])
         # arms: his right (the staff) on the image's left in front, on the right from behind
         top = 10 + b + up + p.nod
         st_side = 0 if not back else 1
-        sh_r = (8, 29 + b + up) if not back else (23, 29 + b + up)
-        sh_l = (23, 29 + b + up) if not back else (8, 29 + b + up)
+        xl, xr = self.shoulders_x
+        sh_r = (xl, 29 + b + up) if not back else (xr, 29 + b + up)
+        sh_l = (xr, 29 + b + up) if not back else (xl, 29 + b + up)
         # the free arm swings: forward lifts the hand a little
         swing = p.arm_far if not back else p.arm_near
         hand_lift = max(0, swing)
         if back:
-            stamp(c, HEAD_BACK, 0, top, LEG, mirrored=True)
-        free = stamp_at(c, ARM_DOWN, "@", "*", (sh_l[0], sh_l[1] - hand_lift), LEG, flip=not back, darker=back)
+            stamp(c, self.HEAD_BACK, 0, top, LEG, mirrored=True)
+        free = stamp_at(c, self.ARM_DOWN, "@", "*", (sh_l[0], sh_l[1] - hand_lift), LEG, flip=not back, darker=back or self.free_arm_shaded)
         # the staff, then the hand round it
         sx = 3 + p.prop // 2 if not back else 28 + p.prop // 2
-        hand = stamp_at(c, ARM_HOLD, "@", "*", sh_r, LEG, flip=back, darker=False)
+        hand = stamp_at(c, self.ARM_HOLD, "@", "*", sh_r, LEG, flip=back, darker=False)
         staff(c, sx, 1 + b + up - p.prop // 2 * 0)
         hy = hand[1]
         for dy in (-1, 0, 1):
@@ -327,7 +338,7 @@ class Elder(Npc):
         c.put(sx - (1 if not back else -1), hy, "skin", 2)
         del free, st_side
         if not back:
-            stamp(c, HEAD_FRONT, 0, top, LEG, mirrored=True)
+            stamp(c, self.HEAD_FRONT, 0, top, LEG, mirrored=True)
             if p.blink:
                 pass  # his eyes are already closed in a smile
         return c

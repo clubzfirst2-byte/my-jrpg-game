@@ -21,10 +21,16 @@ import gen_npc  # noqa: E402
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 NPC_DIR = os.path.join(ROOT, "src", "art-release", "npc")
 HERO_DIR = os.path.join(ROOT, "src", "art-release", "hero")
-OUT = os.path.join(ROOT, "docs", "npc", "release", "batch1")
+# python3 sheets.py      batch 1 (docs/npc/release/batch1/)
+# python3 sheets.py 2    batch 2 and the batch 1 revision (docs/npc/release/batch2/)
+BATCH = int(sys.argv[1]) if len(sys.argv) > 1 else 1
+OUT = os.path.join(ROOT, "docs", "npc", "release", f"batch{BATCH}")
+REV_DIR = os.path.join(ROOT, "src", "art-release", "npc-revision")
 DIRS = ("down", "up", "right", "left")
-IDS = ("elder", "merchant", "guard")
-NAMES = {"elder": "長老", "merchant": "雑貨屋", "guard": "見張り", "hero": "主人公"}
+IDS = ("elder", "merchant", "guard") if BATCH == 1 else ("woman", "cook", "child", "smith")
+BATCH1 = ("elder", "merchant", "guard")
+NAMES = {"elder": "長老", "merchant": "雑貨屋", "guard": "見張り", "woman": "村の女性", "cook": "宿の料理人", "child": "村の子",
+         "smith": "鍛冶職人", "hero": "主人公"}
 FRAMES = {"idle": 4, "walk": 6}
 GRASS = (79, 138, 62, 255)
 FONT_PATHS = ["/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
@@ -128,9 +134,10 @@ def palette():
                   "hair": ["#2a160c", "#4e2e1a", "#7a4a2a", "#a8703f", "#d09a62"], "skin": ["#6e3e2c", "#c8906a", "#f2c49b", "#ffdcbc", "#fff0e0"]}
     sets.append(("主人公", hero_ramps))
     for n in gen_npc.NPCS:
-        sets.append((NAMES[n.id], n.ramps))
+        if n.id in IDS:
+            sets.append((NAMES[n.id], n.ramps))
     sw = 26
-    W = 140 + 6 * (5 * sw + 90)
+    W = 140 + max(len(r) for _, r in sets) * (5 * sw + 90)
     Hh = 30 + len(sets) * (sw + 34)
     c = Image.new("RGBA", (W, Hh), (34, 38, 46, 255))
     g = ImageDraw.Draw(c)
@@ -169,7 +176,14 @@ def data_uri(path_or_img):
 
 def gallery(shots):
     sprites = {}
-    for i in IDS:
+    ids = IDS if BATCH == 1 else BATCH1 + IDS
+    if BATCH != 1:
+        for i in BATCH1:
+            for a, n in FRAMES.items():
+                for d in DIRS:
+                    for k in range(n):
+                        sprites[f"{i}r.{a}.{d}.{k}"] = data_uri(os.path.join(REV_DIR, f"npc.{i}.{a}.{d}.{k}.png"))
+    for i in ids:
         for a, n in FRAMES.items():
             for d in DIRS:
                 for k in range(n):
@@ -181,7 +195,13 @@ def gallery(shots):
             sprites[f"hero.walk.{d}.{k}"] = data_uri(os.path.join(HERO_DIR, f"hero.walk.{d}.{k}.png"))
     import json
     shots_html = "".join(f'<figure><img src="{data_uri(p)}" alt="{t}"><figcaption>{t}</figcaption></figure>' for t, p in shots if os.path.exists(p))
-    return GALLERY.replace("__SPRITES__", json.dumps(sprites)).replace("__SHOTS__", shots_html)
+    page = GALLERY.replace("__SPRITES__", json.dumps(sprites)).replace("__SHOTS__", shots_html)
+    page = page.replace("__IDS__", json.dumps(list(ids))).replace("__NAMES__", json.dumps(NAMES, ensure_ascii=False))
+    if BATCH == 1:
+        return page
+    page = page.replace("NPC製品版 第1回：長老・雑貨屋・見張り", "NPC製品版 第2回：村の女性・宿の料理人・村の子・鍛冶職人（＋第1回）")
+    page = page.replace("<title>NPC製品版 第1回 ギャラリー</title>", "<title>NPC製品版 第2回 ギャラリー</title>")
+    return page.replace("<button data-k=\"3\">3倍</button>", "<button data-rev=\"1\">第1回：修正案</button><button data-k=\"3\">3倍</button>")
 
 
 GALLERY = """<!doctype html>
@@ -209,7 +229,7 @@ button.on{background:#5b7bd5}figure{margin:0}figure img{max-width:100%;border-ra
 <section><h2>全コマ一覧</h2><div id="all"></div></section>
 <section><h2>ゲーム画面</h2><div class="shots">__SHOTS__</div></section>
 <script>
-const S=__SPRITES__;const IDS=['elder','merchant','guard'];const NAMES={elder:'長老',merchant:'雑貨屋',guard:'見張り',hero:'主人公'};
+const S=__SPRITES__;const IDS=__IDS__;const NAMES=__NAMES__;let REV=false;const key=(id)=>REV&&S[id+'r.idle.down.0']?id+'r':id;
 const DIRS=['down','up','right','left'];const DN={down:'正面',up:'背面',right:'右',left:'左'};const N={idle:4,walk:6};const FPS={idle:3,walk:8};
 const imgs={};for(const k in S){const i=new Image();i.src=S[k];imgs[k]=i;}
 let act='idle',K=5,bg='#4f8a3e';const live=[];
@@ -223,13 +243,22 @@ for(const id of ['hero',...IDS]){const cell=document.createElement('div');cell.c
 const all=document.getElementById('all');all.innerHTML='';
 for(const id of IDS)for(const a of ['idle','walk'])for(const dir of DIRS){const row=document.createElement('div');row.className='row';row.style.marginBottom='6px';
 const lab=document.createElement('div');lab.className='cell';lab.style.width='110px';lab.textContent=NAMES[id]+' '+a+' '+DN[dir];row.append(lab);
-for(let i=0;i<N[a];i++){const c=cv(32*3,56*3);c.style.background=bg;row.append(c);setTimeout(()=>draw(c,id+'.'+a+'.'+dir+'.'+i,3),50)}all.append(row)}}
-function tick(t){for(const l of live){const n=N[act];const f=Math.floor(t/1000*FPS[act])%n;draw(l.c,(l.hero?'hero':l.id)+'.'+act+'.'+l.dir+'.'+f,K)}requestAnimationFrame(tick)}
-document.querySelectorAll('button').forEach(b=>b.onclick=()=>{if(b.dataset.act){act=b.dataset.act}if(b.dataset.k){K=+b.dataset.k}if(b.dataset.bg){bg=b.dataset.bg}
-document.querySelectorAll('button').forEach(x=>{if((x.dataset.act&&x.dataset.act===act)||(x.dataset.k&&+x.dataset.k===K)||(x.dataset.bg&&x.dataset.bg===bg))x.classList.add('on');else x.classList.remove('on')});build()});
+for(let i=0;i<N[a];i++){const c=cv(32*3,56*3);c.style.background=bg;row.append(c);setTimeout(()=>draw(c,key(id)+'.'+a+'.'+dir+'.'+i,3),50)}all.append(row)}}
+function tick(t){for(const l of live){const n=N[act];const f=Math.floor(t/1000*FPS[act])%n;draw(l.c,(l.hero?'hero':key(l.id))+'.'+act+'.'+l.dir+'.'+f,K)}requestAnimationFrame(tick)}
+document.querySelectorAll('button').forEach(b=>b.onclick=()=>{if(b.dataset.rev){REV=!REV;b.classList.toggle('on',REV);build();return}if(b.dataset.act){act=b.dataset.act}if(b.dataset.k){K=+b.dataset.k}if(b.dataset.bg){bg=b.dataset.bg}
+document.querySelectorAll('button').forEach(x=>{if(x.dataset.rev)return;if((x.dataset.act&&x.dataset.act===act)||(x.dataset.k&&+x.dataset.k===K)||(x.dataset.bg&&x.dataset.bg===bg))x.classList.add('on');else x.classList.remove('on')});build()});
 window.addEventListener('load',()=>{build();requestAnimationFrame(tick)});
 </script></body></html>
 """
+
+
+def revision_compare():
+    """Batch 1 before (approved) and after (revision 1): the views that changed."""
+    views = [("elder", "down"), ("elder", "up"), ("merchant", "down"), ("merchant", "up"), ("guard", "down")]
+    before = [npc(i, "idle", d, 0) for i, d in views]
+    after = [Image.open(os.path.join(REV_DIR, f"npc.{i}.idle.{d}.0.png")).convert("RGBA") for i, d in views]
+    labels = [f"{NAMES[i]}・{'正面' if d == 'down' else '背面'}" for i, d in views]
+    return labelled_grid([before, after], len(views), 32, 56, 6, labels_top=labels, labels_left=["修正前", "修正後"], left=90)
 
 
 if __name__ == "__main__":
@@ -241,11 +270,20 @@ if __name__ == "__main__":
             gif(i, a, os.path.join(OUT, f"anim_{i}_{a}.gif"))
     hero_compare().save(os.path.join(OUT, "03_hero_compare.png"))
     palette().save(os.path.join(OUT, "04_palette.png"))
-    shots = [("村：長老・見張りと主人公（iPhone 横画面）", os.path.join(OUT, "05_ingame_village.png")),
-             ("長老に話しかける（主人公の方を向く）", os.path.join(OUT, "06_ingame_talk_elder.png")),
-             ("見張りに話しかける", os.path.join(OUT, "07_ingame_talk_guard.png")),
-             ("お店：カウンターの奥の雑貨屋", os.path.join(OUT, "08_ingame_shop.png")),
-             ("変更前：仮素材の NPC（?npc=placeholder）", os.path.join(OUT, "09_ingame_before.png"))]
+    if BATCH == 1:
+        shots = [("村：長老・見張りと主人公（iPhone 横画面）", os.path.join(OUT, "05_ingame_village.png")),
+                 ("長老に話しかける（主人公の方を向く）", os.path.join(OUT, "06_ingame_talk_elder.png")),
+                 ("見張りに話しかける", os.path.join(OUT, "07_ingame_talk_guard.png")),
+                 ("お店：カウンターの奥の雑貨屋", os.path.join(OUT, "08_ingame_shop.png")),
+                 ("変更前：仮素材の NPC（?npc=placeholder）", os.path.join(OUT, "09_ingame_before.png"))]
+    else:
+        revision_compare().save(os.path.join(OUT, "00_batch1_revision.png"))
+        shots = [("村：7 人と主人公（村の女性・鍛冶職人は確認用に一時表示）", os.path.join(OUT, "05_ingame_village.png")),
+                 ("宿の料理人に話しかける", os.path.join(OUT, "06_ingame_talk_cook.png")),
+                 ("村の子に話しかける", os.path.join(OUT, "07_ingame_talk_child.png")),
+                 ("村の女性と鍛冶職人（確認用に一時表示）", os.path.join(OUT, "08_ingame_new.png")),
+                 ("第1回の修正案（?npc=revision）", os.path.join(OUT, "09_ingame_revision.png")),
+                 ("変更前：仮素材の NPC（?npc=placeholder）", os.path.join(OUT, "10_ingame_before.png"))]
     with open(os.path.join(OUT, "NPCギャラリー.html"), "w") as fh:
         fh.write(gallery(shots))
     print("sheets ->", os.path.relpath(OUT, ROOT))

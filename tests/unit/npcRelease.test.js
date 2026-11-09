@@ -1,14 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { NPC_ANIM, npcFrameKey, idleOffset } from '../../src/view/npcAnim.js';
 
-// NPC batch 1 (docs/npc/NPC_RELEASE_PLAN.md): the elder, the merchant and the guard at release
-// quality, drawn like the adopted hero (tools/npc_release/), and how the game picks their frames.
+// NPC release art (docs/npc/NPC_RELEASE_PLAN.md), drawn like the adopted hero (tools/npc_release/):
+//   batch 1  the elder, the merchant and the guard (approved: their 120 files are pinned below)
+//   batch 2  the village woman, the inn's cook, the village child and the blacksmith
+//   revision batch 1 with the review's fixes, in its own folder (src/art-release/npc-revision/)
+// and how the game picks the frames.
 
 const DIR = new URL('../../src/art-release/npc/', import.meta.url);
 const HERO = new URL('../../src/art-release/hero/', import.meta.url);
-const IDS = ['elder', 'merchant', 'guard'];
+const REVISION = new URL('../../src/art-release/npc-revision/', import.meta.url);
+const BATCH1 = ['elder', 'merchant', 'guard'];
+const BATCH2 = ['woman', 'cook', 'child', 'smith'];
+const IDS = [...BATCH1, ...BATCH2];
+const PINNED = JSON.parse(readFileSync(new URL('./fixtures/npc-batch1-sha256.json', import.meta.url), 'utf8'));
 const DIRS = ['down', 'up', 'right', 'left'];
 const files = readdirSync(DIR).filter((f) => f.endsWith('.png')).map((f) => f.slice(0, -4));
 
@@ -34,10 +42,26 @@ const expected = IDS.flatMap((id) => Object.entries(NPC_ANIM).flatMap(([a, { fra
 const BODY = { x0: 8, x1: 24 };
 
 describe('NPC release art, batch 1 (src/art-release/npc)', () => {
-  it('120 frames: 3 villagers × (idle 4 + walk 6) × 4 directions, named npc.<id>.<idle|walk>.<dir>.<n>, nothing else', () => {
-    expect(expected).toHaveLength(120);
+  it('280 frames: 7 villagers × (idle 4 + walk 6) × 4 directions (batch 2 adds 160), named npc.<id>.<idle|walk>.<dir>.<n>, nothing else', () => {
+    expect(expected).toHaveLength(280);
+    expect(expected.filter((f) => BATCH2.includes(f.split('.')[1]))).toHaveLength(160);
     expect([...files].sort()).toEqual([...expected].sort());
-    for (const f of files) expect(f).toMatch(/^npc\.(elder|merchant|guard)\.(idle|walk)\.(down|up|right|left)\.\d$/);
+    for (const f of files) expect(f).toMatch(/^npc\.(elder|merchant|guard|woman|cook|child|smith)\.(idle|walk)\.(down|up|right|left)\.\d$/);
+  });
+
+  it('batch 1 (approved) is unchanged: all 120 files byte for byte as approved', () => {
+    expect(Object.keys(PINNED)).toHaveLength(120);
+    for (const [name, sha] of Object.entries(PINNED)) expect(createHash('sha256').update(readFileSync(new URL(`${name}.png`, DIR))).digest('hex'), name).toBe(sha);
+  });
+
+  it('the batch 1 revision is a separate set: the same 120 names, 32×56, its front / back fixes differ from the approved frames', () => {
+    const rev = readdirSync(REVISION).filter((f) => f.endsWith('.png')).map((f) => f.slice(0, -4));
+    expect([...rev].sort()).toEqual(Object.keys(PINNED).sort());
+    for (const f of rev) expect([read(new URL(`${f}.png`, REVISION)).w, read(new URL(`${f}.png`, REVISION)).h], f).toEqual([32, 56]);
+    const changed = (f) => createHash('sha256').update(readFileSync(new URL(`${f}.png`, REVISION))).digest('hex') !== PINNED[f];
+    for (const id of BATCH1) expect(changed(`npc.${id}.idle.down.0`), `${id} front revised`).toBe(true);
+    expect(changed('npc.merchant.idle.up.0'), 'merchant back revised').toBe(true);
+    expect(changed('npc.guard.idle.right.0'), 'the guard\'s side view is kept').toBe(false);
   });
 
   it('every frame is a 32×56 RGBA PNG with a transparent background', () => {
@@ -106,7 +130,7 @@ describe('NPC release art, batch 1 (src/art-release/npc)', () => {
     }
   });
 
-  it('facing left, the staff, the book and the spear stay in the same hand: left frames are drawn on their own', () => {
+  it('facing left, what is held or worn on one side (staff, book, spear, basket, ladle, towel, pinwheel, bag, hammer) stays on that side: left frames are drawn on their own', () => {
     const isMirror = (a, b) => {
       const A = frame(a);
       const B = frame(b);
@@ -120,7 +144,7 @@ describe('NPC release art, batch 1 (src/art-release/npc)', () => {
     }
   });
 
-  it('different builds in the same frame: the elder is the smallest, the guard reaches higher than the merchant', () => {
+  it('different builds in the same frame: the child is the smallest, then the elder; the guard reaches higher than the merchant; the smith is the biggest', () => {
     const top = (url) => {
       const img = read(url);
       for (let y = 0; y < 56; y++) for (let x = BODY.x0; x <= BODY.x1; x++) if (img.alpha(x, y)) return y;
@@ -132,6 +156,34 @@ describe('NPC release art, batch 1 (src/art-release/npc)', () => {
     expect(t.elder).toBeGreaterThan(hero + 4);
     expect(t.guard).toBeLessThan(t.merchant);
     expect(t.guard).toBeLessThanOrEqual(hero + 1);
+    expect(t.child).toBeGreaterThan(t.elder + 3);
+    expect(t.woman).toBeGreaterThan(t.cook);
+    // bulk: the figure's area (the guard's spear and the elder's staff aside, the smith is the biggest)
+    const bulk = (id) => {
+      const img = read(new URL(`npc.${id}.idle.down.0.png`, DIR));
+      let n = 0;
+      for (let y = 0; y < 56; y++) for (let x = 0; x < 32; x++) if (img.alpha(x, y)) n++;
+      return n;
+    };
+    for (const id of ['woman', 'cook', 'merchant', 'child']) expect(bulk('smith'), `smith bigger than ${id}`).toBeGreaterThan(bulk(id));
+    expect(bulk('child')).toBeLessThan(bulk('woman') * 0.75);
+  });
+
+  it('no two villagers share a body: front frames differ in most pixels (no colour swaps of one shape)', () => {
+    const shape = (id) => {
+      const img = read(new URL(`npc.${id}.idle.down.0.png`, DIR));
+      const out = [];
+      for (let y = 0; y < 56; y++) for (let x = 0; x < 32; x++) out.push(img.alpha(x, y) ? 1 : 0);
+      return out;
+    };
+    const shapes = Object.fromEntries(IDS.map((id) => [id, shape(id)]));
+    for (const a of IDS) {
+      for (const b of IDS) {
+        if (a >= b) continue;
+        const diff = shapes[a].reduce((n, v, i) => n + (v !== shapes[b][i] ? 1 : 0), 0);
+        expect(diff, `${a} vs ${b}: silhouettes differ`).toBeGreaterThan(80);
+      }
+    }
   });
 
   it('the same palette as the hero for shared materials: skin, leather and gold come from the same ramps', () => {
@@ -178,10 +230,12 @@ describe('npcFrameKey: which frame a villager shows', () => {
   });
 
   it('a villager without release art keeps the placeholder frames (npc.<look>.walk.<dir>.<0..2>)', () => {
-    expect(npcFrameKey(npc({ id: 'cook', look: 2 }), 5, has)).toBe('npc.2.walk.down.0');
+    expect(npcFrameKey(npc({ id: 'traveller', look: 2 }), 5, has)).toBe('npc.2.walk.down.0');
     const walking = new Set();
-    for (let w = 0; w < 1; w += 0.05) walking.add(npcFrameKey(npc({ id: 'child', look: 5, moving: true, walkTime: w }), 0, has));
+    for (let w = 0; w < 1; w += 0.05) walking.add(npcFrameKey(npc({ id: 'princess', look: 5, moving: true, walkTime: w }), 0, has));
     expect([...walking].sort()).toEqual(['npc.5.walk.down.0', 'npc.5.walk.down.1', 'npc.5.walk.down.2']);
+    // batch 2: the cook and the child (in the village) now have their own
+    expect(npcFrameKey(npc({ id: 'cook', look: 2 }), 0, has)).toMatch(/^npc\.cook\.idle\.down\./);
     // with no release art at all (?npc=placeholder), everyone keeps it
     expect(npcFrameKey(npc({}), 0, () => false)).toBe('npc.1.walk.down.0');
   });
