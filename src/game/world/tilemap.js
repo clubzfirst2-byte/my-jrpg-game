@@ -45,7 +45,7 @@ const HEIGHT_DIGITS = '0123456789abcdefghijklmnopqrstuv';
  * @property {import('./features.js').AreaDef} [outdoor]  camera bounds outside every area (default: the whole map)
  * @property {import('./features.js').AreaDef[]} [outdoors]  P10.3: the outdoors of each column of regions
  * @property {{ type: string, tx: number, ty: number, link?: string }[]} [envObjects]  P4: crystals, jars, brambles, braziers, receivers, doors; P6: anvil
- * @property {{ id: string, item: string, tx: number, ty: number, count?: number, seasons?: string[] }[]} [pickups]  P6: items lying in the world; P10.2: some only in some seasons
+ * @property {{ id: string, item: string, tx: number, ty: number, count?: number, seasons?: string[], regrowMs?: number }[]} [pickups]  P6: items lying in the world; P10.2: some only in some seasons; v1.0: regrowMs (default a day)
  * @property {import('../puzzles/switches.js').SwitchDef[]} [switches]  P7: plates, sensors, sconces, stones
  * @property {import('./world.js').RegionInfo[]} [regions]  P8: the regions of the world (climate, art bundle)
  * @property {{ id: string, name: string, dialogue: string, look?: number, tx: number, ty: number, stay?: boolean, reach?: number }[]} [npcs]  P9: villagers

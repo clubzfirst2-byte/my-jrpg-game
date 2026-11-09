@@ -167,6 +167,9 @@ export function placeholderEntries() {
   entries.push({ key: 'tile.wood', rows: woodFloorTile(), anchor: TOP_LEFT });
   entries.push({ key: 'tile.walltop', rows: wallTopTile(), anchor: TOP_LEFT });
   entries.push({ key: 'tile.dark', rows: darkTile(), anchor: TOP_LEFT });
+  // v1.0 (C5): the small 星環 on the beach (the island has no region bundle).
+  entries.push({ key: 'obj.star_ring.off', rows: starRingSprite(false), anchor: FEET });
+  entries.push({ key: 'obj.star_ring.on', rows: starRingSprite(true), anchor: FEET });
   return entries;
 }
 
@@ -254,24 +257,23 @@ for (const [region, kind] of /** @type {const} */ ([['region:forest', 'root'], [
 }
 
 /**
- * v1.0 (C5-C7): the art of 淀みの源 and of the small 星環 on the beach, a bundle of its own that is
- * always loaded like the base one (a common bundle): the source fights in the desert's strip of
- * rooms and the ring stands on the island, which has no region bundle (docs/story/V1_STORY_PROPOSAL.md
- * C6). It is apart from the base atlas only because the 64 × 64 frames do not fit that 256 × 256 atlas.
+ * v1.0 (C7): the art of 淀みの源, a bundle of its own. The source fights in the desert's strip of
+ * rooms, but its 64 × 64 frames do not fit the 256 × 256 base atlas, and they are not wanted
+ * everywhere (about 4 MB once the release art is in): the view loads this bundle only while the
+ * player is in the desert region (its strip includes the antechamber and the arena) and releases it
+ * elsewhere (SOURCE_REGIONS, gameView.js). The small 星環 on the beach is in the base bundle.
  * The seats reuse the base bundle's sconce, sensor, plate, crate, stone, crystal and brazier.
  * Names: the release art's (enemy.boss_source.<action>.<frame>), so that art drops in under them.
  */
 export const SOURCE_BUNDLE = 'common:source';
+/** The regions near which the source's bundle is kept loaded. */
+export const SOURCE_REGIONS = Object.freeze(['desert']);
 /** @returns {{ key: string, rows: string[], anchor: [number, number] }[]} */
 export function sourceEntries() {
-  return [
-    ...Object.entries(sourceFrames()).map(([key, rows]) => ({ key, rows, anchor: FEET })),
-    { key: 'obj.star_ring.off', rows: starRingSprite(false), anchor: FEET },
-    { key: 'obj.star_ring.on', rows: starRingSprite(true), anchor: FEET },
-  ];
+  return Object.entries(sourceFrames()).map(([key, rows]) => ({ key, rows, anchor: FEET }));
 }
 
-/** @param {string} name @param {Map<string, string>} [overrides] */
+/** @param {string} name @param {Map<string, ArtSource>} [overrides] */
 export function buildRegionPack(name, overrides) {
   return buildPlaceholderPack(REGION_ENTRIES[name](), overrides);
 }
@@ -280,7 +282,7 @@ export function buildRegionPack(name, overrides) {
  * The hero's release animation frames (hero.<action>.<dir>.<frame>, docs/hero/HERO_ANIMATION_SPEC.md)
  * have no placeholder: they get a slot in the base bundle only when such art is given (?hero=release
  * until approved), so normal play builds exactly the same bundle.
- * @param {Map<string, string>} [overrides]
+ * @param {Map<string, ArtSource>} [overrides]
  */
 export function releaseHeroEntries(overrides) {
   if (!overrides?.size) return [];
@@ -291,7 +293,7 @@ export function releaseHeroEntries(overrides) {
  * The villagers' release frames (npc.<id>.<idle|walk>.<dir>.<frame>, docs/npc/NPC_RELEASE_PLAN.md):
  * like the hero's, they get a slot in the base bundle only when such art is given. A villager
  * without them keeps the placeholder npc.<look>.* frames.
- * @param {Map<string, string>} [overrides]
+ * @param {Map<string, ArtSource>} [overrides]
  */
 export function releaseNpcEntries(overrides) {
   if (!overrides?.size) return [];
@@ -352,11 +354,32 @@ function loadImage(url) {
 }
 
 /**
+ * One frame of a packed release sheet (docs/perf/release-art-packing.md): the sheet's image and
+ * where the frame sits on it, in its pixels.
+ * @typedef {{ sheet: CanvasImageSource, x: number, y: number, w: number, h: number }} SheetFrame
+ */
+/** Where a sprite's art comes from: its own PNG's URL, or its place on a packed sheet. @typedef {string | SheetFrame} ArtSource */
+
+/**
+ * Copies a frame off its sheet into its own canvas, pixel for pixel, so it is drawn exactly as its
+ * own PNG would be. @param {SheetFrame} f @returns {HTMLCanvasElement}
+ */
+export function cutSheetFrame(f) {
+  const canvas = document.createElement('canvas');
+  canvas.width = f.w;
+  canvas.height = f.h;
+  const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(f.sheet, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+  return canvas;
+}
+
+/**
  * P11.5: puts the real art (src/art/<name>.png) in place of the placeholder where there is one.
  * A tile of the wrong size is left as the placeholder (it would not fit the grid) and reported.
  * @param {{ key: string, rows: string[], anchor: [number, number] }[]} entries
- * @param {Map<string, string>} overrides logical name → PNG URL (artOverrides.js)
- * @returns {Promise<{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement }[]>}
+ * @param {Map<string, ArtSource>} overrides logical name → PNG URL (artOverrides.js) or sheet frame
+ * @returns {Promise<{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement | HTMLCanvasElement }[]>}
  */
 export async function withOverrides(entries, overrides) {
   if (overrides.size === 0) return entries;
@@ -365,7 +388,7 @@ export async function withOverrides(entries, overrides) {
       const url = overrides.get(e.key);
       if (!url) return e;
       try {
-        const image = await loadImage(url);
+        const image = typeof url === 'string' ? await loadImage(url) : cutSheetFrame(url);
         const [w, h] = [e.rows[0].length * ART_SCALE, e.rows.length * ART_SCALE];
         if (mustKeepSize(e.anchor) && (image.width !== w || image.height !== h)) {
           console.warn(`art: ${e.key}.png must be ${w}x${h} (is ${image.width}x${image.height}); using the placeholder`);
@@ -382,7 +405,7 @@ export async function withOverrides(entries, overrides) {
 
 /**
  * @param {{ key: string, rows: string[], anchor: [number, number] }[]} [entries]
- * @param {Map<string, string>} [overrides] the real art (P11.5), by logical name
+ * @param {Map<string, ArtSource>} [overrides] the real art (P11.5), by logical name
  * @returns {Promise<import('./assetManager.js').BuiltBundle>}
  */
 export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map()) {
@@ -408,7 +431,7 @@ function mergePacks(packs) {
 }
 
 /**
- * @param {{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement }[]} entries
+ * @param {{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement | HTMLCanvasElement }[]} entries
  * @param {number} atlasSize
  * @param {number} resolution pixels per game pixel (1 for placeholders, ART_SCALE for the real art)
  * @returns {import('./assetManager.js').BuiltBundle}

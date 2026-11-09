@@ -67,12 +67,31 @@ export function placePickups(state) {
   for (const d of state.pickupDefs) {
     if (d.seasons && !d.seasons.includes(season)) continue; // P10.2: out of season
     const t = picked[d.id];
-    if (typeof t === 'number' && state.env.now - t < PICKUP_REGROW_MS) continue;
+    if (typeof t === 'number' && state.env.now - t < (d.regrowMs ?? PICKUP_REGROW_MS)) continue;
     if (typeof t === 'number' && itemDef(d.item).type === 'key') continue; // story items never come back (P9)
     const ts = map.tileSize;
     list.push({ key: d.id, mapId: d.id, item: d.item, count: d.count ?? 1, x: d.tx * ts + ts / 2, y: d.ty * ts + ts - 3, z: map.elev[d.ty * map.width + d.tx] });
   }
   state.pickups = list;
+}
+
+/**
+ * Puts back the map items with their own short regrowth (`regrowMs`, e.g. the source's quiver) once
+ * that time has passed. (Everything else comes back with the next full placement.)
+ * @param {any} state
+ */
+function regrowQuick(state) {
+  const picked = state.progress.picked;
+  if (!picked) return;
+  for (const d of state.pickupDefs) {
+    if (!d.regrowMs) continue;
+    const t = picked[d.id];
+    if (typeof t !== 'number' || state.env.now - t < d.regrowMs) continue;
+    if (state.pickups.some((/** @type {Pickup} */ it) => it.mapId === d.id)) continue;
+    const map = state.map;
+    const ts = map.tileSize;
+    state.pickups.push({ key: d.id, mapId: d.id, item: d.item, count: d.count ?? 1, x: d.tx * ts + ts / 2, y: d.ty * ts + ts - 3, z: map.elev[d.ty * map.width + d.tx] });
+  }
 }
 
 /**
@@ -115,6 +134,9 @@ export function itemStep(state) {
       state.pickups.push({ key: `drop${state.nextId++}`, item: d.item, count: d.count, x: e.x + (k - (drops.length - 1) / 2) * 8, y: e.y, z: e.z });
     });
   }
+
+  // v1.0: items that come back sooner than a day (the arrows by the source) return in place.
+  regrowQuick(state);
 
   // Walking over an item picks it up.
   if (!p.dead) {

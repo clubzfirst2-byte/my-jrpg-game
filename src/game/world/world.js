@@ -74,7 +74,7 @@ export function stitchWorld(island, regions) {
     // v1.0 (C7): 淀みの源, the final boss, in its own list (not one of the four cores).
     if (r.finalBoss) {
       const fb = r.finalBoss;
-      def.finalBoss = { ...at(fb), arena: at(fb.arena), roam: at(fb.roam), crate: at(fb.crate) };
+      def.finalBoss = { ...at(fb), arena: at(fb.arena), roam: at(fb.roam), crate: at(fb.crate), grass: (fb.grass ?? []).map(at) };
     }
     // P10.1: house doors lead to rooms in the region's east strip (both ends move with the region).
     for (const w of r.warps ?? []) def.warps.push({ ...w, tx: w.tx + ox, ty: w.ty + oy, toTx: w.toTx + ox, toTy: w.toTy + oy });

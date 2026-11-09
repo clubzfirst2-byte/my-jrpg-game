@@ -10,7 +10,7 @@ import { slideCrate } from '../../src/game/puzzles/abilities.js';
 import { hitEnemy } from '../../src/game/combat/damage.js';
 import { countOf } from '../../src/game/items/inventory.js';
 import { STEP_SEC } from '../../src/game/core/fixedStep.js';
-import { sourceEntries, atlasSizeFor, SOURCE_BUNDLE, REGION_ENTRIES } from '../../src/view/assets/placeholderPack.js';
+import { sourceEntries, placeholderEntries, atlasSizeFor, SOURCE_BUNDLE, SOURCE_REGIONS, REGION_ENTRIES } from '../../src/view/assets/placeholderPack.js';
 import { SOURCE_ACTIONS } from '../../src/view/assets/sourceArt.js';
 import { sourceFrameKey } from '../../src/view/sourceView.js';
 
@@ -483,19 +483,26 @@ describe('every seat wakes in two ways or more, one without any 星環 ability',
   });
 });
 
-describe('the art (placeholders under the release art\'s names, in a common bundle)', () => {
-  it('every frame of enemy.boss_source.* (64 × 64, feet at the bottom) and the beach ring, lit and not', () => {
+describe('the art (placeholders under the release art\'s names)', () => {
+  it('every frame of enemy.boss_source.* (64 × 64, feet at the bottom) in its own bundle; the beach ring in the base one', () => {
     const entries = sourceEntries();
     const keys = new Set(entries.map((e) => e.key));
     for (const [action, n] of Object.entries(SOURCE_ACTIONS)) for (let f = 0; f < n; f++) expect(keys.has(`enemy.boss_source.${action}.${f}`)).toBe(true);
-    expect(keys.has('obj.star_ring.on') && keys.has('obj.star_ring.off')).toBe(true);
+    const base = new Set(placeholderEntries().map((e) => e.key));
+    expect(base.has('obj.star_ring.on') && base.has('obj.star_ring.off')).toBe(true);
+    expect([...keys].every((k) => k.startsWith('enemy.boss_source.'))).toBe(true);
     for (const e of entries) {
       for (const r of e.rows) expect(r.length, e.key).toBe(e.rows[0].length);
       if (e.key.startsWith('enemy.')) expect([e.rows[0].length, e.rows.length]).toEqual([64, 64]);
       expect(e.anchor).toEqual([0.5, 1]);
     }
     expect(atlasSizeFor(entries)).toBeLessThanOrEqual(512);
-    expect(SOURCE_BUNDLE in REGION_ENTRIES).toBe(false); // (not a region's: always loaded)
+    expect(SOURCE_BUNDLE in REGION_ENTRIES).toBe(false); // (its own: loaded only near the arena)
+    // The arena (and the antechamber) lie in a region whose presence loads the bundle.
+    const ar = WORLD.areas.find((a) => a.id === 'source_arena');
+    const r = WORLD.regions.find((x) => ar.tx >= x.tx && ar.tx < x.tx + x.tw && ar.ty >= x.ty && ar.ty < x.ty + x.th);
+    expect(SOURCE_REGIONS).toContain(r.id);
+    expect(SOURCE_REGIONS).not.toContain('island');
   });
 
   it('a frame for each state of the fight, falling back to idle when a frame is missing', () => {
@@ -509,5 +516,109 @@ describe('the art (placeholders under the release art\'s names, in a common bund
     expect(sourceFrameKey({ ...e, state: 'dead', t: FINAL_BOSS.defeatMs }, 0, all)).toBe('enemy.boss_source.defeat.5');
     expect(sourceFrameKey({ ...e, clock: 300, transformFrom: 0, transformUntil: 1000 }, 0, all)).toBe('enemy.boss_source.transform.1');
     expect(sourceFrameKey({ ...e, state: 'stagger' }, 0, (k) => k.includes('.idle.'))).toBe('enemy.boss_source.idle.0');
+  });
+});
+
+describe('three rounds with real inputs only, no abilities (review 中-1)', () => {
+  it('fire arrows through the braziers, the sword on the crate and the crystal, a blow in each stagger: purified', () => {
+    const s = createGameState(WORLD);
+    s.enemies = [];
+    s.enemySpawns = [];
+    s.player.maxHp = s.player.hp = 4000;
+    // The player stands where each action is done (attacks would knock them around otherwise).
+    let spot = at(104, 55);
+    let facing = 'up';
+    const step = (input = none) => {
+      s.player.hp = s.player.maxHp;
+      s.player.dead = false;
+      place(s, spot, facing);
+      stepGame(s, input);
+    };
+    const go = (p, f) => {
+      spot = p;
+      facing = f;
+      step();
+    };
+    const wait = (n, input = none) => {
+      for (let i = 0; i < n; i++) step(input);
+    };
+    const fire = () => {
+      wait(Math.ceil((COMBAT.bowDrawMs / 1000) * 60) + 2, { ...none, bow: true });
+      wait(60);
+    };
+    const cut = () => {
+      step({ ...none, attack: true });
+      wait(40);
+    };
+    wait(2);
+    const b = s.enemies.find((e) => e.final);
+    const arrows0 = countOf(s.progress.inv, 'arrow');
+    const roundMs = [];
+    for (let round = 0; round < 3; round++) {
+      const t0 = s.env.now;
+      for (let tries = 0; tries < 4 && b.state !== 'stagger'; tries++) {
+        go(at(108, 46), 'up'); // light: a fire arrow through the east brazier sets the grass alight
+        fire();
+        go(at(100, 47), 'up'); // fire: a fire arrow through the west brazier onto the sconce
+        fire();
+        go(at(102, 54), 'left'); // weight: two sword hits push the crate onto the plate
+        cut();
+        go(at(101, 54), 'left');
+        cut();
+        go(at(105, 54), 'right'); // resonance: strike the crystal
+        cut();
+        wait(3);
+      }
+      expect(b.state, `round ${round}`).toBe('stagger');
+      for (let k = 0; k < 20 && b.state === 'stagger'; k++) {
+        go({ tx: Math.floor(b.x / 16), ty: Math.floor(b.y / 16) + 1 }, 'up');
+        cut();
+      }
+      expect(b.hp, `round ${round}`).toBe(FINAL_BOSS.hp - 30 * (round + 1));
+      roundMs.push(s.env.now - t0);
+      go(at(104, 50), 'up');
+      wait(200); // the wave passes
+    }
+    expect(s.progress.flags[SOURCE_PURIFIED]).toBe(true);
+    // Each round is a matter of seconds (no waiting for burnt grass to grow back).
+    for (const ms of roundMs) expect(ms).toBeLessThan(40_000);
+    expect(arrows0 - countOf(s.progress.inv, 'arrow')).toBeLessThanOrEqual(12);
+  }, 60_000);
+
+  it('the wave makes the light seat\'s grass whole again (put out, no ash); nothing else', () => {
+    const { s, b } = arena();
+    const grass = [107, 108, 109].map((x) => at(x, 37)).map(({ tx, ty }) => ty * s.map.width + tx);
+    const elsewhere = at(104, 50).ty * s.map.width + 30; // (an outdoor tile, far away)
+    s.env.cells.set(elsewhere, { burnMs: 0, at: 0, wetUntil: 0, ashUntil: s.env.now + 99_000 });
+    s.env.cells.set(grass[0], { burnMs: 0, at: 0, wetUntil: 0, ashUntil: s.env.now + 99_000 });
+    s.env.cells.set(grass[1], { burnMs: 2000, at: s.env.now, wetUntil: 0, ashUntil: 0 });
+    s.env.burning.add(grass[1]);
+    resetSeats(s, b);
+    expect(grass.every((i) => !s.env.burning.has(i) && (s.env.cells.get(i)?.ashUntil ?? 0) === 0)).toBe(true);
+    expect(s.env.cells.get(elsewhere).ashUntil).toBeGreaterThan(s.env.now);
+  });
+});
+
+describe('arrows by the source (review 中-2)', () => {
+  it('a quiver in the antechamber comes back a minute after it is taken', () => {
+    const d = WORLD.pickups.find((p) => p.id === 'source_arrows');
+    expect(d).toMatchObject({ item: 'arrow', regrowMs: 60_000 });
+    const s = createGameState(WORLD);
+    expect(areaAt(s, d.tx * 16 + 8, d.ty * 16 + 8)?.id).toBe('source_gate');
+    s.enemies = [];
+    s.enemySpawns = [];
+    stepGame(s, none);
+    const n0 = countOf(s.progress.inv, 'arrow');
+    place(s, { tx: d.tx, ty: d.ty });
+    stepGame(s, none);
+    expect(countOf(s.progress.inv, 'arrow')).toBe(n0 + d.count);
+    place(s, { tx: d.tx + 2, ty: d.ty });
+    run(s, none, Math.ceil(30_000 / MS));
+    expect(s.pickups.some((p) => p.mapId === d.id)).toBe(false);
+    run(s, none, Math.ceil(31_000 / MS));
+    expect(s.pickups.some((p) => p.mapId === d.id)).toBe(true);
+    place(s, { tx: d.tx, ty: d.ty });
+    stepGame(s, none);
+    expect(countOf(s.progress.inv, 'arrow')).toBe(n0 + 2 * d.count);
   });
 });

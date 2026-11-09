@@ -14,7 +14,7 @@ import { lerp } from '../game/core/math.js';
 import { Camera } from './camera.js';
 import { windupProgress } from '../game/entities/enemies.js';
 import { BOSS_KINDS } from '../game/entities/bosses.js';
-import { FINAL_BOSS } from '../game/entities/finalBoss.js';
+import { FINAL_BOSS, FINAL_BOSS_ENEMY_ID } from '../game/entities/finalBoss.js';
 import { COMBAT } from '../game/entities/playerCombat.js';
 import { areaAt } from '../game/world/features.js';
 import { sourceFrameKey, drawSourceTelegraphs, drawSeatLights } from './sourceView.js';
@@ -26,7 +26,7 @@ import { PuzzleView } from './puzzleView.js';
 import { NpcView } from './npcView.js';
 import { regionAt, outdoorAt } from '../game/world/world.js';
 import { seasonAt } from '../game/env/weather.js';
-import { SEASON_ENTRIES, seasonKeys } from './assets/placeholderPack.js';
+import { SEASON_ENTRIES, seasonKeys, SOURCE_BUNDLE, SOURCE_REGIONS } from './assets/placeholderPack.js';
 import { HeroAnimator } from './heroAnim.js';
 
 /** Chunk size in tiles (P8). */
@@ -145,6 +145,9 @@ export class GameView {
     this.charmHome = false;
     /** v1.0: the beach ring glows while it is a gate */
     this.ringOpen = false;
+    /** v1.0: the source's art bundle: held only while the player is in the desert (its arena is there) */
+    this.sourceHeld = false;
+    this.sourceLoading = false;
     /** @type {Graphics | null} v1.0: the source's telegraphs (ground) and seat lights */
     this.sourceGround = null;
     /** @type {Graphics | null} */
@@ -505,6 +508,36 @@ export class GameView {
   }
 
   /** Bosses are drawn with region art: drop their sprites before a region bundle can go (redrawn next frame if still loaded). */
+  /**
+   * v1.0: the source's art is loaded while the player is in the desert region (its strip of rooms
+   * holds the antechamber and the arena) and released elsewhere (about 4 MB with the release art).
+   * @param {import('../game/state.js').GameState} state
+   */
+  updateSourceBundle(state) {
+    const p = state.player;
+    const want = SOURCE_REGIONS.includes(regionAt(this.regions, Math.floor(p.x / 16), Math.floor(p.y / 16))?.id ?? '');
+    if (want && !this.sourceHeld && !this.sourceLoading) {
+      this.sourceLoading = true;
+      this.assets.load(SOURCE_BUNDLE).then(
+        () => {
+          this.sourceLoading = false;
+          this.sourceHeld = true; // (released on the next frame if no longer wanted)
+        },
+        () => {
+          this.sourceLoading = false;
+        },
+      );
+    } else if (!want && this.sourceHeld) {
+      const spr = this.enemySprites.get(FINAL_BOSS_ENEMY_ID);
+      if (spr) {
+        spr.destroy();
+        this.enemySprites.delete(FINAL_BOSS_ENEMY_ID);
+      }
+      this.sourceHeld = false;
+      this.assets.unload(SOURCE_BUNDLE);
+    }
+  }
+
   dropBossSprites() {
     for (const [id, spr] of this.enemySprites) {
       if (id < 1000) continue;
@@ -684,6 +717,7 @@ export class GameView {
     else this.camera.follow(x, y - camZ - aimY, dtSec);
     this.applyCamera();
     this.updateSeason(state.env.now);
+    this.updateSourceBundle(state);
     this.updateChunks(this.camera.origin(), this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom);
     // P10.1: the elder's charm is back on its shelf once the quest is done.
     const charmHome = state.progress.quests.lost_charm === 'done';
@@ -836,6 +870,8 @@ export class GameView {
     for (const e of state.enemies) {
       // P10.4: a core of the murk is drawn by its region's art, only while that is loaded.
       if (e.boss && !this.assets.hasTexture(`enemy.${e.kind}.0`)) continue;
+      // v1.0: the source is drawn by its own bundle, only while that is loaded.
+      if (e.final && !this.assets.hasTexture('enemy.boss_source.idle.0')) continue;
       seen.add(e.id);
       // v1.0: the source has a frame for each action (front-facing: never flipped).
       const sourceKey = e.final ? sourceFrameKey(e, timeSec, (k) => this.assets.hasTexture(k)) : null;

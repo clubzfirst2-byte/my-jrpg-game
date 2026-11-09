@@ -560,6 +560,9 @@ M.features['landmarks'].append({'id': 'mine', 'name': '白嶺の坑道', 'tx': m
 ANTE = 20
 S.puzzle_box('source_gate', '星環の前室', ANTE)
 S.features['checkpoints'].append({'id': 'source', 'tx': 104, 'ty': ANTE + 7})  # on the way through: touched in passing
+# A quiver of arrows that comes back a minute after it is taken: the fire and light seats' ways
+# without abilities use fire arrows (2+ a round), so nobody runs out at the source.
+S.features['pickups'].append({'id': 'source_arrows', 'item': 'arrow', 'tx': 101, 'ty': ANTE + 9, 'count': 10, 'regrowMs': 60_000})
 # Back out: walk down from the south end; you come out on the sand in front of the beach ring.
 S.extra['passes'] = [{'id': 'source-out', 'tx': 104, 'ty': ANTE + 12, 'facing': 'down', 'to': {'region': 'island', 'tx': 42, 'ty': 68}}]
 AR0, AR1 = 36, 57  # the arena's walls (top) and its line of rocks (bottom)
@@ -600,6 +603,7 @@ S.extra['finalBoss'] = {
     'roam': {'tx': 102, 'ty': 40, 'tw': 5, 'th': 6},                    # and floats only in here
     'seats': ['source-fire', 'source-light', 'source-weight', 'source-echo'],
     'crate': {'tx': 101, 'ty': 54},
+    'grass': [{'tx': X, 'ty': AR0 + 1} for X in (107, 108, 109)],  # the wave makes it whole again
 }
 # The rules the spec sets for the seats (C6).
 def tiles(a, b): return max(abs(a[0] - b[0]), abs(a[1] - b[1]))

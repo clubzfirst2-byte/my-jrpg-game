@@ -104,7 +104,7 @@ async function boot() {
   //   ?hd=1        the fine canvas even without real art
   //   ?hero=test   a size-test hero (仮, 32×56) in place of the hero, to check the new standard
   const hdParam = params.get('hd');
-  /** @type {Map<string, string>} */
+  /** @type {Map<string, import('./view/assets/placeholderPack.js').ArtSource>} */
   const artOverrides = hdParam === '0' ? new Map() : new Map(ART_OVERRIDES);
   if (params.get('hero') === 'test' && hdParam !== '0') for (const [k, v] of testHeroFrames()) artOverrides.set(k, v);
   //   ?hero=proto / ?npc=proto / ?enemy=proto / ?proto=all   the P12 prototypes (仮素材) — shown
@@ -158,9 +158,9 @@ async function boot() {
   assets.register('placeholder', () => buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides)], artOverrides));
   // P8: each region's art is its own bundle, loaded by the view near the region.
   for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name, artOverrides));
-  // v1.0: the final boss and the beach ring (a common bundle, always loaded).
+  // v1.0: the final boss's art (loaded by the view only near its arena).
   assets.register(SOURCE_BUNDLE, () => buildPlaceholderPack(sourceEntries(), artOverrides));
-  await Promise.all([assets.load('placeholder'), assets.load(SOURCE_BUNDLE)]);
+  await assets.load('placeholder');
   performance.mark('art');
   // Without ?map= the game starts at the title on the first island and saves its progress.
   // ?map=... (tests, height/field test maps) skips the title and never touches the save.
@@ -955,8 +955,19 @@ async function boot() {
     resolution: () => ({ ...resolution, target: targetHeight }),
     /** The hero's current animation (action and frame) and the texture drawn. */
     heroPose: () => ({ ...view.heroPose, texture: view.heroKey }),
-    /** Which file a sprite's art comes from (tests: release / revision / prototype). */
-    artUrl: (/** @type {string} */ key) => artOverrides.get(key) ?? null,
+    /**
+     * A sprite's art (tests: release / revision / prototype): its PNG URL, or for a frame on a
+     * packed sheet (the build) the frame's pixels as a data URL, so two sets compare by content.
+     */
+    artUrl: (/** @type {string} */ key) => {
+      const src = artOverrides.get(key);
+      if (src === undefined || typeof src === 'string') return src ?? null;
+      const c = document.createElement('canvas');
+      c.width = src.w;
+      c.height = src.h;
+      /** @type {CanvasRenderingContext2D} */ (c.getContext('2d')).drawImage(src.sheet, src.x, src.y, src.w, src.h, 0, 0, src.w, src.h);
+      return c.toDataURL();
+    },
     /** P11.5: the art in use (density, how many real-art sprites) and the drawn hero's size in game px. */
     art: () => ({ density: artDensity, overrides: artOverrides.size, zoom: view.camera.zoom, hero: { w: view.player.texture.width, h: view.player.texture.height, k: view.heroK } }),
     /** P8: the auto tour (minutes may be fractional in tests). */

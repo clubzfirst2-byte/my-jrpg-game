@@ -43,6 +43,7 @@ import { PHASE2_WINDUP, inArena } from './bosses.js';
  * @property {Rect} roam   and floats only in here (out of reach of the weight seat)
  * @property {string[]} seats  the switch ids of its four seats
  * @property {{ tx: number, ty: number }} crate  where the weight seat's crate starts (the wave puts it back)
+ * @property {{ tx: number, ty: number }[]} [grass]  the grass by the light seat (the wave makes it whole again)
  */
 
 export const FINAL_BOSS = Object.freeze({
@@ -69,6 +70,9 @@ export const FINAL_BOSS = Object.freeze({
   /** The purified ring fades out this long before it leaves the enemy list (its defeat frames). */
   defeatMs: 2400,
 });
+
+/** Its id in the enemy list (ordinary enemies count from 1, the cores from 1000). */
+export const FINAL_BOSS_ENEMY_ID = 2000;
 
 /** The flag that the defeat sets, and that keeps it gone. */
 export const SOURCE_PURIFIED = 'source_purified';
@@ -103,6 +107,7 @@ export function createFinalBoss(def, map, id) {
     roam: def.roam,
     seatIds: [...def.seats],
     crateHome: { ...def.crate },
+    grass: (def.grass ?? []).map((g) => ({ ...g })),
     /** @type {Record<string, boolean>} seats awake now */
     seats: Object.fromEntries(def.seats.map((s) => [s, false])),
     state: 'idle',
@@ -140,7 +145,7 @@ export function placeFinalBoss(state) {
   if (!def || state.progress.flags[SOURCE_PURIFIED] || state.player.dead) return;
   if (!inArena({ arena: def.arena }, state.map, state.player.x, state.player.y)) return;
   if (state.enemies.some((/** @type {any} */ e) => e.final)) return;
-  state.enemies.push(createFinalBoss(def, state.map, 2000));
+  state.enemies.push(createFinalBoss(def, state.map, FINAL_BOSS_ENEMY_ID));
 }
 
 /** @param {any} e @param {string} s */
@@ -312,10 +317,22 @@ function fan(e, state, n, spread) {
 
 /**
  * The inversion wave: every seat goes back to sleep. The sconce is put out, the crate slides back
- * to where it started, the stone falls silent.
+ * to where it started, the stone falls silent, and the grass by the light seat is whole again (put
+ * out, no ash): burning it is the light seat's way without abilities, and ash would otherwise take
+ * two minutes to grow back. Only those grass tiles are touched (the fire / ash of a tile lives in
+ * the environment simulation, not in the saved world differences).
  * @param {any} state @param {any} e
  */
 export function resetSeats(state, e) {
+  const env = state.env;
+  for (const g of e.grass ?? []) {
+    const i = g.ty * state.map.width + g.tx;
+    const c = env.cells.get(i);
+    if (!c) continue;
+    if (env.burning.delete(i)) c.burnMs = 0;
+    c.ashUntil = 0;
+    env.version++;
+  }
   for (const id of e.seatIds) e.seats[id] = false;
   const map = state.map;
   for (const s of state.switches) {
