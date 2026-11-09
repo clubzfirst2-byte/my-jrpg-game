@@ -187,7 +187,7 @@ def draw(p):
         r.add(r.m_ellipse(hx_, hy + L + 3 + mo * 1.4, 3.8 * hs, 1.8), "frostfur", soft=1, inline=True)
     r.add(r.m_ellipse(hx_, hy + L, 5.5 * hs, 3.4 * hs * max(fo, 0.8)), "frostfur", dark=1, soft=1, inline="br")  # muzzle
     r.px([(round(hx_ - 2), round(hy + L)), (round(hx_ + 1), round(hy + L))], "frostfur", 0)
-    glow_eyes(r, hx_, hy + 3 * hs * fo, round(5 * hs), p.eyes)
+    glow_eyes(r, hx_, hy + 3 * hs * fo, round(5 * hs), p.eyes, socket="frostfur")
     # antlers from the brow
     for s in (-1, 1):
         antler(r, s, hx_ + s * 5 * hs, hy - 6 * hs, hs * 0.8, p.rot + 6, p.lev, p.phase2)

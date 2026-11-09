@@ -79,16 +79,11 @@ def draw(p):
                 [3.4, 2.2, 0.8], "rotwood", soft=1)
     # the body: a broad hunched mass
     body = r.mask_of(r.m_ellipse(cx, by, 30, 17), r.m_ellipse(cx, by + 6, 24, 13))
-    r.add(body, "rotwood", soft=4, tex=("bark", 90, 3))
+    r.add(body, "rotwood", soft=4, tex=("bark", "radial", 3, {"centre": (cx, by - 3), "calm": (cx, by - 3, 11)}))
     # shoulder spikes pointing out
     for s in (-1, 1):
         r.chain([(cx + s * 24, by - 2), (cx + s * 32, by - 7), (cx + s * 40, by - 10)], [4.2, 2.6, 0.8], "rotwood", soft=1)
     # root grain: dark grooves sweeping over the body
-    for s in (-1, 1):
-        for i in range(4):
-            x0, x1 = cx + s * (9 + i * 5), cx + s * (14 + i * 6)
-            r.shade(r.m_line(x0, by - 15 + i, x1, by + 9 + i), lambda t: max(1, t - 1))
-            r.shade(r.m_line(x0 - s, by - 14 + i, x1 - s, by + 4 + i), lambda t: min(3, t + 1) if t >= 2 else t)
     # fungus caps
     for fx_, fy_, rr in ((cx - 22, by - 4, 3.5), (cx + 21, by - 2, 3.0), (cx - 15, by + 7, 2.4), (cx + 25, by + 6, 2.0)):
         r.ellipse(fx_, fy_, rr, rr * 0.6, "fungus", soft=1)
@@ -118,7 +113,7 @@ def draw(p):
         r.add(r.m_ellipse(hx_, hy + 11 * hs + p.jaw, 6.5 * hs, 3.0 + p.jaw * 0.6), "rotwood", dark=1, soft=1)
         r.add(r.m_ellipse(hx_, hy + 10 * hs + p.jaw * 0.5, 5 * hs, 1.2 + p.jaw * 0.7), "murk", tone=0)
         head &= ~r.m_ellipse(hx_, hy + 11 * hs + p.jaw * 0.5, 5 * hs, 1.2 + p.jaw * 0.7)
-    r.add(head, "rotwood", soft=2)
+    r.add(head, "rotwood", soft=2, tex=("bark", 0, 7))
     # snout disc with nostrils (hand-placed)
     r.ellipse(hx_, hy + 8 * hs, 4.6 * hs, 3.0 * hs, "rotwood", lit=1, soft=1)
     r.px([(round(hx_ - 2), round(hy + 8 * hs)), (round(hx_ + 1), round(hy + 8 * hs))], "rotwood", 0)
@@ -133,7 +128,7 @@ def draw(p):
     if c < 2:
         for x in (-4, 0, 4):
             r.limb(hx_ + x, hy + 13 * hs + p.jaw, hx_ + x * 1.6, min(G - 1, hy + 23), 1.2, 0.8, "rotwood", soft=1, dark=1)
-    glow_eyes(r, hx_, hy - 3 * hs, round(5 * hs), p.eyes)
+    glow_eyes(r, hx_, hy - 3 * hs, round(5 * hs), p.eyes, socket="rotwood")
     # volley: orbs lined up in front of the core
     for i in range(p.orbs):
         orb(r, cx + (i - (p.orbs - 1) / 2) * 10, ky + 4 - abs(i - (p.orbs - 1) / 2) * 3, 3.4)
@@ -162,7 +157,7 @@ def frames():
     f["move.0"] = Pose(legs=(5, 0), shift=-2, dy=0)
     f["move.1"] = Pose(legs=(0, 5), shift=2, dy=0)
     # charge: back rises, spikes bristle and fan, head drops low, tusks forward; the lunge
-    f["windup_charge.0"] = Pose(lift=-4, head=9, spikes=3, fan=4, spread=4)
+    f["windup_charge.0"] = Pose(lift=-5, head=10, hs=1.04, spikes=4, fan=5, spread=5)
     f["windup_charge.1"] = Pose(lift=-5, head=11, hs=1.08, spikes=4, fan=5, spread=5, jaw=1)
     f["attack_charge.0"] = Pose(lift=-2, head=8, hs=1.15, spread=3, jaw=2, legs=(2, 2), fan=2)
     f["attack_charge.1"] = Pose(lift=-1, head=5, hs=1.1, spread=2, jaw=1, fan=1)
@@ -173,7 +168,7 @@ def frames():
     f["attack_slam.1"] = Pose(dy=2, head=2, spread=3, jaw=1)
     # volley: the head throws up, the mouth gapes, the front legs brace wide, the spikes fan;
     # orbs line up before the bared core; then the fan leaves (recoil)
-    f["windup_volley.0"] = Pose(jaw=3, orbs=3, head=-6, spread=7, fan=4, spikes=2, phase2=True)
+    f["windup_volley.0"] = Pose(jaw=3, orbs=3, head=-8, spread=8, fan=5, spikes=3, lift=-1, phase2=True)
     f["windup_volley.1"] = Pose(jaw=4, orbs=5, head=-9, spread=9, fan=6, spikes=3, lift=-2, phase2=True)
     f["attack_volley.0"] = Pose(jaw=3, head=-2, dy=-1, phase2=True)
     f["attack_volley.1"] = Pose(jaw=1, head=0, phase2=True)
