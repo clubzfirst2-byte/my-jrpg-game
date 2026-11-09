@@ -77,6 +77,28 @@ export function levelBrightness(level, release) {
 }
 
 /**
+ * The resolution of a chunk's cached flat ground (gameView.buildChunk, cacheAsTexture), in texture
+ * pixels per game pixel: the release terrain has 2 art pixels per game pixel (ART_SCALE), and a cache
+ * at 1 drew it at half detail (every 2×2 block of art one pixel). 512 × 512 game px chunk: 4 MB at 2,
+ * 1 MB at 1.
+ * @param {boolean} release
+ */
+export function groundCacheResolution(release) {
+  return release ? 2 : 1;
+}
+
+/**
+ * The ambient light indoors (caves, mines, trial rooms, the source's rooms; not the dark trial rooms
+ * or the lived-in houses, which have their own). The release ruin and cave stone is darker than the
+ * placeholders', so under the placeholders' 0.55 the floors were near black with little contrast
+ * against the walls (re-inspection of a25fb7d); the release terrain gets 0.65 / 0.65 / 0.75.
+ * @param {boolean} release
+ */
+export function indoorLight(release) {
+  return release ? { r: 0.65, g: 0.65, b: 0.75 } : { r: 0.55, g: 0.55, b: 0.65 };
+}
+
+/**
  * Which of a ground's n variants a tile shows (gameView.surfaceKey), from a stable per-tile hash.
  * The placeholders pick them evenly. The release terrain's variant 0 is the plain one and the others
  * carry a visible mark (reeds, shells, flowers, mushrooms), so variant 0 covers about half of the

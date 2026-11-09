@@ -28,7 +28,7 @@ import { regionAt, outdoorAt } from '../game/world/world.js';
 import { seasonAt } from '../game/env/weather.js';
 import { SEASON_ENTRIES, seasonKeys, SOURCE_BUNDLE, SOURCE_REGIONS } from './assets/placeholderPack.js';
 import { HeroAnimator } from './heroAnim.js';
-import { groundVariant, levelBrightness, usesReleaseTerrain } from './assets/terrainArt.js';
+import { groundCacheResolution, groundVariant, indoorLight, levelBrightness, usesReleaseTerrain } from './assets/terrainArt.js';
 import { openingView } from '../game/story/story.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
 import { SilhouetteCache, placeFlash } from './flashOverlay.js';
@@ -178,6 +178,7 @@ export class GameView {
     // Time of day and weather (P5): light map, rain, lightning, above the world.
     this.weather = new WeatherView(app, (key) => this.makeSprite(key), this.actors);
     this.weather.attach(app.stage, app.stage.getChildIndex(this.world) + 1);
+    this.weather.indoorAmbient = indoorLight(this.releaseTerrain);
     // (v1.0 attack warnings stay in the world, sorted with their enemy, so trees in front hide them;
     // at night the light map lights each winding-up enemy instead: weatherView.js warningLights.)
 
@@ -432,8 +433,9 @@ export class GameView {
     }
     base.tint = levelTint(0, this.releaseTerrain);
     this.base.addChild(base);
-    // A chunk's flat ground -> one textured quad per frame.
-    base.cacheAsTexture({ scaleMode: 'nearest', antialias: false });
+    // A chunk's flat ground -> one textured quad per frame. v1.0: at the terrain art's density (2 with
+    // the release terrain), else its fine pixels were halved in the cache (terrainArt.groundCacheResolution).
+    base.cacheAsTexture({ scaleMode: 'nearest', antialias: false, resolution: groundCacheResolution(this.releaseTerrain) });
 
     // Objects standing in this chunk now.
     for (const o of map.objects) {

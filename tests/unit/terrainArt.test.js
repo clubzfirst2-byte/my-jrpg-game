@@ -7,7 +7,7 @@ import { decodePng } from '../../tools/release-art-pack.mjs';
 // that every art file is used by the bundle its production record puts it in, and that it fits.
 vi.mock('pixi.js', () => ({ Rectangle: class {}, Texture: class {} }));
 const { REGION_ENTRIES, placeholderEntries, releaseHeroEntries, releaseNpcEntries, releaseEnemyEntries, atlasSizeFor, ART_SCALE, mustKeepSize } = await import('../../src/view/assets/placeholderPack.js');
-const { isTerrainKey, wantsTerrainArt, TERRAIN_GROUP, TERRAIN_OBJECTS, groundVariant, levelBrightness } = await import('../../src/view/assets/terrainArt.js');
+const { isTerrainKey, wantsTerrainArt, TERRAIN_GROUP, TERRAIN_OBJECTS, groundVariant, levelBrightness, indoorLight, groundCacheResolution } = await import('../../src/view/assets/terrainArt.js');
 
 const ROOT = new URL('../../src/art-release/', import.meta.url);
 /** name -> { w, h } of every PNG in a release folder (from the IHDR). */
@@ -105,6 +105,16 @@ describe('terrain release art → game sprite keys', () => {
     expect(levelBrightness(4, true)).toBe(1);
     expect(levelBrightness(0, false)).toBeCloseTo(0.8);
     expect(levelBrightness(2, false)).toBeCloseTo(0.94);
+  });
+
+  it('the cached flat ground keeps the art density (2 art px per game px with the release terrain)', () => {
+    expect(groundCacheResolution(true)).toBe(ART_SCALE);
+    expect(groundCacheResolution(false)).toBe(1);
+  });
+
+  it('indoors is a little brighter with the release terrain (its stone is darker); the placeholders keep 0.55', () => {
+    expect(indoorLight(true)).toEqual({ r: 0.65, g: 0.65, b: 0.75 });
+    expect(indoorLight(false)).toEqual({ r: 0.55, g: 0.55, b: 0.65 });
   });
 
   it('release ground variants: 0 (plain) about half the time, the marked ones an equal share each; placeholders evenly', () => {
