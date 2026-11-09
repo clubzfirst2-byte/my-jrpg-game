@@ -256,11 +256,7 @@ for (const [region, kind] of Object.entries(BOSS_REGIONS)) {
   REGION_ENTRIES[region] = () => [...make(), ...bossFrames(kind)];
 }
 
-/**
- * @param {string} name
- * @param {Parameters<typeof buildPlaceholderPack>[1]} [overrides] the real art by logical name (its URL, or after
- *   the release-art packing its place on a sheet: whatever buildPlaceholderPack takes)
- */
+/** @param {string} name @param {Map<string, ArtSource>} [overrides] */
 export function buildRegionPack(name, overrides) {
   return buildPlaceholderPack([...REGION_ENTRIES[name](), ...releaseBossEntries(name, overrides)], overrides);
 }
@@ -273,8 +269,8 @@ const ENEMY_ACTION_KEY = /^enemy\.([a-z_]+)\.([a-z0-9_]+)\.\d+$/;
  * like the hero's, they get a slot in the base bundle only when such art is given; an enemy without
  * them keeps its enemy.<kind>.<0|1> frames. Cores of the murk (boss_*) go in their region's bundle
  * (releaseBossEntries); the final boss (no code yet) and the shots are not used yet. Only the names
- * are read, so any kind of art source will do (a URL, or a sheet frame after the release-art packing).
- * @param {Map<string, unknown>} [overrides]
+ * are read (a URL or a packed sheet frame alike).
+ * @param {Map<string, ArtSource>} [overrides]
  */
 export function releaseEnemyEntries(overrides) {
   if (!overrides?.size) return [];
@@ -289,7 +285,7 @@ export function releaseEnemyEntries(overrides) {
 /**
  * A core's per-action release frames (enemy.boss_<kind>.<action>.<n>) go in its region's bundle, with
  * its enemy.boss_<kind>.<0|1> frames, so they are loaded and released with the region.
- * @param {string} region bundle name @param {Map<string, unknown>} [overrides] (only the names are read)
+ * @param {string} region bundle name @param {Map<string, ArtSource>} [overrides] (only the names are read)
  */
 export function releaseBossEntries(region, overrides) {
   const kind = /** @type {Record<string, string>} */ (BOSS_REGIONS)[region];
@@ -301,7 +297,7 @@ export function releaseBossEntries(region, overrides) {
  * The hero's release animation frames (hero.<action>.<dir>.<frame>, docs/hero/HERO_ANIMATION_SPEC.md)
  * have no placeholder: they get a slot in the base bundle only when such art is given (?hero=release
  * until approved), so normal play builds exactly the same bundle.
- * @param {Map<string, string>} [overrides]
+ * @param {Map<string, ArtSource>} [overrides]
  */
 export function releaseHeroEntries(overrides) {
   if (!overrides?.size) return [];
@@ -312,7 +308,7 @@ export function releaseHeroEntries(overrides) {
  * The villagers' release frames (npc.<id>.<idle|walk>.<dir>.<frame>, docs/npc/NPC_RELEASE_PLAN.md):
  * like the hero's, they get a slot in the base bundle only when such art is given. A villager
  * without them keeps the placeholder npc.<look>.* frames.
- * @param {Map<string, string>} [overrides]
+ * @param {Map<string, ArtSource>} [overrides]
  */
 export function releaseNpcEntries(overrides) {
   if (!overrides?.size) return [];
@@ -373,11 +369,32 @@ function loadImage(url) {
 }
 
 /**
+ * One frame of a packed release sheet (docs/perf/release-art-packing.md): the sheet's image and
+ * where the frame sits on it, in its pixels.
+ * @typedef {{ sheet: CanvasImageSource, x: number, y: number, w: number, h: number }} SheetFrame
+ */
+/** Where a sprite's art comes from: its own PNG's URL, or its place on a packed sheet. @typedef {string | SheetFrame} ArtSource */
+
+/**
+ * Copies a frame off its sheet into its own canvas, pixel for pixel, so it is drawn exactly as its
+ * own PNG would be. @param {SheetFrame} f @returns {HTMLCanvasElement}
+ */
+export function cutSheetFrame(f) {
+  const canvas = document.createElement('canvas');
+  canvas.width = f.w;
+  canvas.height = f.h;
+  const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(f.sheet, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+  return canvas;
+}
+
+/**
  * P11.5: puts the real art (src/art/<name>.png) in place of the placeholder where there is one.
  * A tile of the wrong size is left as the placeholder (it would not fit the grid) and reported.
  * @param {{ key: string, rows: string[], anchor: [number, number] }[]} entries
- * @param {Map<string, string>} overrides logical name → PNG URL (artOverrides.js)
- * @returns {Promise<{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement }[]>}
+ * @param {Map<string, ArtSource>} overrides logical name → PNG URL (artOverrides.js) or sheet frame
+ * @returns {Promise<{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement | HTMLCanvasElement }[]>}
  */
 export async function withOverrides(entries, overrides) {
   if (overrides.size === 0) return entries;
@@ -386,7 +403,7 @@ export async function withOverrides(entries, overrides) {
       const url = overrides.get(e.key);
       if (!url) return e;
       try {
-        const image = await loadImage(url);
+        const image = typeof url === 'string' ? await loadImage(url) : cutSheetFrame(url);
         const [w, h] = [e.rows[0].length * ART_SCALE, e.rows.length * ART_SCALE];
         if (mustKeepSize(e.anchor) && (image.width !== w || image.height !== h)) {
           console.warn(`art: ${e.key}.png must be ${w}x${h} (is ${image.width}x${image.height}); using the placeholder`);
@@ -403,7 +420,7 @@ export async function withOverrides(entries, overrides) {
 
 /**
  * @param {{ key: string, rows: string[], anchor: [number, number] }[]} [entries]
- * @param {Map<string, string>} [overrides] the real art (P11.5), by logical name
+ * @param {Map<string, ArtSource>} [overrides] the real art (P11.5), by logical name
  * @returns {Promise<import('./assetManager.js').BuiltBundle>}
  */
 export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map()) {
@@ -429,7 +446,7 @@ function mergePacks(packs) {
 }
 
 /**
- * @param {{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement }[]} entries
+ * @param {{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement | HTMLCanvasElement }[]} entries
  * @param {number} atlasSize
  * @param {number} resolution pixels per game pixel (1 for placeholders, ART_SCALE for the real art)
  * @returns {import('./assetManager.js').BuiltBundle}
