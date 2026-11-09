@@ -88,7 +88,9 @@ body {
   background: #24364a;
   border: 1px solid #3c5571;
   border-radius: 6px;
-  min-height: 36px;
+  /* v1.0 (iPhone): every button is at least a 44 pt tap target (Apple HIG; 1 CSS px = 1 pt). */
+  min-height: 44px;
+  min-width: 44px;
   padding: 6px 10px;
 }
 
@@ -237,6 +239,11 @@ body {
   font-weight: bold;
   touch-action: none;
   padding: 0;
+  /* Sized by the cluster below (all ≥ 44 px at the medium size); labels fit by tighter spacing. */
+  min-height: 0;
+  min-width: 0;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
 }
 
 #ui .action-button.active {
@@ -257,7 +264,7 @@ body {
   bottom: calc(14px * var(--btn) + var(--safe-bottom));
   width: calc(60px * var(--btn));
   height: calc(60px * var(--btn));
-  font-size: calc(11px * var(--btn));
+  font-size: calc(12px * var(--btn));
 }
 
 #ui #dodge-button {
@@ -281,7 +288,7 @@ body {
   bottom: calc(40px * var(--btn) + var(--safe-bottom));
   width: calc(52px * var(--btn));
   height: calc(52px * var(--btn));
-  font-size: calc(10px * var(--btn));
+  font-size: calc(12px * var(--btn));
 }
 
 #ui #dash-button {
@@ -289,7 +296,8 @@ body {
   bottom: calc(104px * var(--btn) + var(--safe-bottom));
   width: calc(48px * var(--btn));
   height: calc(48px * var(--btn));
-  font-size: calc(9px * var(--btn));
+  font-size: calc(12px * var(--btn));
+  letter-spacing: -0.12em; /* 4 characters inside a 48 px circle */
 }
 
 /* ---- HUD ---- */
@@ -313,7 +321,7 @@ body {
   position: absolute;
   top: calc(8px + var(--safe-top));
   left: calc(8px + var(--safe-left));
-  min-width: 40px;
+  min-width: 44px;
   font-weight: bold;
 }
 
@@ -658,10 +666,11 @@ body {
 /* ---- items (P6) ---- */
 #ui #bag-button {
   position: absolute;
-  top: calc(52px + var(--safe-top));
+  /* Under the 44 px pause button; narrow enough (≤ 52 px) to stay left of the HUD text column. */
+  top: calc(58px + var(--safe-top));
   left: calc(8px + var(--safe-left));
-  font-size: 11px;
-  padding: 4px 8px;
+  font-size: 12px;
+  padding: 4px 6px;
 }
 
 #ui #use-button {
@@ -733,6 +742,8 @@ body {
 
 .inv-row {
   display: flex;
+  min-height: 44px;
+  box-sizing: border-box;
   flex-wrap: wrap;
   align-items: center;
   gap: 2px 10px;
@@ -762,7 +773,7 @@ body {
   flex: 1;
   min-width: 50%;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .inv-actions {
@@ -795,7 +806,7 @@ body {
   bottom: calc(158px * var(--btn) + var(--safe-bottom));
   width: calc(52px * var(--btn));
   height: calc(52px * var(--btn));
-  font-size: calc(11px * var(--btn));
+  font-size: calc(12px * var(--btn));
   background: rgba(30, 80, 100, 0.75);
   border-color: rgba(127, 232, 255, 0.85);
 }
@@ -939,6 +950,10 @@ body {
   gap: 10px;
   justify-content: center;
 }
+/* (min-width restated with #ui: the 44 px minimum on `#ui button` would otherwise win) */
+#ui .pause-sound button {
+  min-width: 112px;
+}
 .pause-sound button {
   min-width: 112px;
   padding: 8px 12px;
@@ -990,7 +1005,8 @@ body {
   gap: 6px;
 }
 #settings-menu .settings-choices button {
-  min-height: 34px;
+  min-height: 44px;
+  min-width: 44px;
   padding: 4px 12px;
   border-radius: 8px;
   font-size: 14px;
@@ -1004,6 +1020,18 @@ body {
   margin: 6px 0;
   font-size: 13px;
   color: #ffd75e;
+}
+/* v1.0 (iPhone): the menu is taller than a landscape phone, so the footer with 閉じる sticks to the
+   bottom of the scrolling panel (settingsMenu.js) and can always be reached without scrolling. */
+.settings-foot {
+  position: sticky;
+  bottom: -12px;
+  display: flex;
+  justify-content: center;
+  margin: 0 -16px -12px;
+  padding: 8px 16px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgb(10, 16, 26);
 }
 #ui #settings-close {
   min-width: 120px;
