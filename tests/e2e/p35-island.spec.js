@@ -177,6 +177,11 @@ test('v1.0: the pause screen goes back to the title (saved first); つづきか�
   await openChest(page, 'camp');
   await page.click('#pause-button');
   await expect(page.locator('.pause-version')).toHaveText(/^v\d+\.\d+\.\d+$/);
+  // v1.0 final: the version overlaps nothing on the pause screen (it used to sit on the pause button).
+  const box = async (sel) => page.locator(sel).boundingBox();
+  const apart = (a, b) => a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+  const version = await box('.pause-version');
+  for (const sel of ['#pause-button', '.pause-title', '#resume-button', '.pause-sound']) expect(apart(version, await box(sel)), sel).toBe(true);
   await page.click('#pause-title-button');
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
   await expect(page.locator('#title-screen')).toBeVisible();

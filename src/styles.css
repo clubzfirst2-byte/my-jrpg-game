@@ -338,10 +338,10 @@ body {
   font-weight: bold;
 }
 
+/* In the centred column, right under the title (pulled up into the column gap); nothing else
+   is drawn there at any landscape size. */
 .pause-version {
-  position: absolute;
-  left: calc(10px + var(--safe-left));
-  top: calc(10px + var(--safe-top));
+  margin-top: -10px;
   font-size: 11px;
   color: var(--muted);
 }
