@@ -38,7 +38,7 @@ for (const vp of VIEWPORTS) {
       await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
       await api(page, 'clearEnemies');
       if (large) await page.evaluate(() => document.getElementById('ui')?.classList.add('text-large'));
-      await api(page, 'give', 'travel_sword');
+      for (const id of ['travel_sword', 'guard_spear', 'rusty_greatsword', 'ember_sword', 'star_steel_sword']) await api(page, 'give', id);
       await api(page, 'standBy', 'elder');
       await expect(page.locator('#use-button')).toBeVisible();
 
@@ -58,10 +58,55 @@ for (const vp of VIEWPORTS) {
         expect(px, id).toBeGreaterThanOrEqual(12);
       }
 
-      // Button size 小: ダッシュ stays ≥ 44 (48 × 0.85 would be 40.8), the others are ≥ 44 already.
-      await page.evaluate(() => document.getElementById('ui')?.classList.add('btn-small'));
-      expect(await smallTargets(page)).toEqual([]);
-      await page.evaluate(() => document.getElementById('ui')?.classList.remove('btn-small'));
+      // Every button size, either hand, with two abilities (⇄ shown): every target ≥ 44 px, the
+      // labels ≥ 12 px and inside their circle, and no two buttons overlapping (QA2 M-1, M-2).
+      await api(page, 'grantAbility', 'light');
+      await api(page, 'grantAbility', 'resonance');
+      await expect(page.locator('#ability-next')).toBeVisible();
+      for (const size of ['btn-small', '', 'btn-large']) {
+        for (const left of [false, true]) {
+          await page.evaluate(([size, left]) => {
+            const ui = /** @type {HTMLElement} */ (document.getElementById('ui'));
+            ui.classList.remove('btn-small', 'btn-large');
+            if (size) ui.classList.add(size);
+            ui.classList.toggle('left-handed', left);
+          }, /** @type {const} */ ([size, left]));
+          const tag = `${size || 'btn-medium'}${left ? ' left' : ''}`;
+          expect(await smallTargets(page), tag).toEqual([]);
+          const check = await page.evaluate(() => {
+            const ids = ['attack-button', 'jump-button', 'dodge-button', 'bow-button', 'guard-button', 'dash-button', 'ability-button', 'ability-next'];
+            const boxes = ids.map((id) => /** @type {HTMLElement} */ (document.getElementById(id))).filter((el) => el && !el.hidden);
+            const out = { small: /** @type {string[]} */ ([]), spill: /** @type {string[]} */ ([]), overlaps: /** @type {string[]} */ ([]), offscreen: /** @type {string[]} */ ([]) };
+            for (const el of boxes) {
+              const r = el.getBoundingClientRect();
+              if (parseFloat(getComputedStyle(el).fontSize) < 12) out.small.push(el.id);
+              const rg = document.createRange();
+              rg.selectNodeContents(el);
+              const t = rg.getBoundingClientRect();
+              if (t.width > 0 && (t.left < r.left + 1 || t.right > r.right - 1 || t.top < r.top || t.bottom > r.bottom)) out.spill.push(el.id);
+              if (r.left < 0 || r.top < 0 || r.right > innerWidth || r.bottom > innerHeight) out.offscreen.push(el.id);
+            }
+            // circles: centre distance against the radii (the round buttons and ⇄ are all circles)
+            for (let i = 0; i < boxes.length; i++)
+              for (let j = i + 1; j < boxes.length; j++) {
+                const a = boxes[i].getBoundingClientRect();
+                const b = boxes[j].getBoundingClientRect();
+                const d = Math.hypot(a.left + a.width / 2 - (b.left + b.width / 2), a.top + a.height / 2 - (b.top + b.height / 2));
+                if (d < a.width / 2 + b.width / 2) out.overlaps.push(`${boxes[i].id}/${boxes[j].id}`);
+              }
+            return out;
+          });
+          expect(check, tag).toEqual({ small: [], spill: [], overlaps: [], offscreen: [] });
+          // The ability button's top-right corner (inside its circle) is the ability button, not ⇄.
+          const hit = await page.evaluate(() => {
+            const r = /** @type {HTMLElement} */ (document.getElementById('ability-button')).getBoundingClientRect();
+            const k = 0.3; // 45° up-right, at 0.7 of the radius
+            return document.elementFromPoint(r.left + r.width * (0.5 + k * 0.85), r.top + r.height * (0.5 - k * 0.85))?.id;
+          });
+          expect(hit, tag).toBe('ability-button');
+        }
+      }
+      await page.evaluate(() => document.getElementById('ui')?.classList.remove('btn-small', 'btn-large', 'left-handed'));
 
       // The pause screen.
       await page.click('#pause-button');
@@ -91,6 +136,14 @@ for (const vp of VIEWPORTS) {
       await expect(page.locator('#inv-tab-bow')).toBeVisible();
       expect(await smallTargets(page)).toEqual([]);
       expect(await page.locator('#inv-menu .inv-row').count()).toBeGreaterThan(0);
+      // A new tab starts at its top (QA2 L-4): scroll the weapons down, then switch to 素材.
+      const scrolled = await page.locator('#inv-menu .inv-body').evaluate((el) => {
+        el.scrollTop = el.scrollHeight;
+        return el.scrollTop;
+      });
+      if (vp.height < 393 || large) expect(scrolled).toBeGreaterThan(0); // seven weapons do not fit there
+      await page.click('#inv-tab-material');
+      expect(await page.locator('#inv-menu .inv-body').evaluate((el) => el.scrollTop)).toBe(0);
 
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       expect(errors).toEqual([]);

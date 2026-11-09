@@ -26,6 +26,10 @@ export class TouchControls {
     this.bow = new HoldButton(root, 'bow-button', '弓');
     this.guard = new HoldButton(root, 'guard-button', 'ガード');
     this.dash = new HoldButton(root, 'dash-button', 'ダッシュ');
+    // v1.0 QA2 (M-2): may break into ダッ / シュ when the circle is small (styles.css, button size 小).
+    // Each half is kept whole (styles.css), so the only break is at the <wbr>, never before ュ.
+    const half = (/** @type {string} */ t) => Object.assign(document.createElement('span'), { textContent: t });
+    this.dash.el.replaceChildren(half('ダッ'), document.createElement('wbr'), half('シュ'));
     // P7: the selected 星環 ability (its label shows which one).
     this.ability = new HoldButton(root, 'ability-button', '能力');
 

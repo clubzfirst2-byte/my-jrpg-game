@@ -250,13 +250,14 @@ body {
   background: rgba(95, 179, 255, 0.75);
 }
 
-/* Right-hand cluster (DESIGN.md 5.8). Attack sits under the thumb; the others arc around it. */
+/* Right-hand cluster (DESIGN.md 5.8). Attack sits under the thumb; the others arc around it.
+   v1.0 QA2 (M-2): the labels never go below 12 px; at 小 only the circles shrink. */
 #ui #attack-button {
   right: calc(18px * var(--btn) + var(--safe-right));
   bottom: calc(22px * var(--btn) + var(--safe-bottom));
   width: calc(78px * var(--btn));
   height: calc(78px * var(--btn));
-  font-size: calc(14px * var(--btn));
+  font-size: max(12px, calc(14px * var(--btn)));
 }
 
 #ui #jump-button {
@@ -264,7 +265,8 @@ body {
   bottom: calc(14px * var(--btn) + var(--safe-bottom));
   width: calc(60px * var(--btn));
   height: calc(60px * var(--btn));
-  font-size: calc(12px * var(--btn));
+  font-size: max(12px, calc(12px * var(--btn)));
+  letter-spacing: -0.08em; /* 4 characters inside the 51 px circle at 小 */
 }
 
 #ui #dodge-button {
@@ -272,7 +274,7 @@ body {
   bottom: calc(110px * var(--btn) + var(--safe-bottom));
   width: calc(58px * var(--btn));
   height: calc(58px * var(--btn));
-  font-size: calc(12px * var(--btn));
+  font-size: max(12px, calc(12px * var(--btn)));
 }
 
 #ui #bow-button {
@@ -280,7 +282,7 @@ body {
   bottom: calc(84px * var(--btn) + var(--safe-bottom));
   width: calc(52px * var(--btn));
   height: calc(52px * var(--btn));
-  font-size: calc(13px * var(--btn));
+  font-size: max(12px, calc(13px * var(--btn)));
 }
 
 #ui #guard-button {
@@ -288,7 +290,7 @@ body {
   bottom: calc(40px * var(--btn) + var(--safe-bottom));
   width: calc(52px * var(--btn));
   height: calc(52px * var(--btn));
-  font-size: calc(12px * var(--btn));
+  font-size: max(12px, calc(12px * var(--btn)));
 }
 
 #ui #dash-button {
@@ -297,8 +299,15 @@ body {
   /* ≥ 44 pt at every button size (小 would be 40.8); at 小 it still clears 能力 above it by ~2 px */
   width: max(44px, calc(48px * var(--btn)));
   height: max(44px, calc(48px * var(--btn)));
-  font-size: calc(12px * var(--btn));
+  font-size: max(12px, calc(12px * var(--btn)));
   letter-spacing: -0.12em; /* 4 characters inside a 48 px circle */
+  /* At 小 the circle is 44 px: the label then breaks at its <wbr> into ダッ / シュ (touchControls.js) */
+  white-space: normal;
+  line-height: 1.1;
+}
+
+#ui #dash-button span {
+  white-space: nowrap;
 }
 
 /* ---- HUD ---- */
@@ -613,7 +622,8 @@ body {
 /* ---- toast ---- */
 #toast {
   position: absolute;
-  top: calc(44px + var(--safe-top));
+  /* v1.0 QA2: below the HUD's clock and money / weapon line (it used to cover them) */
+  top: calc(80px + var(--safe-top));
   left: 50%;
   transform: translateX(-50%);
   /* final QA C-6: as wide as its text up to the limit (an absolutely placed box at left: 50% would
@@ -625,6 +635,9 @@ body {
   background: var(--panel);
   font-size: 14px;
   text-align: center;
+  /* v1.0 QA2 (C-6 again): a message longer than the box wraps into even lines, never leaving its
+     last character alone on a line (Toast.balance() does the same where this is unsupported) */
+  text-wrap: balance;
   pointer-events: none;
   z-index: 7; /* above the inventory menu */
 }
@@ -809,7 +822,7 @@ body {
   bottom: calc(158px * var(--btn) + var(--safe-bottom));
   width: calc(52px * var(--btn));
   height: calc(52px * var(--btn));
-  font-size: calc(12px * var(--btn));
+  font-size: max(12px, calc(12px * var(--btn)));
   background: rgba(30, 80, 100, 0.75);
   border-color: rgba(127, 232, 255, 0.85);
 }
@@ -819,14 +832,18 @@ body {
   display: none;
 }
 
+/* v1.0 QA2 (M-1): ⇄ sits right above the ability button with a 6 px gap, centred on it, a full
+   44 × 44 target that touches no other button (it used to overlap the ability button's corner). */
 #ui #ability-next {
   position: absolute;
-  right: calc(150px * var(--btn) + var(--safe-right));
-  bottom: calc(196px * var(--btn) + var(--safe-bottom));
-  min-height: calc(26px * var(--btn));
-  padding: 2px 6px;
-  font-size: calc(12px * var(--btn));
-  border-radius: 13px;
+  right: calc(176px * var(--btn) + 26px * var(--btn) - 22px + var(--safe-right));
+  bottom: calc(210px * var(--btn) + 6px + var(--safe-bottom));
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 18px;
+  border-radius: 50%;
 }
 
 /* ---- conversations and the shop (P9) ---- */
@@ -1118,5 +1135,5 @@ body {
 }
 #ui.left-handed #ability-next {
   right: auto;
-  left: calc(150px * var(--btn) + var(--safe-left));
+  left: calc(176px * var(--btn) + 26px * var(--btn) - 22px + var(--safe-left));
 }

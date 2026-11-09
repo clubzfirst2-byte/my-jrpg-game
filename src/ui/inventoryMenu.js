@@ -144,6 +144,7 @@ export class InventoryMenu {
     this.tabs.replaceChildren(
       ...tabs.map((t) => {
         const b = button(`inv-tab-${t}`, TAB_NAMES[t], () => {
+          if (this.tab !== t) this.body.scrollTop = 0; // v1.0 QA2: a new tab starts at its top
           this.tab = t;
           this.render();
         });
