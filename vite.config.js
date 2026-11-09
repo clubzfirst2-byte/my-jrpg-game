@@ -1,5 +1,8 @@
 import { defineConfig } from 'vite';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { packGroup, releaseGroups } from './tools/release-art-pack.mjs';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
@@ -24,8 +27,42 @@ function serviceWorker() {
   };
 }
 
+/**
+ * Release art packing (docs/perf/release-art-packing.md): `virtual:release-art` tells the game where
+ * each src/art-release/<group> lives once built — one sheet PNG + one frame table JSON per group,
+ * emitted straight into dist/assets (nothing generated is written into src/). In the dev server it
+ * is `null` and the game loads the frame files one by one, as before.
+ * @returns {import('vite').Plugin}
+ */
+function releaseArt() {
+  const ID = 'virtual:release-art';
+  const root = fileURLToPath(new URL('./src/art-release/', import.meta.url));
+  let build = false;
+  return {
+    name: 'release-art',
+    configResolved(config) {
+      build = config.command === 'build';
+    },
+    resolveId(id) {
+      return id === ID ? `\0${ID}` : undefined;
+    },
+    load(id) {
+      if (id !== `\0${ID}`) return undefined;
+      if (!build) return 'export default null;';
+      const groups = releaseGroups(root).map((group) => {
+        const { png, table, files } = packGroup(join(root, group));
+        for (const f of files) this.addWatchFile(f);
+        const sheet = this.emitFile({ type: 'asset', name: `release-${group}.png`, source: png });
+        const frames = this.emitFile({ type: 'asset', name: `release-${group}.json`, source: JSON.stringify(table) });
+        return `  ${JSON.stringify(group)}: { sheet: import.meta.ROLLUP_FILE_URL_${sheet}, table: import.meta.ROLLUP_FILE_URL_${frames} },`;
+      });
+      return `export default {\n${groups.join('\n')}\n};\n`;
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [serviceWorker()],
+  plugins: [releaseArt(), serviceWorker()],
   // Relative base so the build works both on GitHub Pages (/my-jrpg-game/) and locally.
   base: './',
   define: {

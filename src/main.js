@@ -102,7 +102,7 @@ async function boot() {
   //   ?hd=1        the fine canvas even without real art
   //   ?hero=test   a size-test hero (仮, 32×56) in place of the hero, to check the new standard
   const hdParam = params.get('hd');
-  /** @type {Map<string, string>} */
+  /** @type {Map<string, import('./view/assets/placeholderPack.js').ArtSource>} */
   const artOverrides = hdParam === '0' ? new Map() : new Map(ART_OVERRIDES);
   if (params.get('hero') === 'test' && hdParam !== '0') for (const [k, v] of testHeroFrames()) artOverrides.set(k, v);
   //   ?hero=proto / ?npc=proto / ?enemy=proto / ?proto=all   the P12 prototypes (仮素材) — shown
