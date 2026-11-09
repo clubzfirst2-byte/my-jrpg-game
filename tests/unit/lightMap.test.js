@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { RenderTexture, Sprite } from 'pixi.js';
-import { createLightMap, warningLights, WARNING_LIGHT } from '../../src/view/weatherView.js';
+import { createLightMap, warningLights, WARNING_LIGHT, LIGHT_MAP_RESOLUTION } from '../../src/view/weatherView.js';
 import { ENEMY_KINDS } from '../../src/game/entities/enemies.js';
 import { BOSS_KINDS } from '../../src/game/entities/bosses.js';
 
@@ -20,18 +20,32 @@ describe('the light map follows its resize to the screen', () => {
   it('createLightMap: drawn early or late, the overlay covers the whole screen after the resize', () => {
     const { rt, overlay } = createLightMap();
     overlay.getLocalBounds(); // drawn early
-    rt.resize(852, 393);
-    const b = overlay.getLocalBounds();
-    expect([b.width, b.height]).toEqual([852, 393]);
-    rt.resize(734, 343); // (the screen size changes: rotation, the Safari bar)
-    const c = overlay.getLocalBounds();
-    expect([c.width, c.height]).toEqual([734, 343]);
+    // Drawn at half resolution, an odd size rounds up by one map pixel (2 screen px) at most.
+    const covers = (/** @type {number} */ w, /** @type {number} */ h) => {
+      rt.resize(w, h, LIGHT_MAP_RESOLUTION);
+      const b = overlay.getLocalBounds();
+      expect(b.width).toBeGreaterThanOrEqual(w);
+      expect(b.height).toBeGreaterThanOrEqual(h);
+      expect(b.width - w).toBeLessThan(1 / LIGHT_MAP_RESOLUTION);
+      expect(b.height - h).toBeLessThan(1 / LIGHT_MAP_RESOLUTION);
+    };
+    covers(852, 393);
+    covers(734, 343); // (the screen size changes: rotation, the Safari bar)
+    covers(1024, 472);
   });
 
   it('is hidden (not drawn) until it is first filled, and multiplies the world', () => {
     const { overlay } = createLightMap();
     expect(overlay.visible).toBe(false);
     expect(overlay.blendMode).toBe('multiply');
+  });
+
+  it('is drawn at half resolution with linear filtering (a soft map, a quarter of the pixels)', () => {
+    const { rt } = createLightMap();
+    rt.resize(1024, 472, LIGHT_MAP_RESOLUTION);
+    expect(LIGHT_MAP_RESOLUTION).toBe(0.5);
+    expect([rt.source.pixelWidth, rt.source.pixelHeight]).toEqual([512, 236]);
+    expect(rt.source.scaleMode).toBe('linear');
   });
 });
 

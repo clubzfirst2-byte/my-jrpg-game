@@ -4,7 +4,12 @@
 // lightning (a warning flicker on the target, then a bolt and a flash). Reads state only.
 //
 // Cost: by day in clear weather the light map is skipped entirely. Otherwise it is one small
-// render-to-texture at the internal resolution (lightMs is measured for the debug overlay).
+// render-to-texture at half the internal resolution (LIGHT_MAP_RESOLUTION; the map is only soft
+// gradients and flat tint, upscaled with linear filtering), and it is redrawn only when a light, the
+// ambient colour or the screen size changed (lightMs is measured for the debug overlay).
+// v1.0 (iPhone perf): night rain in software rendering ran at about half the day's frame rate. Per
+// frame the view no longer rebuilds the flash Graphics, re-renders an unchanged light map, allocates
+// for the lightning lookup, or sets every raindrop's rotation; see `stats` for the counts.
 import { Container, Graphics, RenderTexture, Sprite, Texture } from 'pixi.js';
 import { ambientAt, isDark, isRaining } from '../game/env/weather.js';
 import { playerWeather } from '../game/env/weatherActions.js';
@@ -34,6 +39,9 @@ export function warningLights(enemies) {
   return out;
 }
 
+/** The light map's pixels per screen pixel (0.5: a quarter of the pixels to fill). */
+export const LIGHT_MAP_RESOLUTION = 0.5;
+
 const RAIN_SPEED = 320; // px/s on screen
 const RAIN_WIND = 120;
 const FLASH_MS = 260;
@@ -53,6 +61,17 @@ function lightTexture() {
   return Texture.from(c);
 }
 
+const AMB_DARK_ROOM = Object.freeze({ r: 0.1, g: 0.1, b: 0.16 });
+const AMB_HOME = Object.freeze({ r: 0.94, g: 0.86, b: 0.72 });
+const AMB_INDOOR = Object.freeze({ r: 0.55, g: 0.55, b: 0.65 });
+
+/** @param {number[]} a @param {number[]} b */
+function sameNumbers(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 /** @param {{ r: number, g: number, b: number }} c */
 const toHex = (c) => (Math.round(Math.min(1, c.r) * 255) << 16) | (Math.round(Math.min(1, c.g) * 255) << 8) | Math.round(Math.min(1, c.b) * 255);
 
@@ -66,9 +85,12 @@ const toHex = (c) => (Math.round(Math.min(1, c.r) * 255) << 16) | (Math.round(Ma
  * the first update: the light map was drawn at 8×8 then and stayed an 8×8 dot in the corner for
  * good, so the world was never darkened. (Without the title, the first draw came after the resize,
  * so it happened to work.) Hence `dynamic: true`, and the map stays hidden until it is first filled.
+ * v1.0 (iPhone perf): drawn at LIGHT_MAP_RESOLUTION and stretched back with linear filtering. With
+ * an odd screen size the texture is up to one map pixel larger than the screen (it still starts at
+ * the top left, so screen and map coordinates match).
  */
 export function createLightMap() {
-  const rt = RenderTexture.create({ width: 8, height: 8, dynamic: true });
+  const rt = RenderTexture.create({ width: 8, height: 8, dynamic: true, resolution: LIGHT_MAP_RESOLUTION, scaleMode: 'linear' });
   const overlay = new Sprite(rt);
   overlay.blendMode = 'multiply';
   overlay.label = 'light-map';
@@ -87,7 +109,8 @@ export class WeatherView {
     this.renderer = app.renderer;
     this.makeSprite = makeSprite;
     // Light map.
-    this.lightTex = lightTexture();
+    /** The soft disc for lights, made on first use. @type {Texture | null} */
+    this.lightTex = null;
     this.lightScene = new Container();
     this.ambientFill = new Sprite(Texture.WHITE);
     this.lightScene.addChild(this.ambientFill);
@@ -120,6 +143,35 @@ export class WeatherView {
     this.lightMs = 0;
     this.lightOn = false;
     this.enabled = true;
+    /** The light map's requested size (the texture may round up by one map pixel). */
+    this.rtW = 0;
+    this.rtH = 0;
+    /** What the light map was last drawn from (screen size, ambient, every light); reused buffers. */
+    this.lightSig = /** @type {number[]} */ ([]);
+    this.lastLightSig = /** @type {number[]} */ ([]);
+    this.flashW = 0;
+    this.flashH = 0;
+    this.rainAngle = NaN;
+    this.rainDrops = 0;
+    /** Work counters (unit tests and profiling): light map renders and skips, flash rebuilds. */
+    this.stats = { lightRenders: 0, lightSkips: 0, flashRebuilds: 0 };
+    // The light map is redrawn only when its inputs change, but its pixels live on the GPU: when
+    // iOS drops the WebGL context (the app in the background) and Pixi restores it, the texture
+    // comes back empty while the hero may still be standing still. Redraw after a context restore,
+    // when the page becomes visible again and after the renderer is resized.
+    const r = /** @type {any} */ (this.renderer);
+    r.runners?.contextChange?.add({ contextChange: () => this.invalidateLightMap() });
+    r.on?.('resize', () => this.invalidateLightMap());
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') this.invalidateLightMap();
+      });
+    }
+  }
+
+  /** Forgets what the light map was drawn from, so the next update draws it again. */
+  invalidateLightMap() {
+    this.lastLightSig.length = 0;
   }
 
   /** Adds the screen-space layers in order: light map, rain, snow, bolt, flash. @param {Container} stage @param {number} index */
@@ -146,7 +198,13 @@ export class WeatherView {
     const nowMs = timeSec * 1000;
 
     // --- lightning ---
-    const bolt = [...state.events].reverse().find((e) => e.type === 'lightning');
+    let bolt = null;
+    for (let j = state.events.length - 1; j >= 0; j--) {
+      if (state.events[j].type === 'lightning') {
+        bolt = state.events[j];
+        break;
+      }
+    }
     if (bolt && bolt.tick !== this.lastBoltTick) {
       this.lastBoltTick = bolt.tick;
       this.flashUntil = nowMs + FLASH_MS;
@@ -154,9 +212,18 @@ export class WeatherView {
     }
     const flashing = nowMs < this.flashUntil;
     const k = flashing ? (this.flashUntil - nowMs) / FLASH_MS : 0;
-    this.flash.clear();
     this.bolt.alpha = k;
-    if (flashing && !indoor) this.flash.rect(0, 0, sw, sh).fill({ color: 0xffffff, alpha: 0.45 * k });
+    // The flash is one white rect built once per screen size; only its alpha changes per frame.
+    this.flash.visible = flashing && !indoor;
+    if (this.flash.visible) {
+      if (this.flashW !== sw || this.flashH !== sh) {
+        this.flashW = sw;
+        this.flashH = sh;
+        this.flash.clear().rect(0, 0, sw, sh).fill({ color: 0xffffff, alpha: 1 });
+        this.stats.flashRebuilds++;
+      }
+      this.flash.alpha = 0.45 * k;
+    }
     const st = env.strike;
     this.warn.visible = !!st;
     if (st) {
@@ -173,19 +240,36 @@ export class WeatherView {
     const t0 = performance.now();
     // Indoors is dim; a dark trial room is nearly black until something gives light (P7).
     // P10.1: a lived-in room is warm and lamp-lit at any hour.
-    const amb = area?.dark ? { r: 0.1, g: 0.1, b: 0.16 } : area?.home ? { r: 0.94, g: 0.86, b: 0.72 } : indoor ? { r: 0.55, g: 0.55, b: 0.65 } : ambientAt(env.now, w.kind);
+    const amb = area?.dark ? AMB_DARK_ROOM : area?.home ? AMB_HOME : indoor ? AMB_INDOOR : ambientAt(env.now, w.kind);
     const white = amb.r >= 0.999 && amb.g >= 0.999 && amb.b >= 0.999;
     this.lightOn = this.enabled && !white;
     this.overlay.visible = this.lightOn;
     if (this.lightOn) {
-      if (this.rt.width !== sw || this.rt.height !== sh) this.rt.resize(sw, sh);
-      this.ambientFill.width = sw;
-      this.ambientFill.height = sh;
-      this.ambientFill.tint = toHex(amb);
+      if (this.rtW !== sw || this.rtH !== sh) {
+        this.rtW = sw;
+        this.rtH = sh;
+        this.rt.resize(sw, sh, LIGHT_MAP_RESOLUTION);
+      }
+      const ambHex = toHex(amb);
+      this.ambientFill.width = this.rt.width;
+      this.ambientFill.height = this.rt.height;
+      this.ambientFill.tint = ambHex;
+      const sig = this.lightSig;
+      sig.length = 0;
+      sig.push(sw, sh, ambHex);
       let n = 0;
-      if (isDark(amb) || indoor) n = this.placeLights(state, origin, zoom, timeSec, sw, sh);
+      if (isDark(amb) || indoor) n = this.placeLights(state, origin, zoom, timeSec, sw, sh, sig);
       for (let j = n; j < this.lights.length; j++) this.lights[j].visible = false;
-      this.renderer.render({ container: this.lightScene, target: this.rt, clear: true });
+      if (sameNumbers(sig, this.lastLightSig)) {
+        this.stats.lightSkips++; // nothing moved, flickered or changed colour: the map is still right
+      } else {
+        this.renderer.render({ container: this.lightScene, target: this.rt, clear: true });
+        this.stats.lightRenders++;
+        this.lightSig = this.lastLightSig;
+        this.lastLightSig = sig;
+      }
+    } else {
+      this.lastLightSig.length = 0; // redraw when the map is next needed
     }
     this.lightMs = performance.now() - t0;
 
@@ -210,9 +294,11 @@ export class WeatherView {
       this.snow.addChild(s);
       this.flakes.push({ s, x: Math.random() * sw, y: Math.random() * sh, phase: Math.random() * 6.28, speed: big ? 34 : 22 });
     }
-    this.flakes.forEach((f, j) => {
+    const flakes = this.flakes;
+    for (let j = 0; j < flakes.length; j++) {
+      const f = flakes[j];
       f.s.visible = j < want;
-      if (j >= want) return;
+      if (j >= want) continue;
       f.x += (w.windX * 30 + Math.sin(timeSec * 1.7 + f.phase) * 10) * dt;
       f.y += f.speed * dt;
       if (f.y > sh) {
@@ -222,11 +308,11 @@ export class WeatherView {
       if (f.x < 0) f.x += sw;
       if (f.x > sw) f.x -= sw;
       f.s.position.set(Math.round(f.x), Math.round(f.y));
-    });
+    }
   }
 
   /** @returns {number} lights used */
-  placeLights(/** @type {any} */ state, /** @type {{ x: number, y: number }} */ o, /** @type {number} */ zoom, /** @type {number} */ timeSec, /** @type {number} */ sw, /** @type {number} */ sh) {
+  placeLights(/** @type {any} */ state, /** @type {{ x: number, y: number }} */ o, /** @type {number} */ zoom, /** @type {number} */ timeSec, /** @type {number} */ sw, /** @type {number} */ sh, /** @type {number[]} */ sig = []) {
     const env = state.env;
     const map = state.map;
     const ts = map.tileSize;
@@ -238,7 +324,7 @@ export class WeatherView {
       if (x < -r || y < -r || x > sw + r || y > sh + r) return;
       let s = this.lights[n];
       if (!s) {
-        s = new Sprite(this.lightTex);
+        s = new Sprite((this.lightTex ??= lightTexture()));
         s.anchor.set(0.5);
         s.blendMode = 'add';
         this.lightScene.addChild(s);
@@ -249,6 +335,7 @@ export class WeatherView {
       s.position.set(x, y);
       s.width = s.height = r * 2;
       s.tint = color;
+      sig.push(x, y, r, color);
     };
     const flicker = (/** @type {number} */ i) => 1 + 0.08 * Math.sin(timeSec * 9 + i);
     // The player's own small glow, so night is dark but playable.
@@ -290,9 +377,20 @@ export class WeatherView {
     const vx = w.windX * RAIN_WIND;
     const vy = RAIN_SPEED;
     const angle = Math.atan2(vx, vy);
-    this.drops.forEach((d, j) => {
-      d.s.visible = j < want;
-      if (j >= want) return;
+    // All drops share the wind's angle: set it only when the wind changes (or new drops appear).
+    const turn = angle !== this.rainAngle || this.drops.length !== this.rainDrops;
+    this.rainAngle = angle;
+    this.rainDrops = this.drops.length;
+    const drops = this.drops;
+    for (let j = 0; j < drops.length; j++) {
+      const d = drops[j];
+      const s = d.s;
+      if (turn) s.rotation = -angle;
+      if (j >= want) {
+        s.visible = false;
+        continue;
+      }
+      s.visible = true;
       d.x += vx * dt;
       d.y += vy * dt;
       if (d.y > sh) {
@@ -301,9 +399,8 @@ export class WeatherView {
       }
       if (d.x < 0) d.x += sw;
       if (d.x > sw) d.x -= sw;
-      d.s.position.set(Math.round(d.x), Math.round(d.y));
-      d.s.rotation = -angle;
-    });
+      s.position.set(Math.round(d.x), Math.round(d.y));
+    }
   }
 
   /** A zigzag bolt from the top of the screen to the strike. */

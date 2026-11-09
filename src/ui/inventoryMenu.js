@@ -22,6 +22,7 @@ import {
 } from '../game/items/inventory.js';
 import { ABILITY_NAMES } from '../game/puzzles/abilities.js';
 import { questLog } from '../game/npc/talk.js';
+import { scrollCue } from './scrollCue.js';
 
 /** @typedef {'weapon' | 'bow' | 'armor' | 'material' | 'food' | 'power' | 'quest' | 'cook' | 'forge'} Tab */
 
@@ -83,6 +84,7 @@ export class InventoryMenu {
     this.body.className = 'inv-body';
     this.el.append(this.head, this.body);
     root.append(this.bagButton, this.useButton, this.el);
+    this.cue = scrollCue(this.el, () => this.body);
   }
 
   get isOpen() {
@@ -124,7 +126,13 @@ export class InventoryMenu {
     else this.open();
   }
 
+  /** Draws the menu, then updates its "more below" cue. */
   render() {
+    this.renderContent();
+    this.cue();
+  }
+
+  renderContent() {
     const s = this.hooks.getState();
     const inv = s.progress.inv;
     this.money.textContent = `★ ${inv.money} 星貨`;
