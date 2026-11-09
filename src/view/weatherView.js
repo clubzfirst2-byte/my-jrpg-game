@@ -127,7 +127,7 @@ export function createLightMap() {
  * and its one flash in the opening. Drawn as obj.star_ring.on (gameView) and lit at night (below).
  * @param {any} state
  */
-export const starRingOpen = (state) => (!!state.progress.flags.source_open && !state.progress.flags.ending_seen) || !!openingView(state)?.flash;
+export const starRingOpen = (state) => (!!state.progress?.flags.source_open && !state.progress.flags.ending_seen) || !!openingView(state)?.flash;
 
 /**
  * The shock crystal's night light: the placeholder's cyan, or with the release art (a pale-yellow
