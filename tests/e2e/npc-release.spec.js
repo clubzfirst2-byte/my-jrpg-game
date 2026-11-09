@@ -184,3 +184,24 @@ test('?npc=revision shows batch 1 with the review\'s fixes (a separate set); wit
     expect(await api(page, 'artUrl', key), key).toBe(await api(page2, 'artUrl', key));
   }
 });
+
+test('?npc=revision-b2 shows the batch 2 fixes (woman, child, smith); the cook and batch 1 as submitted', async ({ page }) => {
+  await open(page, '&hero=release&npc=revision-b2');
+  expect((await api(page, 'art')).overrides).toBe(248 + 280);
+  await api(page, 'standBy', 'child');
+  await waitTicks(page, 10);
+  expect((await sprite(page, 'child')).key).toMatch(/^npc\.child\./);
+  const page2 = await page.context().newPage();
+  await open(page2, '&hero=release');
+  for (const key of ['npc.woman.idle.down.0', 'npc.child.idle.up.0', 'npc.smith.idle.down.0']) {
+    expect(await api(page, 'artUrl', key), key).not.toBe(await api(page2, 'artUrl', key));
+  }
+  for (const key of ['npc.cook.idle.down.0', 'npc.elder.idle.down.0']) {
+    expect(await api(page, 'artUrl', key), key).toBe(await api(page2, 'artUrl', key));
+  }
+  // both revisions together
+  const page3 = await page.context().newPage();
+  await open(page3, '&hero=release&npc=revision,revision-b2');
+  expect(await api(page3, 'artUrl', 'npc.elder.idle.down.0')).not.toBe(await api(page2, 'artUrl', 'npc.elder.idle.down.0'));
+  expect(await api(page3, 'artUrl', 'npc.smith.idle.down.0')).toBe(await api(page, 'artUrl', 'npc.smith.idle.down.0'));
+});

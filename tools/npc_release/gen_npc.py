@@ -16,6 +16,7 @@ import merchant  # noqa: E402
 import guard  # noqa: E402
 
 import revisions  # noqa: E402
+import revisions_b2  # noqa: E402
 import woman  # noqa: E402
 import cook  # noqa: E402
 import child  # noqa: E402
@@ -28,6 +29,8 @@ BY_ID = {n.id: n for n in NPCS}
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "src", "art-release", "npc")
 # batch 1, revision 1: the same names in their own folder (the approved frames stay as they are)
 REVISION_OUT = os.path.join(os.path.dirname(__file__), "..", "..", "src", "art-release", "npc-revision")
+# batch 2, revision 1 (woman, child, smith; the cook is unchanged)
+REVISION_B2_OUT = os.path.join(os.path.dirname(__file__), "..", "..", "src", "art-release", "npc-revision-b2")
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
@@ -46,3 +49,11 @@ if __name__ == "__main__":
                 fh.write(png(img))
             count += 1
     print(f"{count} revised frames -> src/art-release/npc-revision/")
+    os.makedirs(REVISION_B2_OUT, exist_ok=True)
+    count = 0
+    for npc in revisions_b2.REVISED_B2:
+        for name, img in npc.frames().items():
+            with open(os.path.join(REVISION_B2_OUT, f"{name}.png"), "wb") as fh:
+                fh.write(png(img))
+            count += 1
+    print(f"{count} revised frames -> src/art-release/npc-revision-b2/")

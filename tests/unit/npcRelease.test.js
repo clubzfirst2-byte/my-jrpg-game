@@ -8,6 +8,7 @@ import { NPC_ANIM, npcFrameKey, idleOffset } from '../../src/view/npcAnim.js';
 //   batch 1  the elder, the merchant and the guard (approved: their 120 files are pinned below)
 //   batch 2  the village woman, the inn's cook, the village child and the blacksmith
 //   revision batch 1 with the review's fixes, in its own folder (src/art-release/npc-revision/)
+//   revision-b2  batch 2 with the review's fixes (woman, child, smith), in src/art-release/npc-revision-b2/
 // and how the game picks the frames.
 
 const DIR = new URL('../../src/art-release/npc/', import.meta.url);
@@ -17,6 +18,9 @@ const BATCH1 = ['elder', 'merchant', 'guard'];
 const BATCH2 = ['woman', 'cook', 'child', 'smith'];
 const IDS = [...BATCH1, ...BATCH2];
 const PINNED = JSON.parse(readFileSync(new URL('./fixtures/npc-batch1-sha256.json', import.meta.url), 'utf8'));
+const PINNED_B2 = JSON.parse(readFileSync(new URL('./fixtures/npc-batch2-sha256.json', import.meta.url), 'utf8'));
+const REVISION_B2 = new URL('../../src/art-release/npc-revision-b2/', import.meta.url);
+const sha = (url) => createHash('sha256').update(readFileSync(url)).digest('hex');
 const DIRS = ['down', 'up', 'right', 'left'];
 const files = readdirSync(DIR).filter((f) => f.endsWith('.png')).map((f) => f.slice(0, -4));
 
@@ -52,6 +56,39 @@ describe('NPC release art, batch 1 (src/art-release/npc)', () => {
   it('batch 1 (approved) is unchanged: all 120 files byte for byte as approved', () => {
     expect(Object.keys(PINNED)).toHaveLength(120);
     for (const [name, sha] of Object.entries(PINNED)) expect(createHash('sha256').update(readFileSync(new URL(`${name}.png`, DIR))).digest('hex'), name).toBe(sha);
+  });
+
+  it('batch 2 (under review) is unchanged by its revision: all 160 files byte for byte as submitted', () => {
+    expect(Object.keys(PINNED_B2)).toHaveLength(160);
+    for (const [name, h] of Object.entries(PINNED_B2)) expect(sha(new URL(`${name}.png`, DIR)), name).toBe(h);
+  });
+
+  it('the batch 2 revision: woman, child and smith only (the cook is unchanged), 40 frames each, valid PNGs, standing on the same feet', () => {
+    const rev = readdirSync(REVISION_B2).filter((f) => f.endsWith('.png')).map((f) => f.slice(0, -4));
+    const ids = ['woman', 'child', 'smith'];
+    expect([...rev].sort()).toEqual(Object.keys(PINNED_B2).filter((k) => ids.includes(k.split('.')[1])).sort());
+    for (const f of rev) {
+      const img = read(new URL(`${f}.png`, REVISION_B2));
+      expect([img.w, img.h, img.bitDepth, img.colourType], f).toEqual([32, 56, 8, 6]);
+      for (const [x, y] of [[0, 0], [31, 0], [0, 55], [31, 55]]) expect(img.alpha(x, y), f).toBe(0);
+      // the feet (the two bottom rows) are where they were: the fixes are above them
+      const orig = read(new URL(`${f}.png`, DIR));
+      for (let y = 54; y < 56; y++) for (let x = 0; x < 32; x++) expect(img.at(x, y), `${f} (${x},${y})`).toBe(orig.at(x, y));
+    }
+    // what was asked for changed: her eyes (front and side), his curls (front, back, side), his soot and gloves
+    const changed = (f) => sha(new URL(`${f}.png`, REVISION_B2)) !== PINNED_B2[f];
+    for (const f of ['npc.woman.idle.down.0', 'npc.woman.idle.right.0', 'npc.child.idle.down.0', 'npc.child.idle.up.0', 'npc.child.idle.right.0', 'npc.smith.idle.down.0', 'npc.smith.idle.right.0']) expect(changed(f), f).toBe(true);
+    // the woman's back view (scarf, braid, basket) is left as it was
+    expect(changed('npc.woman.idle.up.0')).toBe(false);
+    // every cycle still moves: all idle and walk frames differ
+    for (const id of ids) {
+      for (const [a, { frames }] of Object.entries(NPC_ANIM)) {
+        for (const d of DIRS) {
+          const pics = new Set([...Array(frames).keys()].map((i) => readFileSync(new URL(`npc.${id}.${a}.${d}.${i}.png`, REVISION_B2)).toString('base64')));
+          expect(pics.size, `${id} ${a} ${d}`).toBe(frames);
+        }
+      }
+    }
   });
 
   it('the batch 1 revision is a separate set: the same 120 names, 32×56, its front / back fixes differ from the approved frames', () => {
