@@ -85,6 +85,7 @@ import {
   lakeGrassTile,
   bossSprite,
   stairsSprite,
+  PRINCESS_LOOK,
 } from './placeholderArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
@@ -166,6 +167,9 @@ export function placeholderEntries() {
   entries.push({ key: 'tile.wood', rows: woodFloorTile(), anchor: TOP_LEFT });
   entries.push({ key: 'tile.walltop', rows: wallTopTile(), anchor: TOP_LEFT });
   entries.push({ key: 'tile.dark', rows: darkTile(), anchor: TOP_LEFT });
+  // v1.0 (C4): the princess's placeholder look — she appears by the record stones of every region,
+  // and the island has no region bundle, so her art is in the base bundle.
+  for (const [key, rows] of Object.entries(villagerFrames(PRINCESS_LOOK))) entries.push({ key, rows, anchor: FEET });
   return entries;
 }
 
@@ -182,7 +186,8 @@ export const REGION_ENTRIES = {
     ...[0, 1, 2, 3].map((i) => ({ key: `plains.grass.${i}`, rows: plainsGrassTile(i), anchor: TOP_LEFT })),
     // P9: the village of 風見 (houses and villagers) is in the plains.
     { key: 'obj.house', rows: houseSprite(), anchor: FEET },
-    ...[1, 2, 3, 4, 5].flatMap((look) => Object.entries(villagerFrames(look)).map(([key, rows]) => ({ key, rows, anchor: FEET }))),
+    // v1.0: 6 woman, 7 smith, 8 traveller (the pass east of the plains).
+    ...[1, 2, 3, 4, 5, 6, 7, 8].flatMap((look) => Object.entries(villagerFrames(look)).map(([key, rows]) => ({ key, rows, anchor: FEET }))),
     // P10.1: the furniture inside the village houses.
     { key: 'obj.lowwall', rows: lowWallSprite(), anchor: FEET },
     { key: 'obj.bed', rows: bedSprite(), anchor: FEET },

@@ -2,14 +2,17 @@
 // Integrity check of what people say and do (P9): dialogue / quest / shop data and the villagers
 // placed in the world. Every reference must exist (nodes, quests, items, shops, landmarks) and every
 // node must be reachable. Used by unit tests and `npm run check:data`.
+// v1.0: the conditions `cores` (n cores purified) and `boss` (that core purified), the goal `cores`
+// (C2), and a villager's appearance condition `if` and see-through `ghost` (C3).
 
 const QUEST_STATES = ['none', 'active', 'ready', 'done'];
-const COND_KEYS = ['flag', 'is', 'quest', 'state', 'item', 'count', 'money'];
+const COND_KEYS = ['flag', 'is', 'quest', 'state', 'item', 'count', 'money', 'cores', 'boss'];
+const NPC_KEYS = ['id', 'name', 'dialogue', 'look', 'tx', 'ty', 'stay', 'reach', 'if', 'ghost'];
 const EFFECT_KEYS = ['setFlag', 'clearFlag', 'startQuest', 'completeQuest', 'giveItem', 'count', 'giveMoney', 'openShop', 'sleep'];
 
 /**
  * @param {{ dialogue: any, quests: any, shops: any, items: any }} data
- * @param {{ npcs?: any[], landmarks?: any[] }} [world]
+ * @param {{ npcs?: any[], landmarks?: any[], bosses?: any[] }} [world]
  * @returns {string[]}
  */
 export function validateTalk(data, world = {}) {
@@ -21,6 +24,10 @@ export function validateTalk(data, world = {}) {
   const shops = new Map((data.shops.shops ?? []).map((/** @type {any} */ s) => [s.id, s]));
   const dialogues = data.dialogue.dialogues ?? {};
   const landmarks = new Set((world.landmarks ?? []).map((/** @type {any} */ l) => l.id));
+  // The cores of the murk (C2): the world's when given, else any "core_…" id; four of them.
+  const cores = world.bosses ? new Set(world.bosses.map((/** @type {any} */ b) => b.id).filter((/** @type {string} */ id) => id.startsWith('core_'))) : null;
+  const maxCores = cores ? cores.size : 4;
+  const coreCount = (/** @type {any} */ n) => Number.isInteger(n) && n >= 1 && n <= maxCores;
 
   const checkCond = (/** @type {any} */ c, /** @type {string} */ at) => {
     for (const k of Object.keys(c)) if (!COND_KEYS.includes(k)) err(`${at}: unknown condition "${k}"`);
@@ -29,6 +36,8 @@ export function validateTalk(data, world = {}) {
       if (!QUEST_STATES.includes(c.state)) err(`${at}: quest state must be ${QUEST_STATES.join(' / ')}`);
     }
     if (c.item !== undefined && !items.has(c.item)) err(`${at}: unknown item "${c.item}"`);
+    if (c.cores !== undefined && !coreCount(c.cores)) err(`${at}: cores must be a whole number 1..${maxCores}`);
+    if (c.boss !== undefined && !(cores ? cores.has(c.boss) : typeof c.boss === 'string' && c.boss.startsWith('core_'))) err(`${at}: unknown core of the murk "${c.boss}"`);
   };
   const checkEffects = (/** @type {any[]} */ effects, /** @type {string} */ at) => {
     for (const e of effects ?? []) {
@@ -98,7 +107,9 @@ export function validateTalk(data, world = {}) {
       if (!(g.count >= 1)) err(`${at}.goal: count must be at least 1`);
     } else if (g.type === 'landmark') {
       if (world.landmarks && !landmarks.has(g.landmark)) err(`${at}.goal: unknown landmark "${g.landmark}"`);
-    } else if (g.type !== 'flag') err(`${at}.goal: type must be item / landmark / flag`);
+    } else if (g.type === 'cores') {
+      if (!coreCount(g.count)) err(`${at}.goal: count must be a whole number 1..${maxCores}`);
+    } else if (g.type !== 'flag') err(`${at}.goal: type must be item / landmark / flag / cores`);
     for (const id of Object.keys(q.reward?.items ?? {})) if (!items.has(id)) err(`${at}.reward: unknown item "${id}"`);
     // Some dialogue must be able to start and complete it.
     const all = JSON.stringify(dialogues);
@@ -119,6 +130,13 @@ export function validateTalk(data, world = {}) {
     if (nids.has(n.id)) err(`npc ${n.id}: duplicate id`);
     nids.add(n.id);
     if (!dialogues[n.dialogue]) err(`npc ${n.id}: unknown dialogue "${n.dialogue}"`);
+    for (const k of Object.keys(n)) if (!NPC_KEYS.includes(k)) err(`npc ${n.id}: unknown field "${k}"`);
+    // C3: shown only while every condition holds (the same conditions as a dialogue's start).
+    if (n.if !== undefined) {
+      if (!Array.isArray(n.if) || n.if.length === 0) err(`npc ${n.id}: if must list at least one condition`);
+      else for (const [k, c] of n.if.entries()) checkCond(c, `npc ${n.id}.if[${k}]`);
+    }
+    if (n.ghost !== undefined && typeof n.ghost !== 'boolean') err(`npc ${n.id}: ghost must be true or false`);
   }
   return errors;
 }

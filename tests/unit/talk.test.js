@@ -179,7 +179,7 @@ describe('in the village', () => {
 
   it('villagers stroll near home and stop for the player', () => {
     const s = world();
-    const n = s.npcs[0];
+    const n = s.npcs.find((x) => !x.stay); // (v1.0: the princess on the beach comes first and stays put)
     s.player.x = 5 * 16;
     s.player.y = 5 * 16;
     for (let i = 0; i < 60 * 20; i++) stepGame(s, none);

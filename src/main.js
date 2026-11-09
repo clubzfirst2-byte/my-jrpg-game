@@ -42,6 +42,7 @@ import { failureMessage } from './save/saveFormat.js';
 import { FixedStepLoop } from './game/core/fixedStep.js';
 import { createGameState, stepGame, spawnEnemies, respawnPlayer, MAPS } from './game/state.js';
 import { applyProgress, areaAt } from './game/world/features.js';
+import { markNewGame, noticeOnLoad, noticeOnCore } from './game/npc/storyNotices.js';
 import { activeBoss } from './game/entities/bosses.js';
 import { registerServiceWorker, loadTiming } from './platform/pwa.js';
 import { AudioEngine } from './audio/audioEngine.js';
@@ -331,7 +332,10 @@ async function boot() {
       applyProgress(state, loaded.data);
       respawnPlayer(state);
       if (loaded.recovered) toast.show('ひとつ前の保存から再開しました。', { ms: 4000 });
-    }
+      // v1.0 (C8): a save from before the story whose player never met the princess.
+      const notice = noticeOnLoad(state);
+      if (notice) setTimeout(() => toast.show(notice, { ms: 5000 }), loaded.recovered ? 4000 : 600);
+    } else markNewGame(state);
     // Never overwrite a save written by a newer version of the game.
     autosave.enabled = loaded.status !== 'newer';
     void store.requestPersistence();
@@ -394,6 +398,8 @@ async function boot() {
         toast.show('澱の核が怒り狂っている…！', { ms: 2000 });
       } else if (ev.type === 'bossDown') {
         toast.show(`${ev.name}を浄化した！（澱の核 ${ev.count}/4） 星のかけらを手に入れた`, { ms: 4500 });
+        const notice = noticeOnCore(state); // v1.0 (C8): the fourth core, the princess not told yet
+        if (notice) setTimeout(() => toast.show(notice, { ms: 5000 }), 4500);
       } else if (ev.type === 'warp') {
         // P10.1: stepping into a house shows its name.
         const room = areaAt(state, state.player.x, state.player.y);
@@ -860,8 +866,8 @@ async function boot() {
     /** NPC batch 1: the villagers' sprites (frame key, size, draw order) and their state. */
     npcSprites: () => view.npcs.debug(),
     npcState: () => state.npcs.map((n) => ({ id: n.id, facing: n.facing, moving: n.moving, x: n.x, y: n.y })),
-    /** Test helper: a villager that is not in the world data yet (NPC batch 2: woman, smith), for a
-     *  look on screen only; it is not saved and the village data is unchanged. */
+    /** Test helper: an extra villager, for a look on screen only; it is not saved and the village
+     *  data is unchanged (the woman and the smith are in the village since v1.0). */
     addNpc: (/** @type {string} */ id, /** @type {number} */ tx, /** @type {number} */ ty) => {
       state.npcs.push(...createNpcs(state.map, [{ id, name: id, dialogue: 'elder', look: 1, tx, ty }]));
     },

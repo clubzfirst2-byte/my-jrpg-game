@@ -7,12 +7,16 @@
 import DIALOGUE from '../../../data/dialogue.json';
 import QUESTS from '../../../data/quests.json';
 import SHOPS from '../../../data/shops.json';
+import ITEMS from '../../../data/items.json';
 import { addItem, removeItem, countOf, itemDef } from '../items/inventory.js';
 import { sleepUntil } from '../world/interiors.js';
 
 export const TALK_DATA = { dialogue: DIALOGUE, quests: QUESTS, shops: SHOPS };
 
-/** @typedef {{ flag?: string, is?: boolean, quest?: string, state?: string, item?: string, count?: number, money?: number }} Condition */
+/**
+ * @typedef {{ flag?: string, is?: boolean, quest?: string, state?: string, item?: string, count?: number, money?: number, cores?: number, boss?: string }} Condition
+ * v1.0 (C2): cores — at least that many cores of the murk purified; boss — that core purified.
+ */
 /** @typedef {{ setFlag?: string, clearFlag?: string, startQuest?: string, completeQuest?: string, giveItem?: string, count?: number, giveMoney?: number, openShop?: string, sleep?: number }} Effect  sleep: until that hour (P10.1) */
 
 /** @param {string} id */
@@ -22,6 +26,17 @@ export function questDef(id) {
   return q;
 }
 
+/** Prefix of the four cores of the murk in progress.bosses (the final boss is listed apart, C7). */
+export const CORE_PREFIX = 'core_';
+
+/**
+ * How many cores of the murk have been purified (counted from the saved bosses, so saves from
+ * before v1.0 are right as they are). @param {any} state
+ */
+export function coresPurified(state) {
+  return (state.progress.bosses ?? []).filter((/** @type {string} */ id) => id.startsWith(CORE_PREFIX)).length;
+}
+
 /** @param {any} state @param {any} q */
 function goalMet(state, q) {
   const g = q.goal;
@@ -29,6 +44,7 @@ function goalMet(state, q) {
   if (g.type === 'item') return countOf(pr.inv, g.item) >= g.count;
   if (g.type === 'landmark') return pr.landmarks.includes(g.landmark);
   if (g.type === 'flag') return !!pr.flags[g.flag];
+  if (g.type === 'cores') return coresPurified(state) >= g.count;
   return false;
 }
 
@@ -50,6 +66,8 @@ export function conditionHolds(state, c) {
   if (c.quest !== undefined) return questState(state, c.quest) === c.state;
   if (c.item !== undefined) return countOf(pr.inv, c.item) >= (c.count ?? 1);
   if (c.money !== undefined) return pr.inv.money >= c.money;
+  if (c.cores !== undefined) return coresPurified(state) >= c.cores;
+  if (c.boss !== undefined) return (pr.bosses ?? []).includes(c.boss);
   return true;
 }
 
@@ -78,13 +96,35 @@ export function applyEffects(state, effects = []) {
 }
 
 /**
- * Completes a quest whose goal is met: takes the items (when `consume`), gives the reward.
+ * Whether a quest's gear reward (a weapon or a bow, v1.0: the smith's 星鋼の剣) has a free slot.
+ * Returns the first that does not fit, or null. @param {any} inv @param {any} q @returns {string | null}
+ */
+function gearThatDoesNotFit(inv, q) {
+  for (const [item, n] of Object.entries(q.reward.items ?? {})) {
+    const type = itemDef(item).type;
+    if (type !== 'weapon' && type !== 'bow') continue;
+    const list = type === 'weapon' ? inv.weapons : inv.bows;
+    const max = type === 'weapon' ? ITEMS.limits.weapons : ITEMS.limits.bows;
+    if (list.length + /** @type {number} */ (n) > max) return item;
+  }
+  return null;
+}
+
+/**
+ * Completes a quest whose goal is met: takes the items (when `consume`), gives the reward. A gear
+ * reward with no free slot is not lost: the quest stays ready (like a chest that stays shut, P6)
+ * and a `full` event says why.
  * @param {any} state @param {string} id @returns {boolean}
  */
 export function completeQuest(state, id) {
   if (questState(state, id) !== 'ready') return false;
   const q = questDef(id);
   const inv = state.progress.inv;
+  const full = gearThatDoesNotFit(inv, q);
+  if (full) {
+    state.events.push({ type: 'full', tick: state.tick, item: full });
+    return false;
+  }
   if (q.consume && q.goal.type === 'item') removeItem(inv, q.goal.item, q.goal.count);
   inv.money += q.reward.money ?? 0;
   for (const [item, n] of Object.entries(q.reward.items ?? {})) addItem(inv, item, /** @type {number} */ (n));

@@ -53,6 +53,90 @@
         }
       },
       "consume": false
+    },
+    {
+      "id": "star_ring_call",
+      "name": "星環の呼び声",
+      "giver": "princess",
+      "desc": "浜の記録石のそばで、星環の姫の写し身に会った。森・山・荒野・湖にある 4 つの澱の核（裏返った星環の根）を浄化しよう。",
+      "goal": {
+        "type": "cores",
+        "count": 4
+      },
+      "reward": {
+        "money": 0,
+        "items": {
+          "star_shard": 1
+        }
+      },
+      "consume": false
+    },
+    {
+      "id": "source_of_murk",
+      "name": "淀みの源",
+      "giver": "princess",
+      "desc": "目覚めた浜の小さな星環が、大陸の真ん中への門になった。裏返った星環「淀みの源」を、もとの向きに戻そう。",
+      "goal": {
+        "type": "flag",
+        "flag": "source_purified"
+      },
+      "reward": {
+        "money": 0
+      },
+      "consume": false
+    },
+    {
+      "id": "forest_mushrooms",
+      "name": "森きのこの薬",
+      "giver": "woman",
+      "desc": "村の女性が、熱さましの薬に使う森きのこを 3 つ欲しがっている。囁きの森の木の根元を探そう。",
+      "goal": {
+        "type": "item",
+        "item": "mushroom",
+        "count": 3
+      },
+      "reward": {
+        "money": 50,
+        "items": {
+          "berry_jam": 2
+        }
+      },
+      "consume": true
+    },
+    {
+      "id": "murk_steel",
+      "name": "澱の結晶と星鋼",
+      "giver": "smith",
+      "desc": "鍛冶職人が、澱の結晶を 3 つ持ってくれば剣を打ってくれるという。荒野や白嶺山脈の弓の魔物がよく落とす。",
+      "goal": {
+        "type": "item",
+        "item": "murk_crystal",
+        "count": 3
+      },
+      "reward": {
+        "money": 0,
+        "items": {
+          "star_steel_sword": 1
+        }
+      },
+      "consume": true
+    },
+    {
+      "id": "mirror_tale",
+      "name": "鏡湖の言い伝え",
+      "giver": "traveller",
+      "desc": "峠の旅人に頼まれた。星環の光を持つ人がのぞくと、鏡湖に大陸の真ん中が映るという。鏡湖を見てこよう。",
+      "goal": {
+        "type": "landmark",
+        "landmark": "mirror_lake"
+      },
+      "reward": {
+        "money": 100,
+        "items": {
+          "arrow": 15
+        }
+      },
+      "consume": false
     }
   ]
 }

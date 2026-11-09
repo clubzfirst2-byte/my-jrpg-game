@@ -549,6 +549,37 @@ F.extra['passes'] = [{'id': 'pass-plains', 'tx': 0, 'ty': 53, 'facing': 'left', 
 S.extra['passes'] = [{'id': 'pass-lake', 'tx': RW - 1, 'ty': 47, 'facing': 'right', 'to': {'region': 'lake', 'tx': 1, 'ty': 47}}]
 L.extra['passes'] = [{'id': 'pass-desert', 'tx': 0, 'ty': 47, 'facing': 'left', 'to': {'region': 'desert', 'tx': RW - 2, 'ty': 47}}]
 
+# --- v1.0 (docs/story/V1_STORY_PROPOSAL.md C4): the new people. Placed last, on free tiles, so nothing
+# placed before them moves (saves name things by place; tests/unit/compat.test.js). ---
+# The princess's 写し身 (see-through) by the record stone of each region: there once she has been met
+# on the beach, until the source is purified / the ending is seen.
+PRINCESS_IF = [{'flag': 'princess_met'}, {'flag': 'source_purified', 'is': False}, {'flag': 'ending_seen', 'is': False}]
+def beside_stone(R):
+    """A free tile right beside the region's record stone, on its level (off the road when it can be)."""
+    cp = R.features['checkpoints'][0]
+    lvl = R.h[cp['ty']][cp['tx']]
+    spots = [(cp['tx'] + dx, cp['ty'] + dy) for (dx, dy) in ((1, 0), (-1, 0), (1, 1), (-1, 1), (0, 1), (1, -1), (-1, -1))]
+    for road_ok in (False, True):
+        for (x, y) in spots:
+            if R.free(x, y, lvl) and (road_ok or R.g[y][x] != '='): return x, y
+    raise AssertionError(('no tile beside the stone', R.id))
+for R in (P, S, M, F, L):
+    x, y = beside_stone(R)
+    R.features['npcs'].append({'id': f'princess_{R.id}', 'name': '星環の姫', 'dialogue': 'princess', 'look': 9, 'tx': x, 'ty': y, 'stay': True, 'if': PRINCESS_IF, 'ghost': True})
+def village_spot(x, y):
+    assert P.free(x, y, 0) and P.g[y][x] == '.', ('village spot taken', x, y)
+    return {'tx': x, 'ty': y}
+# In 風見の村: the woman east of the cook's house, the smith west of the guard (a village anvil is for later,
+# C13), and after the ending the princess in front of the inn (beside its door, not on the doorstep).
+P.features['npcs'] += [
+    {'id': 'woman', 'name': '村の女性', 'dialogue': 'woman', 'look': 6, **village_spot(29, 14)},
+    {'id': 'smith', 'name': '鍛冶職人', 'dialogue': 'smith', 'look': 7, **village_spot(34, 18)},
+    {'id': 'princess_home', 'name': '星環の姫', 'dialogue': 'princess', 'look': 9, **village_spot(20, 22), 'if': [{'flag': 'ending_seen'}]},
+]
+# The traveller rests on the plains side of the pass to the forest.
+assert P.free(88, 51, 0) and P.g[51][88] == '.', 'traveller spot'
+P.features['npcs'].append({'id': 'traveller', 'name': '旅人', 'dialogue': 'traveller', 'look': 8, 'tx': 88, 'ty': 51})
+
 regions = [P.out(), S.out(), M.out(), F.out(), L.out()]
 for r in regions:
     assert len(r['ground']) == RH and all(len(row) == RW + EW for row in r['ground'])
