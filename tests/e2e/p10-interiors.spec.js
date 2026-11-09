@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitTicks } from './ticks.js';
 
 // P10.1: inside the village houses — walk in through the door, shop across the counter, sleep in
 // the inn until morning, walk back out over the mat.
@@ -15,7 +16,8 @@ async function openVillage(page) {
 }
 
 /** Holds a key until `done()` is true (or gives up). */
-async function holdUntil(page, key, done, ms = 4000) {
+// The limit is only how long to wait before giving up (a slow renderer walks fewer game ticks per second).
+async function holdUntil(page, key, done, ms = 12_000) {
   await page.keyboard.down(key);
   try {
     await expect.poll(done, { timeout: ms, intervals: [50] }).toBe(true);
@@ -47,8 +49,10 @@ test('in through the shop door, buying across the counter, out over the mat', as
   await page.click('#shop-close');
   await expect(page.locator('#shop-menu')).toBeHidden();
   // Back out: down over the mat.
-  // The world resumes (and input is reset) on the next frame after the shop closes.
-  await page.waitForTimeout(150);
+  // The world resumes (and input is reset) on the next frame after the shop closes: wait until it
+  // has run a few ticks again, so the key below is not pressed before that reset (with slow frames a
+  // fixed 150 ms wait was not always one frame, and the reset swallowed the key).
+  await waitTicks(page, 3);
   await holdUntil(page, 'ArrowDown', async () => (await api(page, 'area')) === null);
   const p = await api(page, 'player');
   expect(Math.floor(p.x / 16)).toBe(16);
@@ -61,7 +65,7 @@ test('sleeping in the inn until morning', async ({ page }, testInfo) => {
   await api(page, 'setHp', 4);
   await enter(page, { tx: 18, ty: 94 }, 'inn');
   // To the bed west of the door.
-  await holdUntil(page, 'ArrowLeft', async () => (await api(page, 'player')).x < 102 * 16 + 8, 3000);
+  await holdUntil(page, 'ArrowLeft', async () => (await api(page, 'player')).x < 102 * 16 + 8, 9000);
   await holdUntil(page, 'ArrowUp', async () => (await api(page, 'nearby')) === 'sleep');
   await expect(page.locator('#use-button')).toHaveText('眠る');
   await page.click('#use-button');

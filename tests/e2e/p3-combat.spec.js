@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitTicks } from './ticks.js';
 
 // Combat on the height verification map. The map's own enemies are cleared; each test places
 // what it needs next to the player with the spawnEnemy test hook.
@@ -74,7 +75,9 @@ test('the bow shoots an arrow after a full draw', async ({ page }, testInfo) => 
   await page.waitForTimeout(60);
   await page.keyboard.up('ArrowRight');
   await page.keyboard.down('KeyU');
-  await page.waitForTimeout(600); // full draw is 400ms
+  // full draw is 400 ms of game time: hold for 36 logic ticks (600 ms), counted in ticks so a slow
+  // renderer cannot cut the draw short
+  await waitTicks(page, 36);
   await page.screenshot({ path: testInfo.outputPath('aim.png') });
   await page.keyboard.up('KeyU');
   await expect
