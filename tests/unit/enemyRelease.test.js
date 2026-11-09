@@ -253,6 +253,16 @@ describe('enemy & boss release art (src/art-release/enemy)', () => {
     }
   });
 
+  it('top edge: no frame touches the top row (antler tips, crests and fists stay 1 px clear, never cut flat)', () => {
+    for (const name of expected.keys()) {
+      if (name.startsWith('enemy.shot.')) continue;
+      const { w, px } = decode(name);
+      let n = 0;
+      for (let x = 0; x < w; x++) if (px[x * 4 + 3]) n++;
+      expect(n, `${name}: opaque pixels on the top row`).toBe(0);
+    }
+  });
+
   it('the minimal set is byte-identical to the frames it mirrors (frames.json "minimal")', () => {
     const fj = JSON.parse(readFileSync(new URL('../../docs/art-release/enemy/frames.json', import.meta.url), 'utf8'));
     expect(Object.keys(fj.minimal).length).toBe(MINIMAL.length * 2);

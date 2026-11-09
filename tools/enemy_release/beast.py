@@ -197,7 +197,7 @@ def frames():
     f["move.0"] = Pose(nf=(31, G), fh=(15, G), ff=(25, G - 2), nh=(8, G - 1), dy=0, tail=1, head=(1, 0))
     f["move.1"] = Pose(nf=(26, G - 2), ff=(24, G - 1), nh=(17, G - 1), fh=(15, G), dy=-1, pitch=1, tail=0, head=(0, 1))  # gathered
     f["move.2"] = Pose(ff=(31, G), nh=(15, G), nf=(25, G - 2), fh=(8, G - 1), dy=0, tail=-1, head=(1, 0))
-    f["move.3"] = Pose(nf=(34, G - 3), ff=(32, G - 1), nh=(7, G - 2), fh=(5, G), dy=-2, pitch=-1, tail=2, head=(1, -1))  # extended
+    f["move.3"] = Pose(nf=(34, G - 3), ff=(32, G - 1), nh=(7, G - 2), fh=(5, G), dy=-1, pitch=-1, tail=2, head=(1, 0))  # extended
     # windup: crouch low, head down, jaw opens, crystals bristle (2 frames, deeper)
     f["windup.0"] = Pose(dy=2, pitch=2, head=(-1, 3), jaw=1, ear=1, spike=1, tail=1, nf=(30, G), ff=(32, G), nh=(14, G), fh=(12, G))
     f["windup.1"] = Pose(dy=3, pitch=3, x=-1, head=(-2, 4), jaw=2, ear=1, spike=2, tail=2, nf=(30, G), ff=(32, G), nh=(12, G), fh=(10, G))

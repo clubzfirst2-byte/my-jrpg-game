@@ -58,11 +58,20 @@ def antler(r, s, x0, y0, k, rot, lev, broken):
     a = math.radians(rot)
     ca, sa = math.cos(a), math.sin(a)
 
-    def P(dx, dy):
+    def raw(dx, dy):
         dy = dy * (1 - 0.55 * lev)
         dx = dx * (1 + 0.12 * lev)
-        x, y = dx * ca - dy * sa, dx * sa + dy * ca
-        return (x0 + s * x * k, max(2.5, y0 + y * k))
+        return dx * ca - dy * sa, dx * sa + dy * ca
+
+    # keep the whole antler (tip radius + outline) 1 px clear of the top edge: when a pose throws
+    # the tips higher than the frame allows, the antler is drawn a little smaller instead of cut flat
+    top = min(raw(*q)[1] for q in BEAM + [t for _, t in TINES])
+    if y0 + top * k < 4.0 and top < 0:
+        k = (y0 - 4.0) / -top
+
+    def P(dx, dy):
+        x, y = raw(dx, dy)
+        return (x0 + s * x * k, y0 + y * k)
 
     def along(i):  # a point part-way along the beam (i may be fractional)
         j = int(i)
@@ -228,9 +237,9 @@ def frames():
     f["attack_slam.1"] = Pose(head=10, rot=40, fore=0.8, dy=2)
     # ring: it rears up, head thrown back, antlers raised; big ice crystals rise around it;
     # then the front hooves stamp down and the crystals fly out to the edges
-    f["windup_ring.0"] = Pose(rear=5, head=-4, rot=-14, fore=0.75, mouth=1, shards=4, shard_r=0.2, shard_s=1.0)
-    f["windup_ring.1"] = Pose(rear=9, head=-7, rot=-22, fore=0.65, mouth=2, shards=6, shard_r=0.35, shard_s=1.3)
-    f["attack_ring.0"] = Pose(head=-6, rot=-26, fore=0.65, mouth=3, dy=1, shards=8, shard_r=1.0, shard_s=1.1, chips=True)
+    f["windup_ring.0"] = Pose(rear=4, head=-1, rot=-4, fore=0.75, mouth=1, shards=4, shard_r=0.2, shard_s=1.0)
+    f["windup_ring.1"] = Pose(rear=8, head=-1, rot=-6, fore=0.65, mouth=2, shards=6, shard_r=0.35, shard_s=1.3)
+    f["attack_ring.0"] = Pose(head=-1, rot=-8, fore=0.65, mouth=3, dy=1, shards=8, shard_r=1.0, shard_s=1.1, chips=True)
     f["attack_ring.1"] = Pose(head=-3, rot=-12, fore=0.8, mouth=1, shards=6, shard_r=1.25, shard_s=0.7)
     # charge (phase 2): antlers levelled forward, a front hoof scrapes; then the lunge
     f["windup_charge.0"] = Pose(head=6, lev=0.7, rot=8, fore=0.8, legs=(5, 0, 0, 0), phase2=True)

@@ -152,7 +152,8 @@ def draw(p):
         a = (i / max(p.shards, 1)) * 2 * math.pi + p.spin * 0.35 + 0.4
         rad = (54 + p.orbit) * s
         x, y = cx + math.cos(a) * rad, cy + math.sin(a) * rad * 0.9
-        if 4 <= x <= W - 5 and 4 <= y <= G - 3:
+        y = max(y, 7)  # a shard never reaches the top edge (1 px of clear space above its outline)
+        if 4 <= x <= W - 5 and y <= G - 3:
             r.poly([(x, y - 5), (x + 3, y), (x, y + 5), (x - 3, y)], "ashring", soft=1)
     # volley: orbs leaving the eye
     for i in range(p.orbs):

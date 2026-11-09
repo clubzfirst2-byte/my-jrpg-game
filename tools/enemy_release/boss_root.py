@@ -184,7 +184,7 @@ def frames():
     f["idle2.0"] = Pose(phase2=True, spikes=1)
     f["idle2.1"] = Pose(phase2=True, dy=1, lift=1, spikes=2)
     f["defeat.0"] = Pose(head=-5, eyes="shut", jaw=2, phase2=True)
-    f["defeat.1"] = Pose(collapse=1, head=4, eyes="shut", spread=3)
+    f["defeat.1"] = Pose(collapse=1, head=4, eyes="shut", spread=3, phase2=True)  # the core stays bared through the purification
     f["defeat.2"] = Pose(collapse=3, head=6, eyes="shut", spread=5)
     f["defeat.3"] = Pose(collapse=4)
     return {k: draw(v) for k, v in f.items()}

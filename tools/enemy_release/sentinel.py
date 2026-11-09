@@ -86,7 +86,7 @@ def draw(p):
     elif f == "mid":
         fist_arm(r, sx, sy, sx + 5, sy - 3, sx + 6, sy - 11)
     elif f == "high":  # over the head and a little behind it: the fist clears the top of the dome
-        fist_arm(r, sx - 1, sy, sx + 2, sy - 9, hx_ + 1, 4.5, inline=True)
+        fist_arm(r, sx - 1, sy, sx + 2, sy - 9, hx_ + 1, 6, inline=True)
     elif f == "slam":
         fist_arm(r, sx, sy, sx + 5, sy + 6, sx + 8, sy + 25)
     elif f == "follow":
@@ -129,7 +129,7 @@ def frames():
     f["move.3"] = Pose(nf=(22, G), ff=(15, G - 3), dy=0)
     # windup: the fist rises (to the shoulder, then over the head), the head tips back
     f["windup.0"] = Pose(fist="mid", tilt=-1, nf=(23, G), ff=(12, G))
-    f["windup.1"] = Pose(fist="high", tilt=-2, dy=2, nf=(24, G), ff=(10, G))
+    f["windup.1"] = Pose(fist="high", tilt=-2, dy=3, nf=(24, G), ff=(10, G))
     # attack: the slam into the ground in front, then the follow-through (body bent over it)
     f["attack.0"] = Pose(fist="slam", tilt=2, dy=2, x=-2, nf=(23, G), ff=(10, G))
     f["attack.1"] = Pose(fist="follow", tilt=1, dy=1, x=-2, nf=(23, G), ff=(10, G))
