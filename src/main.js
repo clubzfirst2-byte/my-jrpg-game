@@ -950,8 +950,19 @@ async function boot() {
     resolution: () => ({ ...resolution, target: targetHeight }),
     /** The hero's current animation (action and frame) and the texture drawn. */
     heroPose: () => ({ ...view.heroPose, texture: view.heroKey }),
-    /** Which file a sprite's art comes from (tests: release / revision / prototype). */
-    artUrl: (/** @type {string} */ key) => artOverrides.get(key) ?? null,
+    /**
+     * A sprite's art (tests: release / revision / prototype): its PNG URL, or for a frame on a
+     * packed sheet (the build) the frame's pixels as a data URL, so two sets compare by content.
+     */
+    artUrl: (/** @type {string} */ key) => {
+      const src = artOverrides.get(key);
+      if (src === undefined || typeof src === 'string') return src ?? null;
+      const c = document.createElement('canvas');
+      c.width = src.w;
+      c.height = src.h;
+      /** @type {CanvasRenderingContext2D} */ (c.getContext('2d')).drawImage(src.sheet, src.x, src.y, src.w, src.h, 0, 0, src.w, src.h);
+      return c.toDataURL();
+    },
     /** P11.5: the art in use (density, how many real-art sprites) and the drawn hero's size in game px. */
     art: () => ({ density: artDensity, overrides: artOverrides.size, zoom: view.camera.zoom, hero: { w: view.player.texture.width, h: view.player.texture.height, k: view.heroK } }),
     /** P8: the auto tour (minutes may be fractional in tests). */
