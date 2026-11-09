@@ -117,12 +117,15 @@ async function boot() {
   //   pixel): with ?hero=release, or alone with ?npc=release / ?hd=1. ?npc=placeholder leaves it out
   //   (before/after comparison), and so do the prototype views (?…=proto)
   const npcParam = params.get('npc');
-  //   ?npc=revision   batch 1 with the review's fixes (src/art-release/npc-revision/, kept apart from
-  //   the approved frames until it is approved)
-  const releaseNpcs = params.get('hero') === 'release' || npcParam === 'release' || npcParam === 'revision' || hdParam === '1';
-  if (releaseNpcs && hdParam !== '0' && npcParam !== 'placeholder' && !protoGroups.length) {
+  //   ?npc=revision      batch 1 with the review's fixes (src/art-release/npc-revision/)
+  //   ?npc=revision-b2   batch 2 with the review's fixes (src/art-release/npc-revision-b2/)
+  //   (both: ?npc=revision,revision-b2) — each kept apart from the frames under review until approved
+  const npcModes = new Set((npcParam ?? '').split(','));
+  const revisions = ['revision', 'revision-b2'].filter((m) => npcModes.has(m));
+  const releaseNpcs = params.get('hero') === 'release' || npcModes.has('release') || revisions.length > 0 || hdParam === '1';
+  if (releaseNpcs && hdParam !== '0' && !npcModes.has('placeholder') && !protoGroups.length) {
     for (const [k, v] of await releaseFrames('npc')) artOverrides.set(k, v);
-    if (npcParam === 'revision') for (const [k, v] of await releaseFrames('npc-revision')) artOverrides.set(k, v);
+    for (const m of revisions) for (const [k, v] of await releaseFrames(`npc-${m}`)) artOverrides.set(k, v);
   }
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
 
