@@ -22,6 +22,7 @@ import {
 } from '../game/items/inventory.js';
 import { ABILITY_NAMES } from '../game/puzzles/abilities.js';
 import { questLog } from '../game/npc/talk.js';
+import { itemIconElement } from '../view/assets/objectsArt.js';
 
 /** @typedef {'weapon' | 'bow' | 'armor' | 'material' | 'food' | 'power' | 'quest' | 'cook' | 'forge'} Tab */
 
@@ -167,7 +168,7 @@ export class InventoryMenu {
             row(`inv-${kind}-${i}`, `${on ? '◆ ' : ''}${d.name}${g.lvl ? ` +${g.lvl}` : ''}`, `耐久 ${g.dur}/${d.durability}  ${d.desc}`, on, () => {
               equipGear(inv, kind, i);
               this.render();
-            }),
+            }, g.id),
           );
         });
         break;
@@ -183,7 +184,7 @@ export class InventoryMenu {
             row(`inv-armor-${id}`, `${on ? '◆ ' : ''}${d.name}（${slot}）`, `防御 ${d.defense}  ${d.desc}`, on, () => {
               equipArmor(inv, id);
               this.render();
-            }),
+            }, id),
           );
         }
         break;
@@ -199,7 +200,7 @@ export class InventoryMenu {
           const effect = d.effect ? `・${EFFECT_NAMES[d.effect.kind]}` : '';
           const canEat = heal > 0 || !!d.effect;
           list.append(
-            row(`inv-item-${id.replace(':', '-')}`, `${d.name} ×${inv.items[id]}`, `${canEat ? `食べる：回復 ${heal / 4} ハート${effect}  ` : ''}${d.desc}`, false, canEat ? () => this.eat(id) : null),
+            row(`inv-item-${id.replace(':', '-')}`, `${d.name} ×${inv.items[id]}`, `${canEat ? `食べる：回復 ${heal / 4} ハート${effect}  ` : ''}${d.desc}`, false, canEat ? () => this.eat(id) : null, id),
           );
         }
         break;
@@ -258,7 +259,7 @@ export class InventoryMenu {
       );
     }
     const n = countOf(pr.inv, 'star_shard');
-    const line = row('inv-shards', `星の欠片 ×${n}`, `1 つで ハート +1（最大 ${SHARD.maxHearts}）か がんばり +${SHARD.stamina}（最大 ${SHARD.maxStamina}）`, false, null);
+    const line = row('inv-shards', `星の欠片 ×${n}`, `1 つで ハート +1（最大 ${SHARD.maxHearts}）か がんばり +${SHARD.stamina}（最大 ${SHARD.maxStamina}）`, false, null, 'star_shard');
     const actions = document.createElement('div');
     actions.className = 'inv-actions';
     for (const [kind, label] of /** @type {const} */ ([['heart', 'ハート +1'], ['stamina', 'がんばり +']])) {
@@ -319,7 +320,7 @@ export class InventoryMenu {
         row(`inv-add-${id}`, `${itemDef(id).name} ×${left}`, '鍋に入れる（3 つまで）', false, left > 0 && this.pot.length < 3 ? () => {
           this.pot.push(id);
           this.render();
-        } : null),
+        } : null, id),
       );
     }
     const known = ITEMS.recipes.filter((/** @type {any} */ r) => inv.recipes.includes(r.result));
@@ -341,7 +342,7 @@ export class InventoryMenu {
       const d = itemDef(g.id);
       const up = nextUpgrade(g);
       const cost = up ? `${up.money} 星貨${Object.entries(up.materials ?? {}).map(([id, n]) => `・${itemDef(id).name}×${n}`).join('')}` : '';
-      const line = row(`inv-forge-${i}`, `${d.name}${g.lvl ? ` +${g.lvl}` : ''}`, `耐久 ${g.dur}/${d.durability}${up ? `  強化（+${up.level}）：${cost}` : '  これ以上は強化できない'}`, false, null);
+      const line = row(`inv-forge-${i}`, `${d.name}${g.lvl ? ` +${g.lvl}` : ''}`, `耐久 ${g.dur}/${d.durability}${up ? `  強化（+${up.level}）：${cost}` : '  これ以上は強化できない'}`, false, null, g.id);
       const actions = document.createElement('div');
       actions.className = 'inv-actions';
       const upB = button(`inv-upgrade-${i}`, '強化', () => {
@@ -364,7 +365,7 @@ export class InventoryMenu {
     inv.bows.forEach((/** @type {any} */ g, /** @type {number} */ i) => {
       const d = itemDef(g.id);
       const rc = repairCost(g);
-      const line = row(`inv-forge-bow-${i}`, d.name, `耐久 ${g.dur}/${d.durability}`, false, null);
+      const line = row(`inv-forge-bow-${i}`, d.name, `耐久 ${g.dur}/${d.durability}`, false, null, g.id);
       const fix = button(`inv-repair-bow-${i}`, rc > 0 ? `修理 ${rc}` : '修理', () => {
         const r = repairGear(inv, 'bow', i);
         this.hooks.toast(r === 'ok' ? `${d.name}を直した` : r === 'cost' ? '星貨が足りない' : '傷んでいない');
@@ -390,11 +391,13 @@ function button(id, text, onClick) {
 /**
  * @param {string} id @param {string} title @param {string} detail @param {boolean} active
  * @param {(() => void) | null} onClick
+ * @param {string} [item] the item the row is about: its icon goes before the title (v1.0)
  */
-function row(id, title, detail, active, onClick) {
+function row(id, title, detail, active, onClick, item) {
   const el = document.createElement('div');
   el.className = `inv-row${active ? ' active' : ''}`;
   el.id = id;
+  if (item) el.append(itemIconElement(item));
   const t = document.createElement('div');
   t.className = 'inv-row-title';
   t.textContent = title;

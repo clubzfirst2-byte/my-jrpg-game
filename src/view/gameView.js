@@ -20,7 +20,7 @@ import { areaAt } from '../game/world/features.js';
 import { sourceFrameKey, drawSourceTelegraphs, drawSeatLights } from './sourceView.js';
 import { FeatureView } from './featureView.js';
 import { EnvView } from './envView.js';
-import { WeatherView } from './weatherView.js';
+import { WeatherView, starRingOpen, crystalLightColor } from './weatherView.js';
 import { ItemView } from './itemView.js';
 import { PuzzleView } from './puzzleView.js';
 import { NpcView } from './npcView.js';
@@ -172,6 +172,7 @@ export class GameView {
     );
     // Time of day and weather (P5): light map, rain, lightning, above the world.
     this.weather = new WeatherView(app, (key) => this.makeSprite(key), this.actors);
+    this.weather.crystalLight = crystalLightColor(assets.texture('obj.crystal'));
     this.weather.attach(app.stage, app.stage.getChildIndex(this.world) + 1);
     // (v1.0 attack warnings stay in the world, sorted with their enemy, so trees in front hide them;
     // at night the light map lights each winding-up enemy instead: weatherView.js warningLights.)
@@ -655,7 +656,8 @@ export class GameView {
     this.actors.addChild(s);
     /** @type {Occluder | null} */
     let occluder = null;
-    if (o.type === 'tree') {
+    // Trees and houses (v1.0: the release house is 56 game px tall) fade when the player is behind them.
+    if (o.type === 'tree' || o.type === 'house') {
       const w = s.width / 2;
       occluder = { sprite: s, x0: x - w, x1: x + w, y0: feetY - z - s.height, y1: feetY - z, key: feetY };
     }
@@ -774,7 +776,7 @@ export class GameView {
     // v1.0 (C5): the beach ring glows while it is the gate to the source.
     // v1.0 (C9): it flashes once in the opening.
     // (open — and glowing — until the ending is seen: the way back to the princess by the source)
-    const ringOpen = (!!state.progress.flags.source_open && !state.progress.flags.ending_seen) || !!openingView(state)?.flash;
+    const ringOpen = starRingOpen(state);
     if (ringOpen !== this.ringOpen) {
       this.ringOpen = ringOpen;
       this.envVersion = -1;

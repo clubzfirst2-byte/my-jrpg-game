@@ -876,6 +876,9 @@ export function itemIcons() {
     'icon.shard': ['....kk....', '...kjjk...', '..kjXjjk..', '..kjXjjk..', '.kjjjjzjk.', '.kjjjzzjk.', '..kjjzjk..', '..kjzzjk..', '...kzzk...', '....kk....'],
     'icon.arrows': ['k.........', '.kak......', '.kaak.....', '..kAk.....', '...kAk.k..', '....kAkak.', '.....kAak.', '.....kAAk.', '......kXXk', '.......kkk'],
     'icon.food': ['..........', '..k.k.k...', '..........', '.kkkkkkkk.', 'kvvvvvvvvk', 'kKyKyKyKvk', 'kvyKyKyvvk', '.kvvvvvvk.', '..kkkkkk..', '..........'],
+    // v1.0: the star shard (a blue four-pointed star) and the elder's charm (a gold ring, a blue gem)
+    'icon.star_shard': ['....kk....', '...kIIk...', '.kkIWWIkk.', 'kIIWWWWIIk', '.kkIWWIkk.', '...kIIk...', '....kk....', '..........', '..........', '..........'],
+    'icon.charm': ['...kkkk...', '..kY..Yk..', '..kY..Yk..', '...kYYk...', '...kIIk...', '..kIWWIk..', '..kIIIIk..', '...kIIk...', '....kk....', '..........'],
   };
 }
 
