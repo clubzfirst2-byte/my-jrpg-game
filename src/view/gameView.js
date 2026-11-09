@@ -8,7 +8,8 @@
 // Sort keys: characters/objects use their feet y; an elevated terrain row uses its NORTH edge.
 // That one rule puts a character behind a cliff when north of it, on top of it when standing on it,
 // and in front of it when south of it.
-import { Container, Graphics, Rectangle, Sprite } from 'pixi.js';
+import { Container, Graphics, Rectangle, Sprite, TexturePool } from 'pixi.js';
+import { chunkRange, CHUNK_KEEP_MARGIN_TILES, CHUNK_LOAD_MARGIN_TILES } from './chunkRange.js';
 import { Ground, Shape, LEVEL_PX, inBounds, northEdgeHeight, southEdgeHeight } from '../game/world/tilemap.js';
 import { lerp } from '../game/core/math.js';
 import { Camera } from './camera.js';
@@ -156,6 +157,8 @@ export class GameView {
     /** Load every chunk at once (?chunks=all: for comparing against streaming). */
     this.loadAll = false;
     this.chunkStats = { built: 0, freed: 0, pending: 0, updates: 0 };
+    /** Chunks were freed since the last update: their cache textures sit idle in the TexturePool. */
+    this.chunkCachesFreed = false;
     this.hasBraziers = this.map.objects.some((o) => o.type === 'brazier');
     // Screen-space layer above the world (landmark markers).
     this.screenLayer = new Container();
@@ -503,14 +506,16 @@ export class GameView {
     const size = CHUNK * ts;
     const ncx = Math.ceil(this.map.width / CHUNK);
     const ncy = Math.ceil(this.map.height / CHUNK);
-    const range = (/** @type {number} */ margin) => ({
-      x0: this.loadAll ? 0 : Math.max(0, Math.floor((origin.x - margin) / size)),
-      x1: this.loadAll ? ncx - 1 : Math.min(ncx - 1, Math.floor((origin.x + viewW + margin) / size)),
-      y0: this.loadAll ? 0 : Math.max(0, Math.floor((origin.y - margin) / size)),
-      y1: this.loadAll ? ncy - 1 : Math.min(ncy - 1, Math.floor((origin.y + viewH + margin + 64) / size)),
-    });
-    const want = range(ts * 4); // a little beyond the screen (raised ground draws up to 4 tiles higher)
-    const keep = range(size); // hysteresis: freed only once well out of view
+    const range = (/** @type {number} */ margin) => chunkRange(origin, viewW, viewH, margin, { chunkPx: size, ncx, ncy, all: this.loadAll });
+    const want = range(ts * CHUNK_LOAD_MARGIN_TILES); // a little beyond the screen
+    const keep = range(ts * CHUNK_KEEP_MARGIN_TILES); // hysteresis: freed only once out of view
+    // v1.0 (perf review of the terrain cache): the chunk caches (cacheAsTexture) are the only users of
+    // PixiJS's TexturePool, which keeps every texture given back and never shrinks: 4 MB each with
+    // the release terrain. Once chunks have been freed (the frame before), let the idle ones go.
+    if (this.chunkCachesFreed) {
+      TexturePool.clear(true);
+      this.chunkCachesFreed = false;
+    }
     this.chunkStats.updates++;
     let pending = 0;
     for (let cy = want.y0; cy <= want.y1; cy++) {
@@ -533,6 +538,7 @@ export class GameView {
       if (c.cx < keep.x0 || c.cx > keep.x1 || c.cy < keep.y0 || c.cy > keep.y1) {
         this.destroyChunk(c);
         this.chunks.delete(key);
+        this.chunkCachesFreed = true;
       }
     }
     // A bundle loaded for chunks that were left behind before being built: let it go.
