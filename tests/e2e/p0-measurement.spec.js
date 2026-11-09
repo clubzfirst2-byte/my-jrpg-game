@@ -65,8 +65,15 @@ test('runtime errors are shown on screen', async ({ page }) => {
 });
 
 test('debug panel toggles and is hidden by default', async ({ page }) => {
+  // v1.0: in normal play there is no 「計測」 button and no build label at all…
   await page.goto('/?map=height');
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
+  await expect(page.locator('#debug-toggle')).toBeHidden();
+  await expect(page.locator('#phase-label')).toBeHidden();
+  // …with ?debug=0 the button is there (the panel closed), and the label.
+  await page.goto('/?map=height&debug=0');
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
+  await expect(page.locator('#phase-label')).toContainText('星環のレガリア');
   await expect(page.locator('#debug-panel')).toBeHidden();
   await page.locator('#debug-toggle').click();
   await expect(page.locator('#debug-panel')).toBeVisible();

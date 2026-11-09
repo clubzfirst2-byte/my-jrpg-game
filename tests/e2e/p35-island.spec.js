@@ -169,3 +169,20 @@ test('discovered landmarks off-screen get an edge marker', async ({ page }) => {
   await api(page, 'teleport', 20, 64);
   await expect.poll(() => api(page, 'markers')).toEqual(expect.arrayContaining(['smoke', 'tower']));
 });
+
+test('v1.0: the pause screen goes back to the title (saved first); つづきから carries on; no debug UI in normal play', async ({ page }) => {
+  const errors = await startNew(page);
+  await expect(page.locator('#debug-toggle')).toBeHidden();
+  await expect(page.locator('#phase-label')).toBeHidden();
+  await openChest(page, 'camp');
+  await page.click('#pause-button');
+  await expect(page.locator('.pause-version')).toHaveText(/^v\d+\.\d+\.\d+$/);
+  await page.click('#pause-title-button');
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
+  await expect(page.locator('#title-screen')).toBeVisible();
+  await expect(page.locator('#title-continue')).toBeEnabled();
+  await page.click('#title-continue');
+  await expect(page.locator('#title-screen')).toBeHidden();
+  expect((await api(page, 'progress')).openedChests).toEqual(['camp']);
+  expect(errors).toEqual([]);
+});

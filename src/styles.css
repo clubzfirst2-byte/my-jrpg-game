@@ -68,6 +68,11 @@ body {
   pointer-events: auto;
 }
 
+#phase-label[hidden],
+#debug-toggle[hidden] {
+  display: none;
+}
+
 #phase-label {
   position: absolute;
   left: calc(8px + var(--safe-left));
@@ -331,6 +336,14 @@ body {
 .pause-title {
   font-size: 22px;
   font-weight: bold;
+}
+
+.pause-version {
+  position: absolute;
+  left: calc(10px + var(--safe-left));
+  top: calc(10px + var(--safe-top));
+  font-size: 11px;
+  color: var(--muted);
 }
 
 .pause-message {

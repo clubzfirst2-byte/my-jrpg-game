@@ -91,8 +91,14 @@ async function boot() {
   const host = /** @type {HTMLElement} */ (document.getElementById('app'));
   const uiRoot = /** @type {HTMLElement} */ (document.getElementById('ui'));
   document.title = GAME_TITLE;
+  // v1.0: the measurement button and the build label are for development: shown with ?debug=
+  // (1 opens the panel, 0 only shows the button) or in the dev server, not in normal play.
+  const debugUi = params.has('debug') || import.meta.env.DEV;
   const label = document.getElementById('phase-label');
-  if (label) label.textContent = `${GAME_TITLE} ${PHASE} v${__APP_VERSION__} (${__COMMIT__})`;
+  if (label) {
+    label.textContent = `${GAME_TITLE} ${PHASE} v${__APP_VERSION__} (${__COMMIT__})`;
+    label.hidden = !debugUi;
+  }
 
   const settings = loadSettings();
   const resParam = intParam('res', 0);
@@ -468,6 +474,16 @@ async function boot() {
   const bench = new Bench(app);
   bench.setCount(intParam('bench', 0));
 
+  // v1.0: back to the title from the pause screen: save, then start the page afresh (the title shows,
+  // つづきから reads that save). A save that fails keeps the player here, with the message.
+  async function backToTitle() {
+    if (autosave.enabled && !(await autosave.saveNow())) {
+      toast.show('保存できなかったため、タイトルへ戻るのをやめました。', { kind: 'error', ms: 4000 });
+      return;
+    }
+    location.assign(location.pathname);
+  }
+
   // --- pause / resume ---
   let paused = false;
   const pauseOverlay = new PauseOverlay(uiRoot, {
@@ -477,6 +493,9 @@ async function boot() {
     onVolume: (kind) => setVolume(kind, nextVolume(kind === 'bgm' ? settings.bgmVolume : settings.sfxVolume)),
     volumes: () => ({ bgm: settings.bgmVolume, sfx: settings.sfxVolume }),
     onSettings: () => settingsMenu.open(),
+    // v1.0: 「タイトルへ」 — saved first; with no title (?map= test maps) there is none.
+    onTitle: withTitle ? () => void backToTitle() : undefined,
+    version: `v${__APP_VERSION__}`,
   });
   // P11.3: the settings screen; every choice applies at once and is remembered.
   const settingsMenu = new SettingsMenu(uiRoot, {
@@ -598,7 +617,7 @@ async function boot() {
         return targetHeight;
       },
     },
-    { open: params.get('debug') === '1', reportSec, resolution: targetHeight },
+    { open: params.get('debug') === '1', reportSec, resolution: targetHeight, showToggle: debugUi },
   );
 
   // --- P8: 自動巡回 (long-play measurement) ---
