@@ -10,7 +10,8 @@ import { slideCrate } from '../../src/game/puzzles/abilities.js';
 import { hitEnemy } from '../../src/game/combat/damage.js';
 import { countOf } from '../../src/game/items/inventory.js';
 import { STEP_SEC } from '../../src/game/core/fixedStep.js';
-import { sourceEntries, placeholderEntries, atlasSizeFor, SOURCE_BUNDLE, SOURCE_REGIONS, REGION_ENTRIES } from '../../src/view/assets/placeholderPack.js';
+import { sourceEntries, placeholderEntries, releaseEnemyEntries, atlasSizeFor, SOURCE_BUNDLE, SOURCE_REGIONS, REGION_ENTRIES } from '../../src/view/assets/placeholderPack.js';
+import { readdirSync, readFileSync } from 'node:fs';
 import { SOURCE_ACTIONS } from '../../src/view/assets/sourceArt.js';
 import { sourceFrameKey } from '../../src/view/sourceView.js';
 
@@ -503,6 +504,23 @@ describe('the art (placeholders under the release art\'s names)', () => {
     const r = WORLD.regions.find((x) => ar.tx >= x.tx && ar.tx < x.tx + x.tw && ar.ty >= x.ty && ar.ty < x.ty + x.th);
     expect(SOURCE_REGIONS).toContain(r.id);
     expect(SOURCE_REGIONS).not.toContain('island');
+  });
+
+  it('the release art (src/art-release/enemy) has every frame under the same names and size, and it goes in the source\'s bundle', () => {
+    const dir = new URL('../../src/art-release/enemy/', import.meta.url);
+    const files = readdirSync(dir).filter((f) => f.startsWith('enemy.boss_source.') && f.endsWith('.png'));
+    const art = new Map(files.map((f) => [f.slice(0, -4), f]));
+    const ours = sourceEntries();
+    for (const e of ours) {
+      expect(art.has(e.key), e.key).toBe(true);
+      const png = readFileSync(new URL(/** @type {string} */ (art.get(e.key)), dir));
+      // 2 art pixels per game pixel: 128 × 128 for the 64 × 64 placeholder.
+      expect([png.readUInt32BE(16), png.readUInt32BE(20)], e.key).toEqual([e.rows[0].length * 2, e.rows.length * 2]);
+    }
+    // Only the tendril frames are not used (yet).
+    expect([...art.keys()].filter((k) => !ours.some((e) => e.key === k)).every((k) => k.includes('.tendril.'))).toBe(true);
+    // Not in the base atlas.
+    expect(releaseEnemyEntries(new Map([...art.keys()].map((k) => [k, 'x.png']))).length).toBe(0);
   });
 
   it('a frame for each state of the fight, falling back to idle when a frame is missing', () => {

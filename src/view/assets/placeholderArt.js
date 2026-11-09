@@ -434,6 +434,58 @@ export function archerFrames() {
   return { 'enemy.archer.0': f0, 'enemy.archer.1': f1 };
 }
 
+/**
+ * v1.0 澱だまり (slime): a murk jelly mound with a glowing core and two eyes. 16 x 14 (the release
+ * art's 32 x 28 at 2 art pixels per game pixel), 2 frames: resting, and stretched mid-hop.
+ */
+export function slimeFrames() {
+  /** @param {number} rx @param {number} ry @param {number} cy */
+  const blob = (rx, ry, cy) => {
+    const g = grid(16, 14, '.');
+    for (let y = 0; y < 14; y++) {
+      for (let x = 0; x < 16; x++) {
+        const dx = (x - 7.5) / rx;
+        const dy = (y - cy) / ry;
+        const d = dx * dx + dy * dy;
+        if (d > 1 || y > 12) continue;
+        g[y][x] = d > 0.7 ? 'k' : dy < -0.3 && dx < 0 ? 'j' : y >= cy + ry * 0.4 ? 'Z' : 'z';
+      }
+    }
+    const top = Math.round(cy - ry * 0.3);
+    g[top][5] = g[top][10] = 'i';
+    g[top + 2][7] = g[top + 2][8] = 'O';
+    for (let x = 1; x < 15; x++) if (g[13][x] === '.' && x % 3 === 0) g[13][x] = 'Z'; // the murk seeping out
+    return toRows(g);
+  };
+  return { 'enemy.slime.0': blob(7.5, 6, 8.5), 'enemy.slime.1': blob(6, 7, 7) };
+}
+
+/**
+ * v1.0 遺跡の番兵 (sentinel): a squared stone body with a bronze band, a domed head with a glowing
+ * slit, one big stone fist. 20 x 28 (the release art's 40 x 56), 2 frames: standing, and a step.
+ */
+export function sentinelFrames() {
+  /** @param {number} step */
+  const make = (step) => {
+    const g = grid(20, 28, '.');
+    const fill = (/** @type {number} */ x0, /** @type {number} */ y0, /** @type {number} */ x1, /** @type {number} */ y1, /** @type {string} */ c) => {
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) g[y][x] = x === x0 || x === x1 || y === y0 || y === y1 ? 'k' : c;
+    };
+    fill(5, 1, 13, 7, 'R'); // domed head
+    g[1][5] = g[1][13] = '.';
+    for (let x = 7; x <= 11; x++) g[4][x] = 'O'; // the eye slit
+    fill(3, 7, 15, 18, 'r'); // body
+    for (let x = 4; x <= 14; x++) g[12][x] = 'N'; // bronze band
+    for (let y = 9; y <= 16; y++) g[y][4] = 'R';
+    fill(14, 9, 19, 19, 'm'); // the big fist arm
+    for (let y = 10; y <= 18; y++) g[y][15] = 'r';
+    fill(5, 18, 8, 27 - step, 'm'); // legs (one lifted in the step)
+    fill(10, 18, 13, 26 + step, 'm');
+    return toRows(g);
+  };
+  return { 'enemy.sentinel.0': make(0), 'enemy.sentinel.1': make(1) };
+}
+
 /** Sword slash: a white crescent pointing right (+x); rotated at runtime. 16 x 20. */
 export function slashSprite() {
   const w = 16;

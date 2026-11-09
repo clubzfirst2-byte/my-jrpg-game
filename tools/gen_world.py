@@ -622,6 +622,24 @@ F.extra['passes'] = [{'id': 'pass-plains', 'tx': 0, 'ty': 53, 'facing': 'left', 
 S.extra['passes'] = [{'id': 'pass-lake', 'tx': RW - 1, 'ty': 47, 'facing': 'right', 'to': {'region': 'lake', 'tx': 1, 'ty': 47}}] + S.extra.get('passes', [])
 L.extra['passes'] = [{'id': 'pass-desert', 'tx': 0, 'ty': 47, 'facing': 'left', 'to': {'region': 'desert', 'tx': RW - 2, 'ty': 47}}]
 
+# ---------------- v1.0: the new enemies (docs/enemy/ENEMY_BOSS_DESIGN.md 2.3, 2.4) ----------------
+# Added after everything else and at the end of each region's list, so nothing placed before moves.
+# 澱だまり (slime): by the forest's bog pools, and in the dark first floor of 白嶺の坑道.
+for (x, y) in [(24, 36), (60, 69), (38, 83), (74, 28)]:
+    tx, ty = F.near_free(x, y)
+    F.features['enemies'].append({'kind': 'slime', 'tx': tx, 'ty': ty})
+for (X, y) in [(101, MINE[0] + 10), (108, MINE[0] + 9)]:
+    assert M.eg[y][X - 96] == 'u' and not any(o.get('tx') == X and o.get('ty') == y for lst in M.features.values() for o in lst if isinstance(o, dict)), ('mine slime', X, y)
+    M.features['enemies'].append({'kind': 'slime', 'tx': X, 'ty': y})
+# 遺跡の番兵 (sentinel): by the ruin pillar of 暗がりの試練 and under the 大岩 in the desert, and on the
+# second floor of the mine (where the crystal's sparks can reach it on the metal floor).
+for (x, y) in [(34, 62), (62, 36)]:
+    tx, ty = S.near_free(x, y)
+    S.features['enemies'].append({'kind': 'sentinel', 'tx': tx, 'ty': ty})
+X, y = 103, MINE[1] + 6
+assert M.eg[y][X - 96] == 'u', ('mine sentinel', X, y)
+M.features['enemies'].append({'kind': 'sentinel', 'tx': X, 'ty': y})
+
 regions = [P.out(), S.out(), M.out(), F.out(), L.out()]
 for r in regions:
     assert len(r['ground']) == RH and all(len(row) == RW + EW for row in r['ground'])

@@ -65,8 +65,10 @@ export function hitEnemy(state, e, hit) {
   if (e.final) return hitFinalBoss(state, e, hit); // v1.0: only a staggered source can be hurt
   if (e.state === 'dead' || e.lastHitId === hit.id) return false;
   e.lastHitId = hit.id;
-  // P10.4: a core that burns takes double damage from fire.
-  const damage = e.weak && hit.element === e.weak ? hit.damage * 2 : hit.damage;
+  // P10.4: a core that burns takes double damage from fire. v1.0: the sentinel takes double from
+  // electricity, and swords glance off its stone (armor: the fraction of a melee hit that lands).
+  const weakHit = !!e.weak && hit.element === e.weak;
+  const damage = (weakHit ? hit.damage * 2 : hit.damage) * (hit.kind === 'melee' && e.armor ? e.armor : 1);
   e.hp = Math.max(0, e.hp - damage);
   const d = direction(e.x - hit.from.x, e.y - hit.from.y, { x: 0, y: 1 });
   const k = hit.knock ?? 1;
@@ -78,8 +80,9 @@ export function hitEnemy(state, e, hit) {
     e.state = 'dead';
     e.t = 0;
     state.events.push({ type: 'enemyDown', tick: state.tick, x: e.x, y: e.y });
-  } else if (!e.boss) {
-    // Hits interrupt the enemy (including a wind-up): a short stagger. (Bosses do not flinch.)
+  } else if (!e.boss && (!e.heavy || weakHit)) {
+    // Hits interrupt the enemy (including a wind-up): a short stagger. (Bosses do not flinch; a heavy
+    // enemy only from its weakness.)
     e.state = 'stun';
     e.t = 0;
     e.stunMs = 250;

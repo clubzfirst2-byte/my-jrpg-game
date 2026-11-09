@@ -130,7 +130,7 @@ export function discharge(state, crystal) {
     if (e.state === 'dead') continue;
     const ei = tileIndexAt(state, e.x, e.y);
     if (set.has(ei) && touchesSurface(state, e, ei)) {
-      hitEnemy(state, e, { owner: 'player', id: `shock${state.tick}`, damage: ENV_COMBAT.shockEnemyDamage, from: { x: e.x, y: e.y - 1 }, kind: 'projectile', knock: 0 });
+      hitEnemy(state, e, { owner: 'player', id: `shock${state.tick}`, damage: ENV_COMBAT.shockEnemyDamage, from: { x: e.x, y: e.y - 1 }, kind: 'projectile', knock: 0, element: 'shock' });
       if (e.state === 'stun') e.stunMs = 1200;
     }
   }

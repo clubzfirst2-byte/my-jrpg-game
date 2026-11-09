@@ -395,6 +395,20 @@
         "count": 3,
         "chance": 1
       }
+    ],
+    "slime": [
+      {
+        "item": "murk_crystal",
+        "count": 1,
+        "chance": 0.5
+      }
+    ],
+    "sentinel": [
+      {
+        "item": "murk_crystal",
+        "count": 2,
+        "chance": 1
+      }
     ]
   },
   "start": {

@@ -43,7 +43,7 @@ const SIGHT_PX = 200;
 /** Seconds between collapsing and getting back up at the spawn point. */
 export const DEATH_DELAY_MS = 2000;
 /** Enemies that died stay (fading) this long before they are removed from play. */
-const ENEMY_CORPSE_MS = 600;
+export const ENEMY_CORPSE_MS = 600;
 
 /**
  * @typedef {object} GameState

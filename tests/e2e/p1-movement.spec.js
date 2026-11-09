@@ -151,8 +151,7 @@ test('pauses when the app goes to the background and resumes on tap', async ({ p
   });
   await page.locator('#resume-button').click();
   await expect(page.locator('#pause-overlay')).toBeHidden();
-  await page.waitForTimeout(300);
-  expect(await tick(page)).toBeGreaterThan(t0);
+  await expect.poll(() => tick(page), { timeout: 5000 }).toBeGreaterThan(t0); // (a busy machine can lag)
 });
 
 test('pause button pauses the game', async ({ page }) => {
