@@ -48,8 +48,41 @@ describe('region bundles (P8, P9)', async () => {
       const entries = make();
       for (const e of entries) for (const r of e.rows) expect(r.length, `${name} ${e.key}`).toBe(e.rows[0].length);
       for (const e of entries) for (const r of e.rows) for (const c of r) expect(c === '.' || c in PALETTE, `${name} ${e.key} "${c}"`).toBe(true);
-      expect(atlasSizeFor(entries)).toBeLessThanOrEqual(512);
+      expect(atlasSizeFor(entries).width).toBeLessThanOrEqual(512);
     }
+  });
+});
+
+describe('atlasSizeFor: power-of-two width and height (perf v1)', async () => {
+  const { atlasSizeFor } = await import('../../src/view/assets/placeholderPack.js');
+  /** @param {number} w @param {number} h */
+  const img = (w, h) => ({ rows: ['.'], image: { width: w, height: h } });
+
+  it('a wide, short set gets a wide, short atlas (2048×1024, not 2048×2048)', () => {
+    // 676 frames of 48×56 in a 2048 wide atlas: 41 a row, 17 rows of 57 px = 968 px used.
+    expect(atlasSizeFor(Array.from({ length: 676 }, () => img(48, 56)))).toEqual({ width: 2048, height: 1024 });
+  });
+
+  it('the width is the same as the square choice, so the layout is unchanged', () => {
+    // 21 frames of 48×56 do not fit 256×256 (5 a row, 5 rows = 284 px), so the width is 512;
+    // at 512 they take 3 rows (170 px), so the height is 256.
+    expect(atlasSizeFor(Array.from({ length: 21 }, () => img(48, 56)))).toEqual({ width: 512, height: 256 });
+  });
+
+  it('the height is never under 64 nor over the width', () => {
+    expect(atlasSizeFor([img(10, 10)])).toEqual({ width: 64, height: 64 });
+    expect(atlasSizeFor([])).toEqual({ width: 64, height: 64 });
+    expect(atlasSizeFor([img(100, 1000)])).toEqual({ width: 1024, height: 1024 });
+  });
+
+  it('a set filling exactly a power of two keeps it; one pixel more doubles it', () => {
+    expect(atlasSizeFor([img(1024, 512)])).toEqual({ width: 1024, height: 512 });
+    expect(atlasSizeFor([img(1024, 513)])).toEqual({ width: 1024, height: 1024 });
+  });
+
+  it('the 2048 limit stays', () => {
+    expect(() => atlasSizeFor([img(2049, 10)])).toThrow('Too many sprites for one atlas');
+    expect(() => atlasSizeFor(Array.from({ length: 3 }, () => img(2048, 700)))).toThrow('Too many sprites for one atlas');
   });
 });
 

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { packGroup, releaseGroups } from './tools/release-art-pack.mjs';
+import { precacheFiles, onDemandReleaseGroup, releaseGroupOf } from './tools/precache.mjs';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
@@ -18,10 +19,12 @@ function serviceWorker() {
     name: 'service-worker',
     apply: 'build',
     generateBundle(_options, bundle) {
-      const files = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png', ...Object.keys(bundle).filter((f) => !f.endsWith('.map'))];
+      // perf v1: files normal play never loads (prototype art, review / unused release art) are
+      // left out; they still load from the network on demand (tools/precache.mjs).
+      const files = precacheFiles(/** @type {any} */ (bundle));
       const source = readFileSync(new URL('./src/sw/sw-template.js', import.meta.url), 'utf8')
         .replace('__SW_VERSION__', JSON.stringify(version))
-        .replace('__SW_FILES__', JSON.stringify([...new Set(files)]));
+        .replace('__SW_FILES__', JSON.stringify(files));
       this.emitFile({ type: 'asset', fileName: 'sw.js', source });
     },
   };
@@ -57,6 +60,24 @@ function releaseArt() {
         return `  ${JSON.stringify(group)}: { sheet: import.meta.ROLLUP_FILE_URL_${sheet}, table: import.meta.ROLLUP_FILE_URL_${frames} },`;
       });
       return `export default {\n${groups.join('\n')}\n};\n`;
+    },
+    // perf v1: the page starts fetching the sheets and frame tables of normal play (hero, npc,
+    // enemy) as soon as the HTML arrives, alongside the game's JS, instead of after it has run. The
+    // requests match the game's own (an <img> without crossorigin; fetch() same-origin), so the
+    // browser reuses them.
+    transformIndexHtml: {
+      order: 'post',
+      handler(_html, ctx) {
+        if (!ctx.bundle) return undefined;
+        return Object.values(ctx.bundle).flatMap((out) => {
+          if (out.type !== 'asset') return [];
+          const group = (out.names ?? []).map(releaseGroupOf).find((g) => g !== null);
+          if (!group || onDemandReleaseGroup(group)) return [];
+          const href = `./${out.fileName}`;
+          const attrs = out.fileName.endsWith('.png') ? { rel: 'preload', as: 'image', href } : { rel: 'preload', as: 'fetch', type: 'application/json', crossorigin: 'anonymous', href };
+          return [{ tag: 'link', attrs, injectTo: /** @type {const} */ ('head') }];
+        });
+      },
     },
   };
 }
