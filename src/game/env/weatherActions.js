@@ -112,7 +112,7 @@ export function strike(state, i) {
   }
   for (const e of state.enemies) {
     if (e.state !== 'dead' && near(e)) {
-      hitEnemy(state, e, { owner: 'player', id: `bolt${state.tick}`, damage: STORM.enemyDamage, from: { x: cx, y: cy }, kind: 'projectile', knock: 0.6 });
+      hitEnemy(state, e, { owner: 'player', id: `bolt${state.tick}`, damage: STORM.enemyDamage, from: { x: cx, y: cy }, kind: 'projectile', knock: 0.6, element: 'shock' });
     }
   }
 }

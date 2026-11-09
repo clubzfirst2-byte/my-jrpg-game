@@ -52,3 +52,33 @@ describe('region bundles (P8, P9)', async () => {
     }
   });
 });
+
+describe('v1.0 enemies: placeholders and release-art slots', async () => {
+  const { releaseEnemyEntries, releaseBossEntries, REGION_ENTRIES } = await import('../../src/view/assets/placeholderPack.js');
+
+  it('the slime and the sentinel have placeholder frames .0/.1 at half their release size, feet anchored', () => {
+    const byKey = new Map(placeholderEntries().map((e) => [e.key, e]));
+    for (const [kind, w, h] of [['slime', 16, 14], ['sentinel', 20, 28]]) {
+      for (const f of [0, 1]) {
+        const e = byKey.get(`enemy.${kind}.${f}`);
+        expect(e, `${kind}.${f}`).toBeTruthy();
+        expect([e.rows[0].length, e.rows.length]).toEqual([w, h]);
+        expect(e.anchor).toEqual([0.5, 1]);
+      }
+    }
+  });
+
+  it('per-action release frames get a slot only when such art is given: enemies in the base bundle, cores in their region', () => {
+    expect(releaseEnemyEntries(new Map())).toEqual([]);
+    const art = new Map(
+      ['enemy.beast.0', 'enemy.beast.windup.1', 'enemy.slime.idle.0', 'enemy.sentinel.attack.1', 'enemy.boss_root.windup_slam.0', 'enemy.boss_frost.idle2.1', 'enemy.boss_source.idle.0', 'enemy.shot.orb.0', 'hero.idle.down.0'].map((k) => [k, `${k}.png`]),
+    );
+    expect(releaseEnemyEntries(art).map((e) => e.key)).toEqual(['enemy.beast.windup.1', 'enemy.slime.idle.0', 'enemy.sentinel.attack.1']);
+    expect(releaseEnemyEntries(art).every((e) => e.anchor[0] === 0.5 && e.anchor[1] === 1)).toBe(true);
+    expect(releaseBossEntries('region:forest', art).map((e) => e.key)).toEqual(['enemy.boss_root.windup_slam.0']);
+    expect(releaseBossEntries('region:mountains', art).map((e) => e.key)).toEqual(['enemy.boss_frost.idle2.1']);
+    expect(releaseBossEntries('region:plains', art)).toEqual([]);
+    // The minimal set (enemy.<kind>.<0|1>) replaces the placeholder frames by name instead.
+    expect(REGION_ENTRIES['region:forest']().some((e) => e.key === 'enemy.boss_root.0')).toBe(true);
+  });
+});

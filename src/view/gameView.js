@@ -12,7 +12,7 @@ import { Container, Graphics, Sprite } from 'pixi.js';
 import { Ground, Shape, LEVEL_PX, inBounds, northEdgeHeight, southEdgeHeight } from '../game/world/tilemap.js';
 import { lerp } from '../game/core/math.js';
 import { Camera } from './camera.js';
-import { windupProgress } from '../game/entities/enemies.js';
+import { windupProgress, ENEMY_KINDS } from '../game/entities/enemies.js';
 import { BOSS_KINDS } from '../game/entities/bosses.js';
 import { COMBAT } from '../game/entities/playerCombat.js';
 import { areaAt } from '../game/world/features.js';
@@ -26,6 +26,8 @@ import { regionAt, outdoorAt } from '../game/world/world.js';
 import { seasonAt } from '../game/env/weather.js';
 import { SEASON_ENTRIES, seasonKeys } from './assets/placeholderPack.js';
 import { HeroAnimator } from './heroAnim.js';
+import { enemyFrameKey, warningFlashAlpha } from './enemyAnim.js';
+import { SilhouetteCache, placeFlash } from './flashOverlay.js';
 
 /** Chunk size in tiles (P8). */
 export const CHUNK = 32;
@@ -175,6 +177,12 @@ export class GameView {
     // --- P3 combat visuals ---
     /** @type {Map<number, Sprite>} */
     this.enemySprites = new Map();
+    /** v1.0: each enemy's frame (tests, ?debug) and its wind-up warning overlay (made on first use). */
+    /** @type {Map<number, string>} */
+    this.enemyKeys = new Map();
+    /** @type {Map<number, Sprite>} */
+    this.flashSprites = new Map();
+    this.silhouettes = new SilhouetteCache();
     /** @type {Sprite[]} */
     this.projectileSprites = [];
     this.slash = this.makeSprite('fx.slash');
@@ -500,9 +508,25 @@ export class GameView {
   dropBossSprites() {
     for (const [id, spr] of this.enemySprites) {
       if (id < 1000) continue;
-      spr.destroy();
-      this.enemySprites.delete(id);
+      this.dropEnemySprite(id, spr);
     }
+  }
+
+  /** @param {number} id @param {Sprite} spr */
+  dropEnemySprite(id, spr) {
+    spr.destroy();
+    this.enemySprites.delete(id);
+    this.enemyKeys.delete(id);
+    this.flashSprites.get(id)?.destroy();
+    this.flashSprites.delete(id);
+  }
+
+  /** What the enemies look like on screen (tests, ?debug): frame, size in game px, warning overlay. */
+  enemyDebug() {
+    return [...this.enemySprites].map(([id, s]) => {
+      const f = this.flashSprites.get(id);
+      return { id, key: this.enemyKeys.get(id) ?? '', w: s.texture.width, h: s.texture.height, tint: s.tint, flash: f && f.visible ? f.alpha : 0, flashColor: f ? f.tint : null };
+    });
   }
 
   /** Chunk / bundle numbers for the debug overlay and tests. */
@@ -831,17 +855,21 @@ export class GameView {
       const ex = lerp(e.prevX, e.x, alpha);
       const ey = lerp(e.prevY, e.y, alpha);
       const moving = Math.hypot(e.x - e.prevX, e.y - e.prevY) > 0.01;
-      spr.texture = this.assets.texture(`enemy.${e.kind}.${moving ? Math.floor(timeSec * 6) % 2 : 0}`);
+      // v1.0: the release art's frame for what it is doing (enemyAnim.js), else the placeholder.
+      const key = enemyFrameKey(e, timeSec, moving, (k) => this.assets.hasTexture(k));
+      spr.texture = this.assets.texture(key);
+      this.enemyKeys.set(e.id, key);
       spr.position.set(Math.round(ex), Math.round(ey - e.z));
       spr.zIndex = ey;
       spr.scale.x = e.faceX < -0.2 ? -1 : 1;
-      // Telegraph: the wind-up pulses red, faster as the attack nears. Stunned: pale blue.
-      if (e.state === 'windup') {
-        const k = windupProgress(e);
-        spr.tint = Math.sin(timeSec * (12 + 24 * k)) > 0 ? 0xff7070 : 0xffffff;
-      } else if (e.state === 'stun') spr.tint = 0xa8b8ff;
-      else spr.tint = 0xffffff;
+      // Stunned: pale blue (multiplied).
+      spr.tint = e.state === 'stun' ? 0xa8b8ff : 0xffffff;
       spr.alpha = e.state === 'dead' ? Math.max(0, 1 - e.t / 600) : 1;
+      // Telegraph (v1.0, ART_STYLE_GUIDE 5.4 B): the wind-up pulses under a 50% red overlay, faster
+      // as the attack nears — laid over the art, so it shows on dark bodies too (flashOverlay.js).
+      const flash = warningFlashAlpha(e, timeSec, windupProgress(e));
+      const overlay = placeFlash(spr, this.flashSprites.get(e.id) ?? null, flash, this.silhouettes, this.actors);
+      if (overlay) this.flashSprites.set(e.id, overlay);
     }
     // P10.4: a core winding up its slam shows the shockwave's reach on the ground.
     if (!this.bossRing) {
@@ -850,18 +878,17 @@ export class GameView {
     }
     this.bossRing.clear();
     for (const e of state.enemies) {
-      if (!e.boss || e.state !== 'windup' || e.pattern !== 'slam') continue;
+      // (v1.0: the sentinel's small slam shows its reach the same way.)
+      const slams = e.boss ? e.pattern === 'slam' : e.kind === 'sentinel';
+      if (e.state !== 'windup' || !slams) continue;
       const k = windupProgress(e);
-      const r = BOSS_KINDS[e.bossKind].slamRadius;
+      const r = e.boss ? BOSS_KINDS[e.bossKind].slamRadius : ENEMY_KINDS.sentinel.slamRadius;
       this.bossRing.circle(Math.round(e.x), Math.round(e.y - e.z), r).stroke({ width: 2, color: 0xd0202a, alpha: 0.6 + 0.4 * k });
       this.bossRing.circle(Math.round(e.x), Math.round(e.y - e.z), r * k).fill({ color: 0xd0202a, alpha: 0.18 });
       this.bossRing.zIndex = e.y - r;
     }
     for (const [id, spr] of this.enemySprites) {
-      if (!seen.has(id)) {
-        spr.destroy();
-        this.enemySprites.delete(id);
-      }
+      if (!seen.has(id)) this.dropEnemySprite(id, spr);
     }
 
     // Projectiles: keep one sprite per projectile.

@@ -12,7 +12,7 @@ import { createOverlay } from './debug/overlay.js';
 import { createRenderer, resizeRenderer } from './view/renderer.js';
 import { RESOLUTION_CANDIDATES, DEFAULT_TARGET_HEIGHT, nextCandidate } from './view/resolution.js';
 import { AssetManager } from './view/assets/assetManager.js';
-import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES, placeholderEntries, releaseHeroEntries, releaseNpcEntries } from './view/assets/placeholderPack.js';
+import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES, placeholderEntries, releaseHeroEntries, releaseNpcEntries, releaseEnemyEntries } from './view/assets/placeholderPack.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
@@ -134,6 +134,13 @@ async function boot() {
     for (const [k, v] of await releaseFrames('npc')) artOverrides.set(k, v);
     for (const m of revisions) for (const [k, v] of await releaseFrames(`npc-${m}`)) artOverrides.set(k, v);
   }
+  //   v1.0: the enemies' release art (src/art-release/enemy, when it is there) goes with the hero's
+  //   release art in normal play, or alone with ?enemy=release; ?enemy=placeholder leaves it out, and
+  //   so does ?enemy=proto / ?proto=all
+  const enemyParam = params.get('enemy');
+  if (hdParam !== '0' && enemyParam !== 'placeholder' && !protoGroups.includes('enemy') && (releaseHero || enemyParam === 'release')) {
+    for (const [k, v] of await releaseFrames('enemy')) artOverrides.set(k, v);
+  }
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
 
   /** @type {import('pixi.js').Application} */
@@ -154,7 +161,7 @@ async function boot() {
 
   // --- assets / logic / view ---
   const assets = new AssetManager();
-  assets.register('placeholder', () => buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides)], artOverrides));
+  assets.register('placeholder', () => buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides), ...releaseEnemyEntries(artOverrides)], artOverrides));
   // P8: each region's art is its own bundle, loaded by the view near the region.
   for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name, artOverrides));
   await assets.load('placeholder');
@@ -817,7 +824,7 @@ async function boot() {
     projectiles: () => state.projectiles.map((pr) => ({ kind: pr.kind, owner: pr.owner, x: pr.x, y: pr.y })),
     flurry: () => state.flurryMs,
     /** Test helper: place an enemy next to the player. */
-    spawnEnemy: (/** @type {'beast' | 'archer'} */ kind, /** @type {number} */ tx, /** @type {number} */ ty) => {
+    spawnEnemy: (/** @type {import('./game/entities/enemies.js').EnemyKind} */ kind, /** @type {number} */ tx, /** @type {number} */ ty) => {
       state.enemySpawns.push({ kind, tx, ty });
       spawnEnemies(state);
     },
@@ -826,6 +833,8 @@ async function boot() {
       state.player.hp = v;
     },
     deathMs: () => state.deathMs,
+    /** v1.0: each enemy on screen: frame drawn, size in game px, wind-up overlay strength and colour. */
+    enemyView: () => view.enemyDebug(),
     /** Recent game events (last 64): lets tests observe short actions without racing them. */
     events: () => state.events.map((e) => e.type),
     /** Test helper: set stamina (e.g. to check drowning without waiting). */

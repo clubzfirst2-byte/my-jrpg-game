@@ -32,7 +32,7 @@ const HEIGHT_DIGITS = '0123456789abcdefghijklmnopqrstuv';
  */
 
 /**
- * @typedef {{ kind: 'beast' | 'archer', tx: number, ty: number, seasons?: string[] }} EnemySpawn  P10.2: seasons it comes out in (default: all)
+ * @typedef {{ kind: import('../entities/enemies.js').EnemyKind, tx: number, ty: number, seasons?: string[] }} EnemySpawn  P10.2: seasons it comes out in (default: all)
  * @typedef {object} IslandDef  a map with features (P3.5); every feature list is optional
  * @property {string[]} ground
  * @property {string[]} [height]

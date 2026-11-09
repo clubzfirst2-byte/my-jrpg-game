@@ -8,6 +8,8 @@ import {
   archerFrames,
   arrowSprite,
   beastFrames,
+  slimeFrames,
+  sentinelFrames,
   bowSprite,
   orbSprite,
   shieldSprite,
@@ -116,7 +118,7 @@ export function placeholderEntries() {
   entries.push({ key: 'px', rows: ['XX', 'XX'], anchor: TOP_LEFT });
   entries.push({ key: 'obj.rock', rows: rockSprite(), anchor: FEET });
   const CENTER = /** @type {[number, number]} */ ([0.5, 0.5]);
-  for (const [key, rows] of Object.entries({ ...beastFrames(), ...archerFrames() })) entries.push({ key, rows, anchor: FEET });
+  for (const [key, rows] of Object.entries({ ...beastFrames(), ...archerFrames(), ...slimeFrames(), ...sentinelFrames() })) entries.push({ key, rows, anchor: FEET });
   entries.push({ key: 'fx.slash', rows: slashSprite(), anchor: CENTER });
   entries.push({ key: 'fx.arrow', rows: arrowSprite(), anchor: CENTER });
   entries.push({ key: 'fx.orb', rows: orbSprite(), anchor: CENTER });
@@ -246,15 +248,48 @@ export function seasonKeys(season) {
 for (const [name, make] of Object.entries(SEASON_ENTRIES)) REGION_ENTRIES[name] = make;
 
 // P10.4: each core of the murk is drawn by its region's bundle.
+/** Which core each region's bundle draws. */
+export const BOSS_REGIONS = /** @type {const} */ ({ 'region:forest': 'root', 'region:mountains': 'frost', 'region:desert': 'sand', 'region:lake': 'storm' });
 const bossFrames = (/** @type {'root' | 'frost' | 'sand' | 'storm'} */ kind) => [0, 1].map((f) => ({ key: `enemy.boss_${kind}.${f}`, rows: bossSprite(kind, f), anchor: FEET }));
-for (const [region, kind] of /** @type {const} */ ([['region:forest', 'root'], ['region:mountains', 'frost'], ['region:desert', 'sand'], ['region:lake', 'storm']])) {
+for (const [region, kind] of Object.entries(BOSS_REGIONS)) {
   const make = REGION_ENTRIES[region];
   REGION_ENTRIES[region] = () => [...make(), ...bossFrames(kind)];
 }
 
 /** @param {string} name @param {Map<string, string>} [overrides] */
 export function buildRegionPack(name, overrides) {
-  return buildPlaceholderPack(REGION_ENTRIES[name](), overrides);
+  return buildPlaceholderPack([...REGION_ENTRIES[name](), ...releaseBossEntries(name, overrides)], overrides);
+}
+
+/** Enemy release frames: enemy.<kind>.<action>.<n> (docs/art-release/enemy/frames.json on the art branch). */
+const ENEMY_ACTION_KEY = /^enemy\.([a-z_]+)\.([a-z0-9_]+)\.\d+$/;
+
+/**
+ * The enemies' per-action release frames (enemy.<kind>.<idle|move|windup|attack|hurt|defeat>.<n>):
+ * like the hero's, they get a slot in the base bundle only when such art is given; an enemy without
+ * them keeps its enemy.<kind>.<0|1> frames. Cores of the murk (boss_*) go in their region's bundle
+ * (releaseBossEntries); the final boss (no code yet) and the shots are not used yet.
+ * @param {Map<string, string>} [overrides]
+ */
+export function releaseEnemyEntries(overrides) {
+  if (!overrides?.size) return [];
+  return [...overrides.keys()]
+    .filter((k) => {
+      const m = ENEMY_ACTION_KEY.exec(k);
+      return !!m && !m[1].startsWith('boss_') && m[1] !== 'shot';
+    })
+    .map((key) => ({ key, rows: ['.'], anchor: FEET }));
+}
+
+/**
+ * A core's per-action release frames (enemy.boss_<kind>.<action>.<n>) go in its region's bundle, with
+ * its enemy.boss_<kind>.<0|1> frames, so they are loaded and released with the region.
+ * @param {string} region bundle name @param {Map<string, string>} [overrides]
+ */
+export function releaseBossEntries(region, overrides) {
+  const kind = /** @type {Record<string, string>} */ (BOSS_REGIONS)[region];
+  if (!kind || !overrides?.size) return [];
+  return [...overrides.keys()].filter((k) => ENEMY_ACTION_KEY.exec(k)?.[1] === `boss_${kind}`).map((key) => ({ key, rows: ['.'], anchor: FEET }));
 }
 
 /**
