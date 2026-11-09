@@ -29,8 +29,8 @@ export function requestedProtoGroups(params) {
   return PROTO_GROUPS.filter((g) => params.get(g) === 'proto');
 }
 
-// Release art under review (QUALITY_POLICY: made at release quality, adopted after approval):
-// src/art-release/<group>/*.png, loaded only with ?hero=release until it is approved.
+// Release art (QUALITY_POLICY: made at release quality, adopted after approval): src/art-release/<group>/*.png.
+// The hero's was adopted on 2026-11-08 and is loaded for normal play (src/main.js).
 const releaseFiles = /** @type {Record<string, () => Promise<string>>} */ (import.meta.glob('../../art-release/*/*.png', { query: '?url', import: 'default' }));
 
 /** @param {string} group @returns {Promise<Map<string, string>>} sprite name → PNG URL */

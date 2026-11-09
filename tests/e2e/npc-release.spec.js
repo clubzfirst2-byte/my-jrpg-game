@@ -116,21 +116,26 @@ test('the shop works as before with the release merchant behind the counter', as
   expect(errors).toEqual([]);
 });
 
-test('?npc=placeholder keeps the placeholder villagers; normal play (no release hero yet on main) is unchanged', async ({ page }) => {
+test('?npc=placeholder keeps the placeholder villagers; normal play shows the release villagers with the release hero', async ({ page }) => {
   await open(page, '&hero=release&npc=placeholder');
   expect((await api(page, 'art')).overrides).toBe(248);
   await api(page, 'standBy', 'elder');
   await waitTicks(page, 10);
   expect((await sprite(page, 'elder')).key).toMatch(/^npc\.1\.walk\./);
+  // normal play (no ?hero, since PR #43): the release hero and the release villagers together
   const page2 = await page.context().newPage();
   await open(page2, '');
-  expect(await api(page2, 'art')).toMatchObject({ density: 1, overrides: 0 });
+  expect(await api(page2, 'art')).toMatchObject({ density: 2, overrides: 248 + 120 });
   await api(page2, 'standBy', 'elder');
   await waitTicks(page2, 10);
-  expect((await sprite(page2, 'elder')).key).toMatch(/^npc\.1\.walk\./);
+  expect((await sprite(page2, 'elder')).key).toMatch(/^npc\.elder\./);
+  // ?hero=placeholder: the placeholder hero and the placeholder villagers (as before the release art)
+  const page4 = await page.context().newPage();
+  await open(page4, '&hero=placeholder');
+  expect(await api(page4, 'art')).toMatchObject({ density: 1, overrides: 0 });
   // the villagers' release art alone (without the hero's) can be asked for
   const page3 = await page.context().newPage();
-  await open(page3, '&npc=release');
+  await open(page3, '&hero=placeholder&npc=release');
   expect(await api(page3, 'art')).toMatchObject({ density: 2, overrides: 120 });
 });
 

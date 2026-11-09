@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
-// The hero's release art (src/art-release/hero, under review): drawn by action and frame with
-// ?hero=release; normal play keeps the current hero until it is approved.
+// The hero's release art (src/art-release/hero), drawn by action and frame. Adopted on 2026-11-08:
+// normal play uses it (?hero=release is the same); ?hero=placeholder shows the old hero.
 
 const api = (page, fn, ...args) => page.evaluate(([f, a]) => window.__debugApi[f](...a), [fn, args]);
 
@@ -116,8 +116,12 @@ test('release hero facing left: the sword, shield and bow frames drawn for that 
   expect(errors).toEqual([]);
 });
 
-test('normal play does not use the release hero', async ({ page }) => {
-  await open(page, '');
+test('normal play uses the adopted release hero; ?hero=placeholder still shows the old one', async ({ page }) => {
+  const errors = await open(page, '');
+  await drawn(page, /^hero\.idle\.down\.\d$/);
+  expect((await api(page, 'art')).hero).toMatchObject({ w: 16, h: 28 });
+  expect(errors).toEqual([]);
+  await open(page, '&hero=placeholder');
   await page.waitForTimeout(200);
   expect((await api(page, 'heroPose')).texture).toBeNull();
   expect((await api(page, 'art')).hero).toMatchObject({ w: 16, h: 16 });
