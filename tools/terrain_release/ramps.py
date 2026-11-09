@@ -35,7 +35,7 @@ NEW = {
     "tree.leaf": ["#0c2214", "#1a4426", "#2a6432", "#45883e", "#74b056"],  # obj.tree canopy
     "tree.bark": ["#1e1008", "#3e2414", "#5e3a22", "#7e5432", "#9c7048"],  # obj.tree trunk
     "lake.reed": ["#2a2410", "#54461e", "#76632e", "#957f44", "#b29c62"],  # dry ochre reeds (was yellow-green)
-    "flower.white": ["#4a4a5a", "#b4b4c4", "#eeeef4", "#ffffff", "#ffffff"],
+    "flower.white": ["#4a4a5a", "#b4b4c4", "#e2e2ea", "#f4f4f8", "#ffffff"],
     "flower.yellow": ["#6a4a10", "#c08a20", "#f0c040", "#f8dc80", "#fff4c0"],
     "flower.pink": ["#5a2038", "#b0507a", "#e080a8", "#f4b0cc", "#ffe0ee"],
     "shell": ["#6a4a3a", "#c8987e", "#f0cab0", "#fae2d0", "#fff6ee"],

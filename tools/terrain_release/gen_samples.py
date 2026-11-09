@@ -106,30 +106,40 @@ def meadow_tile(variant):
 # --- path (dirt) --------------------------------------------------------------------------------
 # Low-contrast on purpose: tile.path is ONE tile, so anything bright would show the 32 px grid.
 PEBBLE = [  # a 3 px stone, lit top-left, with its shadow on the dirt (guide 3.6: 1-2 pebbles of 2-3 px)
-    "32.",
-    "2d.",
+    "3d",
+    "2d",
 ]
 PEBBLE_2 = [
     "3.",
     "2d",
 ]
-DENT = [  # a shallow hollow: dark upper-left lip, light lower-right lip
-    ".11..",
-    "1...3",
-    ".333.",
+DENT = [  # a shallow hollow: a short dark upper lip, light lower lip
+    ".11.",
+    "..33",
 ]
 DUST = ["333"]
 
 
+# Hand-placed fine grain (2-3 px marks, spaced ~8-10 px apart on a jittered layout). Sparse single
+# features would show the 32 px repeat as a lattice; an even, low-contrast grain reads as one surface.
+PATH_GRAIN = [
+    (2, 2, "33"), (12, 4, "1."), (21, 1, "33"), (28, 6, "11"), (7, 10, "11"), (17, 9, "333"), (25, 13, "1"),
+    (1, 17, "333"), (10, 15, "1"), (20, 19, "11"), (29, 20, "33"), (6, 23, "33"), (14, 25, "11"),
+    (24, 27, "33"), (3, 29, "1"), (18, 30, "33"),
+]
+
+
 def path_tile():
     t = Tile(32, 32, SAMPLE, base=("dirt", 2))
-    for x, y, p in [(4, 5, DENT), (21, 10, DENT), (10, 23, DENT)]:
-        t.stamp(x, y, p, tones("dirt"))
-    for x, y in [(14, 3), (1, 15), (24, 21)]:
-        t.stamp(x, y, DUST, tones("dirt"))
-    peb = {"4": ("pebble", 4), "3": ("pebble", 3), "2": ("pebble", 2), "1": ("pebble", 1), "d": ("dirt", 1)}
-    t.stamp(15, 14, PEBBLE, peb)
-    t.stamp(28, 27, PEBBLE_2, peb)
+    for x, y, mark in PATH_GRAIN:
+        if mark.strip(".") == "1":  # a 1 px dent gets a lit lip below it (2 px cluster)
+            t.put(x, y, "dirt", 1)
+            t.put(x, y + 1, "dirt", 3)
+        else:
+            t.stamp(x, y, [mark], tones("dirt"))
+    # two small stones in dirt colours (guide 3.6: 1-2 pebbles of 2-3 px), lit top-left
+    for x, y in [(15, 13), (27, 24)]:
+        t.stamp(x, y, ["43", "21"], tones("dirt"))
     return t
 
 
