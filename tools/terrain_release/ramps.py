@@ -76,3 +76,26 @@ REGIONS = {
     "家・木 house / tree": [("壁の上 wall.stone", NEW["wall.stone"], "new"), ("葉 tree.leaf", NEW["tree.leaf"], "new"),
                           ("幹 tree.bark", NEW["tree.bark"], "new")],
 }
+
+
+# ---------------------------------------------------------------------------------------------------
+# RELEASE (art/terrain-release): every ramp the release terrain uses, by material name.
+# GUIDE / GUIDE_OTHER = ART_STYLE_GUIDE 2.1 / 2.5 / 3.7 / 6.2 values as they are; NEW / NEW_RELEASE =
+# added by the terrain work (registered in docs/art-release/terrain/PRODUCTION.md for the guide 2.5).
+# ---------------------------------------------------------------------------------------------------
+GUIDE_OTHER = {
+    "wood": ["#1e1008", "#4a2c16", "#6e4424", "#906038", "#b07e50"],  # guide 2.1
+    "iron": ["#14161c", "#40464f", "#6c7480", "#9aa2ae", "#d4dae2"],  # guide 2.1 (guard / smith iron)
+    "room.plaster": ["#3a3028", "#7a6a58", "#a8967e", "#c4b49c", "#e0d4c0"],  # guide 2.5
+    "cave.rock": ["#0c0c12", "#1c1c26", "#2c2c3a", "#403e52", "#585670"],  # guide 2.5
+    "autumn.grass": ["#2e2010", "#5e4420", "#8a6630", "#a88440", "#c4a058"],  # guide 3.7 (autumn grass)
+    "fire": ["#5a1a0a", "#c0461c", "#f08a3a", "#ffd060", "#fff4c8"],  # guide 6.2 (fallen leaves use 0-2, as 3.7)
+}
+
+NEW_RELEASE = {
+    "autumn.foliage": ["#3a1a08", "#7a3814", "#b05a1e", "#d88a30", "#f2b850"],  # autumn.obj.tree canopy
+    "cactus": ["#0e2420", "#1e4a3a", "#2e6a4e", "#4a8a62", "#78ae84"],  # obj.cactus (blue-green, hue ~150)
+}
+
+RELEASE = {**GUIDE, **NEW, **GUIDE_OTHER, **NEW_RELEASE}
+RELEASE_NEW = set(NEW) | set(NEW_RELEASE)
