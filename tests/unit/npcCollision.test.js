@@ -4,7 +4,7 @@ import { WORLD } from '../../src/game/world/world.js';
 import { STEP_SEC } from '../../src/game/core/fixedStep.js';
 import { tileFeet } from '../../src/game/world/features.js';
 import { isSolidTile, terrainHeightAt, Ground } from '../../src/game/world/tilemap.js';
-import { createNpcs, stepNpcs, npcInReach, npcOverlap, keepClearTiles, onKeepClear, NPC, NPC_BODY } from '../../src/game/npc/npcs.js';
+import { createNpcs, stepNpcs, npcInReach, npcOverlap, keepClearTiles, onKeepClear, blockPlayerByNpcs, playerFrom, NPC, NPC_BODY } from '../../src/game/npc/npcs.js';
 
 // v1.0 final (QA C-2): villagers have a small solid body; none can block a doorway or a narrow way.
 
@@ -202,13 +202,13 @@ describe('no villager can block a doorway or a narrow passage (soft-lock check)'
       stepNpcs(t, STEP_SEC);
       for (const n of t.npcs) {
         expect(onKeepClear(map, clear, n.x, n.y) && !n.stay, `${n.id} on a keep-clear tile at ${n.x},${n.y}`).toBe(false);
-        // (2 px grid is enough for the passage check)
-        spots.get(n.id).add(`${Math.round(n.x / 2) * 2},${Math.round(n.y / 2) * 2}`);
+        // (a 4 px grid of spots is enough for the passage check: the body is 10 × 6)
+        spots.get(n.id).add(`${Math.round(n.x / 4) * 4},${Math.round(n.y / 4) * 4}`);
       }
     }
     for (const n of t.npcs) {
       const list = [...spots.get(n.id)].map((k) => k.split(',').map(Number));
-      expect(list.every(([x, y]) => Math.hypot(x - n.homeX, y - n.homeY) <= NPC.wander + 3), n.id).toBe(true);
+      expect(list.every(([x, y]) => Math.hypot(x - n.homeX, y - n.homeY) <= NPC.wander + 4), n.id).toBe(true);
       // Every spot it stood on: with its body there, the free space around stays in one piece.
       for (const [x, y] of list) {
         const win = { x0: x - 56, x1: x + 56, y0: y - 56, y1: y + 56 };
@@ -217,4 +217,41 @@ describe('no villager can block a doorway or a narrow passage (soft-lock check)'
       }
     }
   }, 120_000);
+});
+
+describe('review fixes (v1-final-a)', () => {
+  it('one who keeps their place (stay: the princess before the inn) is never pushed out of it: the player squeezes by instead', () => {
+    const s = world();
+    const def = WORLD.npcs.find((n) => n.id === 'princess_home');
+    const [princess] = createNpcs(s.map, [def]);
+    expect(princess.stay).toBe(true);
+    s.npcs = [princess];
+    s.npcDefs = [];
+    const home = { x: princess.x, y: princess.y };
+    const p = s.player;
+    Object.assign(p, { x: princess.x, y: princess.y + 14, z: princess.z, groundZ: princess.z });
+    let t = 0;
+    while (p.y > home.y - 20 && t < 60 * 5) {
+      stepGame(s, { ...none, moveY: -1 });
+      t++;
+      expect([princess.x, princess.y]).toEqual([home.x, home.y]);
+    }
+    expect(p.y).toBeLessThan(home.y - 20); // through
+    expect(t / 60).toBeLessThan(2.5);
+    for (let i = 0; i < 120; i++) stepGame(s, none);
+    expect([princess.x, princess.y]).toEqual([home.x, home.y]);
+    expect(princess.aside).toBe(null);
+  });
+
+  it('a move undone by a villager puts the height back with the position', () => {
+    const s = world();
+    const n = s.npcs.find((x) => x.id === 'elder');
+    const p = s.player;
+    Object.assign(p, { x: n.x, y: n.y + 13, z: n.z, groundZ: n.z, grounded: true, vz: 0 });
+    const from = playerFrom(p);
+    // As if the move had climbed a step on its way into the villager's body:
+    Object.assign(p, { y: n.y + 2, z: n.z + 8, groundZ: n.z + 8 });
+    blockPlayerByNpcs(s, from, true, STEP_SEC, 8);
+    expect([p.x, p.y, p.z, p.groundZ, p.grounded]).toEqual([from.x, from.y, from.z, from.groundZ, true]);
+  });
 });

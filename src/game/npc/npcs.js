@@ -19,7 +19,8 @@ import { conditionHolds, coresPurified } from './talk.js';
  *   into a keep-clear tile: a doorway (warp) and the tiles around it, or a 1-tile corridor. So none
  *   can stand in a doorway or a narrow passage.
  * - Last resort against any soft-lock: pushing into a villager for `yieldMs` makes it step aside
- *   (perpendicular to the push, if there is room); with no room it lets the player squeeze through.
+ *   (perpendicular to the push, if there is room); with no room, or if it keeps its place (`stay`),
+ *   it lets the player squeeze through.
  * - Only within `zReach` of the player's height (jumping clears it, a ledge above is no wall).
  * - Ghosts (the princess's 写し身 by the record stones) have no body: an apparition you can walk
  *   through reads right, and it stands by the respawn points, where a body could box the player in.
@@ -106,16 +107,30 @@ function npcSpotFree(state, x, y) {
 }
 
 /**
- * After the player's own move (from fromX, fromY): undoes the part of it that walked into a
- * villager's body, sliding along it where it can (one axis kept). `pushing`: movement input is held
- * (counts toward the villager stepping aside, NPC_BODY.yieldMs). Mutates the player and the villager.
- * @param {any} state @param {number} fromX @param {number} fromY @param {boolean} pushing @param {number} dt seconds
+ * The player's position and height before their move (for blockPlayerByNpcs).
+ * @typedef {{ x: number, y: number, z: number, groundZ: number, grounded: boolean, vz: number }} PlayerFrom
+ * @param {any} p @returns {PlayerFrom}
+ */
+export const playerFrom = (p) => ({ x: p.x, y: p.y, z: p.z, groundZ: p.groundZ, grounded: p.grounded, vz: p.vz });
+
+/**
+ * After the player's own move (from `from`): undoes the part of it that walked into a villager's
+ * body, sliding along it where it can (one axis kept). `pushing`: movement input is held (counts
+ * toward the villager stepping aside, NPC_BODY.yieldMs). Mutates the player and the villager.
+ * The height goes with the position: a move undone entirely puts z / groundZ / grounded back as
+ * they were; a slide (one axis kept) re-reads the ground under the new spot, so the player never
+ * stands for a frame at the height of a step they were stopped short of.
+ * @param {any} state @param {PlayerFrom} from @param {boolean} pushing @param {number} dt seconds
+ * @param {number} [stepHeight] how high a grounded player steps up (PLAYER_MOVE.stepHeight)
  * @returns {Npc | null} the villager that stopped the player, if any
  */
-export function blockPlayerByNpcs(state, fromX, fromY, pushing, dt) {
+export function blockPlayerByNpcs(state, from, pushing, dt, stepHeight = 8) {
   const p = state.player;
+  const fromX = from.x;
+  const fromY = from.y;
   /** @type {Npc | null} */
   let blocker = null;
+  let moved = false;
   // A villager that let the player through stays passable until they are apart.
   if (state.npcPassId) {
     const n = state.npcs.find((/** @type {Npc} */ x) => x.id === state.npcPassId);
@@ -127,6 +142,7 @@ export function blockPlayerByNpcs(state, fromX, fromY, pushing, dt) {
       const now = npcOverlap(p.x, p.y, p, n);
       if (now === 0 || now <= npcOverlap(fromX, fromY, p, n)) continue; // apart, or walking out
       blocker = n;
+      moved = true;
       if (npcOverlap(p.x, fromY, p, n) === 0) {
         p.y = fromY;
         p.vy = 0;
@@ -141,6 +157,22 @@ export function blockPlayerByNpcs(state, fromX, fromY, pushing, dt) {
       }
     }
   }
+  if (moved) {
+    if (p.x === fromX && p.y === fromY) {
+      p.z = from.z;
+      p.groundZ = from.groundZ;
+      p.grounded = from.grounded;
+      p.vz = from.vz;
+    } else if (from.grounded) {
+      const ground = groundHeightUnder(p, state.map);
+      p.groundZ = ground;
+      if (Math.abs(ground - from.z) <= stepHeight) {
+        p.z = ground;
+        p.grounded = true;
+        p.vz = from.vz;
+      }
+    }
+  }
   // Pushing into the same villager for a while: it steps aside (or, with no room, lets them by).
   const push = state.npcPush;
   if (blocker && pushing && !state.dialogue) {
@@ -148,7 +180,9 @@ export function blockPlayerByNpcs(state, fromX, fromY, pushing, dt) {
     state.npcPush = { id: blocker.id, ms };
     if (ms >= NPC_BODY.yieldMs && !blocker.aside) {
       state.npcPush = null;
-      if (!stepAside(state, blocker, fromX, fromY)) state.npcPassId = blocker.id;
+      // One who keeps their place (`stay`: the merchant, the princesses) never steps away from it
+      // (it would not come back): it lets the player squeeze by instead.
+      if (blocker.stay || !stepAside(state, blocker, fromX, fromY)) state.npcPassId = blocker.id;
     }
   } else if (!blocker) {
     state.npcPush = null;

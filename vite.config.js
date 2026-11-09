@@ -105,5 +105,9 @@ export default defineConfig({
   test: {
     include: ['tests/unit/**/*.test.js'],
     environment: 'node',
+    // Many unit tests step the whole world for seconds of game time (1-4 s each alone). With E2E
+    // and other suites running on the same machine they took past the 5 s default now and then:
+    // a flaky failure, not a wrong result. 15 s keeps a real hang visible.
+    testTimeout: 15_000,
   },
 });
