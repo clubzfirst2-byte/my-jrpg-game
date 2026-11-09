@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitTicks, ticksOf } from './ticks.js';
 
 // Height verification map (default). Pond: rows 5-10, columns 30-37; column 33 is water from
 // row 5 to row 10 with land at rows 4 and 11. The tower top (64px) spans columns 22-27, rows 4-7.
@@ -21,7 +22,7 @@ test('wades into the pond, swims across and walks out on the far shore', async (
   await teleport(page, 33, 11); // south shore
   await page.keyboard.down('ArrowUp');
   await expect.poll(async () => (await player(page)).swimming, { timeout: 4000, intervals: [30] }).toBe(true);
-  await page.waitForTimeout(300);
+  await waitTicks(page, ticksOf(300));
   await page.screenshot({ path: testInfo.outputPath('swimming.png') });
   const mid = await player(page);
   expect(mid.z).toBe(0);
@@ -41,7 +42,7 @@ test('running out of stamina in the water returns the player to the shore', asyn
   await teleport(page, 33, 11);
   await page.keyboard.down('ArrowUp');
   await expect.poll(async () => (await player(page)).swimming, { timeout: 4000, intervals: [30] }).toBe(true);
-  await page.waitForTimeout(400);
+  await waitTicks(page, ticksOf(400));
   await page.keyboard.up('ArrowUp');
   await page.evaluate(() => window.__debugApi.setStamina(0.2));
   await expect.poll(async () => (await player(page)).swimming, { timeout: 3000, intervals: [30] }).toBe(false);

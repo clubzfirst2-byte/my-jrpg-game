@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitTicks } from './ticks.js';
 
 async function open(page, query = '') {
   const errors = [];
@@ -30,8 +31,10 @@ test('renders the test field and the player', async ({ page }, testInfo) => {
 test('keyboard moves the player and Shift dashes', async ({ page }) => {
   await open(page);
   const start = await player(page);
+  // walk for 36 logic ticks (0.6 s of game time): counted in ticks, not wall time, so a slow
+  // renderer (the release hero draws at 2 pixels per game pixel) cannot shorten the walk
   await page.keyboard.down('ArrowRight');
-  await page.waitForTimeout(600);
+  await waitTicks(page, 36);
   await page.keyboard.up('ArrowRight');
   const walked = await player(page);
   expect(walked.x).toBeGreaterThan(start.x + 20);
@@ -161,7 +164,10 @@ test('pause button pauses the game', async ({ page }) => {
 });
 
 test('resolution candidates can be switched from the debug panel and are remembered', async ({ page }, testInfo) => {
-  await open(page, '?debug=1');
+  // The old hero (1 art pixel per game pixel). Since docs/perf/hd-view-size.md the release hero gives
+  // the same game scale per candidate too (it used to share one scale between neighbouring
+  // candidates); the placeholder hero is kept here only so the pinned widths stay the same.
+  await open(page, '?debug=1&hero=placeholder');
   const before = await page.evaluate(() => window.__debugApi.resolution());
   expect(before.target).toBe(216);
   await page.locator('#debug-resolution').click();

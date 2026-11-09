@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitTicks } from './ticks.js';
 
 async function open(page, query = '') {
   const errors = [];
@@ -46,7 +47,9 @@ test('camera follows smoothly: lags while moving, settles on the player when sto
 test('jumping does not bob the camera', async ({ page }) => {
   await open(page);
   await teleport(page, 14, 13);
-  await page.waitForTimeout(300);
+  // wait until the camera has finished following the teleport: it eases in over about half a second
+  // of game time, so wait 90 logic ticks (counted in ticks: a slow renderer must not cut it short)
+  await waitTicks(page, 90);
   const before = await camera(page);
   await page.keyboard.down('Space');
   let maxShift = 0;
@@ -79,14 +82,17 @@ test('zoom can be changed and keeps pixel-aligned rendering', async ({ page }, t
   await teleport(page, 14, 13);
   const c = await camera(page);
   const res = await page.evaluate(() => window.__debugApi.resolution());
-  expect(c.zoom).toBe(2);
-  expect(c.viewWidth).toBeCloseTo(res.width / 2, 6);
-  expect(Number.isInteger(c.origin.x * 2)).toBe(true);
+  // the camera zoom is the requested zoom × the art density (2 with the release hero: 2 art px per
+  // game px), so the world keeps its size on screen
+  const k = res.artDensity;
+  expect(c.zoom).toBe(2 * k);
+  expect(c.viewWidth).toBeCloseTo(res.width / (2 * k), 6);
+  expect(Number.isInteger(c.origin.x * 2 * k)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('zoom2.png') });
 
   await page.evaluate(() => window.__debugApi.setZoom(1));
   await page.waitForTimeout(100);
-  expect((await camera(page)).viewWidth).toBeCloseTo(res.width, 6);
+  expect((await camera(page)).viewWidth).toBeCloseTo(res.width, 6); // setZoom is the raw camera zoom
   expect(errors).toEqual([]);
 });
 

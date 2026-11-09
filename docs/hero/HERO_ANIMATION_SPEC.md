@@ -5,7 +5,7 @@
 ## 1. ファイル
 - 名前：`hero.<動作>.<向き>.<コマ>.png`（向き：down / up / right / left。left は right の左右反転）
 - 大きさ：1 コマ 32×56（絵 2 ドット＝ゲーム内 1 ドット）。剣・弓・盾・被弾・倒れるのコマだけ幅 48（体は中央のまま、剣先や弓が切れないよう左右に 8 ドットずつ余白）。高さはすべて 56、足元（下端中央）基準。当たり判定は絵と別（幅 10・高さ 6）
-- 置き場所：製品版候補は `src/art-release/hero/`（承認まで `?hero=release` のときだけ表示）。承認後に正式採用
+- 置き場所：`src/art-release/hero/`。**2026-11-08 に正式採用**し、通常プレイの主人公になった（`?hero=placeholder` で以前の仮の主人公、`?hero=test`・`?hero=proto` で確認用の主人公を表示できる）
 - 作成：`tools/hero_release/gen_hero.py`（骨格から描く）、確認画像：`tools/hero_release/previews.py` → `docs/hero/release/`
 
 ## 2. 動作とコマ数（すべて 4 方向）

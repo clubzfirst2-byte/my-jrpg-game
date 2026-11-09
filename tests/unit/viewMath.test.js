@@ -75,6 +75,23 @@ describe('Camera', () => {
     expect(Number.isInteger(o.y * 2)).toBe(true);
   });
 
+  it('snapStep 1 keeps the origin on whole game px (HD art with a non-integer canvas scale)', () => {
+    const c = cam({ zoom: 2 });
+    c.snapTo(500.37, 300.81);
+    // default: half game px (one canvas px at zoom 2)
+    expect(c.origin()).toEqual({ x: 450.5, y: 276 });
+    c.snapStep = 1;
+    const o = c.origin();
+    expect(Number.isInteger(o.x) && Number.isInteger(o.y)).toBe(true);
+    // slow scrolling: every step is exactly one game px (never half a px, so device steps stay equal)
+    const xs = [];
+    for (let i = 0; i <= 20; i++) {
+      c.snapTo(500 + i * 0.1, 300);
+      xs.push(c.origin().x);
+    }
+    for (let i = 1; i < xs.length; i++) expect([0, 1]).toContain(xs[i] - xs[i - 1]);
+  });
+
   it('returns whole pixels at zoom 1', () => {
     const c = cam();
     c.snapTo(500.4, 300.6);
@@ -109,21 +126,53 @@ describe('computeResolution', () => {
     const c = computeResolution(852, 393, 3, 270);
     expect(c.width).toBeGreaterThan(a.width);
   });
-  it('P11.5: with 2 art pixels per game pixel the canvas has twice the pixels, the game view stays near the target', () => {
+  it('P11.5: with 2 art pixels per game pixel the canvas has twice the pixels per game pixel', () => {
     for (const target of RESOLUTION_CANDIDATES) {
       const r = computeResolution(852, 393, 3, target, 2);
+      const flat = computeResolution(852, 393, 3, target);
       expect(Number.isInteger(r.scale)).toBe(true);
       expect(r.artDensity).toBe(2);
-      expect(r.height * r.scale).toBeGreaterThanOrEqual(393 * 3);
-      // Game pixels across the short side: within a quarter of the target (even device scales only).
-      expect(Math.abs(r.gameHeight - target) / target).toBeLessThan(0.25);
+      expect(r.width).toBe(flat.width * 2);
+      expect(r.height).toBe(flat.height * 2);
+      expect(r.canvasScale * 2).toBe(r.scale);
+      // The canvas covers the screen (canvas px × device px per canvas px).
+      expect(r.height * r.canvasScale).toBeGreaterThanOrEqual(393 * 3);
+      expect(r.cssCanvasWidth).toBe(flat.cssCanvasWidth);
+      expect(r.cssCanvasHeight).toBe(flat.cssCanvasHeight);
     }
-    // iPhone 15 Pro, target 216: 3 device px per canvas px, 6 per game px → 196 game px tall.
-    const r = computeResolution(852, 393, 3, 216, 2);
-    expect(r.scale).toBe(3);
-    expect(Math.round(r.gameHeight)).toBe(197);
-    // Without real art nothing changes.
-    expect(computeResolution(852, 393, 3, 216)).toMatchObject({ scale: 5, height: 236, artDensity: 1 });
+    // iPhone 15 Pro, target 216: 5 device px per game px (2.5 per canvas px) → 236 game px tall,
+    // the same as without real art (it was 197 before docs/perf/hd-view-size.md).
+    expect(computeResolution(852, 393, 3, 216, 2)).toMatchObject({ scale: 5, canvasScale: 2.5, width: 1024, height: 472, gameHeight: 236 });
+    expect(computeResolution(852, 393, 3, 216)).toMatchObject({ scale: 5, height: 236, artDensity: 1, gameHeight: 236 });
+  });
+  describe('HD art shows the same amount of world as before (docs/perf/hd-view-size.md)', () => {
+    // [name, CSS width, CSS height, DPR, {target: visible game height without HD art (pinned)}]
+    /** @type {[string, number, number, number, Record<number, number>][]} */
+    const PHONES = [
+      ['iPhone SE', 667, 375, 2, { 180: 188, 216: 250, 270: 250 }],
+      ['iPhone 13/14', 844, 390, 3, { 180: 168, 216: 234, 270: 293 }],
+      ['iPhone 15 Pro', 852, 393, 3, { 180: 169, 216: 236, 270: 295 }],
+      ['iPhone Pro Max', 932, 430, 3, { 180: 185, 216: 215, 270: 258 }],
+      // Playwright "iPhone 15 landscape" (the E2E viewport; the case that grew 206 → 257)
+      ['iPhone 15 (Safari bars)', 734, 343, 3, { 180: 172, 216: 206, 270: 258 }],
+    ];
+    for (const [name, w, h, dpr, heights] of PHONES) {
+      for (const target of RESOLUTION_CANDIDATES) {
+        it(`${name} ${w}×${h} @${dpr}x, target ${target}`, () => {
+          const flat = computeResolution(w, h, dpr, target);
+          const hd = computeResolution(w, h, dpr, target, 2);
+          // non-HD is unchanged
+          expect(flat.gameHeight).toBe(heights[target]);
+          // HD: exactly the same visible height as non-HD (the brief allowed ±16; it is exact)
+          expect(hd.gameHeight).toBe(flat.gameHeight);
+          // game pixels stay whole device-pixel squares, the canvas still covers the screen
+          expect(Number.isInteger(hd.scale)).toBe(true);
+          expect(hd.width * hd.canvasScale).toBeGreaterThanOrEqual(Math.round(w * dpr));
+          expect(hd.height * hd.canvasScale).toBeGreaterThanOrEqual(Math.round(h * dpr));
+          expect(hd.height * hd.canvasScale - Math.round(h * dpr)).toBeLessThan(hd.scale);
+        });
+      }
+    }
   });
   it('never scales below 1', () => {
     expect(computeResolution(100, 50, 1, 270).scale).toBe(1);
