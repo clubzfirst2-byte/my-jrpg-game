@@ -2,6 +2,7 @@
 // The shop (P9): buy what the shop sells with 星貨, or sell from the bag at half price.
 import { itemDef, baseId } from '../game/items/inventory.js';
 import { shopDef, buy, sell, sellPrice } from '../game/npc/talk.js';
+import { scrollCue } from './scrollCue.js';
 
 export class ShopMenu {
   /**
@@ -16,6 +17,7 @@ export class ShopMenu {
     this.el.id = 'shop-menu';
     this.el.hidden = true;
     root.append(this.el);
+    this.cue = scrollCue(this.el, () => this.el.querySelector('.inv-body'));
   }
 
   get isOpen() {
@@ -33,7 +35,13 @@ export class ShopMenu {
     this.hooks.onClose();
   }
 
+  /** Draws the menu, then updates its "more below" cue. */
   render() {
+    this.renderContent();
+    this.cue();
+  }
+
+  renderContent() {
     const s = this.hooks.getState();
     const shopId = s.shop;
     if (!shopId) return;

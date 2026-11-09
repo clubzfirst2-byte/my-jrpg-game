@@ -85,7 +85,12 @@ export class SettingsMenu {
     close.id = 'settings-close';
     close.textContent = '閉じる';
     close.addEventListener('click', () => this.close());
-    this.el.append(title, this.rows, this.note, close);
+    // v1.0 (iPhone): the menu is taller than a landscape phone; the footer with 閉じる sticks to the
+    // bottom of the scrolling panel, so it can always be reached without scrolling.
+    const foot = document.createElement('div');
+    foot.className = 'settings-foot';
+    foot.append(close);
+    this.el.append(title, this.rows, this.note, foot);
     root.append(this.el);
   }
 
