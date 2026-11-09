@@ -82,7 +82,7 @@ export function createLightMap() {
  * and its one flash in the opening. Drawn as obj.star_ring.on (gameView) and lit at night (below).
  * @param {any} state
  */
-export const starRingOpen = (state) => (!!state.progress.flags.source_open && !state.progress.flags.ending_seen) || !!openingView(state)?.flash;
+export const starRingOpen = (state) => (!!state.progress?.flags.source_open && !state.progress.flags.ending_seen) || !!openingView(state)?.flash;
 
 /**
  * The shock crystal's night light: the placeholder's cyan, or with the release art (a pale-yellow
@@ -251,7 +251,6 @@ export class WeatherView {
     const map = state.map;
     const ts = map.tileSize;
     let n = 0;
-    const ringOpen = starRingOpen(state);
     const add = (/** @type {number} */ wx, /** @type {number} */ wy, /** @type {number} */ radius, /** @type {number} */ color) => {
       const x = (wx - o.x) * zoom;
       const y = (wy - o.y) * zoom;
@@ -288,7 +287,7 @@ export class WeatherView {
       else if (ob.type === 'pillar' || ob.type === 'altar') add(x, y - 10, 30, 0x7fe8ff);
       else if (ob.type === 'crystal') add(x, y - 8, 26, this.crystalLight);
       else if (ob.type === 'receiver' && ob.on) add(x, y - 8, 22, 0x60d8ff);
-      else if (ob.type === 'star_ring' && ringOpen) add(x, y - 12, STAR_RING_LIGHT.radius, STAR_RING_LIGHT.color);
+      else if (ob.type === 'star_ring' && starRingOpen(state)) add(x, y - 12, STAR_RING_LIGHT.radius, STAR_RING_LIGHT.color);
     }
     if (state.orb) add(state.orb.x, state.orb.y - state.orb.z, 80, 0xfff0c8); // 灯火
     if (env.sparks) for (const i of env.sparks.cells) add((i % map.width) * ts + ts / 2, ((i / map.width) | 0) * ts + ts / 2, 20, 0xfff27a);

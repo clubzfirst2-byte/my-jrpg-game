@@ -108,6 +108,7 @@ describe('the beach ring at night', () => {
     expect(starRingOpen(st({}))).toBe(false);
     expect(starRingOpen(st({ source_open: true }))).toBe(true);
     expect(starRingOpen(st({ source_open: true, ending_seen: true }))).toBe(false);
+    expect(starRingOpen({})).toBe(false); // a minimal state (no progress yet) is not an error
     expect(STAR_RING_LIGHT).toEqual({ radius: 40, color: 0x7fe8ff });
   });
 });
