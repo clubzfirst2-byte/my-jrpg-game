@@ -86,6 +86,8 @@ export class WeatherView {
     this.app = app;
     this.renderer = app.renderer;
     this.makeSprite = makeSprite;
+    /** The ambient light indoors (caves, mines, trial rooms); v1.0: set by the view (terrainArt.indoorLight). */
+    this.indoorAmbient = { r: 0.55, g: 0.55, b: 0.65 };
     // Light map.
     this.lightTex = lightTexture();
     this.lightScene = new Container();
@@ -173,7 +175,7 @@ export class WeatherView {
     const t0 = performance.now();
     // Indoors is dim; a dark trial room is nearly black until something gives light (P7).
     // P10.1: a lived-in room is warm and lamp-lit at any hour.
-    const amb = area?.dark ? { r: 0.1, g: 0.1, b: 0.16 } : area?.home ? { r: 0.94, g: 0.86, b: 0.72 } : indoor ? { r: 0.55, g: 0.55, b: 0.65 } : ambientAt(env.now, w.kind);
+    const amb = area?.dark ? { r: 0.1, g: 0.1, b: 0.16 } : area?.home ? { r: 0.94, g: 0.86, b: 0.72 } : indoor ? this.indoorAmbient : ambientAt(env.now, w.kind);
     const white = amb.r >= 0.999 && amb.g >= 0.999 && amb.b >= 0.999;
     this.lightOn = this.enabled && !white;
     this.overlay.visible = this.lightOn;

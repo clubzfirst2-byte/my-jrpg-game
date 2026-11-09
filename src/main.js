@@ -22,6 +22,7 @@ import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
 import { createNpcs } from './game/npc/npcs.js';
 import { prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
+import { TERRAIN_GROUP, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
 import { InputManager } from './platform/inputManager.js';
@@ -150,6 +151,7 @@ async function boot() {
   //   so does ?enemy=proto / ?proto=all
   const enemyParam = params.get('enemy');
   if (hdParam !== '0' && enemyParam !== 'placeholder' && !protoGroups.includes('enemy') && (releaseHero || enemyParam === 'release')) releaseGroups.push('enemy');
+  if (wantsTerrainArt(params, releaseHero)) releaseGroups.push(TERRAIN_GROUP); // v1.0: the terrain release art (?terrain=placeholder|release, terrainArt.js)
   for (const frames of await Promise.all(releaseGroups.map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
 
@@ -1055,6 +1057,7 @@ async function boot() {
   };
   Object.assign(api, finalBossDebugApi(state, api.teleport)); // v1.0: the source (flags, arena, seats)
   Object.assign(api, storyDebugApi(state)); // v1.0: the opening and the ending
+  Object.assign(api, terrainDebugApi(assets)); // v1.0: which terrain is drawn from the release art
   /** @type {any} */ (window).__debugApi = api;
   // ?tour=60 starts the auto tour right away (with ?map=..., which skips the title).
   if (params.get('tour') && !withTitle) startTour(Number.parseFloat(params.get('tour') ?? '') || 60);
