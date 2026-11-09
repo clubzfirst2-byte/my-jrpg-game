@@ -12,6 +12,7 @@ import { countOf } from '../../src/game/items/inventory.js';
 import { STEP_SEC } from '../../src/game/core/fixedStep.js';
 import { sourceEntries, placeholderEntries, releaseEnemyEntries, atlasSizeFor, SOURCE_BUNDLE, SOURCE_REGIONS, REGION_ENTRIES } from '../../src/view/assets/placeholderPack.js';
 import { readdirSync, readFileSync } from 'node:fs';
+import { startDialogue, dialogueView, advance } from '../../src/game/npc/talk.js';
 import { SOURCE_ACTIONS } from '../../src/view/assets/sourceArt.js';
 import { sourceFrameKey } from '../../src/view/sourceView.js';
 
@@ -126,6 +127,24 @@ describe('C5: the small 星環 on the beach', () => {
     run(s, { ...none, moveY: -1 }, 30);
     return areaAt(s, s.player.x, s.player.y)?.id ?? null;
   };
+  it('the princess opens it: after the four cores, her all_cores talk sets source_open and the ring leads in', () => {
+    const s = createGameState(WORLD);
+    s.enemies = [];
+    s.enemySpawns = [];
+    s.progress.flags.princess_met = true;
+    s.progress.quests.star_ring_call = 'active';
+    s.progress.bosses.push('core_forest', 'core_mountains', 'core_desert', 'core_lake');
+    expect(warpOpen(s, ring)).toBe(false);
+    startDialogue(s, 'princess', 'princess_beach');
+    expect(s.dialogue?.node).toBe('all_cores');
+    for (let k = 0; k < 20 && s.dialogue; k++) advance(s, dialogueView(s)?.choices?.length ? 0 : undefined);
+    expect(s.progress.flags.source_open).toBe(true);
+    expect(warpOpen(s, ring)).toBe(true);
+    place(s, { tx: ring.tx, ty: ring.ty + 1 });
+    run(s, { ...none, moveY: -1 }, 30);
+    expect(areaAt(s, s.player.x, s.player.y)?.id).toBe('source_gate');
+  });
+
   it('is only a ring until source_open; then a gate; closed again once the source is purified', () => {
     expect(walkIn({})).toBe(null);
     expect(walkIn({ source_open: true })).toBe('source_gate');

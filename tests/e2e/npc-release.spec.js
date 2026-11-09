@@ -149,21 +149,23 @@ test('iPhone landscape: the three villagers and the hero together on screen', as
   expect(errors).toEqual([]);
 });
 
-test('batch 2: the woman and the smith (not in the village yet) stand, walk and turn like the others', async ({ page }, testInfo) => {
+test('batch 2: the woman and the smith (in the village since v1.0) stand, walk and turn like the others', async ({ page }, testInfo) => {
   const errors = await open(page);
-  const e = (await api(page, 'npcs')).find((n) => n.id === 'elder');
-  await api(page, 'addNpc', 'woman', e.tx + 3, e.ty + 2);
-  await api(page, 'addNpc', 'smith', e.tx + 5, e.ty + 2);
-  await api(page, 'teleport', e.tx + 4, e.ty + 4);
-  await waitTicks(page, 10);
+  const npcs = await api(page, 'npcs');
+  const w = npcs.find((n) => n.id === 'woman');
+  const m = npcs.find((n) => n.id === 'smith');
+  expect(w && m).toBeTruthy();
   for (const id of ['woman', 'smith']) {
+    await api(page, 'standBy', id);
+    await waitTicks(page, 10);
     const s = await sprite(page, id);
     expect(s.key, id).toMatch(new RegExp(`^npc\\.${id}\\.(idle|walk)\\.`));
     expect([s.w, s.h], id).toEqual([16, 28]);
+    expect(s.alpha, id).toBe(1);
   }
   await page.screenshot({ path: testInfo.outputPath('batch2.png') });
   // a few tiles off they stroll: walk frames in the direction they go
-  await api(page, 'teleport', e.tx + 4, e.ty + 9);
+  await api(page, 'teleport', m.tx, m.ty + 6);
   // (the sprite is drawn after the logic step, so wait for the drawn frame, not just the state)
   await expect.poll(async () => (await sprite(page, 'smith')).key.split('.')[2], { timeout: 20_000, intervals: [50] }).toBe('walk');
   const [s, st] = [await sprite(page, 'smith'), await npcState(page, 'smith')];

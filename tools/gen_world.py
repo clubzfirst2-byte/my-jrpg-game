@@ -639,6 +639,39 @@ for (x, y) in [(34, 62), (62, 36)]:
 X, y = 103, MINE[1] + 6
 assert M.eg[y][X - 96] == 'u', ('mine sentinel', X, y)
 M.features['enemies'].append({'kind': 'sentinel', 'tx': X, 'ty': y})
+# --- v1.0 (docs/story/V1_STORY_PROPOSAL.md C4): the new people. Placed last, on free tiles, so nothing
+# placed before them moves (saves name things by place; tests/unit/compat.test.js). ---
+# The princess's 写し身 (see-through) by the record stone of each region: there once she has been met
+# on the beach, until the source is purified / the ending is seen. Every princess is drawn from
+# npc.princess.* (art). Her talk range is short (18 px): the player comes back to life just south of
+# the stone, diagonally from her (about 23 px), and an attack there should swing, not talk.
+PRINCESS_REACH = 18
+PRINCESS_IF = [{'flag': 'princess_met'}, {'flag': 'source_purified', 'is': False}, {'flag': 'ending_seen', 'is': False}]
+def beside_stone(R):
+    """A free tile right beside the region's record stone, on its level (off the road when it can be)."""
+    cp = R.features['checkpoints'][0]
+    lvl = R.h[cp['ty']][cp['tx']]
+    spots = [(cp['tx'] + dx, cp['ty'] + dy) for (dx, dy) in ((1, 0), (-1, 0), (1, 1), (-1, 1), (0, 1), (1, -1), (-1, -1))]
+    for road_ok in (False, True):
+        for (x, y) in spots:
+            if R.free(x, y, lvl) and (road_ok or R.g[y][x] != '='): return x, y
+    raise AssertionError(('no tile beside the stone', R.id))
+for R in (P, S, M, F, L):
+    x, y = beside_stone(R)
+    R.features['npcs'].append({'id': f'princess_{R.id}', 'name': '星環の姫', 'dialogue': 'princess', 'look': 9, 'art': 'princess', 'tx': x, 'ty': y, 'stay': True, 'reach': PRINCESS_REACH, 'if': PRINCESS_IF, 'ghost': True})
+def village_spot(x, y):
+    assert P.free(x, y, 0) and P.g[y][x] == '.', ('village spot taken', x, y)
+    return {'tx': x, 'ty': y}
+# In 風見の村: the woman east of the cook's house, the smith west of the guard (a village anvil is for later,
+# C13), and after the ending the princess in front of the inn (beside its door; she stays there, off the doorstep).
+P.features['npcs'] += [
+    {'id': 'woman', 'name': '村の女性', 'dialogue': 'woman', 'look': 6, **village_spot(29, 14)},
+    {'id': 'smith', 'name': '鍛冶職人', 'dialogue': 'smith', 'look': 7, **village_spot(34, 18)},
+    {'id': 'princess_home', 'name': '星環の姫', 'dialogue': 'princess', 'look': 9, 'art': 'princess', **village_spot(20, 22), 'stay': True, 'if': [{'flag': 'ending_seen'}]},
+]
+# The traveller rests on the plains side of the pass to the forest.
+assert P.free(88, 51, 0) and P.g[51][88] == '.', 'traveller spot'
+P.features['npcs'].append({'id': 'traveller', 'name': '旅人', 'dialogue': 'traveller', 'look': 8, 'tx': 88, 'ty': 51})
 
 regions = [P.out(), S.out(), M.out(), F.out(), L.out()]
 for r in regions:
