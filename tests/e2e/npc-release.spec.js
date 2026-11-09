@@ -34,7 +34,8 @@ test('all five villagers (batch 1: elder, merchant, guard; batch 2: cook, child)
   page.on('console', (m) => {
     if (m.text().startsWith('art:')) warnings.push(m.text());
   });
-  const errors = await open(page);
+  // (&enemy=placeholder: the enemies' release art stays out, so the count is the hero's and the villagers')
+  const errors = await open(page, '&hero=release&enemy=placeholder');
   expect(await api(page, 'art')).toMatchObject({ density: 2, overrides: 248 + 280, hero: { w: 16, h: 28 } });
   for (const id of ['elder', 'guard', 'merchant', 'cook', 'child']) {
     await api(page, 'standBy', id);
@@ -112,14 +113,14 @@ test('the shop works as before with the release merchant behind the counter', as
 });
 
 test('?npc=placeholder keeps the placeholder villagers; normal play shows the release villagers with the release hero', async ({ page }) => {
-  await open(page, '&hero=release&npc=placeholder');
+  await open(page, '&hero=release&npc=placeholder&enemy=placeholder');
   expect((await api(page, 'art')).overrides).toBe(248);
   await api(page, 'standBy', 'elder');
   await waitTicks(page, 10);
   expect((await sprite(page, 'elder')).key).toMatch(/^npc\.1\.walk\./);
   // normal play (no ?hero, since PR #43): the release hero and the release villagers together
   const page2 = await page.context().newPage();
-  await open(page2, '');
+  await open(page2, '&enemy=placeholder');
   expect(await api(page2, 'art')).toMatchObject({ density: 2, overrides: 248 + 280 });
   await api(page2, 'standBy', 'elder');
   await waitTicks(page2, 10);
@@ -169,7 +170,7 @@ test('batch 2: the woman and the smith (not in the village yet) stand, walk and 
 });
 
 test('?npc=revision shows batch 1 with the review\'s fixes (a separate set); without it, the approved frames', async ({ page }) => {
-  await open(page, '&hero=release&npc=revision');
+  await open(page, '&hero=release&npc=revision&enemy=placeholder');
   expect((await api(page, 'art')).overrides).toBe(248 + 280);
   await api(page, 'standBy', 'guard');
   await waitTicks(page, 10);
@@ -186,7 +187,7 @@ test('?npc=revision shows batch 1 with the review\'s fixes (a separate set); wit
 });
 
 test('?npc=revision-b2 shows the batch 2 fixes (woman, child, smith); the cook and batch 1 as submitted', async ({ page }) => {
-  await open(page, '&hero=release&npc=revision-b2');
+  await open(page, '&hero=release&npc=revision-b2&enemy=placeholder');
   expect((await api(page, 'art')).overrides).toBe(248 + 280);
   await api(page, 'standBy', 'child');
   await waitTicks(page, 10);

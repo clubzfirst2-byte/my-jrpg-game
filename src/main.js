@@ -117,7 +117,8 @@ async function boot() {
   //   ?hero=release       still accepted (the same as no ?hero)
   const heroParam = params.get('hero');
   const releaseHero = hdParam !== '0' && (heroParam === null || heroParam === 'release') && !protoGroups.includes('hero');
-  if (releaseHero) for (const [k, v] of await releaseFrames('hero')) artOverrides.set(k, v);
+  /** Release art folders to load (all at once, below), in the order they override each other. @type {string[]} */
+  const releaseGroups = releaseHero ? ['hero'] : [];
   //   the villagers' release art (NPC batch 1: elder, merchant, guard; the others keep the
   //   placeholder) goes with the hero's release art, which it is drawn to match (2 pixels per game
   //   pixel): in normal play like the hero, or alone with ?npc=release / ?hd=1. ?npc=placeholder leaves
@@ -131,16 +132,14 @@ async function boot() {
   const revisions = ['revision', 'revision-b2'].filter((m) => npcModes.has(m));
   const releaseNpcs = releaseHero || npcModes.has('release') || revisions.length > 0 || hdParam === '1';
   if (releaseNpcs && hdParam !== '0' && !npcModes.has('placeholder') && !protoGroups.length) {
-    for (const [k, v] of await releaseFrames('npc')) artOverrides.set(k, v);
-    for (const m of revisions) for (const [k, v] of await releaseFrames(`npc-${m}`)) artOverrides.set(k, v);
+    releaseGroups.push('npc', ...revisions.map((m) => `npc-${m}`));
   }
   //   v1.0: the enemies' release art (src/art-release/enemy, when it is there) goes with the hero's
   //   release art in normal play, or alone with ?enemy=release; ?enemy=placeholder leaves it out, and
   //   so does ?enemy=proto / ?proto=all
   const enemyParam = params.get('enemy');
-  if (hdParam !== '0' && enemyParam !== 'placeholder' && !protoGroups.includes('enemy') && (releaseHero || enemyParam === 'release')) {
-    for (const [k, v] of await releaseFrames('enemy')) artOverrides.set(k, v);
-  }
+  if (hdParam !== '0' && enemyParam !== 'placeholder' && !protoGroups.includes('enemy') && (releaseHero || enemyParam === 'release')) releaseGroups.push('enemy');
+  for (const frames of await Promise.all(releaseGroups.map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
 
   /** @type {import('pixi.js').Application} */

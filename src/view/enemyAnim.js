@@ -15,6 +15,7 @@
 // laid OVER the art rather than multiplied into it, so it shows on dark bodies too.
 import { BOSS_PARRY_STUN_MS } from '../game/entities/bosses.js';
 import { ENEMY_KINDS } from '../game/entities/enemies.js';
+import { ENEMY_CORPSE_MS } from '../game/state.js';
 
 /** Frame timings (docs/art-release/enemy/PRODUCTION.md 2.3). */
 export const ENEMY_ANIM = Object.freeze({
@@ -22,7 +23,11 @@ export const ENEMY_ANIM = Object.freeze({
   moveMs: 140,
   attackMs: 120,
   hurtMs: 200,
-  defeatMs: 260,
+  /** a defeated enemy is removed ENEMY_CORPSE_MS after it falls: its defeat frames play over this
+   *  first part of that time (then the last frame stays and fades out) */
+  defeatPlayMs: ENEMY_CORPSE_MS * 0.6,
+  /** it starts to fade at this point */
+  fadeFromMs: ENEMY_CORPSE_MS * 0.6,
   /** the archer's shot pose lasts this long after the orb leaves */
   shotPoseMs: 240,
   /** placeholder: 2 frames at this rate while moving */
@@ -32,11 +37,23 @@ export const ENEMY_ANIM = Object.freeze({
 /** The wind-up warning: colour and strength of the overlay. */
 export const WARNING_FLASH = Object.freeze({ color: 0xff3a3a, alpha: 0.5 });
 
-/** How many frames an action has (0 when there is none). @param {string} base @param {(key: string) => boolean} has */
-export function frameCount(base, has) {
+/**
+ * How many frames an action has (0 when there is none). With `counts`, each answer is remembered
+ * (the caller clears it when the loaded art changes), so nothing is recounted every frame.
+ * @param {string} base @param {(key: string) => boolean} has @param {Map<string, number>} [counts]
+ */
+export function frameCount(base, has, counts) {
+  const known = counts?.get(base);
+  if (known !== undefined) return known;
   let n = 0;
   while (n < 16 && has(`${base}.${n}`)) n++;
+  counts?.set(base, n);
   return n;
+}
+
+/** How opaque a defeated enemy is, `ms` after it fell: solid while its defeat frames play, then fading out. @param {number} ms */
+export function defeatAlpha(ms) {
+  return Math.max(0, Math.min(1, 1 - (ms - ENEMY_ANIM.fadeFromMs) / (ENEMY_CORPSE_MS - ENEMY_ANIM.fadeFromMs)));
 }
 
 /**
@@ -63,15 +80,14 @@ export function enemyAction(e, moving) {
       if (e.boss && e.stunMs >= BOSS_PARRY_STUN_MS) return { action: 'stagger', ms: e.t, loop: true };
       return { action: 'hurt', ms: e.t, loop: false };
   }
-  const k = /** @type {any} */ (ENEMY_KINDS)[e.kind];
-  if (k?.attack === 'shoot' && k.cooldownMs - e.cooldownMs < ENEMY_ANIM.shotPoseMs && e.cooldownMs > 0) {
-    return { action: 'attack', ms: k.cooldownMs - e.cooldownMs, loop: false };
-  }
+  // The archer holds its shot pose for a moment after the orb leaves (by its own clock, so the pose
+  // ends even if it loses sight of the player at once).
+  if (!e.boss && e.sinceShotMs < ENEMY_ANIM.shotPoseMs) return { action: 'attack', ms: e.sinceShotMs, loop: false };
   if (moving) return { action: 'move', ms: -1, loop: true };
   return { action: e.boss && e.phase === 2 ? 'idle2' : 'idle', ms: -1, loop: true };
 }
 
-const PER_FRAME = /** @type {Record<string, number>} */ ({ defeat: ENEMY_ANIM.defeatMs, hurt: ENEMY_ANIM.hurtMs, stagger: ENEMY_ANIM.hurtMs });
+const PER_FRAME = /** @type {Record<string, number>} */ ({ hurt: ENEMY_ANIM.hurtMs, stagger: ENEMY_ANIM.hurtMs });
 
 /**
  * The sprite key for an enemy this frame.
@@ -79,17 +95,18 @@ const PER_FRAME = /** @type {Record<string, number>} */ ({ defeat: ENEMY_ANIM.de
  * @param {number} timeSec real time (looping animations)
  * @param {boolean} moving whether it moved this step
  * @param {(key: string) => boolean} has whether a texture is loaded
+ * @param {Map<string, number>} [counts] remembered frame counts (frameCount)
  * @returns {string}
  */
-export function enemyFrameKey(e, timeSec, moving, has) {
+export function enemyFrameKey(e, timeSec, moving, has, counts) {
   const base = `enemy.${e.kind}`;
-  if (has(`${base}.idle.0`)) {
+  if (frameCount(`${base}.idle`, has, counts) > 0) {
     const a = enemyAction(e, moving);
     let name = a.action;
-    let n = frameCount(`${base}.${name}`, has);
+    let n = frameCount(`${base}.${name}`, has, counts);
     if (n === 0 && name === 'idle2') {
       name = 'idle';
-      n = frameCount(`${base}.idle`, has);
+      n = frameCount(`${base}.idle`, has, counts);
     }
     if (n > 0) {
       if ('progress' in a) return `${base}.${name}.${Math.min(n - 1, Math.floor(a.progress * n))}`;
@@ -98,7 +115,8 @@ export function enemyFrameKey(e, timeSec, moving, has) {
         const per = name === 'move' ? ENEMY_ANIM.moveMs : ENEMY_ANIM.idleMs;
         return `${base}.${name}.${Math.floor((timeSec * 1000) / per + (e.id % 7) * 0.37) % n}`;
       }
-      const per = PER_FRAME[name] ?? ENEMY_ANIM.attackMs;
+      // (the defeat frames are spread over the time before the body is removed)
+      const per = name === 'defeat' ? ENEMY_ANIM.defeatPlayMs / n : (PER_FRAME[name] ?? ENEMY_ANIM.attackMs);
       const f = Math.floor(a.ms / per);
       return `${base}.${name}.${a.loop ? f % n : Math.min(n - 1, f)}`;
     }

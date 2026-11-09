@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { enemyFrameKey, enemyAction, frameCount, warningFlashAlpha, WARNING_FLASH, ENEMY_ANIM } from '../../src/view/enemyAnim.js';
-import { createEnemy, ENEMY_KINDS, windupProgress } from '../../src/game/entities/enemies.js';
+import { enemyFrameKey, enemyAction, frameCount, warningFlashAlpha, defeatAlpha, WARNING_FLASH, ENEMY_ANIM } from '../../src/view/enemyAnim.js';
+import { createEnemy, ENEMY_KINDS, windupProgress, updateEnemy } from '../../src/game/entities/enemies.js';
+import { createGameState, ENEMY_CORPSE_MS } from '../../src/game/state.js';
 import { BOSS_PARRY_STUN_MS } from '../../src/game/entities/bosses.js';
 
 // v1.0: which frame an enemy shows (release art per action, else the placeholder) and the wind-up
@@ -61,16 +62,42 @@ describe('frames with release art (enemy.<kind>.<action>.<n>)', () => {
   it('stun shows the flinch frame; death plays the defeat frames and stops on the last', () => {
     expect(enemyFrameKey(enemy('slime', { state: 'stun', t: 50 }), 0, false, has)).toBe('enemy.slime.hurt.0');
     expect(enemyFrameKey(enemy('slime', { state: 'dead', t: 0 }), 0, false, has)).toBe('enemy.slime.defeat.0');
-    expect(enemyFrameKey(enemy('slime', { state: 'dead', t: ENEMY_ANIM.defeatMs + 1 }), 0, false, has)).toBe('enemy.slime.defeat.1');
+    expect(enemyFrameKey(enemy('slime', { state: 'dead', t: ENEMY_ANIM.defeatPlayMs / 3 + 1 }), 0, false, has)).toBe('enemy.slime.defeat.1');
     expect(enemyFrameKey(enemy('slime', { state: 'dead', t: 5000 }), 0, false, has)).toBe('enemy.slime.defeat.2');
   });
 
-  it('the archer holds its shot pose just after the orb leaves', () => {
+  it('every defeat frame is shown, solid, before the body is removed; then it fades out', () => {
+    for (const [kind, actions] of [['slime', ENEMY_ACTIONS], ['boss_root', BOSS_ACTIONS]]) {
+      const h = release(kind, actions);
+      const shown = new Map(); // frame -> its opacity when it first shows
+      for (let t = 0; t < ENEMY_CORPSE_MS; t += 1000 / 60) {
+        const e = kind === 'slime' ? enemy('slime', { state: 'dead', t }) : boss({ state: 'dead', t });
+        const key = enemyFrameKey(e, 0, false, h);
+        if (!shown.has(key)) shown.set(key, defeatAlpha(t));
+      }
+      expect(shown.size, kind).toBe(actions.defeat);
+      for (const [key, a] of shown) expect(a, key).toBe(1);
+    }
+    expect(defeatAlpha(0)).toBe(1);
+    expect(defeatAlpha(ENEMY_CORPSE_MS * 0.8)).toBeGreaterThan(0);
+    expect(defeatAlpha(ENEMY_CORPSE_MS * 0.8)).toBeLessThan(1);
+    expect(defeatAlpha(ENEMY_CORPSE_MS)).toBe(0);
+  });
+
+  it('the archer holds its shot pose just after the orb leaves, and lets go of it even when it loses sight', () => {
     const h = release('archer', ENEMY_ACTIONS);
-    const k = ENEMY_KINDS.archer;
-    expect(enemyFrameKey(enemy('archer', { cooldownMs: k.cooldownMs - 10 }), 0, false, h)).toBe('enemy.archer.attack.0');
-    expect(enemyFrameKey(enemy('archer', { cooldownMs: k.cooldownMs - ENEMY_ANIM.shotPoseMs - 10 }), 0, false, h)).toMatch(/^enemy\.archer\.idle\.\d$/);
-    expect(enemyFrameKey(enemy('archer', { cooldownMs: 0 }), 0, false, h)).toMatch(/^enemy\.archer\.idle\.\d$/);
+    expect(enemyFrameKey(enemy('archer'), 0, false, h)).toMatch(/^enemy\.archer\.idle\.\d$/); // never shot
+    expect(enemyFrameKey(enemy('archer', { sinceShotMs: 10 }), 0, false, h)).toBe('enemy.archer.attack.0');
+    expect(enemyFrameKey(enemy('archer', { sinceShotMs: ENEMY_ANIM.shotPoseMs + 1 }), 0, false, h)).toMatch(/^enemy\.archer\.idle\.\d$/);
+    // Shoots, then the player is gone (dead: out of sight): the pose still ends.
+    const s = createGameState({ ground: ['##########', '#P.......#', '##########'], enemies: [{ kind: 'archer', tx: 6, ty: 1 }] });
+    const e = s.enemies[0];
+    Object.assign(e, { state: 'windup', t: ENEMY_KINDS.archer.windupMs });
+    updateEnemy(e, s, 1 / 60);
+    expect(enemyFrameKey(e, 0, false, h)).toBe('enemy.archer.attack.0');
+    s.player.dead = true;
+    for (let i = 0; i < 30; i++) updateEnemy(e, s, 1 / 60);
+    expect(enemyFrameKey(e, 0, false, h)).toMatch(/^enemy\.archer\.idle\.\d$/);
   });
 
   it('an action whose frames are missing falls back to idle (art can arrive a little at a time)', () => {
@@ -82,6 +109,23 @@ describe('frames with release art (enemy.<kind>.<action>.<n>)', () => {
   it('frameCount counts consecutive frames', () => {
     expect(frameCount('enemy.slime.move', has)).toBe(4);
     expect(frameCount('enemy.slime.nothing', has)).toBe(0);
+  });
+
+  it('with a counts map, each action is counted once (not every frame) until the map is cleared', () => {
+    let lookups = 0;
+    const counting = (k) => {
+      lookups++;
+      return has(k);
+    };
+    const counts = new Map();
+    enemyFrameKey(enemy('slime'), 0, true, counting, counts);
+    const first = lookups;
+    for (let i = 0; i < 100; i++) enemyFrameKey(enemy('slime'), i / 10, true, counting, counts);
+    expect(lookups).toBe(first);
+    expect(counts.get('enemy.slime.move')).toBe(4);
+    counts.clear();
+    enemyFrameKey(enemy('slime'), 0, true, counting, counts);
+    expect(lookups).toBe(first * 2);
   });
 });
 

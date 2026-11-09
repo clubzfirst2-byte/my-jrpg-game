@@ -256,7 +256,11 @@ for (const [region, kind] of Object.entries(BOSS_REGIONS)) {
   REGION_ENTRIES[region] = () => [...make(), ...bossFrames(kind)];
 }
 
-/** @param {string} name @param {Map<string, string>} [overrides] */
+/**
+ * @param {string} name
+ * @param {Parameters<typeof buildPlaceholderPack>[1]} [overrides] the real art by logical name (its URL, or after
+ *   the release-art packing its place on a sheet: whatever buildPlaceholderPack takes)
+ */
 export function buildRegionPack(name, overrides) {
   return buildPlaceholderPack([...REGION_ENTRIES[name](), ...releaseBossEntries(name, overrides)], overrides);
 }
@@ -268,8 +272,9 @@ const ENEMY_ACTION_KEY = /^enemy\.([a-z_]+)\.([a-z0-9_]+)\.\d+$/;
  * The enemies' per-action release frames (enemy.<kind>.<idle|move|windup|attack|hurt|defeat>.<n>):
  * like the hero's, they get a slot in the base bundle only when such art is given; an enemy without
  * them keeps its enemy.<kind>.<0|1> frames. Cores of the murk (boss_*) go in their region's bundle
- * (releaseBossEntries); the final boss (no code yet) and the shots are not used yet.
- * @param {Map<string, string>} [overrides]
+ * (releaseBossEntries); the final boss (no code yet) and the shots are not used yet. Only the names
+ * are read, so any kind of art source will do (a URL, or a sheet frame after the release-art packing).
+ * @param {Map<string, unknown>} [overrides]
  */
 export function releaseEnemyEntries(overrides) {
   if (!overrides?.size) return [];
@@ -284,7 +289,7 @@ export function releaseEnemyEntries(overrides) {
 /**
  * A core's per-action release frames (enemy.boss_<kind>.<action>.<n>) go in its region's bundle, with
  * its enemy.boss_<kind>.<0|1> frames, so they are loaded and released with the region.
- * @param {string} region bundle name @param {Map<string, string>} [overrides]
+ * @param {string} region bundle name @param {Map<string, unknown>} [overrides] (only the names are read)
  */
 export function releaseBossEntries(region, overrides) {
   const kind = /** @type {Record<string, string>} */ (BOSS_REGIONS)[region];

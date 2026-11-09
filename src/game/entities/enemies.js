@@ -125,6 +125,8 @@ export function createEnemy(kind, x, y, z, id) {
     // v1.0: the slime's hop clock (each starts at its own point, so a group does not hop in step),
     // and what hits do to it (damage.js reads these).
     hopMs: k.hopMs ? (id * 137) % k.hopMs : 0,
+    /** ms since its last shot (the view holds the shot pose for a moment) */
+    sinceShotMs: 1e9,
     weak: k.weak ?? null,
     armor: k.armor ?? 1,
     heavy: !!k.heavy,
@@ -154,6 +156,7 @@ export function updateEnemy(e, state, dt) {
   if (e.state === 'dead') return;
   const k = /** @type {any} */ (ENEMY_KINDS[/** @type {EnemyKind} */ (e.kind)]);
   if (k.hopMs) e.hopMs = (e.hopMs + ms) % k.hopMs;
+  e.sinceShotMs += ms;
   const p = state.player;
   const dx = p.x - e.x;
   const dy = p.y - e.y;
@@ -292,6 +295,7 @@ function wander(e, map, k, ms, dt) {
 
 /** @param {any} e @param {any} state @param {any} k */
 function shoot(e, state, k) {
+  e.sinceShotMs = 0;
   state.projectiles.push({
     kind: 'orb',
     owner: 'enemy',

@@ -24,17 +24,18 @@ test('the sentinel winds up under a 50% red overlay (the sprite itself is not ti
   // Freeze the drawing clock where the pulse is on for the whole wind-up: sin(0.05 × (12..36)) > 0.
   await api(page, 'setVisualTime', 0.05);
   await api(page, 'spawnEnemy', 'sentinel', 9, 26);
+  // Wait for the DRAWN frame (the view lags the game state by up to a frame): the overlay is up.
   await expect
-    .poll(async () => (await api(page, 'enemies')).find((e) => e.kind === 'sentinel')?.state, { timeout: 8000, intervals: [20] })
-    .toBe('windup');
+    .poll(async () => (await api(page, 'enemyView'))[0]?.flash ?? 0, { timeout: 8000, intervals: [20] })
+    .toBeCloseTo(0.5);
+  expect((await api(page, 'enemies')).find((e) => e.kind === 'sentinel').state).toBe('windup');
   const view = (await api(page, 'enemyView'))[0];
-  expect(view.flash).toBeCloseTo(0.5);
   expect(view.flashColor).toBe(RED);
   expect(view.tint).toBe(0xffffff);
   await page.screenshot({ path: testInfo.outputPath('sentinel-windup.png') });
   // The slam lands (the player stands in reach) and the overlay goes away after the wind-up.
   await expect.poll(async () => (await api(page, 'events')).includes('enemySlam'), { timeout: 4000, intervals: [20] }).toBe(true);
-  await expect.poll(async () => (await api(page, 'enemyView'))[0].flash, { timeout: 4000, intervals: [20] }).toBe(0);
+  await expect.poll(async () => (await api(page, 'enemyView'))[0]?.flash, { timeout: 4000, intervals: [20] }).toBe(0);
   expect(errors).toEqual([]);
 });
 
@@ -54,9 +55,8 @@ test('the slime and the sentinel are drawn at their design size (16×14 and 20×
   expect(errors).toEqual([]);
 });
 
-test('the sword defeats a slime; it leaves a murk crystal sometimes, and never an error', async ({ page }) => {
-  const errors = await open(page);
-  await api(page, 'spawnEnemy', 'slime', 10, 26);
+/** Faces right, then keeps swinging the sword until no enemy is left. */
+async function swingUntilClear(page, timeout) {
   await page.keyboard.down('ArrowRight');
   await page.waitForTimeout(60);
   await page.keyboard.up('ArrowRight');
@@ -66,9 +66,30 @@ test('the sword defeats a slime; it leaves a murk crystal sometimes, and never a
         await page.keyboard.press('KeyJ');
         return (await api(page, 'enemies')).length;
       },
-      { timeout: 15_000, intervals: [150] },
+      { timeout, intervals: [150] },
     )
     .toBe(0);
+}
+
+/** Murk crystals in the bag plus those lying on the ground. */
+const crystals = async (page) =>
+  ((await api(page, 'inventory')).items.murk_crystal ?? 0) +
+  (await api(page, 'pickups')).filter((p) => p.item === 'murk_crystal').reduce((n, p) => n + p.count, 0);
+
+test('the sword defeats a slime without errors', async ({ page }) => {
+  const errors = await open(page);
+  await api(page, 'spawnEnemy', 'slime', 10, 26);
+  await swingUntilClear(page, 15_000);
+  expect(errors).toEqual([]);
+});
+
+test('the sword defeats a sentinel (it glances off, so it takes longer) and it leaves its 2 murk crystals', async ({ page }) => {
+  const errors = await open(page);
+  const before = await crystals(page);
+  await api(page, 'spawnEnemy', 'sentinel', 10, 26);
+  await swingUntilClear(page, 40_000);
+  // (the drop lands where it fell; walking over it puts it in the bag — either way it is there)
+  await expect.poll(async () => (await crystals(page)) - before, { timeout: 3000 }).toBe(2);
   expect(errors).toEqual([]);
 });
 

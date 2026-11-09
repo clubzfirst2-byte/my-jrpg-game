@@ -26,7 +26,7 @@ import { regionAt, outdoorAt } from '../game/world/world.js';
 import { seasonAt } from '../game/env/weather.js';
 import { SEASON_ENTRIES, seasonKeys } from './assets/placeholderPack.js';
 import { HeroAnimator } from './heroAnim.js';
-import { enemyFrameKey, warningFlashAlpha } from './enemyAnim.js';
+import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
 import { SilhouetteCache, placeFlash } from './flashOverlay.js';
 
 /** Chunk size in tiles (P8). */
@@ -158,6 +158,12 @@ export class GameView {
     // Time of day and weather (P5): light map, rain, lightning, above the world.
     this.weather = new WeatherView(app, (key) => this.makeSprite(key), this.actors);
     this.weather.attach(app.stage, app.stage.getChildIndex(this.world) + 1);
+    // v1.0: attack warnings (the wind-up overlay, the slam rings) are drawn ABOVE the light map, so
+    // night and dark rooms do not dim them: a world-space layer that follows the world's camera
+    // transform (applyCamera), just over the light map and under the rain.
+    this.warnLayer = new Container();
+    this.warnLayer.label = 'warnings';
+    app.stage.addChildAt(this.warnLayer, app.stage.getChildIndex(this.weather.overlay) + 1);
 
     this.shadow = this.makeSprite('fx.shadow');
     this.shadow.alpha = 0.35;
@@ -183,6 +189,11 @@ export class GameView {
     /** @type {Map<number, Sprite>} */
     this.flashSprites = new Map();
     this.silhouettes = new SilhouetteCache();
+    /** Frame counts of the enemies' release actions, cleared when the loaded art changes. @type {Map<string, number>} */
+    this.enemyFrameCounts = new Map();
+    this.enemyFrameCountsAt = -1;
+    /** @param {string} k */
+    this.hasTexture = (k) => this.assets.hasTexture(k);
     /** @type {Sprite[]} */
     this.projectileSprites = [];
     this.slash = this.makeSprite('fx.slash');
@@ -758,6 +769,8 @@ export class GameView {
     const zoom = this.camera.zoom;
     this.world.scale.set(zoom);
     this.world.position.set(-o.x * zoom, -o.y * zoom);
+    this.warnLayer.scale.set(zoom);
+    this.warnLayer.position.set(-o.x * zoom, -o.y * zoom);
   }
 
   /**
@@ -842,6 +855,10 @@ export class GameView {
 
     // Enemies: create / update / remove sprites by id.
     const seen = new Set();
+    if (this.enemyFrameCountsAt !== this.assets.version) {
+      this.enemyFrameCounts.clear(); // art came or went: recount the release frames once
+      this.enemyFrameCountsAt = this.assets.version;
+    }
     for (const e of state.enemies) {
       // P10.4: a core of the murk is drawn by its region's art, only while that is loaded.
       if (e.boss && !this.assets.hasTexture(`enemy.${e.kind}.0`)) continue;
@@ -856,7 +873,7 @@ export class GameView {
       const ey = lerp(e.prevY, e.y, alpha);
       const moving = Math.hypot(e.x - e.prevX, e.y - e.prevY) > 0.01;
       // v1.0: the release art's frame for what it is doing (enemyAnim.js), else the placeholder.
-      const key = enemyFrameKey(e, timeSec, moving, (k) => this.assets.hasTexture(k));
+      const key = enemyFrameKey(e, timeSec, moving, this.hasTexture, this.enemyFrameCounts);
       spr.texture = this.assets.texture(key);
       this.enemyKeys.set(e.id, key);
       spr.position.set(Math.round(ex), Math.round(ey - e.z));
@@ -864,17 +881,17 @@ export class GameView {
       spr.scale.x = e.faceX < -0.2 ? -1 : 1;
       // Stunned: pale blue (multiplied).
       spr.tint = e.state === 'stun' ? 0xa8b8ff : 0xffffff;
-      spr.alpha = e.state === 'dead' ? Math.max(0, 1 - e.t / 600) : 1;
+      spr.alpha = e.state === 'dead' ? defeatAlpha(e.t) : 1;
       // Telegraph (v1.0, ART_STYLE_GUIDE 5.4 B): the wind-up pulses under a 50% red overlay, faster
       // as the attack nears — laid over the art, so it shows on dark bodies too (flashOverlay.js).
       const flash = warningFlashAlpha(e, timeSec, windupProgress(e));
-      const overlay = placeFlash(spr, this.flashSprites.get(e.id) ?? null, flash, this.silhouettes, this.actors);
+      const overlay = placeFlash(spr, this.flashSprites.get(e.id) ?? null, flash, this.silhouettes, this.warnLayer);
       if (overlay) this.flashSprites.set(e.id, overlay);
     }
     // P10.4: a core winding up its slam shows the shockwave's reach on the ground.
     if (!this.bossRing) {
       this.bossRing = new Graphics();
-      this.actors.addChild(this.bossRing);
+      this.warnLayer.addChild(this.bossRing); // (above the light map, like the overlay)
     }
     this.bossRing.clear();
     for (const e of state.enemies) {
