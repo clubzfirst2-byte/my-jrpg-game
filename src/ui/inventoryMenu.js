@@ -259,7 +259,7 @@ export class InventoryMenu {
       );
     }
     const n = countOf(pr.inv, 'star_shard');
-    const line = row('inv-shards', `星の欠片 ×${n}`, `1 つで ハート +1（最大 ${SHARD.maxHearts}）か がんばり +${SHARD.stamina}（最大 ${SHARD.maxStamina}）`, false, null);
+    const line = row('inv-shards', `星の欠片 ×${n}`, `1 つで ハート +1（最大 ${SHARD.maxHearts}）か がんばり +${SHARD.stamina}（最大 ${SHARD.maxStamina}）`, false, null, 'star_shard');
     const actions = document.createElement('div');
     actions.className = 'inv-actions';
     for (const [kind, label] of /** @type {const} */ ([['heart', 'ハート +1'], ['stamina', 'がんばり +']])) {

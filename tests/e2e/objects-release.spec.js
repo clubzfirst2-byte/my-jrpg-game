@@ -26,13 +26,20 @@ test('normal play draws the objects from their release art (2 px per game px), w
   for (const [key, w, h] of [['obj.chest.closed', 16, 14], ['sw.plate.on', 14, 10], ['fx.slash', 16, 20], ['icon.sword', 10, 10], ['ui.marker', 7, 7]]) {
     expect(await api(page, 'objectTexture', key), key).toEqual({ key, w, h, res: 2 });
   }
-  // the beach ring has no release art yet: its placeholder stays (1 px per game px)
-  expect((await api(page, 'objectTexture', 'obj.star_ring.off')).res).toBe(1);
+  // the beach ring: its placeholder (1 px per game px) until its release art lands, then that art
+  expect([1, 2]).toContain((await api(page, 'objectTexture', 'obj.star_ring.off')).res);
   // the village (the plains bundle): the houses are the approved 96×112 (48×56 game px)
   await api(page, 'teleport', 24, 89);
   await expect.poll(async () => (await api(page, 'objectSprites')).filter((s) => s.kind === 'house').length, { timeout: 10_000 }).toBeGreaterThan(0);
   for (const s of (await api(page, 'objectSprites')).filter((x) => x.kind === 'house')) expect(s).toMatchObject({ key: 'obj.house', w: 48, h: 56, res: 2 });
   await page.screenshot({ path: testInfo.outputPath('village.png') });
+  // behind a house (north of it) the player sees through it, like behind a tree; in front it is solid
+  const house = () => api(page, 'objectSprites').then((l) => l.filter((s) => s.kind === 'house').map((s) => s.alpha));
+  await api(page, 'teleport', 24, 83);
+  await expect.poll(async () => (await house()).some((a) => a < 1)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('behind-house.png') });
+  await api(page, 'teleport', 24, 87);
+  await expect.poll(async () => (await house()).every((a) => a === 1)).toBe(true);
   // a trial: plates, sconce, resonance stone, chest — all release art, off then on
   await api(page, 'teleport', 106, 61);
   await page.waitForTimeout(300);

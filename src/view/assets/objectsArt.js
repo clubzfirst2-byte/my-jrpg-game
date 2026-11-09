@@ -27,7 +27,11 @@ export const OBJECTS_GROUP = 'objects';
  * the terrain producer's (src/art-release/terrain) and the ones still waiting for art.
  */
 export const TERRAIN_OBJECT_KEYS = Object.freeze(['obj.tree', 'obj.rock', 'obj.bramble', 'obj.stump', 'obj.cactus']);
-/** Keys with no release art yet: they keep the placeholder (drawn at 1 art pixel per game pixel). */
+/**
+ * Keys with no release art yet: they keep the placeholder (drawn at 1 art pixel per game pixel).
+ * Nothing else is needed when their art arrives: a file src/art-release/objects/<key>.png is picked
+ * up by name like the others (then drop the entry here).
+ */
 export const PLACEHOLDER_FALLBACK_KEYS = Object.freeze({
   'obj.star_ring.off': 'the beach ring (v1.0 C5) is not in the objects release set',
   'obj.star_ring.on': 'the beach ring (v1.0 C5) is not in the objects release set',
@@ -138,10 +142,10 @@ export function objectsDebugApi(state, view, assets) {
         for (const { bundle } of assets.loaded.values()) for (const [k, t] of bundle.textures) if (t === s.texture) return k;
         return null;
       };
-      /** @type {{ kind: string, key: string | null, w: number, h: number, res: number, visible: boolean }[]} */
+      /** @type {{ kind: string, key: string | null, w: number, h: number, res: number, visible: boolean, alpha: number, scale: number }[]} */
       const out = [];
       /** @param {string} kind @param {import('pixi.js').Sprite} s */
-      const add = (kind, s) => out.push({ kind, key: find(s), ...art(s.texture), visible: s.visible });
+      const add = (kind, s) => out.push({ kind, key: find(s), ...art(s.texture), visible: s.visible, alpha: s.alpha, scale: s.scale.x });
       for (const { o, sprite } of view.objectSprites.values()) add(o.type, sprite);
       for (const c of view.features.chests) add('chest', c.sprite);
       for (const c of view.features.checkpoints) add('checkpoint', c.sprite);

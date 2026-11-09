@@ -108,10 +108,19 @@ export class EnvView {
       const big = !!o && !o.gone && o.type === 'tree';
       s.visible = true;
       s.texture = this.texture(`fx.fire.${(frame + i) % 2}`);
-      s.scale.set(big ? 1.6 : 1);
+      s.scale.set(big ? bigFireScale(s.texture) : 1);
       s.position.set(tx * ts + ts / 2, ty * ts + ts - 1 - map.elev[i] - (big ? 6 : 0));
       s.zIndex = ty * ts + ts + 0.5; // in front of the tree it burns
     }
     for (let k = nFire; k < this.flames.length; k++) this.flames[k].visible = false;
   }
 }
+
+/**
+ * How much bigger a burning tree's flames are drawn. 1.6 was chosen for the placeholder; with the
+ * release art (2 art px per game px) 1.6 would stretch the art's pixels unevenly, so the nearest
+ * scale that keeps every art pixel a whole number of canvas pixels is used: 1.5 (3 canvas px per art
+ * px on the 2-px-per-game-px canvas). The placeholder keeps 1.6, as before.
+ * @param {import('pixi.js').Texture} tex
+ */
+export const bigFireScale = (tex) => (tex.source.resolution >= 2 ? 1.5 : 1.6);

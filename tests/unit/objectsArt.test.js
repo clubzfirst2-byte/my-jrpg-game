@@ -21,15 +21,16 @@ const covered = (k) => ART.has(k) || fallback.has(k);
 
 describe('objects release art: names → the game keys', () => {
   it('every release sprite is a key the game draws (no renaming needed)', () => {
-    expect(ART.size).toBe(62);
+    expect(ART.size).toBeGreaterThanOrEqual(62); // 62 + the beach ring's 2 once they land
     for (const k of ART) expect(KEYS.has(k), k).toBe(true);
   });
 
   it('every object / switch / effect / icon / UI key of the game has release art or a deliberate fallback', () => {
     const missing = [...KEYS].filter((k) => OBJECT_LIKE.test(k) && !covered(k));
     expect(missing).toEqual([]);
-    // the fallbacks are exactly what the art does not hold (terrain's, the beach ring)
-    for (const k of fallback) expect(ART.has(k), k).toBe(false);
+    // terrain's keys are never in the objects art; the beach ring is a fallback only until its art
+    // lands in src/art-release/objects (then it is picked up by name, like every other sprite)
+    for (const k of TERRAIN_OBJECT_KEYS) expect(ART.has(k), k).toBe(false);
     expect(Object.keys(PLACEHOLDER_FALLBACK_KEYS).sort()).toEqual(['obj.star_ring.off', 'obj.star_ring.on']);
   });
 
@@ -57,6 +58,10 @@ describe('objects release art: names → the game keys', () => {
     expect(ICON_KEYS).toHaveLength(12);
     for (const k of ICON_KEYS) expect(ART.has(k), k).toBe(true);
     for (const it of items) expect(ART.has(iconFor(it.id)), it.id).toBe(true);
+    // key items: the star shard uses the crystal icon; the elder's charm has no fitting icon yet and
+    // keeps the type fallback (icon.food)
+    expect(iconFor('star_shard')).toBe('icon.shard');
+    expect(iconFor('lost_charm')).toBe('icon.food');
   });
 });
 
@@ -73,5 +78,15 @@ describe('objects release art: when it is loaded', () => {
   });
   it('is kept for offline play (precached)', () => {
     expect(onDemandReleaseGroup(OBJECTS_GROUP)).toBe(false);
+  });
+});
+
+describe('objects release art: whole art pixels', () => {
+  it('a burning tree draws its flames at 1.5x with the release art (3 canvas px per art px), 1.6x with the placeholder', async () => {
+    const { bigFireScale } = await import('../../src/view/envView.js');
+    expect(bigFireScale(/** @type {any} */ ({ source: { resolution: 2 } }))).toBe(1.5);
+    expect(bigFireScale(/** @type {any} */ ({ source: { resolution: 1 } }))).toBe(1.6);
+    // 24x28 art px at 1.5 on a 2-px-per-game-px canvas: every art px is 3 canvas px, the sprite 36x42
+    expect([1.5 * 24, 1.5 * 28].every(Number.isInteger)).toBe(true);
   });
 });

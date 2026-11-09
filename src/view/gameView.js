@@ -655,7 +655,8 @@ export class GameView {
     this.actors.addChild(s);
     /** @type {Occluder | null} */
     let occluder = null;
-    if (o.type === 'tree') {
+    // Trees and houses (v1.0: the release house is 56 game px tall) fade when the player is behind them.
+    if (o.type === 'tree' || o.type === 'house') {
       const w = s.width / 2;
       occluder = { sprite: s, x0: x - w, x1: x + w, y0: feetY - z - s.height, y1: feetY - z, key: feetY };
     }
