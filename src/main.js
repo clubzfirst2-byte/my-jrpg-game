@@ -110,16 +110,23 @@ async function boot() {
   //   only when asked, until approved
   const protoGroups = requestedProtoGroups(params);
   if (protoGroups.length && hdParam !== '0') for (const [k, v] of await prototypeFrames(protoGroups)) artOverrides.set(k, v);
-  //   ?hero=release   the hero's release art under review (all actions; QUALITY_POLICY.md)
-  if (params.get('hero') === 'release' && hdParam !== '0') for (const [k, v] of await releaseFrames('hero')) artOverrides.set(k, v);
+  // The hero's release art (src/art-release/hero, adopted 2026-11-08) is the hero of normal play.
+  //   ?hero=placeholder   the old 16×16 placeholder hero instead (comparison)
+  //   ?hero=test / ?hero=proto / ?proto=all   the size-test hero / the P12 prototype instead (they replace the
+  //                       placeholder frames, so the release art stays out of their way)
+  //   ?hero=release       still accepted (the same as no ?hero)
+  const heroParam = params.get('hero');
+  const releaseHero = hdParam !== '0' && (heroParam === null || heroParam === 'release') && !protoGroups.includes('hero');
+  if (releaseHero) for (const [k, v] of await releaseFrames('hero')) artOverrides.set(k, v);
   //   the villagers' release art (NPC batch 1: elder, merchant, guard; the others keep the
   //   placeholder) goes with the hero's release art, which it is drawn to match (2 pixels per game
-  //   pixel): with ?hero=release, or alone with ?npc=release / ?hd=1. ?npc=placeholder leaves it out
-  //   (before/after comparison), and so do the prototype views (?…=proto)
+  //   pixel): in normal play like the hero, or alone with ?npc=release / ?hd=1. ?npc=placeholder leaves
+  //   it out (before/after comparison), and so do ?hero=placeholder / ?hero=test and the prototype
+  //   views (?…=proto)
   const npcParam = params.get('npc');
   //   ?npc=revision   batch 1 with the review's fixes (src/art-release/npc-revision/, kept apart from
   //   the approved frames until it is approved)
-  const releaseNpcs = params.get('hero') === 'release' || npcParam === 'release' || npcParam === 'revision' || hdParam === '1';
+  const releaseNpcs = releaseHero || npcParam === 'release' || npcParam === 'revision' || hdParam === '1';
   if (releaseNpcs && hdParam !== '0' && npcParam !== 'placeholder' && !protoGroups.length) {
     for (const [k, v] of await releaseFrames('npc')) artOverrides.set(k, v);
     if (npcParam === 'revision') for (const [k, v] of await releaseFrames('npc-revision')) artOverrides.set(k, v);
@@ -460,7 +467,14 @@ async function boot() {
     pauseOverlay.hide();
   }
 
-  let resolution = resizeRenderer(app, targetHeight, artDensity);
+  // Non-integer canvas scale (HD art, odd device scale): scroll in whole game px so every step is
+  // the same number of device pixels (docs/perf/hd-view-size.md).
+  const applyResolution = () => {
+    const res = resizeRenderer(app, targetHeight, artDensity);
+    view.camera.snapStep = Number.isInteger(res.canvasScale) ? 0 : 1;
+    return res;
+  };
+  let resolution = applyResolution();
   installLifecycle(app.canvas, {
     onPause: () => {
       if (!paused) pause('');
@@ -469,7 +483,7 @@ async function boot() {
     onContextLost: () => pause('描画が一時的に中断されました。戻らない場合は再読み込みしてください。'),
     onContextRestored: () => pauseOverlay.show('描画が復帰しました。'),
     onViewportChange: () => {
-      resolution = resizeRenderer(app, targetHeight, artDensity);
+      resolution = applyResolution();
     },
   });
 
@@ -521,7 +535,7 @@ async function boot() {
         targetHeight = nextCandidate(targetHeight);
         settings.resolution = targetHeight;
         saveSettings(settings);
-        resolution = resizeRenderer(app, targetHeight, artDensity);
+        resolution = applyResolution();
         stats.reset();
         return targetHeight;
       },
@@ -602,7 +616,7 @@ async function boot() {
       errors: errorLog.total - r.errorsAtStart,
       load: timing,
       device: {
-        内部解像度: `${resolution.width}×${resolution.height}（目標 ${targetHeight}、×${resolution.scale}）`,
+        内部解像度: `${resolution.width}×${resolution.height}（目標 ${targetHeight}、×${resolution.canvasScale}、見える高さ ${resolution.gameHeight}）`,
         ...collectDeviceInfo(gl, app.renderer.name),
       },
     });
@@ -649,7 +663,7 @@ async function boot() {
             `フレーム 平均${s.avgMs.toFixed(1)} / 遅い5% ${s.p95Ms.toFixed(1)} / 最大${s.maxMs.toFixed(1)} ms`,
             `JS ${s.avgCpuMs.toFixed(2)}ms   描画 ${lastDraws}回${drawCounter.supported ? '' : '(未対応)'}`,
             `表示物 ${objectCount}   テクスチャ ${textureCount()}   負荷 ${bench.count}`,
-            `内部 ${resolution.width}×${resolution.height} ×${resolution.scale}  DPR ${window.devicePixelRatio}`,
+            `内部 ${resolution.width}×${resolution.height} ×${resolution.canvasScale} 見える高さ${resolution.gameHeight}  DPR ${window.devicePixelRatio}`,
             `位置 ${p.x.toFixed(0)},${p.y.toFixed(0)} 高さ ${p.z.toFixed(0)}（地面 ${p.groundZ.toFixed(0)}）${p.grounded ? '' : ' 空中'}`,
             `体力 ${p.hp}/${p.maxHp}  スタミナ ${p.stamina.toFixed(0)}${p.exhausted ? '（疲労）' : ''}${p.climbing ? ' 登攀中' : ''}${p.gliding ? ' 滑空中' : ''}${p.swimming ? ' 水泳中' : ''}`,
             `${p.facing}${p.dashing ? ' ダッシュ' : ''}  エラー ${errorLog.total}`,
@@ -933,9 +947,9 @@ async function boot() {
     resolution: () => ({ ...resolution, target: targetHeight }),
     /** The hero's current animation (action and frame) and the texture drawn. */
     heroPose: () => ({ ...view.heroPose, texture: view.heroKey }),
-    /** P11.5: the art in use (density, how many real-art sprites) and the drawn hero's size in game px. */
     /** Which file a sprite's art comes from (tests: release / revision / prototype). */
     artUrl: (/** @type {string} */ key) => artOverrides.get(key) ?? null,
+    /** P11.5: the art in use (density, how many real-art sprites) and the drawn hero's size in game px. */
     art: () => ({ density: artDensity, overrides: artOverrides.size, zoom: view.camera.zoom, hero: { w: view.player.texture.width, h: view.player.texture.height, k: view.heroK } }),
     /** P8: the auto tour (minutes may be fractional in tests). */
     startTour: (/** @type {number} */ minutes) => startTour(minutes),

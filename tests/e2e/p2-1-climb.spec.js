@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitTicks, ticksOf } from './ticks.js';
 
 // Height verification map (default). Tile coordinates refer to src/game/world/maps/heightTest.js.
 
@@ -20,10 +21,22 @@ test('climbs a grass cliff and pulls up onto the plateau', async ({ page }, test
   await teleport(page, 14, 22); // south of plateau B (1 level)
   await page.keyboard.down('ArrowUp');
   await expect.poll(async () => (await player(page)).climbing, { timeout: 3000 }).toBe(true);
+  // Let go of the key the moment he stands on top (checked every frame in the page): held any longer,
+  // he walks on across the plateau and steps off its far edge, which a slow machine used to allow
+  // between two polls from here (or while the screenshot below was taken).
+  await page.evaluate(() => {
+    const w = /** @type {any} */ (window);
+    const check = () => {
+      const p = w.__debugApi.player();
+      if (p.grounded && !p.climbing && p.z > 0) window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowUp', key: 'ArrowUp' }));
+      else requestAnimationFrame(check);
+    };
+    check();
+  });
   await page.screenshot({ path: testInfo.outputPath('climbing.png') });
   const mid = await player(page);
   expect(mid.stamina).toBeLessThanOrEqual(100);
-  await expect.poll(async () => (await player(page)).grounded, { timeout: 4000 }).toBe(true);
+  await expect.poll(async () => { const q = await player(page); return q.grounded && !q.climbing && q.z > 0; }, { timeout: 8000 }).toBe(true);
   await page.keyboard.up('ArrowUp');
   const p = await player(page);
   expect(p.climbing).toBe(false);
@@ -37,7 +50,7 @@ test('climbs the tower side three levels up and uses stamina', async ({ page }, 
   await teleport(page, 28, 10); // ground east of the tower's 3rd tier (48px)
   await page.keyboard.down('ArrowLeft');
   await expect.poll(async () => (await player(page)).climbing, { timeout: 3000 }).toBe(true);
-  await page.waitForTimeout(800);
+  await waitTicks(page, ticksOf(800));
   const climbing = await player(page);
   expect(climbing.stamina).toBeLessThan(100);
   await page.screenshot({ path: testInfo.outputPath('stamina-wheel.png') });
@@ -51,7 +64,7 @@ test('the jump button lets go of the wall', async ({ page }) => {
   await teleport(page, 28, 10);
   await page.keyboard.down('ArrowLeft');
   await expect.poll(async () => (await player(page)).climbing, { timeout: 3000 }).toBe(true);
-  await page.waitForTimeout(400);
+  await waitTicks(page, ticksOf(400));
   expect((await player(page)).z).toBeGreaterThan(4);
   await page.locator('#jump-button').dispatchEvent('pointerdown', { pointerId: 5 });
   await page.waitForTimeout(80);
