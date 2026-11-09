@@ -10,7 +10,7 @@ const SEAT_NAMES = { 'source-fire': '火の座', 'source-light': '光の座', 's
 
 /**
  * The toast for an event of the source, or null.
- * @param {{ type: string, id?: string }} ev @returns {{ text: string, ms: number } | null}
+ * @param {{ type: string, id?: string, full?: boolean }} ev @returns {{ text: string, ms: number } | null}
  */
 export function finalBossToast(ev) {
   switch (ev.type) {
@@ -23,7 +23,7 @@ export function finalBossToast(ev) {
     case 'sourceGuard':
       return { text: '裏返った輪には攻撃が通らない…', ms: 1500 };
     case 'sourceWave':
-      return { text: '裏返しの波——座の光が消えた', ms: 2000 };
+      return ev.full ? { text: '輪がまた裏返った——座の光が消えた', ms: 2000 } : { text: '裏返しの波——床の座（重さ・響き）が静まった', ms: 2000 };
     case 'sourcePhase':
       return { text: '輪にひびが入った…！', ms: 2000 };
     case 'sourcePurified':

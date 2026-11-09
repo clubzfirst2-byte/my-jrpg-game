@@ -125,12 +125,14 @@ export function sourceFrames() {
   const attackHoles = { volley: 1, ring: 2, slam: 3, charge: 4 };
   for (const [action, n] of Object.entries(SOURCE_ACTIONS)) {
     for (let f = 0; f < n; f++) {
+      // As in the release art: idle / idle2 have the eye wide open (shown while staggered, the ring
+      // turned back), hurt has it closed (shown while inverted, at rest).
       /** @type {SourcePose} */
-      let pose = { eye: 'open', holes: 0, bob: f % 2 };
+      let pose = { eye: 'wide', holes: 4, turned: true, bob: f % 2 };
       if (action === 'idle2') pose = { ...pose, cracked: true };
       else if (action.startsWith('windup_')) pose = { eye: 'narrow', holes: attackHoles[/** @type {'volley'} */ (action.slice(7))], bob: 0 };
       else if (action.startsWith('attack_')) pose = { eye: 'wide', holes: attackHoles[/** @type {'volley'} */ (action.slice(7))], bob: 0, flash: f === 0 };
-      else if (action === 'hurt') pose = { eye: 'wide', holes: 4, turned: true };
+      else if (action === 'hurt') pose = { eye: 'closed', holes: 0 };
       else if (action === 'transform') pose = { eye: f % 2 ? 'narrow' : 'wide', holes: f, cracked: f >= 2, flash: f === 3 };
       else if (action === 'defeat') pose = { eye: f < 2 ? 'wide' : 'closed', holes: 4, turned: true, fade: f / 6 };
       out[`enemy.boss_source.${action}.${f}`] = sourceSprite(pose);

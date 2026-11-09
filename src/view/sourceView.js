@@ -10,21 +10,30 @@ const ACTION = { volley: 'volley', ring: 'ring', slam: 'slam', wave: 'charge' };
 const SEAT_COLOR = { 'source-fire': 0xff8a3c, 'source-light': 0xffe27a, 'source-weight': 0xc4beb0, 'source-echo': 0x7fe8ff };
 
 /**
+ * Which frame, by the story's rule 「座を目覚めさせると、輪の目が開いて攻撃が通る」 (QA B-2):
+ * - inverted, at rest (idle / recover, also asleep): the EYE CLOSED — `hurt.0` (the art's only
+ *   closed-eye pose besides the transform / defeat frames);
+ * - winding up: the eye a narrow slit (`windup_*`); the attack itself: the eye flashes (`attack_*`,
+ *   a fraction of a second);
+ * - staggered (the ring turned back, it can be hurt): the EYE WIDE OPEN — `idle` / `idle2` (phase 2,
+ *   cracked), the art's open-eye frames, animated;
+ * - phase change: `transform`; purified: `defeat`.
  * @param {any} e the source @param {number} timeSec @param {(key: string) => boolean} has
  * @returns {string}
  */
 export function sourceFrameKey(e, timeSec, has) {
   const k = (/** @type {string} */ action, /** @type {number} */ f) => `enemy.boss_source.${action}.${f}`;
-  const idle = k(e.phase === 2 ? 'idle2' : 'idle', Math.floor(timeSec * 3) % 2);
+  const open = k(e.phase === 2 ? 'idle2' : 'idle', Math.floor(timeSec * 3) % 2);
+  const closed = k('hurt', 0);
   /** @type {string} */
   let key;
   if (e.state === 'dead') key = k('defeat', Math.min(5, Math.floor(e.t / (FINAL_BOSS.defeatMs / 6))));
-  else if (e.state === 'stagger') key = k('hurt', 0);
+  else if (e.state === 'stagger') key = open;
   else if (e.transformUntil > e.clock) key = k('transform', Math.min(3, Math.floor((e.clock - e.transformFrom) / 250)));
   else if (e.state === 'windup' && e.pattern) key = k(`windup_${ACTION[/** @type {'volley'} */ (e.pattern)]}`, Math.floor(timeSec * 4) % 2);
   else if (e.state === 'attack' && e.pattern) key = k(`attack_${ACTION[/** @type {'volley'} */ (e.pattern)]}`, Math.floor(e.t / 120) % 2);
-  else key = idle;
-  return has(key) ? key : has(idle) ? idle : k('idle', 0);
+  else key = closed;
+  return has(key) ? key : has(closed) ? closed : k('idle', 0);
 }
 
 /**
