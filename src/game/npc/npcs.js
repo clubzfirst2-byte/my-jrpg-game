@@ -5,7 +5,7 @@
 // dialogue's start: flags, quest states, cores purified…) — added and removed as the progress
 // changes — and may be see-through (`ghost`: the princess's 写し身, clearer with each core purified).
 // v1.0 final: villagers have a small solid body (below: NPC_BODY, blockPlayerByNpcs).
-import { moveAndCollide, groundHeightUnder } from '../physics/collision.js';
+import { moveAndCollide, groundHeightUnder, overlapsSolid } from '../physics/collision.js';
 import { roll } from '../core/hashRandom.js';
 import { Ground, isSolidTile } from '../world/tilemap.js';
 import { conditionHolds, coresPurified } from './talk.js';
@@ -158,6 +158,18 @@ export function blockPlayerByNpcs(state, from, pushing, dt, stepHeight = 8) {
     }
   }
   if (moved) {
+    // A slide keeps one axis of the move at a spot the tile collision never checked (new x with
+    // the old y, or the reverse). At a cliff or wall corner that spot can poke into the cliff or
+    // stand on higher ground than the player may step onto: then undo the whole move instead.
+    if (p.x !== fromX || p.y !== fromY) {
+      const maxZ = from.grounded ? from.z + stepHeight : from.z;
+      if (overlapsSolid(p, state.map) || groundHeightUnder(p, state.map) > maxZ + 1e-3) {
+        p.x = fromX;
+        p.y = fromY;
+        p.vx = 0;
+        p.vy = 0;
+      }
+    }
     if (p.x === fromX && p.y === fromY) {
       p.z = from.z;
       p.groundZ = from.groundZ;

@@ -3,6 +3,7 @@ import { createGameState, stepGame } from '../../src/game/state.js';
 import { WORLD } from '../../src/game/world/world.js';
 import { STEP_SEC } from '../../src/game/core/fixedStep.js';
 import { tileFeet } from '../../src/game/world/features.js';
+import { groundHeightUnder } from '../../src/game/physics/collision.js';
 import { isSolidTile, terrainHeightAt, Ground } from '../../src/game/world/tilemap.js';
 import { createNpcs, stepNpcs, npcInReach, npcOverlap, keepClearTiles, onKeepClear, blockPlayerByNpcs, playerFrom, NPC, NPC_BODY } from '../../src/game/npc/npcs.js';
 
@@ -241,6 +242,31 @@ describe('review fixes (v1-final-a)', () => {
     for (let i = 0; i < 120; i++) stepGame(s, none);
     expect([princess.x, princess.y]).toEqual([home.x, home.y]);
     expect(princess.aside).toBe(null);
+  });
+
+  it('a villager by a cliff corner: the slide never pokes the player into the cliff or onto it', () => {
+    const s = world();
+    const map = s.map;
+    const [C, R] = [22, 91]; // open, flat village grass
+    for (let ty = R - 2; ty <= R + 1; ty++) for (let tx = C - 2; tx <= C; tx++) expect(map.elev[ty * map.width + tx]).toBe(0);
+    map.elev[R * map.width + C] = 32; // a cliff tile; the tile above it (the corner) stays open
+    const fx = C * 16 - 6; // the player's right side 1 px short of the cliff
+    const fy = R * 16 + 2; // the box spans rows R-1 and R
+    const [villager] = createNpcs(map, [{ id: 'v', name: 'v', dialogue: 'elder', tx: C - 1, ty: R - 1 }]);
+    Object.assign(villager, { x: fx + 3, y: fy - 6, z: 0 });
+    s.npcs = [villager];
+    s.npcDefs = [];
+    const p = s.player;
+    Object.assign(p, { x: fx, y: fy, z: 0, groundZ: 0, grounded: true, vz: 0 });
+    const from = playerFrom(p);
+    // The move went up-right past the corner (row R-1 is open) and into the villager's body.
+    Object.assign(p, { x: fx + 3, y: fy - 3 });
+    expect(npcOverlap(p.x, p.y, p, villager)).toBeGreaterThan(0);
+    expect(npcOverlap(p.x, fy, p, villager)).toBe(0); // the slide "keep x" would be free of the villager…
+    blockPlayerByNpcs(s, from, true, STEP_SEC, 8);
+    // …but it is in the cliff: the whole move is undone instead.
+    expect([p.x, p.y, p.z]).toEqual([fx, fy, 0]);
+    expect(groundHeightUnder(p, map)).toBe(0);
   });
 
   it('a move undone by a villager puts the height back with the position', () => {
