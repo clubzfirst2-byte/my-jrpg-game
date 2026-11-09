@@ -187,3 +187,36 @@ describe('phase 2, weakness, parry and defeat', () => {
     expect(t.enemies.filter((e) => e.boss).map((e) => e.bossId).sort()).toEqual(['core_desert', 'core_forest', 'core_lake']);
   });
 });
+
+describe('the wake announcement (final QA B-5)', () => {
+  /** Steps n times with the player at (x, y); returns how many bossAwake events came. */
+  const wakes = (s, x, y, n) => {
+    let count = 0;
+    for (let i = 0; i < n; i++) {
+      Object.assign(s.player, { x, y, prevX: x, prevY: y, knockMs: 0 });
+      stepGame(s, none);
+      count += s.events.filter((e) => e.type === 'bossAwake' && e.tick === s.tick).length;
+    }
+    return count;
+  };
+
+  it('is made once per wake: stepping out of the arena and back in mid-fight does not repeat it', () => {
+    const { s, b } = fight('core_forest', { dy: 40 });
+    const inside = { x: b.x, y: b.y + 40 };
+    const outside = { x: b.x, y: (b.arena.ty + b.arena.th) * 16 + 40 };
+    expect(wakes(s, inside.x, inside.y, 120)).toBe(1); // (it closes in and attacks, leaving its place)
+    for (let k = 0; k < 5; k++) {
+      expect(wakes(s, outside.x, outside.y, 6)).toBe(0); // out briefly: it heads home but is not there
+      expect(wakes(s, inside.x, inside.y, 60)).toBe(0);
+    }
+  });
+
+  it('a core that went back to its place and settled announces its next wake again', () => {
+    const { s, b } = fight('core_forest', { dy: 40 });
+    const outside = { x: b.x, y: (b.arena.ty + b.arena.th) * 16 + 40 };
+    expect(wakes(s, b.x, b.y + 40, 120)).toBe(1);
+    wakes(s, outside.x, outside.y, 60 * 10); // long enough to walk home
+    expect(Math.hypot(b.x - b.homeX, b.y - b.homeY)).toBeLessThanOrEqual(2);
+    expect(wakes(s, b.x, b.y + 40, 10)).toBe(1);
+  });
+});

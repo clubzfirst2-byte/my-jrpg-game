@@ -147,6 +147,9 @@ export function createBoss(def, map, id) {
     state: 'idle',
     t: 0,
     awake: false,
+    /** back at its place and calm: the next wake is a new one (announced); stepping out and back in
+     *  during a fight is not (final QA B-5) */
+    settled: true,
     phase: 1,
     patternIndex: 0,
     pattern: /** @type {Pattern | null} */ (null),
@@ -215,7 +218,9 @@ export function updateBoss(e, state, dt) {
   }
   if (playerIn && !e.awake) {
     e.awake = true;
-    state.events.push({ type: 'bossAwake', tick: state.tick, id: e.bossId });
+    // Announced once per wake: not again for the player stepping out and back in mid-fight.
+    if (e.settled) state.events.push({ type: 'bossAwake', tick: state.tick, id: e.bossId });
+    e.settled = false;
   }
   if (!playerIn) {
     // The player left: the core settles back at its place (no chasing across the region).
@@ -223,6 +228,7 @@ export function updateBoss(e, state, dt) {
     if (e.state !== 'stun') setState(e, 'idle');
     const home = direction(e.homeX - e.x, e.homeY - e.y, { x: 0, y: 1 });
     if (Math.hypot(e.homeX - e.x, e.homeY - e.y) > 2) move(e, map, home.x * k.speed * dt, home.y * k.speed * dt);
+    else e.settled = true; // home again: asleep until the next wake
     return;
   }
   const dx = p.x - e.x;

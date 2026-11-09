@@ -8,6 +8,31 @@
 import { Container, Graphics, RenderTexture, Sprite, Texture } from 'pixi.js';
 import { ambientAt, isDark, isRaining } from '../game/env/weather.js';
 import { playerWeather } from '../game/env/weatherActions.js';
+import { ENEMY_KINDS } from '../game/entities/enemies.js';
+import { BOSS_KINDS } from '../game/entities/bosses.js';
+
+/** A winding-up enemy's warning light (world px): the colour added to the light map. */
+export const WARNING_LIGHT = Object.freeze({ color: 0xffd0c0, enemyRadius: 26, bossRadius: 44, ringMargin: 10 });
+
+/**
+ * v1.0 (final QA B-1): the wind-up warning is drawn in the world, sorted with its enemy, so a tree
+ * in front hides it like it hides the enemy. To keep it readable at night and in dark rooms, every
+ * enemy winding up lights its own spot in the light map (big enough for a slam's ring): the red
+ * overlay and the ring then show at about daylight strength, and the glow itself says "about to
+ * strike". (Drawing the warning above the light map instead kept it bright but floated it over
+ * trees.)
+ * @param {any[]} enemies @returns {{ x: number, y: number, r: number }[]}
+ */
+export function warningLights(enemies) {
+  const out = [];
+  for (const e of enemies) {
+    if (e.state !== 'windup') continue;
+    const slam = e.boss && e.bossKind ? (e.pattern === 'slam' ? BOSS_KINDS[e.bossKind]?.slamRadius : 0) : e.kind === 'sentinel' ? ENEMY_KINDS.sentinel.slamRadius : 0;
+    const body = e.boss || e.final ? WARNING_LIGHT.bossRadius : WARNING_LIGHT.enemyRadius;
+    out.push({ x: e.x, y: e.y - e.z - (e.boss || e.final ? 16 : 6), r: Math.max(body, slam ? slam + WARNING_LIGHT.ringMargin : 0) });
+  }
+  return out;
+}
 
 const RAIN_SPEED = 320; // px/s on screen
 const RAIN_WIND = 120;
@@ -31,6 +56,26 @@ function lightTexture() {
 /** @param {{ r: number, g: number, b: number }} c */
 const toHex = (c) => (Math.round(Math.min(1, c.r) * 255) << 16) | (Math.round(Math.min(1, c.g) * 255) << 8) | Math.round(Math.min(1, c.b) * 255);
 
+/**
+ * The light map: a render texture the size of the screen, drawn over the world with 'multiply'.
+ *
+ * v1.0 fix (final QA A-1, "nights are never dark when the game starts from the title"): the texture
+ * starts tiny and is resized to the screen on the first update. A Sprite only follows its texture's
+ * size changes when the texture is `dynamic`; otherwise it keeps the size it had when it was first
+ * drawn. With the title, the app draws frames while boot waits for the save (store.load), before
+ * the first update: the light map was drawn at 8×8 then and stayed an 8×8 dot in the corner for
+ * good, so the world was never darkened. (Without the title, the first draw came after the resize,
+ * so it happened to work.) Hence `dynamic: true`, and the map stays hidden until it is first filled.
+ */
+export function createLightMap() {
+  const rt = RenderTexture.create({ width: 8, height: 8, dynamic: true });
+  const overlay = new Sprite(rt);
+  overlay.blendMode = 'multiply';
+  overlay.label = 'light-map';
+  overlay.visible = false;
+  return { rt, overlay };
+}
+
 export class WeatherView {
   /**
    * @param {import('pixi.js').Application} app
@@ -48,10 +93,9 @@ export class WeatherView {
     this.lightScene.addChild(this.ambientFill);
     /** @type {Sprite[]} */
     this.lights = [];
-    this.rt = RenderTexture.create({ width: 8, height: 8 });
-    this.overlay = new Sprite(this.rt);
-    this.overlay.blendMode = 'multiply';
-    this.overlay.label = 'light-map';
+    const map = createLightMap();
+    this.rt = map.rt;
+    this.overlay = map.overlay;
     // Rain (screen space).
     this.rain = new Container();
     this.rain.label = 'rain';
@@ -226,6 +270,8 @@ export class WeatherView {
     }
     if (state.orb) add(state.orb.x, state.orb.y - state.orb.z, 80, 0xfff0c8); // 灯火
     if (env.sparks) for (const i of env.sparks.cells) add((i % map.width) * ts + ts / 2, ((i / map.width) | 0) * ts + ts / 2, 20, 0xfff27a);
+    // v1.0: enemies winding up light their own spot, so the red warning reads in the dark.
+    for (const l of warningLights(state.enemies ?? [])) add(l.x, l.y, l.r, WARNING_LIGHT.color);
     return n;
   }
 

@@ -173,12 +173,8 @@ export class GameView {
     // Time of day and weather (P5): light map, rain, lightning, above the world.
     this.weather = new WeatherView(app, (key) => this.makeSprite(key), this.actors);
     this.weather.attach(app.stage, app.stage.getChildIndex(this.world) + 1);
-    // v1.0: attack warnings (the wind-up overlay, the slam rings) are drawn ABOVE the light map, so
-    // night and dark rooms do not dim them: a world-space layer that follows the world's camera
-    // transform (applyCamera), just over the light map and under the rain.
-    this.warnLayer = new Container();
-    this.warnLayer.label = 'warnings';
-    app.stage.addChildAt(this.warnLayer, app.stage.getChildIndex(this.weather.overlay) + 1);
+    // (v1.0 attack warnings stay in the world, sorted with their enemy, so trees in front hide them;
+    // at night the light map lights each winding-up enemy instead: weatherView.js warningLights.)
 
     this.shadow = this.makeSprite('fx.shadow');
     this.shadow.alpha = 0.35;
@@ -835,8 +831,6 @@ export class GameView {
     const zoom = this.camera.zoom;
     this.world.scale.set(zoom);
     this.world.position.set(-o.x * zoom, -o.y * zoom);
-    this.warnLayer.scale.set(zoom);
-    this.warnLayer.position.set(-o.x * zoom, -o.y * zoom);
   }
 
   /**
@@ -956,13 +950,13 @@ export class GameView {
       // Telegraph (v1.0, ART_STYLE_GUIDE 5.4 B): the wind-up pulses under a 50% red overlay, faster
       // as the attack nears — laid over the art, so it shows on dark bodies too (flashOverlay.js).
       const flash = warningFlashAlpha(e, timeSec, windupProgress(e));
-      const overlay = placeFlash(spr, this.flashSprites.get(e.id) ?? null, flash, this.silhouettes, this.warnLayer);
+      const overlay = placeFlash(spr, this.flashSprites.get(e.id) ?? null, flash, this.silhouettes, this.actors);
       if (overlay) this.flashSprites.set(e.id, overlay);
     }
     // P10.4: a core winding up its slam shows the shockwave's reach on the ground.
     if (!this.bossRing) {
       this.bossRing = new Graphics();
-      this.warnLayer.addChild(this.bossRing); // (above the light map, like the overlay)
+      this.actors.addChild(this.bossRing);
     }
     this.bossRing.clear();
     for (const e of state.enemies) {
