@@ -256,17 +256,20 @@ def palettes():
     f = font(14)
     sw, rowh = 22, 30
     n = sum(len(v) for v in REGIONS.values())
-    im = Image.new("RGBA", (520, 20 + n * rowh + len(REGIONS) * 26), (34, 36, 46, 255))
+    im = Image.new("RGBA", (640, 20 + n * rowh + len(REGIONS) * 26), (34, 36, 46, 255))
     d = ImageDraw.Draw(im)
     y = 10
     for region, mats in REGIONS.items():
         d.text((10, y), region, fill=(255, 230, 160), font=f)
         y += 24
-        for mname, ramp in mats.items():
-            d.text((30, y + 4), mname, fill=(230, 230, 230), font=f)
+        for mname, ramp, src in mats:
+            d.text((24, y + 4), mname, fill=(230, 230, 230), font=f)
+            x0 = 200
             for i, c in enumerate(ramp):
-                d.rectangle((110 + i * sw, y, 110 + i * sw + sw - 2, y + sw), fill=c)
-            d.text((110 + 5 * sw + 10, y + 4), " ".join(ramp), fill=(160, 160, 170), font=font(11))
+                d.rectangle((x0 + i * sw, y, x0 + i * sw + sw - 2, y + sw), fill=c)
+            tag = "ガイド" if src == "guide" else "新規"
+            d.text((x0 + 5 * sw + 8, y + 4), tag, fill=(140, 200, 255) if src == "guide" else (255, 180, 120), font=f)
+            d.text((x0 + 5 * sw + 56, y + 5), " ".join(ramp), fill=(160, 160, 170), font=font(11))
             y += rowh
     im.save(os.path.join(DOCS, "palettes.png"))
 
