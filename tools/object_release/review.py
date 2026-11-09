@@ -36,7 +36,7 @@ GROUPS = [
                        "obj.stone.on", "obj.pillar", "obj.altar", "sw.plate.off", "sw.plate.on", "sw.sensor.off",
                        "sw.sensor.on"]),
     ("icons", ["icon.sword", "icon.bow", "icon.armor", "icon.mushroom", "icon.berry", "icon.herb", "icon.pepper",
-               "icon.meat", "icon.fang", "icon.shard", "icon.arrows", "icon.food"]),
+               "icon.meat", "icon.fang", "icon.shard", "icon.arrows", "icon.food", "icon.star_shard", "icon.charm"]),
     ("fx / ui", ["fx.slash", "fx.fire.0", "fx.fire.1", "fx.glider", "fx.shadow", "fx.arrow", "fx.orb", "fx.shield",
                  "fx.bow", "fx.smoke", "fx.light", "ui.marker"]),
 ]
