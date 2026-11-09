@@ -6,6 +6,7 @@ import { createPlayer, updatePlayer, respawn } from './entities/player.js';
 import { combatStep, initCombat, COMBAT } from './entities/playerCombat.js';
 import { createBoss, settleBosses } from './entities/bosses.js';
 import { placeFinalBoss, settleFinalBoss, FINAL_BOSS } from './entities/finalBoss.js';
+import { stepOpening, stepEnding } from './story/story.js';
 import { createEnemy, updateEnemy } from './entities/enemies.js';
 import { updateProjectiles } from './entities/projectiles.js';
 import { hitEnemy } from './combat/damage.js';
@@ -94,6 +95,9 @@ export const ENEMY_CORPSE_MS = 600;
  * @property {import('./npc/npcs.js').Npc[]} npcs  P9: villagers (the ones there now)
  * @property {import('./npc/npcs.js').NpcDef[]} npcDefs  v1.0: every villager of the map, with its appearance condition
  * @property {{ id: string, npc: string | null, node: string, line: number } | null} dialogue  P9: the conversation going on
+ * @property {{ ms: number } | null} opening  v1.0 (C9): the opening playing (story/story.js)
+ * @property {'screen' | null} ending  v1.0 (C10): the ending screen is showing (story/story.js)
+ * @property {number | null} endingAt  v1.0 (C10): the tick the ending dialogue starts by itself
  * @property {string | null} shop  P9: the shop open now
  */
 
@@ -151,6 +155,9 @@ export function createGameState(def = HEIGHT_TEST) {
     npcs: [],
     npcDefs: f.npcs ?? [],
     dialogue: null,
+    opening: null,
+    ending: null,
+    endingAt: null,
     shop: null,
   };
   placeFeatureSolids(state);
@@ -224,6 +231,8 @@ function changeSeason(state) {
  */
 export function stepGame(state, input) {
   state.tick++;
+  // v1.0 (C9 / C10): the opening plays and the ending screen shows with the world and controls waiting.
+  if (stepOpening(state, STEP_SEC * 1000) || state.ending === 'screen') return;
   state.hitboxes = [];
   // The world keeps going while the player is down (fires burn on).
   stepEnv(state.env, state.map, state.player, STEP_SEC * 1000);
@@ -287,6 +296,7 @@ export function stepGame(state, input) {
   learnAbilities(state);
   settleBosses(state);
   settleFinalBoss(state);
+  stepEnding(state); // v1.0 (C10)
 }
 
 /**

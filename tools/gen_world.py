@@ -669,6 +669,13 @@ P.features['npcs'] += [
     {'id': 'smith', 'name': '鍛冶職人', 'dialogue': 'smith', 'look': 7, **village_spot(34, 18)},
     {'id': 'princess_home', 'name': '星環の姫', 'dialogue': 'princess', 'look': 9, 'art': 'princess', **village_spot(20, 22), 'stay': True, 'if': [{'flag': 'ending_seen'}]},
 ]
+# v1.0 (C10): once the source is purified the princess stands before the ring in its arena, herself (not a
+# 写し身), and speaks the ending; gone once the ending has been seen.
+_end = (104, 46)  # south of where the ring floats (rows 40-45), on the arena floor
+assert S.eg[_end[1]][_end[0] - 96] == 'u' and S.eh[_end[1]][_end[0] - 96] == 0, 'princess_end floor'
+assert not any(o.get('tx') == _end[0] and o.get('ty') == _end[1] for lst in S.features.values() for o in lst if isinstance(o, dict)), 'princess_end spot taken'
+S.features['npcs'].append({'id': 'princess_end', 'name': '星環の姫', 'dialogue': 'ending', 'look': 9, 'art': 'princess', 'tx': _end[0], 'ty': _end[1], 'stay': True,
+                           'if': [{'flag': 'source_purified'}, {'flag': 'ending_seen', 'is': False}]})
 # The traveller rests on the plains side of the pass to the forest.
 assert P.free(88, 51, 0) and P.g[51][88] == '.', 'traveller spot'
 P.features['npcs'].append({'id': 'traveller', 'name': '旅人', 'dialogue': 'traveller', 'look': 8, 'tx': 88, 'ty': 51})

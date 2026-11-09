@@ -14,6 +14,9 @@ import { RESOLUTION_CANDIDATES, DEFAULT_TARGET_HEIGHT, nextCandidate } from './v
 import { AssetManager } from './view/assets/assetManager.js';
 import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES, placeholderEntries, releaseHeroEntries, releaseNpcEntries, releaseEnemyEntries, SOURCE_BUNDLE, sourceEntries } from './view/assets/placeholderPack.js';
 import { finalBossDebugApi, finalBossToast } from './debug/finalBossDebug.js';
+import { storyDebugApi } from './debug/storyDebug.js';
+import { startOpening, skipOpening, finishEnding, endingLine, ENDING } from './game/story/story.js';
+import { EndingScreen } from './ui/ending.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
@@ -344,7 +347,10 @@ async function boot() {
       // v1.0 (C8): a save from before the story whose player never met the princess.
       const notice = noticeOnLoad(state);
       if (notice) setTimeout(() => toast.show(notice, { ms: 5000 }), loaded.recovered ? 4000 : 600);
-    } else markNewGame(state);
+    } else {
+      markNewGame(state);
+      startOpening(state); // v1.0 (C9): a new game only
+    }
     // Never overwrite a save written by a newer version of the game.
     autosave.enabled = loaded.status !== 'newer';
     void store.requestPersistence();
@@ -353,6 +359,30 @@ async function boot() {
     loop.reset();
     view.snapCamera(state);
   }
+  // v1.0 (C9): a tap or a key skips the opening.
+  const skipOpeningNow = () => {
+    if (state.opening && !inTitle) skipOpening(state);
+  };
+  window.addEventListener('pointerdown', skipOpeningNow, true);
+  window.addEventListener('keydown', skipOpeningNow, true);
+  // v1.0 (C10): the ending screen, then the village in the morning (story.js), saved.
+  /** @type {EndingScreen | null} */
+  let endingScreen = null;
+  const showEnding = () => {
+    endingScreen = new EndingScreen(uiRoot, {
+      title: GAME_TITLE,
+      line: endingLine(state),
+      ms: ENDING.screenMs,
+      onDone: () => {
+        endingScreen = null;
+        finishEnding(state);
+        input.clear();
+        loop.reset();
+        view.snapCamera(state);
+        void autosave.saveNow();
+      },
+    });
+  };
   // Save when the app goes to the background (iOS may close it without further notice).
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') void autosave.saveNow();
@@ -718,6 +748,7 @@ async function boot() {
       alpha = result.alpha;
       for (const k of TAP_KEYS) heldTaps[k] = result.steps === 0 && !!frameInput[k];
     }
+    if (state.ending === 'screen' && !endingScreen) showEnding();
     // P9: show the conversation / shop; when a talk ends, the world goes on with fresh input.
     dialogueBox.show(dialogueView(state));
     if (state.shop && !shopMenu.isOpen) shopMenu.open();
@@ -996,6 +1027,7 @@ async function boot() {
     assets: () => assets.stats(),
   };
   Object.assign(api, finalBossDebugApi(state, api.teleport)); // v1.0: the source (flags, arena, seats)
+  Object.assign(api, storyDebugApi(state)); // v1.0: the opening and the ending
   /** @type {any} */ (window).__debugApi = api;
   // ?tour=60 starts the auto tour right away (with ?map=..., which skips the title).
   if (params.get('tour') && !withTitle) startTour(Number.parseFloat(params.get('tour') ?? '') || 60);
