@@ -12,8 +12,9 @@
 //   for a moment: it staggers for 8 s and can be hit. One hit takes a third of its health (whatever
 //   the weapon) and the ring inverts again at once (a wave), so three rounds purify it.
 // - Attacks: the cores' fan of orbs, ring of orbs and slam, and the inversion wave: a shockwave
-//   (jump over it) that puts every seat out — the sconce goes dark (unlightSconce), the crate slides
-//   back home, the stone falls silent. It comes every few attacks and always after a stagger.
+//   (jump over it). After a stagger it inverts the ring again and puts every seat out — the sconce
+//   goes dark (unlightSconce), the crate slides back home, the stone falls silent. The waves it sends
+//   every few attacks during the fight only put out the floor's seats (crate, stone).
 // - Below half health, phase 2: shorter wind-ups (the cores' rule, PHASE2_WINDUP) and waves more often.
 // - It is in play only while the player is in its arena (placeFinalBoss): a new game's enemy list is
 //   unchanged.
@@ -117,6 +118,8 @@ export function createFinalBoss(def, map, id) {
     patternIndex: 0,
     pattern: /** @type {FinalPattern | null} */ (null),
     windupMs: FINAL_BOSS.windupMs,
+    /** the coming wave inverts the ring again (puts out every seat), not only the floor's */
+    fullWave: false,
     staggers: 0,
     /** its own clock (ms), and when the phase-2 change shows (the view's transform frames) */
     clock: 0,
@@ -160,9 +163,10 @@ function windupFor(e, pattern) {
   return Math.round(base * (e.phase === 2 ? PHASE2_WINDUP : 1));
 }
 
-/** @param {any} e @param {FinalPattern} pattern */
-function startPattern(e, pattern) {
+/** @param {any} e @param {FinalPattern} pattern @param {boolean} [full] a wave that inverts the ring again (after a stagger) */
+function startPattern(e, pattern, full = false) {
   e.pattern = pattern;
+  e.fullWave = full;
   e.windupMs = windupFor(e, pattern);
   setState(e, 'windup');
 }
@@ -223,7 +227,7 @@ export function updateFinalBoss(e, state, dt) {
 
   switch (e.state) {
     case 'stagger':
-      if (e.t >= FINAL_BOSS.staggerMs) startPattern(e, 'wave'); // it inverts again
+      if (e.t >= FINAL_BOSS.staggerMs) startPattern(e, 'wave', true); // it inverts again
       break;
     case 'idle': {
       e.faceX = toPlayer.x;
@@ -246,8 +250,8 @@ export function updateFinalBoss(e, state, dt) {
         if (e.pattern === 'volley') fan(e, state, FINAL_BOSS.volleyShots, 1.0);
         else if (e.pattern === 'ring') fan(e, state, FINAL_BOSS.ringShots, Math.PI * 2);
         else if (e.pattern === 'wave') {
-          resetSeats(state, e);
-          state.events.push({ type: 'sourceWave', tick: state.tick, id: e.bossId });
+          resetSeats(state, e, e.fullWave ? 'all' : 'ground');
+          state.events.push({ type: 'sourceWave', tick: state.tick, id: e.bossId, full: !!e.fullWave });
         }
         setState(e, 'attack');
       }
@@ -316,14 +320,29 @@ function fan(e, state, n, spread) {
 }
 
 /**
- * The inversion wave: every seat goes back to sleep. The sconce is put out, the crate slides back
- * to where it started, the stone falls silent, and the grass by the light seat is whole again (put
- * out, no ash): burning it is the light seat's way without abilities, and ash would otherwise take
- * two minutes to grow back. Only those grass tiles are touched (the fire / ash of a tile lives in
- * the environment simulation, not in the saved world differences).
- * @param {any} state @param {any} e
+ * The inversion wave puts seats back to sleep.
+ * - 'all' (the ring inverting again after a stagger, and when it wakes): every seat. The sconce is
+ *   put out, the crate slides back to where it started, the stone falls silent, and the grass by the
+ *   light seat is whole again (put out, no ash): burning it is the light seat's way without
+ *   abilities, and ash would otherwise take two minutes to grow back. Only those grass tiles are
+ *   touched (the fire / ash of a tile lives in the environment simulation, not in the saved world
+ *   differences).
+ * - 'ground' (the waves it sends during the fight): only the seats on the floor — the crate is
+ *   pushed back and the stone falls silent; the flames (sconce, burning grass) hold. So waking the
+ *   fire and light seats takes one fire arrow each per round (fair without abilities: QA B-3).
+ * @param {any} state @param {any} e @param {'all' | 'ground'} [scope]
  */
-export function resetSeats(state, e) {
+export function resetSeats(state, e, scope = 'all') {
+  const map = state.map;
+  if (scope === 'ground') {
+    for (const s of state.switches) {
+      if (!e.seatIds.includes(s.id) || !(s.kind === 'plate' || s.kind === 'stone')) continue;
+      e.seats[s.id] = false;
+      delete state.switchUntil[s.id];
+    }
+    returnCrate(state, e.crateHome);
+    return;
+  }
   const env = state.env;
   for (const g of e.grass ?? []) {
     const i = g.ty * state.map.width + g.tx;
@@ -334,7 +353,6 @@ export function resetSeats(state, e) {
     env.version++;
   }
   for (const id of e.seatIds) e.seats[id] = false;
-  const map = state.map;
   for (const s of state.switches) {
     if (!e.seatIds.includes(s.id)) continue;
     const o = state.env.objectAt.get(s.ty * map.width + s.tx);
@@ -402,7 +420,7 @@ export function hitFinalBoss(state, e, hit) {
     e.transformUntil = e.clock + 1000;
     state.events.push({ type: 'sourcePhase', tick: state.tick, id: e.bossId });
   }
-  startPattern(e, 'wave'); // the ring flips back over
+  startPattern(e, 'wave', true); // the ring flips back over
   return true;
 }
 

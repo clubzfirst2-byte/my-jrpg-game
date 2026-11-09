@@ -379,6 +379,31 @@ describe('C7: 淀みの源', () => {
   });
 });
 
+describe('the waves during the fight (QA B-3)', () => {
+  it('put out only the floor\'s seats (crate, stone); the flames hold', () => {
+    const { s, b } = arena();
+    hold(s, 60);
+    lightSconce(s, objAt(s, at(100, 40))); // fire
+    const crate = s.map.objects.find((o) => o.type === 'crate' && o.tx === 101 && o.ty === at(101, 54).ty);
+    slideCrate(s, crate, -1, 0, 5); // weight
+    s.switchUntil['source-echo'] = s.env.now + 10_000; // resonance (no light: no stagger)
+    hold(s, 2);
+    expect(seatsOf(b).sort()).toEqual(['source-echo', 'source-fire', 'source-weight']);
+    // The next pattern is the wave.
+    b.patternIndex = FINAL_BOSS.phase1.indexOf('wave');
+    let wave = null;
+    for (let t = 0; t < 8000 && !wave; t += MS) {
+      hold(s, 1);
+      wave = s.events.find((e) => e.type === 'sourceWave');
+    }
+    expect(wave).toMatchObject({ full: false });
+    expect(seatsOf(b)).toEqual(['source-fire']);
+    expect(objAt(s, at(100, 40)).lit).toBe(true);
+    expect(objAt(s, at(101, 54))?.type).toBe('crate');
+    expect(s.switchUntil['source-echo']).toBe(undefined);
+  });
+});
+
 describe('the seats can be woken again and again (C15)', () => {
   it('awake → stagger → the wave puts them out (sconce dark, crate home, stone silent) → awake again', () => {
     const { s, b } = arena();
@@ -546,14 +571,25 @@ describe('the art (placeholders under the release art\'s names)', () => {
   it('a frame for each state of the fight, falling back to idle when a frame is missing', () => {
     const all = () => true;
     const e = { state: 'idle', phase: 1, pattern: null, t: 0, clock: 0, transformUntil: 0, transformFrom: 0 };
-    expect(sourceFrameKey(e, 0, all)).toBe('enemy.boss_source.idle.0');
-    expect(sourceFrameKey({ ...e, phase: 2 }, 0, all)).toBe('enemy.boss_source.idle2.0');
+    // Inverted, at rest: the eye closed (the art's hurt.0). Staggered: the eye wide open (idle / idle2).
+    expect(sourceFrameKey(e, 0, all)).toBe('enemy.boss_source.hurt.0');
+    expect(sourceFrameKey({ ...e, state: 'recover', pattern: 'slam' }, 0, all)).toBe('enemy.boss_source.hurt.0');
+    expect(sourceFrameKey({ ...e, state: 'stagger' }, 0, all)).toBe('enemy.boss_source.idle.0');
+    expect(sourceFrameKey({ ...e, state: 'stagger', phase: 2 }, 0, all)).toBe('enemy.boss_source.idle2.0');
     expect(sourceFrameKey({ ...e, state: 'windup', pattern: 'wave' }, 0, all)).toBe('enemy.boss_source.windup_charge.0');
     expect(sourceFrameKey({ ...e, state: 'attack', pattern: 'ring' }, 0, all)).toBe('enemy.boss_source.attack_ring.0');
-    expect(sourceFrameKey({ ...e, state: 'stagger' }, 0, all)).toBe('enemy.boss_source.hurt.0');
     expect(sourceFrameKey({ ...e, state: 'dead', t: FINAL_BOSS.defeatMs }, 0, all)).toBe('enemy.boss_source.defeat.5');
     expect(sourceFrameKey({ ...e, clock: 300, transformFrom: 0, transformUntil: 1000 }, 0, all)).toBe('enemy.boss_source.transform.1');
-    expect(sourceFrameKey({ ...e, state: 'stagger' }, 0, (k) => k.includes('.idle.'))).toBe('enemy.boss_source.idle.0');
+    expect(sourceFrameKey({ ...e, state: 'windup', pattern: 'ring' }, 0, (k) => k.includes('.hurt.'))).toBe('enemy.boss_source.hurt.0');
+  });
+
+  it('the art agrees: idle / idle2 show the eye open, hurt.0 shows it closed (placeholders and release art)', () => {
+    // The eye's middle: pupil colours in the placeholder; in the release art, a bright eye pixel.
+    const frames = Object.fromEntries(sourceEntries().map((e) => [e.key, e.rows]));
+    const eyeOpen = (rows) => rows.slice(20, 36).some((r) => /[XjO]/.test(r.slice(26, 38)));
+    expect(eyeOpen(frames['enemy.boss_source.idle.0'])).toBe(true);
+    expect(eyeOpen(frames['enemy.boss_source.idle2.1'])).toBe(true);
+    expect(eyeOpen(frames['enemy.boss_source.hurt.0'])).toBe(false);
   });
 });
 
@@ -566,11 +602,18 @@ describe('three rounds with real inputs only, no abilities (review 中-1)', () =
     // The player stands where each action is done (attacks would knock them around otherwise).
     let spot = at(104, 55);
     let facing = 'up';
+    const seenEvents = new WeakSet();
+    let groundWaves = 0;
     const step = (input = none) => {
       s.player.hp = s.player.maxHp;
       s.player.dead = false;
       place(s, spot, facing);
       stepGame(s, input);
+      for (const ev of s.events) {
+        if (seenEvents.has(ev)) continue;
+        seenEvents.add(ev);
+        if (ev.type === 'sourceWave' && !ev.full) groundWaves++;
+      }
     };
     const go = (p, f) => {
       spot = p;
@@ -590,23 +633,40 @@ describe('three rounds with real inputs only, no abilities (review 中-1)', () =
     };
     wait(2);
     const b = s.enemies.find((e) => e.final);
-    const arrows0 = countOf(s.progress.inv, 'arrow');
     const roundMs = [];
+    const roundArrows = [];
+    // The player takes their time: about 4 s of walking between seats, so the waves the source sends
+    // during the fight do come in the middle of a round. They put out only the floor's seats.
+    const walk = () => wait(240);
+    const awake = (id) => b.seats[id] || b.state === 'stagger';
     for (let round = 0; round < 3; round++) {
       const t0 = s.env.now;
-      for (let tries = 0; tries < 4 && b.state !== 'stagger'; tries++) {
-        go(at(108, 46), 'up'); // light: a fire arrow through the east brazier sets the grass alight
-        fire();
-        go(at(100, 47), 'up'); // fire: a fire arrow through the west brazier onto the sconce
-        fire();
-        go(at(102, 54), 'left'); // weight: two sword hits push the crate onto the plate
-        cut();
-        go(at(101, 54), 'left');
-        cut();
-        go(at(105, 54), 'right'); // resonance: strike the crystal
-        cut();
+      const a0 = countOf(s.progress.inv, 'arrow');
+      for (let tries = 0; tries < 10 && b.state !== 'stagger'; tries++) {
+        if (!awake('source-light')) {
+          go(at(108, 46), 'up'); // light: a fire arrow through the east brazier sets the grass alight
+          fire();
+          walk();
+        }
+        if (!awake('source-fire')) {
+          go(at(100, 47), 'up'); // fire: a fire arrow through the west brazier onto the sconce
+          fire();
+          walk();
+        }
+        if (!awake('source-weight')) {
+          go(at(102, 54), 'left'); // weight: two sword hits push the crate onto the plate
+          cut();
+          go(at(101, 54), 'left');
+          cut();
+          walk();
+        }
+        if (!awake('source-echo')) {
+          go(at(105, 54), 'right'); // resonance: strike the crystal
+          cut();
+        }
         wait(3);
       }
+      roundArrows.push(a0 - countOf(s.progress.inv, 'arrow'));
       expect(b.state, `round ${round}`).toBe('stagger');
       for (let k = 0; k < 20 && b.state === 'stagger'; k++) {
         go({ tx: Math.floor(b.x / 16), ty: Math.floor(b.y / 16) + 1 }, 'up');
@@ -618,9 +678,11 @@ describe('three rounds with real inputs only, no abilities (review 中-1)', () =
       wait(200); // the wave passes
     }
     expect(s.progress.flags[SOURCE_PURIFIED]).toBe(true);
-    // Each round is a matter of seconds (no waiting for burnt grass to grow back).
-    for (const ms of roundMs) expect(ms).toBeLessThan(40_000);
-    expect(arrows0 - countOf(s.progress.inv, 'arrow')).toBeLessThanOrEqual(12);
+    // Each round is a matter of seconds (no waiting for burnt grass to grow back), and costs a couple
+    // of fire arrows (QA B-3: the waves during the fight no longer put the flames out).
+    for (const ms of roundMs) expect(ms).toBeLessThan(90_000);
+    for (const n of roundArrows) expect(n).toBeLessThanOrEqual(4);
+    expect(groundWaves).toBeGreaterThan(0); // (the test does meet the waves)
   }, 60_000);
 
   it('the wave makes the light seat\'s grass whole again (put out, no ash); nothing else', () => {
