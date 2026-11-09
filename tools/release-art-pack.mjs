@@ -5,7 +5,7 @@
 // the game loads 2 files per group instead of one module per frame. Nothing is written into src/:
 // the sheet and the table are emitted straight into dist/assets by the plugin.
 //
-// Only plain 8-bit-per-channel, non-interlaced PNGs without colour-space chunks (gAMA, iCCP, cHRM)
+// Only plain 8-bit-per-channel, non-interlaced PNGs without colour-space chunks (gAMA, iCCP, cHRM, cICP, mDCV, cLLI)
 // are accepted, so the browser draws the sheet's pixels exactly as it drew each frame file; anything
 // else stops the build with the file's name rather than risk a different picture.
 import { readdirSync, readFileSync } from 'node:fs';
@@ -25,6 +25,9 @@ const crc32 = (buf) => {
   for (const b of buf) c = CRC[(c ^ b) & 255] ^ (c >>> 8);
   return (c ^ -1) >>> 0;
 };
+
+/** Chunks that tell the browser to change colours; a frame with one is refused (see the top). */
+export const COLOUR_SPACE_CHUNKS = ['gAMA', 'iCCP', 'cHRM', 'cICP', 'mDCV', 'cLLI'];
 
 /** @typedef {{ width: number, height: number, data: Uint8Array }} RgbaImage RGBA, 4 bytes per pixel, rows top to bottom */
 /** @typedef {{ x: number, y: number, w: number, h: number }} FrameRect */
@@ -62,10 +65,11 @@ export function decodePng(file, name = 'PNG') {
     } else if (kind === 'PLTE') palette = data;
     else if (kind === 'tRNS') trns = data;
     else if (kind === 'IDAT') idat.push(data);
-    else if (kind === 'gAMA' || kind === 'iCCP' || kind === 'cHRM') {
+    else if (COLOUR_SPACE_CHUNKS.includes(kind)) {
       throw new Error(`${name}: colour-space chunk ${kind} is not supported (the browser could draw the packed sheet differently); save the PNG without it`);
     } else if (kind === 'IEND') break;
   }
+  if (!width || !height) throw new Error(`${name}: PNG without a valid IHDR`);
   const channels = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[type];
   if (!channels) throw new Error(`${name}: unknown PNG colour type ${type}`);
   if (depth === 16 || (depth !== 8 && type !== 0 && type !== 3)) throw new Error(`${name}: ${depth}-bit PNGs of colour type ${type} are not supported`);
@@ -74,6 +78,8 @@ export function decodePng(file, name = 'PNG') {
   const raw = inflateSync(Buffer.concat(idat));
   const bpp = Math.max(1, (channels * depth) >> 3); // bytes per pixel for the filters
   const stride = Math.ceil((width * channels * depth) / 8);
+  // height × (filter byte + one row); for 8-bit RGBA that is height × (1 + width × 4)
+  if (raw.length !== (stride + 1) * height) throw new Error(`${name}: broken PNG (pixel data is ${raw.length} bytes, expected ${(stride + 1) * height})`);
   const lines = new Uint8Array(stride * height);
   let prev = new Uint8Array(stride);
   for (let y = 0; y < height; y++) {
@@ -168,12 +174,16 @@ export function encodePng({ width, height, data }) {
   return Buffer.concat([SIGNATURE, chunk('IHDR', head), chunk('IDAT', deflateSync(raw, { level: 9 })), chunk('IEND', new Uint8Array(0))]);
 }
 
+/** The largest sheet, in either direction (well within iPhone image limits). */
+export const MAX_SHEET = 4096;
+
 /** Empty pixels between frames, so a frame never picks up its neighbour's edge. */
 export const SHEET_PAD = 1;
 
 /**
  * Lays frames out on shelves (tallest first, then by name) in the narrowest power-of-two width
- * (64 .. 4096) whose sheet is no taller than wide. Same frames → same layout.
+ * (64 .. 4096) whose sheet is no taller than wide; a group that would need more than 4096×4096
+ * stops the build. Same frames → same layout.
  * @param {{ name: string, width: number, height: number }[]} frames
  * @returns {{ width: number, height: number, frames: Record<string, FrameRect> }}
  */
@@ -199,13 +209,13 @@ export function layoutSheet(frames) {
     }
     return { width, height: Math.max(1, y + shelf), frames: rects };
   };
-  for (const width of [64, 128, 256, 512, 1024, 2048, 4096]) {
+  for (const width of [64, 128, 256, 512, 1024, 2048, MAX_SHEET]) {
     const r = place(width);
     if (r && r.height <= width) return r;
   }
-  const r = place(4096);
-  if (!r) throw new Error('release art: a frame is wider than 4096 px');
-  return r;
+  const r = place(MAX_SHEET);
+  if (!r) throw new Error(`release art: a frame is wider than ${MAX_SHEET} px`);
+  throw new Error(`release art: the frames need a ${MAX_SHEET}×${r.height} sheet, more than ${MAX_SHEET}×${MAX_SHEET}; split the group into more folders`);
 }
 
 /**
@@ -249,18 +259,19 @@ export function releaseGroups(root) {
 }
 
 /**
- * Packs one group folder: every *.png in it, named by its file name without ".png" (the same names
+ * Packs one group folder: every *.png in it (lowercase ".png" only — the dev server's glob is
+ * case-sensitive too, so both see the same files), named by its file name without ".png" (the same names
  * releaseFrames gave before packing).
  * @param {string} dir
  * @returns {{ png: Buffer, table: { width: number, height: number, frames: Record<string, FrameRect> }, files: string[] }}
  */
 export function packGroup(dir) {
   const files = readdirSync(dir)
-    .filter((f) => /\.png$/i.test(f))
+    .filter((f) => f.endsWith('.png')) // lowercase only, like the dev server's glob (*.png)
     .sort();
   /** @type {Map<string, RgbaImage>} */
   const frames = new Map();
-  for (const f of files) frames.set(f.replace(/\.png$/i, ''), decodePng(readFileSync(join(dir, f)), join(dir, f)));
+  for (const f of files) frames.set(f.slice(0, -'.png'.length), decodePng(readFileSync(join(dir, f)), join(dir, f)));
   const { image, frames: rects } = packSheet(frames);
   return { png: encodePng(image), table: { width: image.width, height: image.height, frames: rects }, files: files.map((f) => join(dir, f)) };
 }

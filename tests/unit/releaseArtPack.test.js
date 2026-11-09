@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { deflateSync, inflateSync } from 'node:zlib';
-import { decodePng, encodePng, packGroup, packSheet, cutFrame, layoutSheet, releaseGroups, SHEET_PAD } from '../../tools/release-art-pack.mjs';
+import { decodePng, encodePng, packGroup, packSheet, cutFrame, layoutSheet, releaseGroups, SHEET_PAD, MAX_SHEET, COLOUR_SPACE_CHUNKS } from '../../tools/release-art-pack.mjs';
 
 // Release art packing (docs/perf/release-art-packing.md): each src/art-release/<group> becomes one
 // sheet PNG + one frame table at build time, drawn exactly as the frame files were.
@@ -122,6 +122,25 @@ describe('release art packer', () => {
     const gama = Buffer.from([0, 0, 0, 4, 0x67, 0x41, 0x4d, 0x41, 0, 0, 0xb1, 0x8f, 0, 0, 0, 0]);
     const bad = Buffer.concat([png.subarray(0, 33), gama, png.subarray(33)]);
     expect(() => decodePng(bad, 'x.png')).toThrow(/gAMA/);
+    const cicp = Buffer.concat([png.subarray(0, 33), Buffer.from([0, 0, 0, 4]), Buffer.from('cICP'), Buffer.from([9, 16, 0, 1, 0, 0, 0, 0])]);
+    expect(() => decodePng(Buffer.concat([cicp, png.subarray(33)]), 'x.png')).toThrow(/cICP/);
+    expect(COLOUR_SPACE_CHUNKS).toEqual(expect.arrayContaining(['gAMA', 'iCCP', 'cHRM', 'cICP']));
+  });
+
+  it('refuses a broken PNG whose pixel data is short', () => {
+    const png = encodePng({ width: 4, height: 4, data: new Uint8Array(64).fill(200) });
+    const raw = deflateSync(Buffer.alloc(3 * (1 + 4 * 4)));
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(raw.length);
+    const bad = Buffer.concat([png.subarray(0, 33), len, Buffer.from('IDAT'), raw, Buffer.alloc(4), png.subarray(png.length - 12)]);
+    expect(() => decodePng(bad, 'short.png')).toThrow(/broken PNG/);
+  });
+
+  it('stops when a group needs a sheet larger than 4096×4096', () => {
+    const many = Array.from({ length: 6500 }, (_, i) => ({ name: `f${i}`, width: 48, height: 56 }));
+    expect(MAX_SHEET).toBe(4096);
+    expect(() => layoutSheet(many)).toThrow(/4096×\d+ sheet/);
+    expect(() => layoutSheet([{ name: 'wide', width: 5000, height: 10 }])).toThrow(/wider than 4096/);
   });
 });
 
@@ -164,7 +183,7 @@ describe('sheet frames in the game', () => {
     expect(first.sheet.url).toBe('hero.png');
     expect(first).toMatchObject(hero.table.frames['hero.attack1.down.1']);
     // a group with no sheet (and no files in this test) gives nothing
-    expect((await releaseFrames('npc', { hero: { sheet: 'hero.png', table: 'hero.json' } })).size).toBe(0);
+    expect((await releaseFrames('no-such-group', { hero: { sheet: 'hero.png', table: 'hero.json' } })).size).toBe(0);
   });
 
   it('a sheet that cannot load leaves the placeholders (no crash)', async () => {
