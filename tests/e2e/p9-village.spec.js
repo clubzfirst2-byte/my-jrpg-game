@@ -96,6 +96,7 @@ test('quests and flags are saved', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
   await page.click('#title-new');
+  await api(page, 'skipOpening'); // v1.0: the opening (C9) is not what this test is about
   await api(page, 'clearEnemies');
   await api(page, 'teleport', 24, 91);
   await api(page, 'talkTo', 'guard');

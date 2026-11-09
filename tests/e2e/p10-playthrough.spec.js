@@ -32,6 +32,7 @@ test('a playthrough: every region, a quest, a night at the inn, a core purified 
   const errors = await openTitle(page);
   await page.click('#title-new');
   await expect(page.locator('#title-screen')).toBeHidden();
+  await api(page, 'skipOpening'); // v1.0: the opening (C9) is not what this test is about
   // (Enemies stay — the cores of the murk are enemies too; a deep well of health instead.)
   await api(page, 'setHp', 400);
   const places = await api(page, 'places');

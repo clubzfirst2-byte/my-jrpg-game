@@ -6,7 +6,7 @@ import { validateTalk } from '../../src/game/npc/validateTalk.js';
 import { npcPresent, syncNpcs, npcAlpha, npcInReach, NPC } from '../../src/game/npc/npcs.js';
 import { markNewGame, noticeOnLoad, noticeOnCore, NOTICE, STORY_FLAG } from '../../src/game/npc/storyNotices.js';
 import { addItem } from '../../src/game/items/inventory.js';
-import { applyProgress, emptyProgress, respawnPoint } from '../../src/game/world/features.js';
+import { applyProgress, emptyProgress, respawnPoint, warpOpen } from '../../src/game/world/features.js';
 import { npcFrameKey } from '../../src/view/npcAnim.js';
 import ITEMS from '../../data/items.json';
 
@@ -145,8 +145,9 @@ describe('C3: villagers who come and go (if) and the see-through princess (ghost
     const s = world();
     startDialogue(s, 'princess', 'princess_beach');
     s.progress.flags.source_purified = true;
-    expect(syncNpcs(s)).toBe(false);
+    syncNpcs(s); // (the princess by the source comes, C10)
     expect(ids(s)).toContain('princess_beach');
+    expect(ids(s)).toContain('princess_end');
     s.dialogue = null;
     expect(syncNpcs(s)).toBe(true);
     expect(ids(s)).not.toContain('princess_beach');
@@ -630,7 +631,11 @@ describe('C15: no quest gets stuck, with who is there at the time (every phase Ã
       const p = situation(phase, 4, {});
       const princesses = WORLD.npcs.filter((n) => n.id.startsWith('princess_') && npcPresent(light(p), n)).map((n) => n.id);
       if (phase.flags.ending_seen) expect(princesses, phase.name).toEqual(['princess_home']);
-      else if (phase.flags.source_purified) expect(princesses, phase.name).toEqual([]); // by the source (C6 / C10)
+      else if (phase.flags.source_purified) {
+        expect(princesses, phase.name).toEqual(['princess_end']); // by the source (C10)
+        // â€¦and the way to her stays open (the beach ring), until the ending is seen.
+        expect(warpOpen(light(p), WORLD.warps.find((w) => w.id === 'source-gate')), phase.name).toBe(true);
+      }
       else expect(princesses.length, phase.name).toBe(k === 0 ? 1 : 6);
     }
   });

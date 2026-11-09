@@ -5,6 +5,7 @@
 // always has a picture. Pure logic (no PixiJS): unit-tested.
 
 import { COMBAT, SWORD } from '../game/entities/playerCombat.js';
+import { openingView } from '../game/story/story.js';
 
 /**
  * Every action the hero has, its frame count (per direction) and timing.
@@ -53,7 +54,7 @@ export class HeroAnimator {
 
   /**
    * @param {any} p the player
-   * @param {{ deathMs?: number }} state
+   * @param {{ deathMs?: number, opening?: { ms: number } | null }} state
    * @param {number} timeSec real time (for idle and gliding loops)
    * @param {number} dtMs time since the previous call
    * @returns {HeroPose}
@@ -83,10 +84,13 @@ export class HeroAnimator {
 
 /**
  * The pose for the player's state (pure).
- * @param {any} p @param {{ deathMs?: number }} state @param {number} timeSec @param {number} sinceLandMs
+ * @param {any} p @param {{ deathMs?: number, opening?: { ms: number } | null }} state @param {number} timeSec @param {number} sinceLandMs
  * @returns {HeroPose}
  */
 export function poseOf(p, state, timeSec, sinceLandMs) {
+  // v1.0 (C9): in the opening he gets up — his collapse played backwards.
+  const op = state.opening ? openingView(state) : null;
+  if (op) return { action: 'down', frame: op.riseFrame };
   if (p.dead || (state.deathMs ?? -1) >= 0) {
     return { action: 'down', frame: Math.min(3, Math.floor(Math.max(0, state.deathMs ?? 0) / DOWN_FRAME_MS)) };
   }

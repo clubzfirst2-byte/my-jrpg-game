@@ -427,7 +427,9 @@ ENV_OBJECTS.append({'type': 'star_ring', 'tx': RING[0], 'ty': RING[1]})
 features['passes'] = [{
     'id': 'source-gate', 'tx': RING[0], 'ty': RING[1], 'facing': 'up',
     'to': {'region': 'desert', 'tx': 104, 'ty': 31},
-    'if': [{'flag': 'source_open'}, {'flag': 'source_purified', 'is': False}],
+    # Open from source_open until the ending is seen (not only until the source falls: after a death
+    # or a save between the last blow and her words, the way back to princess_end must stay open).
+    'if': [{'flag': 'source_open'}, {'flag': 'ending_seen', 'is': False}],
 }]
 # enemies must not stand on environment objects
 for e in features['enemies']:

@@ -66,6 +66,7 @@ test('the time of day is saved and comes back with つづきから', async ({ pa
   await page.goto('/');
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
   await page.click('#title-new');
+  await api(page, 'skipOpening'); // v1.0: the opening (C9) is not what this test is about
   await expect(page.locator('#hud-clock')).toContainText('07:');
   await api(page, 'setHour', 20);
   expect(await api(page, 'saveNow')).toBe(true);
