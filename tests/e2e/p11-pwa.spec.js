@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitTicks, ticksOf } from './ticks.js';
 
 // P11.1: the game as an app — installable (manifest, icons), playable with no network (service
 // worker), and the start time is measured and reported.
@@ -69,7 +70,7 @@ test('with no network at all, the game still starts and plays', async ({ page, c
     await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
     const t0 = (await api(page, 'player')).x;
     await page.keyboard.down('ArrowRight');
-    await page.waitForTimeout(400);
+    await waitTicks(page, ticksOf(400));
     await page.keyboard.up('ArrowRight');
     expect((await api(page, 'player')).x).toBeGreaterThan(t0);
     expect((await api(page, 'loadTiming')).fromCache).toBe(true);

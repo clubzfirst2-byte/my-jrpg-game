@@ -30,8 +30,8 @@ export function requestedProtoGroups(params) {
   return PROTO_GROUPS.filter((g) => params.get(g) === 'proto');
 }
 
-// Release art under review (QUALITY_POLICY: made at release quality, adopted after approval):
-// src/art-release/<group>/*.png, loaded only with ?hero=release until it is approved.
+// Release art (QUALITY_POLICY: made at release quality, adopted after approval): src/art-release/<group>/*.png.
+// The hero's was adopted on 2026-11-08 and is loaded for normal play (src/main.js).
 // In the build each group is ONE sheet PNG + ONE frame table JSON (vite.config.js, releaseArt;
 // docs/perf/release-art-packing.md), so it costs 2 requests instead of one per frame. In the dev
 // server (no sheets) the frame files are loaded one by one; this glob is dropped from the build.

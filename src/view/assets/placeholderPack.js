@@ -268,6 +268,17 @@ export function releaseHeroEntries(overrides) {
   return [...overrides.keys()].filter((k) => /^hero\.[a-z0-9]+\.(down|up|right|left)\.\d+$/.test(k)).map((key) => ({ key, rows: ['.'], anchor: FEET }));
 }
 
+/**
+ * The villagers' release frames (npc.<id>.<idle|walk>.<dir>.<frame>, docs/npc/NPC_RELEASE_PLAN.md):
+ * like the hero's, they get a slot in the base bundle only when such art is given. A villager
+ * without them keeps the placeholder npc.<look>.* frames.
+ * @param {Map<string, ArtSource>} [overrides]
+ */
+export function releaseNpcEntries(overrides) {
+  if (!overrides?.size) return [];
+  return [...overrides.keys()].filter((k) => /^npc\.[a-z]+\.(idle|walk)\.(down|up|right|left)\.\d+$/.test(k)).map((key) => ({ key, rows: ['.'], anchor: FEET }));
+}
+
 /** Width and height of an entry: its PNG when one replaces it, else the placeholder. @param {{ rows: string[], image?: { width: number, height: number } }} e */
 const sizeOf = (e) => (e.image ? { w: e.image.width, h: e.image.height } : { w: e.rows[0].length, h: e.rows.length });
 

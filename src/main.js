@@ -12,10 +12,11 @@ import { createOverlay } from './debug/overlay.js';
 import { createRenderer, resizeRenderer } from './view/renderer.js';
 import { RESOLUTION_CANDIDATES, DEFAULT_TARGET_HEIGHT, nextCandidate } from './view/resolution.js';
 import { AssetManager } from './view/assets/assetManager.js';
-import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES, placeholderEntries, releaseHeroEntries } from './view/assets/placeholderPack.js';
+import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES, placeholderEntries, releaseHeroEntries, releaseNpcEntries } from './view/assets/placeholderPack.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
+import { createNpcs } from './game/npc/npcs.js';
 import { prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
 import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
@@ -109,8 +110,30 @@ async function boot() {
   //   only when asked, until approved
   const protoGroups = requestedProtoGroups(params);
   if (protoGroups.length && hdParam !== '0') for (const [k, v] of await prototypeFrames(protoGroups)) artOverrides.set(k, v);
-  //   ?hero=release   the hero's release art under review (all actions; QUALITY_POLICY.md)
-  if (params.get('hero') === 'release' && hdParam !== '0') for (const [k, v] of await releaseFrames('hero')) artOverrides.set(k, v);
+  // The hero's release art (src/art-release/hero, adopted 2026-11-08) is the hero of normal play.
+  //   ?hero=placeholder   the old 16×16 placeholder hero instead (comparison)
+  //   ?hero=test / ?hero=proto / ?proto=all   the size-test hero / the P12 prototype instead (they replace the
+  //                       placeholder frames, so the release art stays out of their way)
+  //   ?hero=release       still accepted (the same as no ?hero)
+  const heroParam = params.get('hero');
+  const releaseHero = hdParam !== '0' && (heroParam === null || heroParam === 'release') && !protoGroups.includes('hero');
+  if (releaseHero) for (const [k, v] of await releaseFrames('hero')) artOverrides.set(k, v);
+  //   the villagers' release art (NPC batch 1: elder, merchant, guard; the others keep the
+  //   placeholder) goes with the hero's release art, which it is drawn to match (2 pixels per game
+  //   pixel): in normal play like the hero, or alone with ?npc=release / ?hd=1. ?npc=placeholder leaves
+  //   it out (before/after comparison), and so do ?hero=placeholder / ?hero=test and the prototype
+  //   views (?…=proto)
+  const npcParam = params.get('npc');
+  //   ?npc=revision      batch 1 with the review's fixes (src/art-release/npc-revision/)
+  //   ?npc=revision-b2   batch 2 with the review's fixes (src/art-release/npc-revision-b2/)
+  //   (both: ?npc=revision,revision-b2) — each kept apart from the frames under review until approved
+  const npcModes = new Set((npcParam ?? '').split(','));
+  const revisions = ['revision', 'revision-b2'].filter((m) => npcModes.has(m));
+  const releaseNpcs = releaseHero || npcModes.has('release') || revisions.length > 0 || hdParam === '1';
+  if (releaseNpcs && hdParam !== '0' && !npcModes.has('placeholder') && !protoGroups.length) {
+    for (const [k, v] of await releaseFrames('npc')) artOverrides.set(k, v);
+    for (const m of revisions) for (const [k, v] of await releaseFrames(`npc-${m}`)) artOverrides.set(k, v);
+  }
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
 
   /** @type {import('pixi.js').Application} */
@@ -131,7 +154,7 @@ async function boot() {
 
   // --- assets / logic / view ---
   const assets = new AssetManager();
-  assets.register('placeholder', () => buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides)], artOverrides));
+  assets.register('placeholder', () => buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides)], artOverrides));
   // P8: each region's art is its own bundle, loaded by the view near the region.
   for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name, artOverrides));
   await assets.load('placeholder');
@@ -447,7 +470,14 @@ async function boot() {
     pauseOverlay.hide();
   }
 
-  let resolution = resizeRenderer(app, targetHeight, artDensity);
+  // Non-integer canvas scale (HD art, odd device scale): scroll in whole game px so every step is
+  // the same number of device pixels (docs/perf/hd-view-size.md).
+  const applyResolution = () => {
+    const res = resizeRenderer(app, targetHeight, artDensity);
+    view.camera.snapStep = Number.isInteger(res.canvasScale) ? 0 : 1;
+    return res;
+  };
+  let resolution = applyResolution();
   installLifecycle(app.canvas, {
     onPause: () => {
       if (!paused) pause('');
@@ -456,7 +486,7 @@ async function boot() {
     onContextLost: () => pause('描画が一時的に中断されました。戻らない場合は再読み込みしてください。'),
     onContextRestored: () => pauseOverlay.show('描画が復帰しました。'),
     onViewportChange: () => {
-      resolution = resizeRenderer(app, targetHeight, artDensity);
+      resolution = applyResolution();
     },
   });
 
@@ -508,7 +538,7 @@ async function boot() {
         targetHeight = nextCandidate(targetHeight);
         settings.resolution = targetHeight;
         saveSettings(settings);
-        resolution = resizeRenderer(app, targetHeight, artDensity);
+        resolution = applyResolution();
         stats.reset();
         return targetHeight;
       },
@@ -589,7 +619,7 @@ async function boot() {
       errors: errorLog.total - r.errorsAtStart,
       load: timing,
       device: {
-        内部解像度: `${resolution.width}×${resolution.height}（目標 ${targetHeight}、×${resolution.scale}）`,
+        内部解像度: `${resolution.width}×${resolution.height}（目標 ${targetHeight}、×${resolution.canvasScale}、見える高さ ${resolution.gameHeight}）`,
         ...collectDeviceInfo(gl, app.renderer.name),
       },
     });
@@ -636,7 +666,7 @@ async function boot() {
             `フレーム 平均${s.avgMs.toFixed(1)} / 遅い5% ${s.p95Ms.toFixed(1)} / 最大${s.maxMs.toFixed(1)} ms`,
             `JS ${s.avgCpuMs.toFixed(2)}ms   描画 ${lastDraws}回${drawCounter.supported ? '' : '(未対応)'}`,
             `表示物 ${objectCount}   テクスチャ ${textureCount()}   負荷 ${bench.count}`,
-            `内部 ${resolution.width}×${resolution.height} ×${resolution.scale}  DPR ${window.devicePixelRatio}`,
+            `内部 ${resolution.width}×${resolution.height} ×${resolution.canvasScale} 見える高さ${resolution.gameHeight}  DPR ${window.devicePixelRatio}`,
             `位置 ${p.x.toFixed(0)},${p.y.toFixed(0)} 高さ ${p.z.toFixed(0)}（地面 ${p.groundZ.toFixed(0)}）${p.grounded ? '' : ' 空中'}`,
             `体力 ${p.hp}/${p.maxHp}  スタミナ ${p.stamina.toFixed(0)}${p.exhausted ? '（疲労）' : ''}${p.climbing ? ' 登攀中' : ''}${p.gliding ? ' 滑空中' : ''}${p.swimming ? ' 水泳中' : ''}`,
             `${p.facing}${p.dashing ? ' ダッシュ' : ''}  エラー ${errorLog.total}`,
@@ -827,6 +857,14 @@ async function boot() {
     nearby: () => state.nearby,
     /** P9: villagers and conversations. */
     npcs: () => state.npcs.map((n) => ({ id: n.id, name: n.name, tx: Math.floor(n.x / 16), ty: Math.floor(n.y / 16) })),
+    /** NPC batch 1: the villagers' sprites (frame key, size, draw order) and their state. */
+    npcSprites: () => view.npcs.debug(),
+    npcState: () => state.npcs.map((n) => ({ id: n.id, facing: n.facing, moving: n.moving, x: n.x, y: n.y })),
+    /** Test helper: a villager that is not in the world data yet (NPC batch 2: woman, smith), for a
+     *  look on screen only; it is not saved and the village data is unchanged. */
+    addNpc: (/** @type {string} */ id, /** @type {number} */ tx, /** @type {number} */ ty) => {
+      state.npcs.push(...createNpcs(state.map, [{ id, name: id, dialogue: 'elder', look: 1, tx, ty }]));
+    },
     dialogue: () => dialogueView(state),
     talkTo: (/** @type {string} */ id) => {
       const n = state.npcs.find((x) => x.id === id);
@@ -912,6 +950,8 @@ async function boot() {
     resolution: () => ({ ...resolution, target: targetHeight }),
     /** The hero's current animation (action and frame) and the texture drawn. */
     heroPose: () => ({ ...view.heroPose, texture: view.heroKey }),
+    /** Which file a sprite's art comes from (tests: release / revision / prototype). */
+    artUrl: (/** @type {string} */ key) => artOverrides.get(key) ?? null,
     /** P11.5: the art in use (density, how many real-art sprites) and the drawn hero's size in game px. */
     art: () => ({ density: artDensity, overrides: artOverrides.size, zoom: view.camera.zoom, hero: { w: view.player.texture.width, h: view.player.texture.height, k: view.heroK } }),
     /** P8: the auto tour (minutes may be fractional in tests). */
