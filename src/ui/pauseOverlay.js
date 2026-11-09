@@ -5,7 +5,8 @@
 export class PauseOverlay {
   /**
    * @param {HTMLElement} root
-   * @param {{ onPauseRequest: () => void, onResume: () => void, onVolume?: (kind: 'bgm' | 'sfx') => void, volumes?: () => { bgm: number, sfx: number }, onSettings?: () => void }} handlers
+   * @param {{ onPauseRequest: () => void, onResume: () => void, onVolume?: (kind: 'bgm' | 'sfx') => void, volumes?: () => { bgm: number, sfx: number }, onSettings?: () => void, onTitle?: () => void, version?: string }} handlers
+   *   onTitle: v1.0 「タイトルへ」 (saves, then back to the title; only when given); version: shown small
    */
   constructor(root, handlers) {
     this.handlers = handlers;
@@ -55,7 +56,25 @@ export class PauseOverlay {
       handlers.onSettings?.();
     });
     sound.append(settings);
+    // v1.0: back to the title (the game saves first).
+    if (handlers.onTitle) {
+      const toTitle = document.createElement('button');
+      toTitle.type = 'button';
+      toTitle.id = 'pause-title-button';
+      toTitle.textContent = 'タイトルへ';
+      toTitle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handlers.onTitle?.();
+      });
+      sound.append(toTitle);
+    }
     this.overlay.append(title, this.message, sound, resume);
+    if (handlers.version) {
+      const v = document.createElement('div');
+      v.className = 'pause-version';
+      v.textContent = handlers.version;
+      this.overlay.append(v);
+    }
     this.refresh();
     this.overlay.addEventListener('click', () => handlers.onResume());
 

@@ -27,6 +27,10 @@
             },
             {
               "flag": "elder_met"
+            },
+            {
+              "flag": "ending_seen",
+              "is": false
             }
           ],
           "goto": "legend"
@@ -65,6 +69,14 @@
             }
           ],
           "goto": "ask"
+        },
+        {
+          "if": [
+            {
+              "flag": "ending_seen"
+            }
+          ],
+          "goto": "intro_after"
         },
         {
           "goto": "intro"
@@ -153,6 +165,18 @@
             "星脈の風が、村まで届いておる。新月の夜からこっち、みなが待っておった風じゃ。",
             "まさか姫さまを連れて帰ってくるとはのう。長生きはするもんじゃ。"
           ]
+        },
+        "intro_after": {
+          "text": [
+            "おお、お前さんか。霧が晴れて、村に風が戻ってきたわい。",
+            "わしは風見の村の長老じゃ。……せっかくじゃ、ひとつ頼まれてくれんか。"
+          ],
+          "effects": [
+            {
+              "setFlag": "elder_met"
+            }
+          ],
+          "next": "ask"
         }
       }
     },
@@ -201,6 +225,14 @@
             }
           ],
           "goto": "waiting"
+        },
+        {
+          "if": [
+            {
+              "flag": "ending_seen"
+            }
+          ],
+          "goto": "intro_after"
         },
         {
           "goto": "intro"
@@ -274,6 +306,27 @@
               "count": 1
             }
           ]
+        },
+        "intro_after": {
+          "text": [
+            "いらっしゃい！ 霧が晴れてから、宿も大にぎわいさ。",
+            "……ところが肉が切れちまってね。獣の肉を 3 つ持ってきてくれたら、自慢の煮込みをごちそうするよ。"
+          ],
+          "choices": [
+            {
+              "label": "持ってくる",
+              "effects": [
+                {
+                  "startQuest": "meat_for_cook"
+                }
+              ],
+              "goto": "ok"
+            },
+            {
+              "label": "今は無理",
+              "goto": "no"
+            }
+          ]
         }
       }
     },
@@ -343,6 +396,14 @@
             }
           ],
           "goto": "waiting"
+        },
+        {
+          "if": [
+            {
+              "flag": "ending_seen"
+            }
+          ],
+          "goto": "intro_after"
         },
         {
           "goto": "intro"
@@ -418,6 +479,27 @@
           "text": [
             "そういえば、島の浜の記録石のあたりが、夜に青く光るのを見たぞ。",
             "何だろうな。お前、島から来たんだろう？"
+          ]
+        },
+        "intro_after": {
+          "text": [
+            "霧が晴れて、見張りも少しは楽になった。",
+            "それでも東の丘の風車跡は気になる。見てきてくれないか？"
+          ],
+          "choices": [
+            {
+              "label": "見てくる",
+              "effects": [
+                {
+                  "startQuest": "windmill_watch"
+                }
+              ],
+              "goto": "ok"
+            },
+            {
+              "label": "断る",
+              "goto": "no"
+            }
           ]
         }
       }
@@ -993,6 +1075,14 @@
           "goto": "ask"
         },
         {
+          "if": [
+            {
+              "flag": "ending_seen"
+            }
+          ],
+          "goto": "intro_after"
+        },
+        {
           "goto": "intro"
         }
       ],
@@ -1070,6 +1160,18 @@
             "霧が晴れて、空気の味が変わりましたね。",
             "わたしは、もう少し旅を続けます。また、どこかの道で。"
           ]
+        },
+        "intro_after": {
+          "text": [
+            "やあ。霧の晴れた峠は、気持ちがいいですね。",
+            "わたしは旅の者です。……おや、その胸の石。星環の光ですね。"
+          ],
+          "effects": [
+            {
+              "setFlag": "traveller_met"
+            }
+          ],
+          "next": "ask"
         }
       }
     },
@@ -1130,10 +1232,29 @@
         {
           "if": [
             {
+              "flag": "ending_seen"
+            },
+            {
+              "flag": "woman_met"
+            }
+          ],
+          "goto": "ask_after"
+        },
+        {
+          "if": [
+            {
               "flag": "woman_met"
             }
           ],
           "goto": "ask"
+        },
+        {
+          "if": [
+            {
+              "flag": "ending_seen"
+            }
+          ],
+          "goto": "intro_after"
         },
         {
           "goto": "intro"
@@ -1216,6 +1337,39 @@
             "空がこんなに青かったなんて、忘れていたわ。",
             "今度、子どもたちと森へ薬草つみに行くの。こわくないって、いいことね。"
           ]
+        },
+        "intro_after": {
+          "text": [
+            "あら、あなたが霧を晴らしてくれた人？ ふふ、村じゅうのうわさよ。",
+            "わたしはこの村で薬を作っているの。"
+          ],
+          "effects": [
+            {
+              "setFlag": "woman_met"
+            }
+          ],
+          "next": "ask_after"
+        },
+        "ask_after": {
+          "text": [
+            "囁きの森の『森きのこ』が、熱さましの薬にいちばん効くのよ。",
+            "霧が晴れて森にも入れるようになったけど、わたしの足では遠くて。3 つ、とってきてもらえない？"
+          ],
+          "choices": [
+            {
+              "label": "うなずく",
+              "effects": [
+                {
+                  "startQuest": "forest_mushrooms"
+                }
+              ],
+              "goto": "ok"
+            },
+            {
+              "label": "首を横にふる",
+              "goto": "no"
+            }
+          ]
         }
       }
     },
@@ -1281,6 +1435,14 @@
             }
           ],
           "goto": "ask"
+        },
+        {
+          "if": [
+            {
+              "flag": "ending_seen"
+            }
+          ],
+          "goto": "intro_after"
         },
         {
           "goto": "intro"
@@ -1364,6 +1526,18 @@
             "こいつは上物だ。……だが、お前さん、武器で手がいっぱいじゃないか。",
             "どれか 1 本、折れるまで使ってから来な。結晶はそのまま持っておけ。打つのはそれからだ。"
           ]
+        },
+        "intro_after": {
+          "text": [
+            "おう、お前さんか。霧を晴らしたって話は聞いてるぜ。",
+            "俺はこの村の鍛冶屋だ。"
+          ],
+          "effects": [
+            {
+              "setFlag": "smith_met"
+            }
+          ],
+          "next": "ask"
         }
       }
     }

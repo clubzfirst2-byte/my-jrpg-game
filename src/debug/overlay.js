@@ -25,10 +25,12 @@ function el(tag, attrs = {}, text = '') {
  * @param {HTMLElement} root
  * @param {import('./errorLog.js').ErrorLog} errorLog
  * @param {OverlayHandlers} handlers
- * @param {{ open: boolean, reportSec: number, resolution: number }} options
+ * @param {{ open: boolean, reportSec: number, resolution: number, showToggle?: boolean }} options
+ *   showToggle: the 「計測」 button (v1.0: only with ?debug= or in development; the error badge always)
  */
 export function createOverlay(root, errorLog, handlers, options) {
   const toggle = el('button', { id: 'debug-toggle', type: 'button', 'aria-expanded': String(options.open) }, '計測');
+  if (options.showToggle === false) toggle.hidden = true;
   const badge = el('button', { id: 'error-badge', type: 'button', hidden: '' }, '');
   const panel = el('div', { id: 'debug-panel', role: 'status' });
   if (!options.open) panel.hidden = true;

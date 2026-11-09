@@ -418,6 +418,27 @@ describe('C14: the story in data', () => {
     expect(talk(s, 'child')[0]).toMatch(/やっつけた/);
   });
 
+  it('after the ending, a villager met for the first time speaks of the clear sky — and still asks the favour', () => {
+    const quests = { elder: 'lost_charm', cook: 'meat_for_cook', guard: 'windmill_watch', woman: 'forest_mushrooms', smith: 'murk_steel', traveller: 'mirror_tale' };
+    const firstBefore = {};
+    for (const id of Object.keys(quests)) firstBefore[id] = talk(world(), id, [1])[0];
+    for (const [id, q] of Object.entries(quests)) {
+      const s = world();
+      Object.assign(s.progress.flags, { princess_met: true, ending_seen: true, regalia_kept: true });
+      const said = talk(s, id, [0]);
+      expect(said[0], id).not.toBe(firstBefore[id]);
+      expect(said.join(''), id).toMatch(/霧|晴れ/);
+      expect(questState(s, q), id).toBe('active');
+    }
+    // the elder no longer asks which guardian you are once she is back
+    const s = world();
+    Object.assign(s.progress.flags, { princess_met: true, elder_met: true, ending_seen: true });
+    expect(talk(s, 'elder', [1]).join('')).not.toMatch(/どっちかのう/);
+    // and the merchant and the child have their own words after it too
+    expect(talk(s, 'merchant', [1])[0]).toMatch(/霧が晴れて/);
+    expect(talk(s, 'child')[0]).toMatch(/銀の髪/);
+  });
+
   it('after the ending the cook treats you once', () => {
     const s = world();
     Object.assign(s.progress.flags, { ending_seen: true });
