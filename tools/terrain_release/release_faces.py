@@ -139,7 +139,8 @@ def ruin_face(kind, seg):
     if is_base:
         for x in range(32):
             for y in range(max(3, h - 7 if h == 16 else h - 4), h - 1):
-                t.shift(x, y, -1, lo=1)
+                if t.tone_of(x, y) != 0:  # keep the stone joints (tone 0)
+                    t.shift(x, y, -1, lo=1)
             t.put(x, h - 1, "ruin.stone", 0)
     if (kind, h) == ("mid", 16):  # a carved line motif (the lamp-folk): groove (1) with a lit lower lip (3)
         for x, y in [(22, 3), (23, 3), (24, 3), (24, 4), (24, 5), (25, 5), (26, 5)]:

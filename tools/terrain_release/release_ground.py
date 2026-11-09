@@ -128,6 +128,9 @@ FOREST = {
 }
 
 
+WINTER_FOREST_AT = {1: (5, 18), 2: (20, 26), 3: (12, 11)}  # winter: the one plant, at a different height each
+
+
 def forest_grass(variant, winter=False):
     (dx, dy), feats = FOREST[variant]
     t = new_tile(32, 32, base=("forest.moss", 2))
@@ -135,6 +138,8 @@ def forest_grass(variant, winter=False):
     for i, (kind, (x, y)) in enumerate(feats):
         if winter and i > 0:
             continue  # under snow: one dark feature per tile at most (design inspection 1)
+        if winter:  # spread over the tile height per variant (guide 3.3: no row every 32 px)
+            x, y = WINTER_FOREST_AT[variant]
         if kind == "needles":
             t.stamp(x, y, NEEDLES, tones("forest.pine"))
         elif kind == "needles2":

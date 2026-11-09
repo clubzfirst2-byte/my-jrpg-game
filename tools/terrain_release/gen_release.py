@@ -82,6 +82,11 @@ POKE = {  # per summer layout: (x, y, stamp)
     "forest.grass.3": [(26, 4, BLADES)],
 }
 FLOWER_AT = {1: (20, 20), 2: (8, 6), 3: (26, 8)}
+# Winter: one tuft of blades per tile. Island grass .0 stays plain and the others sit at different
+# heights (guide 3.3: a mark at the same height on every variant shows rows every 32 px). The forest
+# floor gets none (its one plant is in release_ground.WINTER_FOREST_AT).
+WINTER_MARK = {n: p[0] for n, p in POKE.items() if not n.startswith(("forest.", "tile.grass."))}
+WINTER_MARK.update({"tile.grass.1": (6, 19, BLADES), "tile.grass.2": (24, 27, BLADES_2)})
 
 
 def summer_ground(name, winter=False):
@@ -154,7 +159,7 @@ def winter_ground(name):
     if kind == "plains.grass" and int(v) in FLOWER_AT:
         x, y = FLOWER_AT[int(v)]
         t.stamp(x - 1, y, MOUND, tones(mat))
-    pokes = [] if kind == "forest.grass" and v != "0" else POKE.get(name, [])[:1]  # forest 1-3 already show a plant
+    pokes = [WINTER_MARK[name]] if name in WINTER_MARK else []  # one mark, at a different height per variant
     for x, y, p in pokes:  # one tuft of blades out of the snow per tile
         t.stamp(x, y, p[:2], tones(green))
     return t

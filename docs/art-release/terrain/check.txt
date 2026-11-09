@@ -47,9 +47,9 @@
   autumn.lake.grass.1        #76632e  92%  4番 0.6%  明るさ 38.7（マント差 +10.1・色合い  44°）  端の差 左右 0.7 上下 0.0（中の最大  3.8）  ざらつき 3.6
   autumn.lake.grass.2        #76632e  93%  4番 0.6%  明るさ 38.7（マント差 +10.1・色合い  44°）  端の差 左右 0.0 上下 2.1（中の最大  8.5）  ざらつき 4.6
   autumn.lake.grass.3        #76632e  93%  4番 0.5%  明るさ 38.7（マント差 +10.1・色合い  44°）  端の差 左右 3.5 上下 2.1（中の最大  5.7）  ざらつき 3.5
-  winter.tile.grass.0        #b8c8e0  99%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  3.3）  ざらつき 2.8
-  winter.tile.grass.1        #b8c8e0  99%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  3.5）  ざらつき 2.3
-  winter.tile.grass.2        #b8c8e0  98%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  3.3）  ざらつき 3.0
+  winter.tile.grass.0        #b8c8e0 100%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  0.7）  ざらつき 0.7
+  winter.tile.grass.1        #b8c8e0  99%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  3.3）  ざらつき 3.0
+  winter.tile.grass.2        #b8c8e0  99%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  4.3）  ざらつき 2.4
   winter.plains.grass.0      #b8c8e0  99%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  3.7）  ざらつき 2.8
   winter.plains.grass.1      #b8c8e0  98%  4番 0.1%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  4.3）  ざらつき 3.1
   winter.plains.grass.2      #b8c8e0  97%  4番 0.1%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  3.7）  ざらつき 3.6
@@ -58,10 +58,10 @@
   winter.lake.grass.1        #b8c8e0  98%  4番 0.1%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  6.8）  ざらつき 4.8
   winter.lake.grass.2        #b8c8e0  98%  4番 0.1%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.7（中の最大  3.3）  ざらつき 3.2
   winter.lake.grass.3        #b8c8e0  99%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.4 上下 0.0（中の最大  3.8）  ざらつき 3.0
-  winter.forest.grass.0      #b8c8e0  98%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  4.8）  ざらつき 3.1
+  winter.forest.grass.0      #b8c8e0  98%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  1.1）  ざらつき 1.5
   winter.forest.grass.1      #b8c8e0  98%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  7.0）  ざらつき 4.3
-  winter.forest.grass.2      #b8c8e0  98%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  7.5）  ざらつき 4.5
-  winter.forest.grass.3      #b8c8e0  98%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  7.9）  ざらつき 4.5
+  winter.forest.grass.2      #b8c8e0  98%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  6.7）  ざらつき 4.5
+  winter.forest.grass.3      #b8c8e0  98%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  6.7）  ざらつき 4.5
 
 使ったランプ: autumn.foliage, autumn.grass, cactus, cave.rock, desert.sand, desert.stone, earth.face, fire, flower.pink, flower.white, flower.yellow, forest.moss, forest.pine, forest.swamp, iron, island.sand, lake.grass, lake.reed, lake.shore, mount.ice, mount.rock, mount.snow, pebble, plains.grass, plains.path, room.plaster, ruin.stone, shell, tree.bark, tree.leaf, wall.stone, water.surface, wood
 新規のランプ（ガイド 2.5 に登録してほしいもの）: autumn.foliage, cactus, flower.pink, flower.white, flower.yellow, island.sand, lake.reed, pebble, shell, tree.bark, tree.leaf, wall.stone, water.surface
