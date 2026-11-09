@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 
 // P11.5: the character standard (32×56 art at 2 pixels per game pixel). Without real art the game
-// is exactly as before; ?hero=test shows a size-test hero (仮素材) of the new size; ?hd=0 is "before".
+// is exactly as before (?hero=placeholder since the release hero became the default; ?hd=0);
+// ?hero=test shows a size-test hero (仮素材) of the new size.
 
 const api = (page, fn, ...args) => page.evaluate(([f, a]) => window.__debugApi[f](...a), [fn, args]);
 
@@ -42,7 +43,8 @@ async function fieldSpeed(context, query) {
 }
 
 test('without real art nothing changes: 1 pixel per game pixel, the 16×16 placeholder hero', async ({ page }) => {
-  const errors = await open(page, '');
+  // the adopted release hero is the default since 2026-11-08: ?hero=placeholder asks for the old one
+  const errors = await open(page, '&hero=placeholder');
   expect(await api(page, 'art')).toMatchObject({ density: 1, overrides: 0, zoom: 1, hero: { w: 16, h: 16, k: 1 } });
   expect(errors).toEqual([]);
 });
@@ -84,9 +86,10 @@ test('P12 hero prototype (?hero=proto): all 20 frames of 32×56, same feet and s
   // The same game: walking speed in game px per tick as with the placeholder.
   const speed = await fieldSpeed(page.context(), '&hero=proto');
   expect(Math.abs(speed - (await fieldSpeed(page.context(), ''))) / speed).toBeLessThan(0.05);
+  // not used by default: normal play draws the adopted release hero (hero.<action>…), not the prototype
   const page2 = await page.context().newPage();
   await open(page2, '');
-  expect((await api(page2, 'art')).hero).toMatchObject({ w: 16, h: 16 });
+  await expect.poll(async () => (await api(page2, 'heroPose')).texture ?? '', { timeout: 8000 }).toMatch(/^hero\./);
 });
 
 test('P12 round 1 prototypes (?proto=all): elder, watchman, beast and goblin drawn from the prototypes', async ({ page }, testInfo) => {
@@ -108,5 +111,6 @@ test('P12 round 1 prototypes (?proto=all): elder, watchman, beast and goblin dra
   // Each group can be asked for alone.
   const page2 = await page.context().newPage();
   await open(page2, '&enemy=proto');
-  expect(await api(page2, 'art')).toMatchObject({ overrides: 4, hero: { h: 16 } });
+  // the enemy prototypes only (4 frames) next to the adopted release hero (248 frames, 16×28)
+  expect(await api(page2, 'art')).toMatchObject({ overrides: 4 + 248, hero: { h: 28 } });
 });

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { waitTicks, ticksOf } from "./ticks.js";
 
 // Uses the height verification map (default map). Tile coordinates refer to
 // src/game/world/maps/heightTest.js.
@@ -19,10 +20,10 @@ const player = (page) => page.evaluate(() => window.__debugApi.player());
 const teleport = (page, tx, ty) =>
   page.evaluate(([x, y]) => window.__debugApi.teleport(x, y), [tx, ty]);
 
-/** Hold keys for a while (game time advances in real time). */
+/** Hold keys for `ms` of game time (counted in logic ticks, see ./ticks.js). */
 async function hold(page, keys, ms) {
   for (const k of keys) await page.keyboard.down(k);
-  await page.waitForTimeout(ms);
+  await waitTicks(page, ticksOf(ms));
   for (const k of keys) await page.keyboard.up(k);
 }
 
@@ -58,10 +59,12 @@ test("a 1-level ledge can be jumped onto", async ({ page }) => {
   await teleport(page, 14, 22); // just south of the floating plateau B (1 level = 16px)
   await page.keyboard.down("ArrowUp");
   await page.keyboard.down("Space");
-  await page.waitForTimeout(700);
+  // 42 logic ticks (0.7 s of game time) up and jumping, then 18 to land: counted in ticks, so a
+  // slow renderer cannot shorten the jump
+  await waitTicks(page, 42);
   await page.keyboard.up("Space");
   await page.keyboard.up("ArrowUp");
-  await page.waitForTimeout(300);
+  await waitTicks(page, 18);
   const p = await player(page);
   expect(p.grounded).toBe(true);
   expect(p.z).toBe(16);
