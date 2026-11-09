@@ -79,16 +79,11 @@ def draw(p):
                 [3.4, 2.2, 0.8], "rotwood", soft=1)
     # the body: a broad hunched mass
     body = r.mask_of(r.m_ellipse(cx, by, 30, 17), r.m_ellipse(cx, by + 6, 24, 13))
-    r.add(body, "rotwood", soft=4, tex=("bark", 90, 3))
+    r.add(body, "rotwood", soft=4, tex=("bark", "radial", 3, {"centre": (cx, by - 3), "calm": (cx, by - 3, 11)}))
     # shoulder spikes pointing out
     for s in (-1, 1):
         r.chain([(cx + s * 24, by - 2), (cx + s * 32, by - 7), (cx + s * 40, by - 10)], [4.2, 2.6, 0.8], "rotwood", soft=1)
     # root grain: dark grooves sweeping over the body
-    for s in (-1, 1):
-        for i in range(4):
-            x0, x1 = cx + s * (9 + i * 5), cx + s * (14 + i * 6)
-            r.shade(r.m_line(x0, by - 15 + i, x1, by + 9 + i), lambda t: max(1, t - 1))
-            r.shade(r.m_line(x0 - s, by - 14 + i, x1 - s, by + 4 + i), lambda t: min(3, t + 1) if t >= 2 else t)
     # fungus caps
     for fx_, fy_, rr in ((cx - 22, by - 4, 3.5), (cx + 21, by - 2, 3.0), (cx - 15, by + 7, 2.4), (cx + 25, by + 6, 2.0)):
         r.ellipse(fx_, fy_, rr, rr * 0.6, "fungus", soft=1)

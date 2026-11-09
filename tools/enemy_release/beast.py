@@ -90,6 +90,15 @@ def draw(p):
     rx, ry = sh[0] + 2, sh[1] - 6
     r.add(r.m_poly([(rx - 7, ry), (rx - 5, ry - 2), (rx - 3, ry - 4), (rx - 1, ry - 3), (rx + 2, ry - 5), (rx + 5, ry - 1), (rx + 3, ry + 1),
                     (rx + 2, ry + 3), (rx, ry + 1), (rx - 2, ry + 3), (rx - 4, ry + 1)]), "ashfur", lit=1, soft=1)
+    # fur locks, hand-drawn (v1.0 finish 2): four big locks flowing back along the back under the
+    # crystals, and two on the ruff -- a lit stroke over a dark underside, read at 1x
+    leg_ = {"3": ("ashfur", 3), "1": ("ashfur", 1), "2": ("ashfur", 2)}
+    for i, ox in enumerate((1, 6, 11, 16)):
+        lx = round(hip[0] + ox - 1 + p.stretch * (ox / 18))
+        ly = round(by - 2 + p.pitch * (ox / 16))
+        r.stamp(lx, ly, ["...333", ".333.1", "31.11."] if i % 2 else ["..333.", "3333.1", "1.11.."], leg_)
+    r.stamp(round(rx) - 5, round(ry) + 1, ["..33.", "3311.", "1...."], leg_)
+    r.stamp(round(rx) - 1, round(ry) - 2, [".33", "31.", "1.."], leg_)
     # murk melting on the flank: a patch on the haunch with drips
     fx, fy = hip[0] + 3, hip[1] - 1
     r.ellipse(fx, fy, 5.0, 2.6, "murk", soft=1)

@@ -101,10 +101,12 @@ LOCKS = {
         ["L..", "LL.", "LLD", ".LD", "..D"],
     ],
     # long shaggy locks (the frost elk's coat)
+    # long shaggy locks (the frost elk's coat): 3-4 px wide bundles, lit body, dark right side,
+    # a dark tip pointing down (v1.0 finish 2: no thin 1-px strokes)
     "shag": [
-        ["L...", "LL..", ".LD.", ".LD.", "..D.", "..DD"],
-        [".L..", "LL..", "LLD.", ".LD.", ".LD.", "..D."],
-        ["L...", "LL..", ".LL.", "..LD", "..DD", "...D"],
+        ["LL...", "LLL..", "LLLD.", ".LLD.", ".LDD.", "..D..", "..D.."],
+        [".LL..", "LLLD.", "LLLD.", ".LLD.", "..DD.", "..D.."],
+        ["LLL..", "LLLD.", ".LLD.", ".LLD.", "..DD.", "...D."],
     ],
     # locks flowing back (angle ~180: the beast faces right, its coat lies back to the left)
     "back": [
@@ -113,7 +115,7 @@ LOCKS = {
         ["...LL", "..LD.", "LDD.."],
     ],
 }
-LOCK_GRID = {"down": (4, 5, 2), "shag": (5, 5, 2), "back": (5, 3, 2)}  # step x, step y, row stagger
+LOCK_GRID = {"down": (4, 5, 2), "shag": (6, 7, 3), "back": (5, 3, 2)}  # step x, step y, row stagger
 
 
 def _erode(m):
@@ -125,16 +127,18 @@ def _erode(m):
     return e
 
 
-def _clusters(tex, t, m, oy, ox):
+def _clusters(tex, t, m, oy, ox, org=(0, 0)):
     """Re-tone the volume shading `t` (tones 1..4) inside mask `m` with hand-drawn clusters.
-    tex = (kind, angle, seed): kind "fur" / "shag" (locks) or "bark" (plates)."""
+    tex = (kind, angle, seed[, options]): kind "fur" / "shag" (locks) or "bark" (plates).
+    org = the frame coordinates of t[0, 0]."""
     kind, ang = tex[0], tex[1]
     seed = tex[2] if len(tex) > 2 else 0
+    opt = tex[3] if len(tex) > 3 else {}
     h, w = t.shape
     out = t.copy()
     inner = _erode(m)
     if kind == "bark":
-        return _plates(out, t, m, inner, oy, ox, ang, seed)
+        return _plates(out, t, m, inner, oy, ox, ang, seed, opt, org)
     style = "shag" if kind == "shag" else ("down" if 45 <= ang % 180 <= 135 else "back")
     flip = style == "back" and (ang % 360) < 90  # a coat flowing to the right
     sx, sy, stag = LOCK_GRID[style]
@@ -175,34 +179,71 @@ def _clusters(tex, t, m, oy, ox):
     return out
 
 
-def _plates(out, t, m, inner, oy, ox, ang, seed):
-    """Bark: plates split by dark seams; each plate's upper-left edge catches the light."""
+def _keep_runs(mask):
+    """Drop pixels of `mask` that have no 8-neighbour in it (no lone dots: lines and edges only)."""
+    p = np.pad(mask, 1)
+    n = np.zeros(mask.shape, int)
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            if dy or dx:
+                n += p[1 + dy:1 + dy + mask.shape[0], 1 + dx:1 + dx + mask.shape[1]]
+    return mask & (n > 0)
+
+
+def _connect4(mask):
+    """Make diagonal steps of a 1-px line 4-connected (a pixel under each diagonal step), so the
+    line reads as a line and never as a chain of lone dots."""
+    m = mask.copy()
+    dr = np.zeros_like(m)
+    dr[:-1, :-1] = mask[:-1, :-1] & mask[1:, 1:] & ~mask[1:, :-1] & ~mask[:-1, 1:]
+    m[1:, :-1] |= dr[:-1, :-1]
+    dl = np.zeros_like(m)
+    dl[:-1, 1:] = mask[:-1, 1:] & mask[1:, :-1] & ~mask[1:, 1:] & ~mask[:-1, :-1]
+    m[1:, 1:] |= dl[:-1, 1:]
+    return m
+
+
+def _plates(out, t, m, inner, oy, ox, ang, seed, opt, org):
+    """Bark (v1.0 finish 2): long plates (8 px along the root, ~3.6 px across) running along each
+    root -- or out from a centre for the body (ang "radial") -- with a 1-px seam only between
+    some plates (about every 2-3), tone 3 only on the top-left lip of a plate below / right of a
+    seam, the rest of each plate a flat tone 2. Around opt["calm"] = (x, y, r) nothing is drawn
+    and the face is a calm tone 2 (the core sits there)."""
     h, w = t.shape
     yy, xx = np.mgrid[0:h, 0:w]
-    yy, xx = yy - oy, xx - ox
-    a = math.radians(ang)
-    u = xx * math.cos(a) + yy * math.sin(a)  # along the grain: plates are long
-    v = -xx * math.sin(a) + yy * math.cos(a)
-    U, V = u / 12.0, v / 6.0
-    cu, cv = np.floor(U).astype(int), np.floor(V).astype(int)
-    best = np.full((h, w), 9.0)
-    second = np.full((h, w), 9.0)
-    for du in (-1, 0, 1):
-        for dv in (-1, 0, 1):
-            iu, iv = cu + du, cv + dv
-            su = iu + 0.2 + 0.6 * _hash(iu, iv, seed)
-            sv = iv + 0.2 + 0.6 * _hash(iu, iv, seed + 3)
-            d = np.hypot((U - su) * 12.0, (V - sv) * 6.0)
-            nb = np.minimum(best, d)
-            second = np.where(d < best, best, np.minimum(second, d))
-            best = nb
-    seam = ((second - best) < 1.15) & inner
+    fy, fx = yy + org[0], xx + org[1]  # frame coordinates
+    if ang == "radial":
+        cx, cy = opt["centre"]
+        dx, dy = fx - cx, fy - cy
+        u = np.hypot(dx, dy)
+        v = np.arctan2(dy, dx) * 16.0
+    else:
+        a = math.radians(ang)
+        ly, lx = yy - oy, xx - ox
+        u = lx * math.cos(a) + ly * math.sin(a)  # along the grain: plates are long
+        v = -lx * math.sin(a) + ly * math.cos(a)
+    WID, LEN = 3.6, 8.0
+    row = np.floor(v / WID).astype(int)
+    roff = _hash(row, np.zeros_like(row), seed + 11) * LEN
+    seg = np.floor((u + roff) / LEN).astype(int)
+    drawn = _hash(row, seg, seed + 5) < 0.42  # a seam only for some plates
+    along = np.floor((v + 1.0) / WID).astype(int) != row
+    across = np.floor((u + roff + 1.0) / LEN).astype(int) != seg
+    calm = np.zeros((h, w), bool)
+    if opt.get("calm"):
+        x, y, r = opt["calm"]
+        calm = np.hypot(fx - x, fy - y) <= r
+    seam = (along | across) & drawn & inner & ~calm
+    seam = _connect4(_keep_runs(seam)) & inner & ~calm
     out[seam] = np.maximum(t[seam] - 1, 1)
     lit = np.zeros_like(seam)
     lit[1:, :] |= seam[:-1, :]
     lit[:, 1:] |= seam[:, :-1]
-    lit &= inner & ~seam & (t <= 2)
-    out[lit] = t[lit] + 1
+    lit &= inner & ~seam & (t == 2) & ~calm
+    lit = _connect4(_keep_runs(lit)) & inner & ~seam & (t == 2) & ~calm
+    out[lit] = 3
+    flat = calm & inner & (t == 3)
+    out[flat] = 2
     return out
 
 
@@ -386,7 +427,7 @@ class Rig:
             t[m & (down | right) & ~(up | left)] = 1
             t[m & (up | left) & ~(down | right) & (t < 3)] = 3
             if p.tex:  # fur locks / bark plates, hand-drawn clusters
-                t = _clusters(p.tex, t, m, ys.min() - y0, xs.min() - x0)
+                t = _clusters(p.tex, t, m, ys.min() - y0, xs.min() - x0, (y0 - PAD, x0 - PAD))
             t = np.clip(t - p.dark + p.lit, 1, 4)
             if p.mat not in SHINY:
                 t = np.minimum(t, 3)
