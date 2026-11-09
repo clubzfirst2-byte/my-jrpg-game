@@ -21,8 +21,11 @@ export const DEFAULT_TARGET_HEIGHT = 216;
  *   tiles 32×32, characters 32×56). The canvas then has that many pixels per game pixel and the
  *   camera zooms by the same factor, so the finer art keeps every pixel. `targetHeight` stays in
  *   game pixels. One canvas pixel covers `scale / artDensity` device pixels: an integer when `scale`
- *   is even; when it is odd (e.g. 5) art pixels alternate 2 and 3 device pixels while game pixels
- *   (tiles, positions) still land exactly on `scale` device pixels.
+ *   is even; when it is odd (e.g. 5) art pixels alternate 2 and 3 device pixels. Game pixels land
+ *   exactly on `scale` device pixels when they sit on whole game px, so main.js then snaps the
+ *   camera to whole game px (Camera.snapStep). If `scale < artDensity` (very small window at DPR 1)
+ *   `canvasScale` is 0.5: the canvas is drawn larger than the screen and shrunk (art pixels are
+ *   dropped); this does not happen on iPhones.
  */
 export function computeResolution(cssWidth, cssHeight, dpr, targetHeight, artDensity = 1) {
   const deviceW = Math.max(1, Math.round(cssWidth * dpr));

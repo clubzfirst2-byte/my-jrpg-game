@@ -453,7 +453,14 @@ async function boot() {
     pauseOverlay.hide();
   }
 
-  let resolution = resizeRenderer(app, targetHeight, artDensity);
+  // Non-integer canvas scale (HD art, odd device scale): scroll in whole game px so every step is
+  // the same number of device pixels (docs/perf/hd-view-size.md).
+  const applyResolution = () => {
+    const res = resizeRenderer(app, targetHeight, artDensity);
+    view.camera.snapStep = Number.isInteger(res.canvasScale) ? 0 : 1;
+    return res;
+  };
+  let resolution = applyResolution();
   installLifecycle(app.canvas, {
     onPause: () => {
       if (!paused) pause('');
@@ -462,7 +469,7 @@ async function boot() {
     onContextLost: () => pause('描画が一時的に中断されました。戻らない場合は再読み込みしてください。'),
     onContextRestored: () => pauseOverlay.show('描画が復帰しました。'),
     onViewportChange: () => {
-      resolution = resizeRenderer(app, targetHeight, artDensity);
+      resolution = applyResolution();
     },
   });
 
@@ -514,7 +521,7 @@ async function boot() {
         targetHeight = nextCandidate(targetHeight);
         settings.resolution = targetHeight;
         saveSettings(settings);
-        resolution = resizeRenderer(app, targetHeight, artDensity);
+        resolution = applyResolution();
         stats.reset();
         return targetHeight;
       },

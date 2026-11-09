@@ -36,6 +36,13 @@ export class Camera {
     /** @type {Rect | null} */
     this.bounds = null;
     this.initialized = false;
+    /**
+     * Snap step for the origin in world px. 0 = one screen (canvas) pixel, i.e. 1 / zoom.
+     * Set to 1 (whole game px) when a canvas pixel is not a whole number of device pixels
+     * (HD art with an odd device scale, docs/perf/hd-view-size.md): then every scroll step is the
+     * same number of device pixels.
+     */
+    this.snapStep = 0;
   }
 
   /** Size of the visible world area in world px. */
@@ -103,7 +110,8 @@ export class Camera {
       ox = clampAxis(ox, vw, this.bounds.x, this.bounds.width);
       oy = clampAxis(oy, vh, this.bounds.y, this.bounds.height);
     }
-    return { x: Math.round(ox * this.zoom) / this.zoom, y: Math.round(oy * this.zoom) / this.zoom };
+    const step = this.snapStep > 0 ? this.snapStep : 1 / this.zoom;
+    return { x: Math.round(ox / step) * step, y: Math.round(oy / step) * step };
   }
 }
 

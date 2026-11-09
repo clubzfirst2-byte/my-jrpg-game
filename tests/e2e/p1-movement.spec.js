@@ -164,9 +164,9 @@ test('pause button pauses the game', async ({ page }) => {
 });
 
 test('resolution candidates can be switched from the debug panel and are remembered', async ({ page }, testInfo) => {
-  // The old hero (1 art pixel per game pixel): there every candidate gives its own pixel scale. With
-  // the release hero (2 art pixels per game pixel) neighbouring candidates can share one scale on a
-  // small screen (see docs/chatgpt-reports/2026-11-08-hero-default.md).
+  // The old hero (1 art pixel per game pixel). Since docs/perf/hd-view-size.md the release hero gives
+  // the same game scale per candidate too (it used to share one scale between neighbouring
+  // candidates); the placeholder hero is kept here only so the pinned widths stay the same.
   await open(page, '?debug=1&hero=placeholder');
   const before = await page.evaluate(() => window.__debugApi.resolution());
   expect(before.target).toBe(216);

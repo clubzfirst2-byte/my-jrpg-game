@@ -75,6 +75,23 @@ describe('Camera', () => {
     expect(Number.isInteger(o.y * 2)).toBe(true);
   });
 
+  it('snapStep 1 keeps the origin on whole game px (HD art with a non-integer canvas scale)', () => {
+    const c = cam({ zoom: 2 });
+    c.snapTo(500.37, 300.81);
+    // default: half game px (one canvas px at zoom 2)
+    expect(c.origin()).toEqual({ x: 450.5, y: 276 });
+    c.snapStep = 1;
+    const o = c.origin();
+    expect(Number.isInteger(o.x) && Number.isInteger(o.y)).toBe(true);
+    // slow scrolling: every step is exactly one game px (never half a px, so device steps stay equal)
+    const xs = [];
+    for (let i = 0; i <= 20; i++) {
+      c.snapTo(500 + i * 0.1, 300);
+      xs.push(c.origin().x);
+    }
+    for (let i = 1; i < xs.length; i++) expect([0, 1]).toContain(xs[i] - xs[i - 1]);
+  });
+
   it('returns whole pixels at zoom 1', () => {
     const c = cam();
     c.snapTo(500.4, 300.6);
@@ -146,9 +163,8 @@ describe('computeResolution', () => {
           const hd = computeResolution(w, h, dpr, target, 2);
           // non-HD is unchanged
           expect(flat.gameHeight).toBe(heights[target]);
-          // HD: within one tile (16 game px) of non-HD, never smaller than the old height − 16
-          expect(Math.abs(hd.gameHeight - flat.gameHeight)).toBeLessThanOrEqual(16);
-          expect(hd.gameHeight).toBeGreaterThanOrEqual(heights[target] - 16);
+          // HD: exactly the same visible height as non-HD (the brief allowed ±16; it is exact)
+          expect(hd.gameHeight).toBe(flat.gameHeight);
           // game pixels stay whole device-pixel squares, the canvas still covers the screen
           expect(Number.isInteger(hd.scale)).toBe(true);
           expect(hd.width * hd.canvasScale).toBeGreaterThanOrEqual(Math.round(w * dpr));
