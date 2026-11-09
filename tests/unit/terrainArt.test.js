@@ -7,7 +7,7 @@ import { decodePng } from '../../tools/release-art-pack.mjs';
 // that every art file is used by the bundle its production record puts it in, and that it fits.
 vi.mock('pixi.js', () => ({ Rectangle: class {}, Texture: class {} }));
 const { REGION_ENTRIES, placeholderEntries, releaseHeroEntries, releaseNpcEntries, releaseEnemyEntries, atlasSizeFor, ART_SCALE, mustKeepSize } = await import('../../src/view/assets/placeholderPack.js');
-const { isTerrainKey, wantsTerrainArt, TERRAIN_GROUP, TERRAIN_OBJECTS } = await import('../../src/view/assets/terrainArt.js');
+const { isTerrainKey, wantsTerrainArt, TERRAIN_GROUP, TERRAIN_OBJECTS, groundVariant, levelBrightness } = await import('../../src/view/assets/terrainArt.js');
 
 const ROOT = new URL('../../src/art-release/', import.meta.url);
 /** name -> { w, h } of every PNG in a release folder (from the IHDR). */
@@ -97,6 +97,25 @@ describe('terrain release art → game sprite keys', () => {
     const size = atlasSizeFor(real);
     expect(size.width).toBeLessThanOrEqual(2048);
     expect(size.height).toBeLessThanOrEqual(1024);
+  });
+
+  it('the release terrain is drawn near its own colours (flat 0.95, +0.05 a level); the placeholders keep 0.8 + 0.07', () => {
+    expect(levelBrightness(0, true)).toBeCloseTo(0.95);
+    expect(levelBrightness(1, true)).toBeCloseTo(1);
+    expect(levelBrightness(4, true)).toBe(1);
+    expect(levelBrightness(0, false)).toBeCloseTo(0.8);
+    expect(levelBrightness(2, false)).toBeCloseTo(0.94);
+  });
+
+  it('release ground variants: 0 (plain) about half the time, the marked ones an equal share each; placeholders evenly', () => {
+    for (const n of [3, 4]) {
+      const counts = Array(n).fill(0);
+      const N = 2 * n * 1000;
+      for (let h = 0; h < N; h++) counts[groundVariant(h, n, true)]++;
+      expect(counts[0] / N).toBeCloseTo((n + 1) / (2 * n), 5);
+      for (let v = 1; v < n; v++) expect(counts[v] / N).toBeCloseTo(1 / (2 * n), 5);
+      for (let h = 0; h < 50; h++) expect(groundVariant(h, n, false)).toBe(h % n);
+    }
   });
 
   it('is drawn in normal play, not with ?terrain=placeholder, ?hd=0 or ?hero=placeholder (unless ?terrain=release)', () => {

@@ -55,6 +55,42 @@ export function isTerrainKey(key) {
 }
 
 /**
+ * Whether the loaded base bundle draws the terrain from the release art (its tiles are on the
+ * 2-pixels-per-game-pixel atlas). Read once by the view, after the base bundle has loaded.
+ * @param {import('./assetManager.js').AssetManager} assets
+ */
+export function usesReleaseTerrain(assets) {
+  return assets.hasTexture('tile.grass.0') && assets.texture('tile.grass.0').source.resolution > 1;
+}
+
+/**
+ * The height tint of the ground (gameView.levelTint): higher ground is drawn a little brighter so
+ * levels read at a glance. The placeholders keep their 0.8 + 0.07 per level; the release terrain
+ * was approved at its own colours, so its flat ground is drawn at 0.95 (+0.05 per level, up to 1):
+ * otherwise it showed 20–44 % darker than the hero and villagers standing on it (inspection of
+ * e7d40c0). Cliff faces, edge lines and contact shadows still mark the levels.
+ * @param {number} level height in levels (may be fractional, e.g. on a ramp)
+ * @param {boolean} release
+ */
+export function levelBrightness(level, release) {
+  return Math.min(1, release ? 0.95 + 0.05 * level : 0.8 + 0.07 * level);
+}
+
+/**
+ * Which of a ground's n variants a tile shows (gameView.surfaceKey), from a stable per-tile hash.
+ * The placeholders pick them evenly. The release terrain's variant 0 is the plain one and the others
+ * carry a visible mark (reeds, shells, flowers, mushrooms), so variant 0 covers about half of the
+ * ground and each other one an equal share (n = 4: 5/8 plain, 1/8 each) — marks no longer form a
+ * grid on wide open ground (guide 3.3: variant 0 is the quietest and the most common).
+ * @param {number} hash non-negative integer @param {number} n @param {boolean} release
+ */
+export function groundVariant(hash, n, release) {
+  if (!release) return hash % n;
+  const k = hash % (2 * n);
+  return k <= n ? 0 : k - n;
+}
+
+/**
  * Debug / test helper (window.__debugApi.terrainArt): of the terrain keys loaded right now, which are
  * drawn from the release art (2 pixels per game pixel) and which from the placeholder.
  * @param {import('./assetManager.js').AssetManager} assets

@@ -28,6 +28,7 @@ import { regionAt, outdoorAt } from '../game/world/world.js';
 import { seasonAt } from '../game/env/weather.js';
 import { SEASON_ENTRIES, seasonKeys, SOURCE_BUNDLE, SOURCE_REGIONS } from './assets/placeholderPack.js';
 import { HeroAnimator } from './heroAnim.js';
+import { groundVariant, levelBrightness, usesReleaseTerrain } from './assets/terrainArt.js';
 import { openingView } from '../game/story/story.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
 import { SilhouetteCache, placeFlash } from './flashOverlay.js';
@@ -64,11 +65,13 @@ const CLIFF_SHADOW_ALPHA = 0.32;
 
 /**
  * Higher ground is drawn slightly brighter so levels read at a glance (multiplicative tint).
+ * v1.0: the release terrain is tinted less (terrainArt.levelBrightness).
  * @param {number} heightPx
+ * @param {boolean} [release] whether the terrain is the release art
  */
-export function levelTint(heightPx) {
+export function levelTint(heightPx, release = false) {
   const level = heightPx / LEVEL_PX;
-  const v = Math.round(255 * Math.min(1, 0.8 + 0.07 * level));
+  const v = Math.round(255 * levelBrightness(level, release));
   return (v << 16) | (v << 8) | v;
 }
 
@@ -83,6 +86,8 @@ export class GameView {
   constructor(app, assets, state) {
     this.app = app;
     this.assets = assets;
+    /** v1.0: the terrain is drawn from its release art (its brightness and variants, terrainArt.js). */
+    this.releaseTerrain = usesReleaseTerrain(assets);
     /** P10.2: the season the world is drawn for, and its art bundle (held while it lasts). */
     /** @type {string | null} */
     this.season = null;
@@ -292,12 +297,12 @@ export class GameView {
     const g = this.map.ground[ty * this.map.width + tx];
     // P8: each region dresses the same ground in its own art (its asset bundle).
     const region = regionAt(this.regions, tx, ty);
-    if (region?.id === 'desert' && g === Ground.SAND) return `desert.sand.${hash(tx, ty) % 3}`;
-    if (region?.id === 'plains' && g === Ground.GRASS) return `plains.grass.${hash(tx, ty) % 4}`;
+    if (region?.id === 'desert' && g === Ground.SAND) return `desert.sand.${this.variant(tx, ty, 3)}`;
+    if (region?.id === 'plains' && g === Ground.GRASS) return `plains.grass.${this.variant(tx, ty, 4)}`;
     // P10.3: the east column.
-    if (region?.id === 'forest' && g === Ground.GRASS) return `forest.grass.${hash(tx, ty) % 4}`;
-    if (region?.id === 'mountains' && g === Ground.GRASS) return `mountains.snow.${hash(tx, ty) % 4}`;
-    if (region?.id === 'lake' && g === Ground.GRASS) return `lake.grass.${hash(tx, ty) % 4}`;
+    if (region?.id === 'forest' && g === Ground.GRASS) return `forest.grass.${this.variant(tx, ty, 4)}`;
+    if (region?.id === 'mountains' && g === Ground.GRASS) return `mountains.snow.${this.variant(tx, ty, 4)}`;
+    if (region?.id === 'lake' && g === Ground.GRASS) return `lake.grass.${this.variant(tx, ty, 4)}`;
     if (g === Ground.WOOD) return 'tile.wood';
     if (g === Ground.WALL) return 'tile.walltop';
     if (g === Ground.DARK) return 'tile.dark';
@@ -306,8 +311,17 @@ export class GameView {
     if (g === Ground.RUIN) return 'tile.ruin';
     if (g === Ground.SAND) return 'tile.sand';
     if (g === Ground.METAL) return 'tile.metal';
-    if (g === Ground.PIT) return 'tile.pit';
-    return `tile.grass.${hash(tx, ty) % 3}`;
+    if (g === Ground.PIT) {
+      // v1.0: a pit's far wall is drawn on its top row only; below a pit tile it is all dark.
+      if (this.releaseTerrain && ty > 0 && this.map.ground[(ty - 1) * this.map.width + tx] === Ground.PIT) return 'tile.dark';
+      return 'tile.pit';
+    }
+    return `tile.grass.${this.variant(tx, ty, 3)}`;
+  }
+
+  /** Which of a ground's n variants tile (tx, ty) shows (terrainArt.groundVariant). @param {number} tx @param {number} ty @param {number} n */
+  variant(tx, ty, n) {
+    return groundVariant(hash(tx, ty), n, this.releaseTerrain);
   }
 
   /** @param {number} cx @param {number} cy */
@@ -380,7 +394,7 @@ export class GameView {
         const top = ty * ts - h;
         const surface = this.makeSprite(isRamp ? 'tile.ramp' : this.surfaceKey(tx, ty));
         surface.position.set(x, top);
-        surface.tint = levelTint(isRamp ? h - LEVEL_PX / 2 : h);
+        surface.tint = levelTint(isRamp ? h - LEVEL_PX / 2 : h, this.releaseTerrain);
         row.addChild(surface);
 
         // South face: from this tile's south edge down to the south neighbor's north edge.
@@ -416,7 +430,7 @@ export class GameView {
         extents.set(ty, list);
       }
     }
-    base.tint = levelTint(0);
+    base.tint = levelTint(0, this.releaseTerrain);
     this.base.addChild(base);
     // A chunk's flat ground -> one textured quad per frame.
     base.cacheAsTexture({ scaleMode: 'nearest', antialias: false });
