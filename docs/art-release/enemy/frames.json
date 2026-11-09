@@ -1,0 +1,699 @@
+{
+ "minimal": {
+  "enemy.beast.0": "enemy.beast.idle.0",
+  "enemy.beast.1": "enemy.beast.move.0",
+  "enemy.archer.0": "enemy.archer.idle.0",
+  "enemy.archer.1": "enemy.archer.move.0",
+  "enemy.boss_root.0": "enemy.boss_root.idle.0",
+  "enemy.boss_root.1": "enemy.boss_root.move.0",
+  "enemy.boss_frost.0": "enemy.boss_frost.idle.0",
+  "enemy.boss_frost.1": "enemy.boss_frost.move.0",
+  "enemy.boss_sand.0": "enemy.boss_sand.idle.0",
+  "enemy.boss_sand.1": "enemy.boss_sand.move.0",
+  "enemy.boss_storm.0": "enemy.boss_storm.idle.0",
+  "enemy.boss_storm.1": "enemy.boss_storm.move.0"
+ },
+ "kinds": {
+  "beast": {
+   "facing": "right",
+   "actions": {
+    "idle": {
+     "frames": 2,
+     "size": [
+      44,
+      32
+     ]
+    },
+    "move": {
+     "frames": 4,
+     "size": [
+      44,
+      32
+     ]
+    },
+    "windup": {
+     "frames": 2,
+     "size": [
+      44,
+      32
+     ]
+    },
+    "attack": {
+     "frames": 2,
+     "size": [
+      44,
+      32
+     ]
+    },
+    "hurt": {
+     "frames": 1,
+     "size": [
+      44,
+      32
+     ]
+    },
+    "defeat": {
+     "frames": 3,
+     "size": [
+      44,
+      32
+     ]
+    }
+   }
+  },
+  "archer": {
+   "facing": "right",
+   "actions": {
+    "idle": {
+     "frames": 2,
+     "size": [
+      32,
+      56
+     ]
+    },
+    "move": {
+     "frames": 4,
+     "size": [
+      32,
+      56
+     ]
+    },
+    "windup": {
+     "frames": 2,
+     "size": [
+      32,
+      56
+     ]
+    },
+    "attack": {
+     "frames": 2,
+     "size": [
+      32,
+      56
+     ]
+    },
+    "hurt": {
+     "frames": 1,
+     "size": [
+      32,
+      56
+     ]
+    },
+    "defeat": {
+     "frames": 3,
+     "size": [
+      32,
+      56
+     ]
+    }
+   }
+  },
+  "slime": {
+   "facing": "right",
+   "actions": {
+    "idle": {
+     "frames": 2,
+     "size": [
+      32,
+      28
+     ]
+    },
+    "move": {
+     "frames": 4,
+     "size": [
+      32,
+      28
+     ]
+    },
+    "windup": {
+     "frames": 2,
+     "size": [
+      32,
+      28
+     ]
+    },
+    "attack": {
+     "frames": 2,
+     "size": [
+      32,
+      28
+     ]
+    },
+    "hurt": {
+     "frames": 1,
+     "size": [
+      32,
+      28
+     ]
+    },
+    "defeat": {
+     "frames": 3,
+     "size": [
+      32,
+      28
+     ]
+    }
+   }
+  },
+  "sentinel": {
+   "facing": "right",
+   "actions": {
+    "idle": {
+     "frames": 2,
+     "size": [
+      40,
+      56
+     ]
+    },
+    "move": {
+     "frames": 4,
+     "size": [
+      40,
+      56
+     ]
+    },
+    "windup": {
+     "frames": 2,
+     "size": [
+      40,
+      56
+     ]
+    },
+    "attack": {
+     "frames": 2,
+     "size": [
+      40,
+      56
+     ]
+    },
+    "hurt": {
+     "frames": 1,
+     "size": [
+      40,
+      56
+     ]
+    },
+    "defeat": {
+     "frames": 3,
+     "size": [
+      40,
+      56
+     ]
+    }
+   }
+  },
+  "boss_root": {
+   "facing": "front",
+   "actions": {
+    "idle": {
+     "frames": 2,
+     "size": [
+      96,
+      80
+     ]
+    },
+    "move": {
+     "frames": 2,
+     "size": [
+      96,
+      80
+     ]
+    },
+    "windup_charge": {
+     "frames": 2,
+     "size": [
+      96,
+      80
+     ]
+    },
+    "attack_charge": {
+     "frames": 2,
+     "size": [
+      96,
+      80
+     ]
+    },
+    "windup_slam": {
+     "frames": 2,
+     "size": [
+      96,
+      80
+     ]
+    },
+    "attack_slam": {
+     "frames": 2,
+     "size": [
+      96,
+      80
+     ]
+    },
+    "windup_volley": {
+     "frames": 2,
+     "size": [
+      96,
+      80
+     ]
+    },
+    "attack_volley": {
+     "frames": 2,
+     "size": [
+      96,
+      80
+     ]
+    },
+    "hurt": {
+     "frames": 1,
+     "size": [
+      96,
+      80
+     ]
+    },
+    "stagger": {
+     "frames": 2,
+     "size": [
+      96,
+      80
+     ]
+    },
+    "idle2": {
+     "frames": 2,
+     "size": [
+      96,
+      80
+     ]
+    },
+    "defeat": {
+     "frames": 4,
+     "size": [
+      96,
+      80
+     ]
+    }
+   }
+  },
+  "boss_frost": {
+   "facing": "front",
+   "actions": {
+    "idle": {
+     "frames": 2,
+     "size": [
+      96,
+      88
+     ]
+    },
+    "move": {
+     "frames": 2,
+     "size": [
+      96,
+      88
+     ]
+    },
+    "windup_slam": {
+     "frames": 2,
+     "size": [
+      96,
+      88
+     ]
+    },
+    "attack_slam": {
+     "frames": 2,
+     "size": [
+      96,
+      88
+     ]
+    },
+    "windup_ring": {
+     "frames": 2,
+     "size": [
+      96,
+      88
+     ]
+    },
+    "attack_ring": {
+     "frames": 2,
+     "size": [
+      96,
+      88
+     ]
+    },
+    "windup_charge": {
+     "frames": 2,
+     "size": [
+      96,
+      88
+     ]
+    },
+    "attack_charge": {
+     "frames": 2,
+     "size": [
+      96,
+      88
+     ]
+    },
+    "hurt": {
+     "frames": 1,
+     "size": [
+      96,
+      88
+     ]
+    },
+    "stagger": {
+     "frames": 2,
+     "size": [
+      96,
+      88
+     ]
+    },
+    "idle2": {
+     "frames": 2,
+     "size": [
+      96,
+      88
+     ]
+    },
+    "defeat": {
+     "frames": 4,
+     "size": [
+      96,
+      88
+     ]
+    }
+   }
+  },
+  "boss_sand": {
+   "facing": "front",
+   "actions": {
+    "idle": {
+     "frames": 2,
+     "size": [
+      80,
+      96
+     ]
+    },
+    "move": {
+     "frames": 2,
+     "size": [
+      80,
+      96
+     ]
+    },
+    "windup_volley": {
+     "frames": 2,
+     "size": [
+      80,
+      96
+     ]
+    },
+    "attack_volley": {
+     "frames": 2,
+     "size": [
+      80,
+      96
+     ]
+    },
+    "windup_charge": {
+     "frames": 2,
+     "size": [
+      80,
+      96
+     ]
+    },
+    "attack_charge": {
+     "frames": 2,
+     "size": [
+      80,
+      96
+     ]
+    },
+    "windup_ring": {
+     "frames": 2,
+     "size": [
+      80,
+      96
+     ]
+    },
+    "attack_ring": {
+     "frames": 2,
+     "size": [
+      80,
+      96
+     ]
+    },
+    "hurt": {
+     "frames": 1,
+     "size": [
+      80,
+      96
+     ]
+    },
+    "stagger": {
+     "frames": 2,
+     "size": [
+      80,
+      96
+     ]
+    },
+    "idle2": {
+     "frames": 2,
+     "size": [
+      80,
+      96
+     ]
+    },
+    "defeat": {
+     "frames": 4,
+     "size": [
+      80,
+      96
+     ]
+    }
+   }
+  },
+  "boss_storm": {
+   "facing": "front",
+   "actions": {
+    "idle": {
+     "frames": 2,
+     "size": [
+      88,
+      96
+     ]
+    },
+    "move": {
+     "frames": 2,
+     "size": [
+      88,
+      96
+     ]
+    },
+    "windup_ring": {
+     "frames": 2,
+     "size": [
+      88,
+      96
+     ]
+    },
+    "attack_ring": {
+     "frames": 2,
+     "size": [
+      88,
+      96
+     ]
+    },
+    "windup_volley": {
+     "frames": 2,
+     "size": [
+      88,
+      96
+     ]
+    },
+    "attack_volley": {
+     "frames": 2,
+     "size": [
+      88,
+      96
+     ]
+    },
+    "windup_slam": {
+     "frames": 2,
+     "size": [
+      88,
+      96
+     ]
+    },
+    "attack_slam": {
+     "frames": 2,
+     "size": [
+      88,
+      96
+     ]
+    },
+    "hurt": {
+     "frames": 1,
+     "size": [
+      88,
+      96
+     ]
+    },
+    "stagger": {
+     "frames": 2,
+     "size": [
+      88,
+      96
+     ]
+    },
+    "idle2": {
+     "frames": 2,
+     "size": [
+      88,
+      96
+     ]
+    },
+    "defeat": {
+     "frames": 4,
+     "size": [
+      88,
+      96
+     ]
+    }
+   }
+  },
+  "boss_source": {
+   "facing": "front",
+   "actions": {
+    "idle": {
+     "frames": 2,
+     "size": [
+      128,
+      128
+     ]
+    },
+    "idle2": {
+     "frames": 2,
+     "size": [
+      128,
+      128
+     ]
+    },
+    "windup_volley": {
+     "frames": 2,
+     "size": [
+      128,
+      128
+     ]
+    },
+    "attack_volley": {
+     "frames": 2,
+     "size": [
+      128,
+      128
+     ]
+    },
+    "windup_ring": {
+     "frames": 2,
+     "size": [
+      128,
+      128
+     ]
+    },
+    "attack_ring": {
+     "frames": 2,
+     "size": [
+      128,
+      128
+     ]
+    },
+    "windup_slam": {
+     "frames": 2,
+     "size": [
+      128,
+      128
+     ]
+    },
+    "attack_slam": {
+     "frames": 2,
+     "size": [
+      128,
+      128
+     ]
+    },
+    "windup_charge": {
+     "frames": 2,
+     "size": [
+      128,
+      128
+     ]
+    },
+    "attack_charge": {
+     "frames": 2,
+     "size": [
+      128,
+      128
+     ]
+    },
+    "hurt": {
+     "frames": 1,
+     "size": [
+      128,
+      128
+     ]
+    },
+    "transform": {
+     "frames": 4,
+     "size": [
+      128,
+      128
+     ]
+    },
+    "defeat": {
+     "frames": 6,
+     "size": [
+      128,
+      128
+     ]
+    },
+    "tendril": {
+     "frames": 3,
+     "size": [
+      32,
+      48
+     ]
+    }
+   }
+  },
+  "shot": {
+   "facing": "right",
+   "actions": {
+    "orb": {
+     "frames": 2,
+     "size": [
+      12,
+      12
+     ]
+    },
+    "ice": {
+     "frames": 2,
+     "size": [
+      12,
+      12
+     ]
+    },
+    "sand": {
+     "frames": 2,
+     "size": [
+      12,
+      12
+     ]
+    },
+    "spark": {
+     "frames": 2,
+     "size": [
+      12,
+      12
+     ]
+    }
+   }
+  }
+ },
+ "anchor": "feet = bottom centre (shots: centre)"
+}
