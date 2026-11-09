@@ -20,6 +20,7 @@ async function startNew(page) {
   const errors = await openTitle(page);
   await page.click('#title-new');
   await expect(page.locator('#title-screen')).toBeHidden();
+  await api(page, 'skipOpening'); // v1.0: the opening (C9) is not what this test is about
   await api(page, 'clearEnemies');
   return errors;
 }
@@ -101,6 +102,7 @@ test('はじめから over an existing save asks first', async ({ page }) => {
   await expect(page.locator('#title-continue')).toBeVisible();
   await page.click('#title-new');
   await page.click('#title-confirm-yes');
+  await api(page, 'skipOpening'); // v1.0: the opening (C9) is not what this test is about
   expect((await api(page, 'progress')).openedChests).toEqual([]);
 });
 

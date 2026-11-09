@@ -28,6 +28,7 @@ import { regionAt, outdoorAt } from '../game/world/world.js';
 import { seasonAt } from '../game/env/weather.js';
 import { SEASON_ENTRIES, seasonKeys, SOURCE_BUNDLE, SOURCE_REGIONS } from './assets/placeholderPack.js';
 import { HeroAnimator } from './heroAnim.js';
+import { openingView } from '../game/story/story.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
 import { SilhouetteCache, placeFlash } from './flashOverlay.js';
 import { EnemySlots } from './enemySlots.js';
@@ -49,6 +50,8 @@ const TREE_FADE_ALPHA = 0.5;
 const CLIFF_SHADOW_PX = 6;
 const EDGE_PX = 2;
 const GLIDER_SHOULDER_Y = 9;
+/** v1.0 (C9): the pendant on the hero's chest, in placeholder pixels above his feet (×heroK). */
+const PENDANT_Y = 7;
 /** The hero's placeholder height in game pixels; offsets around the hero below are for this size
  *  and scale with the hero's real height (P11.5: the 32×56 art is 28 game pixels tall). */
 const HERO_BASE_H = 16;
@@ -187,6 +190,11 @@ export class GameView {
     this.glider = this.makeSprite('fx.glider');
     this.glider.visible = false;
     this.actors.addChild(this.shadow, this.player, this.glider);
+    // v1.0 (C9): the pendant's glow in the opening (a soft blue light on the hero's chest).
+    this.pendantGlow = new Graphics();
+    for (const [r, a] of /** @type {const} */ ([[7, 0.18], [4.5, 0.32], [2.5, 0.6], [1, 1]])) this.pendantGlow.circle(0, 0, r).fill({ color: r > 1 ? 0x7fe8ff : 0xffffff, alpha: a });
+    this.pendantGlow.visible = false;
+    this.actors.addChild(this.pendantGlow);
     // Stamina wheel beside the player (shown only while not full).
     this.staminaWheel = new Graphics();
     this.staminaWheel.visible = false;
@@ -719,6 +727,14 @@ export class GameView {
     this.heroK = Math.max(1, tex.height / HERO_BASE_H);
     this.player.position.set(sx, sy);
     this.player.zIndex = y;
+    // v1.0 (C9): the pendant glows as he gets up in the opening.
+    const op = openingView(state);
+    this.pendantGlow.visible = !!op && op.glow > 0.01;
+    if (op && this.pendantGlow.visible) {
+      this.pendantGlow.position.set(sx, sy - Math.round(PENDANT_Y * this.heroK));
+      this.pendantGlow.alpha = op.glow;
+      this.pendantGlow.zIndex = y + 0.002;
+    }
     // Glider canopy above the player's head; its cords end at the shoulders.
     this.glider.visible = p.gliding;
     if (p.gliding) {
@@ -760,7 +776,9 @@ export class GameView {
       this.envVersion = -1;
     }
     // v1.0 (C5): the beach ring glows while it is the gate to the source.
-    const ringOpen = !!state.progress.flags.source_open && !state.progress.flags.source_purified;
+    // v1.0 (C9): it flashes once in the opening.
+    // (open — and glowing — until the ending is seen: the way back to the princess by the source)
+    const ringOpen = (!!state.progress.flags.source_open && !state.progress.flags.ending_seen) || !!openingView(state)?.flash;
     if (ringOpen !== this.ringOpen) {
       this.ringOpen = ringOpen;
       this.envVersion = -1;
@@ -1025,7 +1043,9 @@ export class GameView {
     const blink = p.invulnMs > 0 && Math.floor(timeSec * 12) % 2 === 0;
     this.player.alpha = p.dead ? 0.5 : blink ? 0.3 : p.action === 'dodge' ? 0.7 : 1;
     // (the release hero has his own collapse frames: no turning the sprite on its side)
-    this.player.rotation = p.dead && held !== 'down' ? Math.PI / 2 : 0;
+    // (the placeholder hero lies on his side in the opening until he gets up, v1.0)
+    const lying = p.dead || (openingView(state)?.riseFrame ?? 0) >= 2;
+    this.player.rotation = lying && held !== 'down' ? Math.PI / 2 : 0;
 
     // Slow motion tint (screen space).
     const slow = state.flurryMs > 0 || state.bulletTime;

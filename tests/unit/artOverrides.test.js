@@ -58,6 +58,6 @@ describe('art overrides', () => {
 
   it('the atlas grows to fit bigger art', () => {
     const big = entries.map((e) => ({ ...e, image: { width: 200, height: 200 } }));
-    expect(atlasSizeFor(big)).toBeGreaterThan(atlasSizeFor(entries));
+    expect(atlasSizeFor(big).width).toBeGreaterThan(atlasSizeFor(entries).width);
   });
 });
