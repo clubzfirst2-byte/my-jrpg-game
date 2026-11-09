@@ -30,6 +30,7 @@ import { SEASON_ENTRIES, seasonKeys, SOURCE_BUNDLE, SOURCE_REGIONS } from './ass
 import { HeroAnimator } from './heroAnim.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
 import { SilhouetteCache, placeFlash } from './flashOverlay.js';
+import { EnemySlots } from './enemySlots.js';
 
 /** Chunk size in tiles (P8). */
 export const CHUNK = 32;
@@ -192,8 +193,9 @@ export class GameView {
     this.overlay.addChild(this.silhouette, this.staminaWheel);
 
     // --- P3 combat visuals ---
-    /** @type {Map<number, Sprite>} */
-    this.enemySprites = new Map();
+    /** One sprite per enemy, tied to the enemy object it was made for (ids are reused on respawn: enemySlots.js). */
+    /** @type {EnemySlots<Sprite>} */
+    this.enemySprites = new EnemySlots((id, spr) => this.releaseEnemySprite(id, spr));
     /** v1.0: each enemy's frame (tests, ?debug) and its wind-up warning overlay (made on first use). */
     /** @type {Map<number, string>} */
     this.enemyKeys = new Map();
@@ -547,34 +549,34 @@ export class GameView {
         },
       );
     } else if (!want && this.sourceHeld) {
-      const spr = this.enemySprites.get(FINAL_BOSS_ENEMY_ID);
-      if (spr) this.dropEnemySprite(FINAL_BOSS_ENEMY_ID, spr); // (its warning overlay too)
+      this.enemySprites.drop(FINAL_BOSS_ENEMY_ID); // (its warning overlay too)
       this.sourceHeld = false;
       this.assets.unload(SOURCE_BUNDLE);
     }
   }
 
   dropBossSprites() {
-    for (const [id, spr] of this.enemySprites) {
-      if (id < 1000) continue;
-      this.dropEnemySprite(id, spr);
-    }
+    for (const id of this.enemySprites.ids()) if (id >= 1000) this.enemySprites.drop(id);
   }
 
-  /** @param {number} id @param {Sprite} spr */
-  dropEnemySprite(id, spr) {
+  /** Releases an enemy's sprite and its warning overlay (EnemySlots calls this). @param {number} id @param {Sprite} spr */
+  releaseEnemySprite(id, spr) {
     spr.destroy();
-    this.enemySprites.delete(id);
     this.enemyKeys.delete(id);
     this.flashSprites.get(id)?.destroy();
     this.flashSprites.delete(id);
   }
 
-  /** What the enemies look like on screen (tests, ?debug): frame, size in game px, warning overlay. */
-  enemyDebug() {
-    return [...this.enemySprites].map(([id, s]) => {
+  /**
+   * What the enemies look like on screen (tests, ?debug): frame, size in game px, warning overlay.
+   * Only sprites drawn for an enemy still in the game: one left by an enemy that was cleared or
+   * respawned (not yet redrawn) is not listed.
+   * @param {{ enemies: any[] }} state
+   */
+  enemyDebug(state) {
+    return this.enemySprites.live(state.enemies).map(({ id, owner, sprite: s }) => {
       const f = this.flashSprites.get(id);
-      return { id, key: this.enemyKeys.get(id) ?? '', w: s.texture.width, h: s.texture.height, tint: s.tint, flash: f && f.visible ? f.alpha : 0, flashColor: f ? f.tint : null };
+      return { id, kind: owner.kind, key: this.enemyKeys.get(id) ?? '', w: s.texture.width, h: s.texture.height, tint: s.tint, flash: f && f.visible ? f.alpha : 0, flashColor: f ? f.tint : null };
     });
   }
 
@@ -913,10 +915,10 @@ export class GameView {
       seen.add(e.id);
       // v1.0: the source has a frame for each action (front-facing: never flipped).
       const sourceKey = e.final ? sourceFrameKey(e, timeSec, (k) => this.assets.hasTexture(k)) : null;
-      let spr = this.enemySprites.get(e.id);
+      let spr = this.enemySprites.get(e); // (a sprite another enemy left under this id is dropped)
       if (!spr) {
         spr = this.makeSprite(sourceKey ?? `enemy.${e.kind}.0`);
-        this.enemySprites.set(e.id, spr);
+        this.enemySprites.set(e, spr);
         this.actors.addChild(spr);
       }
       const ex = lerp(e.prevX, e.x, alpha);
@@ -967,9 +969,7 @@ export class GameView {
     /** @type {Graphics} */ (this.sourceMarks).clear();
     drawSourceTelegraphs(this.sourceGround, state);
     drawSeatLights(/** @type {Graphics} */ (this.sourceMarks), state, timeSec);
-    for (const [id, spr] of this.enemySprites) {
-      if (!seen.has(id)) this.dropEnemySprite(id, spr);
-    }
+    this.enemySprites.sweep(seen);
 
     // Projectiles: keep one sprite per projectile.
     while (this.projectileSprites.length < state.projectiles.length) {
