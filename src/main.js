@@ -883,7 +883,7 @@ async function boot() {
     },
     deathMs: () => state.deathMs,
     /** v1.0: each enemy on screen: frame drawn, size in game px, wind-up overlay strength and colour. */
-    enemyView: () => view.enemyDebug(),
+    enemyView: () => view.enemyDebug(state),
     /** Recent game events (last 64): lets tests observe short actions without racing them. */
     events: () => state.events.map((e) => e.type),
     /** Test helper: set stamina (e.g. to check drowning without waiting). */
