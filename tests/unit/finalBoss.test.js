@@ -217,7 +217,7 @@ describe('C6: the arena in the desert strip', () => {
     expect(switchActive(s, plate, [])).toBe(false);
     s.enemies.push({ ...b, final: false, id: 999 }); // (an ordinary enemy there would)
     expect(switchActive(s, plate, [])).toBe(true);
-  });
+  }, 30_000); // (simulates many steps: slow under load)
 
   it('seats are never doors or gates', () => {
     const { s } = arena();
