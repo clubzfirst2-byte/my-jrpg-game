@@ -16,6 +16,7 @@ import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES, placeholderEntri
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
+import { createNpcs } from './game/npc/npcs.js';
 import { prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
 import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
@@ -116,8 +117,13 @@ async function boot() {
   //   pixel): with ?hero=release, or alone with ?npc=release / ?hd=1. ?npc=placeholder leaves it out
   //   (before/after comparison), and so do the prototype views (?…=proto)
   const npcParam = params.get('npc');
-  const releaseNpcs = params.get('hero') === 'release' || npcParam === 'release' || hdParam === '1';
-  if (releaseNpcs && hdParam !== '0' && npcParam !== 'placeholder' && !protoGroups.length) for (const [k, v] of await releaseFrames('npc')) artOverrides.set(k, v);
+  //   ?npc=revision   batch 1 with the review's fixes (src/art-release/npc-revision/, kept apart from
+  //   the approved frames until it is approved)
+  const releaseNpcs = params.get('hero') === 'release' || npcParam === 'release' || npcParam === 'revision' || hdParam === '1';
+  if (releaseNpcs && hdParam !== '0' && npcParam !== 'placeholder' && !protoGroups.length) {
+    for (const [k, v] of await releaseFrames('npc')) artOverrides.set(k, v);
+    if (npcParam === 'revision') for (const [k, v] of await releaseFrames('npc-revision')) artOverrides.set(k, v);
+  }
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
 
   /** @type {import('pixi.js').Application} */
@@ -837,6 +843,11 @@ async function boot() {
     /** NPC batch 1: the villagers' sprites (frame key, size, draw order) and their state. */
     npcSprites: () => view.npcs.debug(),
     npcState: () => state.npcs.map((n) => ({ id: n.id, facing: n.facing, moving: n.moving, x: n.x, y: n.y })),
+    /** Test helper: a villager that is not in the world data yet (NPC batch 2: woman, smith), for a
+     *  look on screen only; it is not saved and the village data is unchanged. */
+    addNpc: (/** @type {string} */ id, /** @type {number} */ tx, /** @type {number} */ ty) => {
+      state.npcs.push(...createNpcs(state.map, [{ id, name: id, dialogue: 'elder', look: 1, tx, ty }]));
+    },
     dialogue: () => dialogueView(state),
     talkTo: (/** @type {string} */ id) => {
       const n = state.npcs.find((x) => x.id === id);
@@ -923,6 +934,8 @@ async function boot() {
     /** The hero's current animation (action and frame) and the texture drawn. */
     heroPose: () => ({ ...view.heroPose, texture: view.heroKey }),
     /** P11.5: the art in use (density, how many real-art sprites) and the drawn hero's size in game px. */
+    /** Which file a sprite's art comes from (tests: release / revision / prototype). */
+    artUrl: (/** @type {string} */ key) => artOverrides.get(key) ?? null,
     art: () => ({ density: artDensity, overrides: artOverrides.size, zoom: view.camera.zoom, hero: { w: view.player.texture.width, h: view.player.texture.height, k: view.heroK } }),
     /** P8: the auto tour (minutes may be fractional in tests). */
     startTour: (/** @type {number} */ minutes) => startTour(minutes),

@@ -29,14 +29,14 @@ async function holdUntil(page, key, done, ms = 12_000) {
   }
 }
 
-test('the elder, the merchant and the guard use their release art (16×28) beside the release hero; the others keep the placeholder', async ({ page }, testInfo) => {
+test('all five villagers (batch 1: elder, merchant, guard; batch 2: cook, child) use their release art (16×28) beside the release hero', async ({ page }, testInfo) => {
   const warnings = [];
   page.on('console', (m) => {
     if (m.text().startsWith('art:')) warnings.push(m.text());
   });
   const errors = await open(page);
-  expect(await api(page, 'art')).toMatchObject({ density: 2, overrides: 248 + 120, hero: { w: 16, h: 28 } });
-  for (const id of ['elder', 'guard', 'merchant']) {
+  expect(await api(page, 'art')).toMatchObject({ density: 2, overrides: 248 + 280, hero: { w: 16, h: 28 } });
+  for (const id of ['elder', 'guard', 'merchant', 'cook', 'child']) {
     await api(page, 'standBy', id);
     await waitTicks(page, 10);
     const s = await sprite(page, id);
@@ -44,11 +44,6 @@ test('the elder, the merchant and the guard use their release art (16×28) besid
     expect([s.w, s.h], id).toEqual([16, 28]);
     await page.screenshot({ path: testInfo.outputPath(`${id}.png`) });
   }
-  await api(page, 'standBy', 'cook');
-  await waitTicks(page, 10);
-  const cook = await sprite(page, 'cook');
-  expect(cook.key).toMatch(/^npc\.2\.walk\./);
-  expect([cook.w, cook.h]).toEqual([16, 16]);
   expect(warnings).toEqual([]);
   expect(errors).toEqual([]);
 });
@@ -131,7 +126,7 @@ test('?npc=placeholder keeps the placeholder villagers; normal play (no release 
   // the villagers' release art alone (without the hero's) can be asked for
   const page3 = await page.context().newPage();
   await open(page3, '&npc=release');
-  expect(await api(page3, 'art')).toMatchObject({ density: 2, overrides: 120 });
+  expect(await api(page3, 'art')).toMatchObject({ density: 2, overrides: 280 });
 });
 
 test('iPhone landscape: the three villagers and the hero together on screen', async ({ page }, testInfo) => {
@@ -144,4 +139,43 @@ test('iPhone landscape: the three villagers and the hero together on screen', as
   expect(on.length).toBeGreaterThanOrEqual(1);
   await page.screenshot({ path: testInfo.outputPath('iphone.png') });
   expect(errors).toEqual([]);
+});
+
+test('batch 2: the woman and the smith (not in the village yet) stand, walk and turn like the others', async ({ page }, testInfo) => {
+  const errors = await open(page);
+  const e = (await api(page, 'npcs')).find((n) => n.id === 'elder');
+  await api(page, 'addNpc', 'woman', e.tx + 3, e.ty + 2);
+  await api(page, 'addNpc', 'smith', e.tx + 5, e.ty + 2);
+  await api(page, 'teleport', e.tx + 4, e.ty + 4);
+  await waitTicks(page, 10);
+  for (const id of ['woman', 'smith']) {
+    const s = await sprite(page, id);
+    expect(s.key, id).toMatch(new RegExp(`^npc\\.${id}\\.(idle|walk)\\.`));
+    expect([s.w, s.h], id).toEqual([16, 28]);
+  }
+  await page.screenshot({ path: testInfo.outputPath('batch2.png') });
+  // a few tiles off they stroll: walk frames in the direction they go
+  await api(page, 'teleport', e.tx + 4, e.ty + 9);
+  await expect.poll(async () => (await npcState(page, 'smith')).moving, { timeout: 20_000, intervals: [50] }).toBe(true);
+  const s = await sprite(page, 'smith');
+  expect(s.key.split('.')[2]).toBe('walk');
+  expect(s.key.split('.')[3]).toBe((await npcState(page, 'smith')).facing);
+  expect(errors).toEqual([]);
+});
+
+test('?npc=revision shows batch 1 with the review\'s fixes (a separate set); without it, the approved frames', async ({ page }) => {
+  await open(page, '&hero=release&npc=revision');
+  expect((await api(page, 'art')).overrides).toBe(248 + 280);
+  await api(page, 'standBy', 'guard');
+  await waitTicks(page, 10);
+  expect((await sprite(page, 'guard')).key).toMatch(/^npc\.guard\./);
+  const page2 = await page.context().newPage();
+  await open(page2, '&hero=release');
+  // (the build inlines small images, so the files are compared by their contents)
+  for (const key of ['npc.elder.idle.down.0', 'npc.merchant.idle.up.0', 'npc.guard.idle.down.0']) {
+    expect(await api(page, 'artUrl', key), key).not.toBe(await api(page2, 'artUrl', key));
+  }
+  for (const key of ['npc.guard.idle.right.0', 'npc.cook.idle.down.0']) {
+    expect(await api(page, 'artUrl', key), key).toBe(await api(page2, 'artUrl', key));
+  }
 });

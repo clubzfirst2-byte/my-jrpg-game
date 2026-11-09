@@ -270,6 +270,12 @@ def arm_hang(c, sh, swing, far):
 
 
 class Guard(Npc):
+    # the maps, as attributes so a revision (a subclass) can replace them
+    HEAD_FRONT = HEAD_FRONT
+    HEAD_BACK = HEAD_BACK
+    BODY_FRONT = BODY_FRONT
+    BODY_BACK = BODY_BACK
+    CREST = CREST
     id = "guard"
     ramps = RAMPS
     walk_gait = dict(stride=3, lift=2, bob=1, arm=2)
@@ -298,8 +304,8 @@ class Guard(Npc):
             y = BODY_TOP + row
             dx = round(p.sway * (y - 36) / 6) if y > 36 and ch in "ABCDEfghij" else 0
             return dx, b + (up if y < 34 else 0)
-        stamp(c, BODY_BACK if back else BODY_FRONT, 0, BODY_TOP, LEG, mirrored=True, shift=shift)
-        stamp(c, CREST, 12, 27 + b + up, LEG)
+        stamp(c, self.BODY_BACK if back else self.BODY_FRONT, 0, BODY_TOP, LEG, mirrored=True, shift=shift)
+        stamp(c, self.CREST, 12, 27 + b + up, LEG)
         sh_r = (5, 25 + b + up) if not back else (26, 25 + b + up)
         sh_l = (26, 25 + b + up) if not back else (5, 25 + b + up)
         free_swing = max(0, p.arm_far if not back else p.arm_near)
@@ -310,7 +316,7 @@ class Guard(Npc):
         for dy in (-1, 0, 1):  # the fist round the shaft
             c.put(sx, hand[1] + dy, "skin", 3 if dy < 1 else 2)
         c.put(sx + (1 if not back else -1), hand[1], "skin", 2)
-        stamp(c, HEAD_BACK if back else HEAD_FRONT, 0, 1 + b + up, LEG, mirrored=True)
+        stamp(c, self.HEAD_BACK if back else self.HEAD_FRONT, 0, 1 + b + up, LEG, mirrored=True)
         if p.blink and not back:  # eyes shut: the lash line drops over the eye
             for x in (9, 10, 11, 12, 19, 20, 21, 22):
                 c.put(x, 13 + b + up, "skin", 2)
