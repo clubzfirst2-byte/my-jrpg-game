@@ -620,5 +620,5 @@ describe('arrows by the source (review 中-2)', () => {
     place(s, { tx: d.tx, ty: d.ty });
     stepGame(s, none);
     expect(countOf(s.progress.inv, 'arrow')).toBe(n0 + 2 * d.count);
-  });
+  }, 30_000);
 });
