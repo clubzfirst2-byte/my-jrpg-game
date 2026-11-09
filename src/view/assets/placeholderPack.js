@@ -344,7 +344,15 @@ export function releaseNpcEntries(overrides) {
 /** Width and height of an entry: its PNG when one replaces it, else the placeholder. @param {{ rows: string[], image?: { width: number, height: number } }} e */
 const sizeOf = (e) => (e.image ? { w: e.image.width, h: e.image.height } : { w: e.rows[0].length, h: e.rows.length });
 
-/** The smallest square atlas (64 .. 2048) the entries fit in, with the same shelf packing. @param {{ rows: string[], image?: { width: number, height: number } }[]} entries */
+/**
+ * The atlas the entries fit in, with the same shelf packing: the narrowest power-of-two width (64 ..
+ * 2048) whose square would hold them — the same width, so the same layout, as a square atlas — and
+ * then the smallest power-of-two height (64 .. that width) the packed shelves actually use, so an
+ * atlas that fills only the top of its square is not given the empty rest (perf v1: the base atlas
+ * of the release art went from 2048×2048 to 2048×1024).
+ * @param {{ rows: string[], image?: { width: number, height: number } }[]} entries
+ * @returns {{ width: number, height: number }}
+ */
 export function atlasSizeFor(entries) {
   for (const size of [64, 128, 256, 512, 1024, 2048]) {
     let x = 0;
@@ -365,7 +373,11 @@ export function atlasSizeFor(entries) {
       x += w + 1;
       shelf = Math.max(shelf, h);
     }
-    if (fits) return size;
+    if (!fits) continue;
+    const used = y + shelf;
+    let height = 64;
+    while (height < used) height *= 2;
+    return { width: size, height: Math.min(height, size) };
   }
   throw new Error('Too many sprites for one atlas');
 }
@@ -473,16 +485,16 @@ function mergePacks(packs) {
 
 /**
  * @param {{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement | HTMLCanvasElement }[]} entries
- * @param {number} atlasSize
+ * @param {{ width: number, height: number }} atlasSize from atlasSizeFor
  * @param {number} resolution pixels per game pixel (1 for placeholders, ART_SCALE for the real art)
  * @returns {import('./assetManager.js').BuiltBundle}
  */
 function packAtlas(entries, atlasSize, resolution) {
-  const ATLAS = atlasSize;
+  const { width: ATLAS_W, height: ATLAS_H } = atlasSize;
   const PAD = 1;
   const canvas = document.createElement('canvas');
-  canvas.width = ATLAS;
-  canvas.height = ATLAS;
+  canvas.width = ATLAS_W;
+  canvas.height = ATLAS_H;
   const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
 
   /** @type {Map<string, { x: number, y: number, w: number, h: number }>} */
@@ -492,12 +504,12 @@ function packAtlas(entries, atlasSize, resolution) {
   let shelf = 0;
   for (const e of entries) {
     const { w, h } = sizeOf(e);
-    if (x + w > ATLAS) {
+    if (x + w > ATLAS_W) {
       x = 0;
       y += shelf + PAD;
       shelf = 0;
     }
-    if (y + h > ATLAS) throw new Error('Placeholder atlas is full');
+    if (y + h > ATLAS_H) throw new Error('Placeholder atlas is full');
     if (e.image) {
       ctx.drawImage(e.image, x, y);
       rects.set(e.key, { x, y, w, h });

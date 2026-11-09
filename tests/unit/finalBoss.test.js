@@ -516,7 +516,7 @@ describe('the art (placeholders under the release art\'s names)', () => {
       if (e.key.startsWith('enemy.')) expect([e.rows[0].length, e.rows.length]).toEqual([64, 64]);
       expect(e.anchor).toEqual([0.5, 1]);
     }
-    expect(atlasSizeFor(entries)).toBeLessThanOrEqual(512);
+    expect(atlasSizeFor(entries).width).toBeLessThanOrEqual(512);
     expect(SOURCE_BUNDLE in REGION_ENTRIES).toBe(false); // (its own: loaded only near the arena)
     // The arena (and the antechamber) lie in a region whose presence loads the bundle.
     const ar = WORLD.areas.find((a) => a.id === 'source_arena');
