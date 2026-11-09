@@ -5,6 +5,7 @@ import { groundHeightUnder } from './physics/collision.js';
 import { createPlayer, updatePlayer, respawn } from './entities/player.js';
 import { combatStep, initCombat, COMBAT } from './entities/playerCombat.js';
 import { createBoss, settleBosses } from './entities/bosses.js';
+import { placeFinalBoss, settleFinalBoss, FINAL_BOSS } from './entities/finalBoss.js';
 import { createEnemy, updateEnemy } from './entities/enemies.js';
 import { updateProjectiles } from './entities/projectiles.js';
 import { hitEnemy } from './combat/damage.js';
@@ -29,7 +30,7 @@ import { areaAt } from './world/features.js';
 import { ISLAND } from './world/maps/island.js';
 import { WORLD } from './world/world.js';
 import { objectBaseline } from './world/worldDiff.js';
-import { createNpcs, stepNpcs } from './npc/npcs.js';
+import { createNpcs, stepNpcs, syncNpcs } from './npc/npcs.js';
 import { TEST_FIELD } from './world/maps/testField.js';
 import { HEIGHT_TEST } from './world/maps/heightTest.js';
 
@@ -62,6 +63,7 @@ export const ENEMY_CORPSE_MS = 600;
  * @property {number} nextId
  * @property {import('./world/tilemap.js').EnemySpawn[]} enemySpawns
  * @property {import('./entities/bosses.js').BossDef[]} bossDefs  P10.4
+ * @property {import('./entities/finalBoss.js').FinalBossDef | null} finalBossDef  v1.0 (C7): 淀みの源
  * @property {any[]} chests
  * @property {any[]} checkpointDefs
  * @property {any[]} campfires
@@ -89,7 +91,8 @@ export const ENEMY_CORPSE_MS = 600;
  * @property {boolean} abilityHeld
  * @property {import('./world/world.js').RegionInfo[]} regions  P8
  * @property {any[]} objectBaseline  P8: objects as the map made them (for saving differences)
- * @property {import('./npc/npcs.js').Npc[]} npcs  P9: villagers
+ * @property {import('./npc/npcs.js').Npc[]} npcs  P9: villagers (the ones there now)
+ * @property {import('./npc/npcs.js').NpcDef[]} npcDefs  v1.0: every villager of the map, with its appearance condition
  * @property {{ id: string, npc: string | null, node: string, line: number } | null} dialogue  P9: the conversation going on
  * @property {string | null} shop  P9: the shop open now
  */
@@ -118,6 +121,7 @@ export function createGameState(def = HEIGHT_TEST) {
     nextId: 1,
     enemySpawns: f.enemies ?? [],
     bossDefs: f.bosses ?? [],
+    finalBossDef: f.finalBoss ?? null,
     chests: f.chests ?? [],
     checkpointDefs: f.checkpoints ?? [],
     campfires: f.campfires ?? [],
@@ -145,6 +149,7 @@ export function createGameState(def = HEIGHT_TEST) {
     regions: f.regions ?? [],
     objectBaseline: [],
     npcs: [],
+    npcDefs: f.npcs ?? [],
     dialogue: null,
     shop: null,
   };
@@ -159,7 +164,9 @@ export function createGameState(def = HEIGHT_TEST) {
     }
   }
   state.objectBaseline = objectBaseline(map.objects);
-  state.npcs = createNpcs(map, f.npcs ?? []);
+  state.npcs = createNpcs(map, state.npcDefs.filter((d) => !d.if));
+  // v1.0: villagers with an appearance condition come and go with the progress (npcs.js).
+  syncNpcs(state);
   const campfires = state.campfires.map((c) => ({ type: 'campfire', tx: c.tx, ty: c.ty }));
   state.env = createEnv(map, [...map.objects, ...campfires], 1, CLOCK.startHour * CLOCK.hourMs);
   // P8: dry regions (the desert) never get rain.
@@ -266,10 +273,11 @@ export function stepGame(state, input) {
 
   swordHitsObjects(state);
 
+  placeFinalBoss(state); // v1.0: the source appears when the player steps into its arena
   const enemyDt = STEP_SEC * enemyScale;
   fireDamage(state, enemyDt * 1000);
   for (const e of state.enemies) updateEnemy(e, state, enemyDt);
-  state.enemies = state.enemies.filter((e) => !(e.state === 'dead' && e.t > ENEMY_CORPSE_MS));
+  state.enemies = state.enemies.filter((e) => !(e.state === 'dead' && e.t > (e.final ? FINAL_BOSS.defeatMs : ENEMY_CORPSE_MS)));
   pushApart(state);
   updateProjectiles(state, enemyDt);
   itemStep(state);
@@ -278,6 +286,7 @@ export function stepGame(state, input) {
   stepSwitches(state);
   learnAbilities(state);
   settleBosses(state);
+  settleFinalBoss(state);
 }
 
 /**

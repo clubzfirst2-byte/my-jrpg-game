@@ -87,7 +87,9 @@ import {
   lakeGrassTile,
   bossSprite,
   stairsSprite,
+  PRINCESS_LOOK,
 } from './placeholderArt.js';
+import { sourceFrames, starRingSprite } from './sourceArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
 const TOP_LEFT = /** @type {[number, number]} */ ([0, 0]);
@@ -168,6 +170,12 @@ export function placeholderEntries() {
   entries.push({ key: 'tile.wood', rows: woodFloorTile(), anchor: TOP_LEFT });
   entries.push({ key: 'tile.walltop', rows: wallTopTile(), anchor: TOP_LEFT });
   entries.push({ key: 'tile.dark', rows: darkTile(), anchor: TOP_LEFT });
+  // v1.0 (C5): the small 星環 on the beach (the island has no region bundle).
+  entries.push({ key: 'obj.star_ring.off', rows: starRingSprite(false), anchor: FEET });
+  entries.push({ key: 'obj.star_ring.on', rows: starRingSprite(true), anchor: FEET });
+  // v1.0 (C4): the princess's placeholder look — she appears by the record stones of every region,
+  // and the island has no region bundle, so her art is in the base bundle.
+  for (const [key, rows] of Object.entries(villagerFrames(PRINCESS_LOOK))) entries.push({ key, rows, anchor: FEET });
   return entries;
 }
 
@@ -184,7 +192,8 @@ export const REGION_ENTRIES = {
     ...[0, 1, 2, 3].map((i) => ({ key: `plains.grass.${i}`, rows: plainsGrassTile(i), anchor: TOP_LEFT })),
     // P9: the village of 風見 (houses and villagers) is in the plains.
     { key: 'obj.house', rows: houseSprite(), anchor: FEET },
-    ...[1, 2, 3, 4, 5].flatMap((look) => Object.entries(villagerFrames(look)).map(([key, rows]) => ({ key, rows, anchor: FEET }))),
+    // v1.0: 6 woman, 7 smith, 8 traveller (the pass east of the plains).
+    ...[1, 2, 3, 4, 5, 6, 7, 8].flatMap((look) => Object.entries(villagerFrames(look)).map(([key, rows]) => ({ key, rows, anchor: FEET }))),
     // P10.1: the furniture inside the village houses.
     { key: 'obj.lowwall', rows: lowWallSprite(), anchor: FEET },
     { key: 'obj.bed', rows: bedSprite(), anchor: FEET },
@@ -256,6 +265,23 @@ for (const [region, kind] of Object.entries(BOSS_REGIONS)) {
   REGION_ENTRIES[region] = () => [...make(), ...bossFrames(kind)];
 }
 
+/**
+ * v1.0 (C7): the art of 淀みの源, a bundle of its own. The source fights in the desert's strip of
+ * rooms, but its 64 × 64 frames do not fit the 256 × 256 base atlas, and they are not wanted
+ * everywhere (about 4 MB once the release art is in): the view loads this bundle only while the
+ * player is in the desert region (its strip includes the antechamber and the arena) and releases it
+ * elsewhere (SOURCE_REGIONS, gameView.js). The small 星環 on the beach is in the base bundle.
+ * The seats reuse the base bundle's sconce, sensor, plate, crate, stone, crystal and brazier.
+ * Names: the release art's (enemy.boss_source.<action>.<frame>), so that art drops in under them.
+ */
+export const SOURCE_BUNDLE = 'common:source';
+/** The regions near which the source's bundle is kept loaded. */
+export const SOURCE_REGIONS = Object.freeze(['desert']);
+/** @returns {{ key: string, rows: string[], anchor: [number, number] }[]} */
+export function sourceEntries() {
+  return Object.entries(sourceFrames()).map(([key, rows]) => ({ key, rows, anchor: FEET }));
+}
+
 /** @param {string} name @param {Map<string, ArtSource>} [overrides] */
 export function buildRegionPack(name, overrides) {
   return buildPlaceholderPack([...REGION_ENTRIES[name](), ...releaseBossEntries(name, overrides)], overrides);
@@ -268,7 +294,7 @@ const ENEMY_ACTION_KEY = /^enemy\.([a-z_]+)\.([a-z0-9_]+)\.\d+$/;
  * The enemies' per-action release frames (enemy.<kind>.<idle|move|windup|attack|hurt|defeat>.<n>):
  * like the hero's, they get a slot in the base bundle only when such art is given; an enemy without
  * them keeps its enemy.<kind>.<0|1> frames. Cores of the murk (boss_*) go in their region's bundle
- * (releaseBossEntries); the final boss (no code yet) and the shots are not used yet. Only the names
+ * (releaseBossEntries); the final boss (boss_source) goes in its own bundle (common:source, sourceEntries) and the shots are not used yet. Only the names
  * are read (a URL or a packed sheet frame alike).
  * @param {Map<string, ArtSource>} [overrides]
  */

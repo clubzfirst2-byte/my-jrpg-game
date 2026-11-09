@@ -13,6 +13,7 @@ import { Ground } from '../world/tilemap.js';
 import { direction, overlaps } from '../combat/hitbox.js';
 import { hitPlayer } from '../combat/damage.js';
 import { updateBoss, bossWindup } from './bosses.js';
+import { updateFinalBoss } from './finalBoss.js';
 
 /** @typedef {'beast' | 'archer' | 'slime' | 'sentinel'} EnemyKind */
 
@@ -149,6 +150,7 @@ export function strideFactor(e, k) {
  */
 export function updateEnemy(e, state, dt) {
   if (e.boss) return updateBoss(e, state, dt); // P10.4
+  if (e.final) return updateFinalBoss(e, state, dt); // v1.0: 淀みの源
   const ms = dt * 1000;
   e.prevX = e.x;
   e.prevY = e.y;
@@ -313,7 +315,7 @@ function shoot(e, state, k) {
 
 /** For the view: 0..1 how far into the wind-up (telegraph) the enemy is. @param {any} e */
 export function windupProgress(e) {
-  if (e.boss) return bossWindup(e);
+  if (e.boss || e.final) return bossWindup(e);
   if (e.state !== 'windup') return 0;
   return Math.min(1, e.t / ENEMY_KINDS[/** @type {EnemyKind} */ (e.kind)].windupMs);
 }

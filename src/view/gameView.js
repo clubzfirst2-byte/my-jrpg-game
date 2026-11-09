@@ -14,8 +14,10 @@ import { lerp } from '../game/core/math.js';
 import { Camera } from './camera.js';
 import { windupProgress, ENEMY_KINDS } from '../game/entities/enemies.js';
 import { BOSS_KINDS } from '../game/entities/bosses.js';
+import { FINAL_BOSS, FINAL_BOSS_ENEMY_ID } from '../game/entities/finalBoss.js';
 import { COMBAT } from '../game/entities/playerCombat.js';
 import { areaAt } from '../game/world/features.js';
+import { sourceFrameKey, drawSourceTelegraphs, drawSeatLights } from './sourceView.js';
 import { FeatureView } from './featureView.js';
 import { EnvView } from './envView.js';
 import { WeatherView } from './weatherView.js';
@@ -24,7 +26,7 @@ import { PuzzleView } from './puzzleView.js';
 import { NpcView } from './npcView.js';
 import { regionAt, outdoorAt } from '../game/world/world.js';
 import { seasonAt } from '../game/env/weather.js';
-import { SEASON_ENTRIES, seasonKeys } from './assets/placeholderPack.js';
+import { SEASON_ENTRIES, seasonKeys, SOURCE_BUNDLE, SOURCE_REGIONS } from './assets/placeholderPack.js';
 import { HeroAnimator } from './heroAnim.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
 import { SilhouetteCache, placeFlash } from './flashOverlay.js';
@@ -143,6 +145,15 @@ export class GameView {
     );
     this.envVersion = -1;
     this.charmHome = false;
+    /** v1.0: the beach ring glows while it is a gate */
+    this.ringOpen = false;
+    /** v1.0: the source's art bundle: held only while the player is in the desert (its arena is there) */
+    this.sourceHeld = false;
+    this.sourceLoading = false;
+    /** @type {Graphics | null} v1.0: the source's telegraphs (ground) and seat lights */
+    this.sourceGround = null;
+    /** @type {Graphics | null} */
+    this.sourceMarks = null;
     /** @type {Graphics | null} P10.4: slam telegraph */
     this.bossRing = null;
     this.items = new ItemView((key) => this.makeSprite(key), this.actors);
@@ -516,6 +527,33 @@ export class GameView {
   }
 
   /** Bosses are drawn with region art: drop their sprites before a region bundle can go (redrawn next frame if still loaded). */
+  /**
+   * v1.0: the source's art is loaded while the player is in the desert region (its strip of rooms
+   * holds the antechamber and the arena) and released elsewhere (about 4 MB with the release art).
+   * @param {import('../game/state.js').GameState} state
+   */
+  updateSourceBundle(state) {
+    const p = state.player;
+    const want = SOURCE_REGIONS.includes(regionAt(this.regions, Math.floor(p.x / 16), Math.floor(p.y / 16))?.id ?? '');
+    if (want && !this.sourceHeld && !this.sourceLoading) {
+      this.sourceLoading = true;
+      this.assets.load(SOURCE_BUNDLE).then(
+        () => {
+          this.sourceLoading = false;
+          this.sourceHeld = true; // (released on the next frame if no longer wanted)
+        },
+        () => {
+          this.sourceLoading = false;
+        },
+      );
+    } else if (!want && this.sourceHeld) {
+      const spr = this.enemySprites.get(FINAL_BOSS_ENEMY_ID);
+      if (spr) this.dropEnemySprite(FINAL_BOSS_ENEMY_ID, spr); // (its warning overlay too)
+      this.sourceHeld = false;
+      this.assets.unload(SOURCE_BUNDLE);
+    }
+  }
+
   dropBossSprites() {
     for (const [id, spr] of this.enemySprites) {
       if (id < 1000) continue;
@@ -592,6 +630,7 @@ export class GameView {
       if (r === 'forest' || r === 'mountains') return `${r}.pine`;
     }
     if (o.type === 'charm_shelf') return this.charmHome ? 'obj.charm_shelf.on' : 'obj.charm_shelf'; // P10.1
+    if (o.type === 'star_ring') return this.ringOpen ? 'obj.star_ring.on' : 'obj.star_ring.off'; // v1.0
     return `obj.${o.type}`;
   }
 
@@ -710,11 +749,18 @@ export class GameView {
     else this.camera.follow(x, y - camZ - aimY, dtSec);
     this.applyCamera();
     this.updateSeason(state.env.now);
+    this.updateSourceBundle(state);
     this.updateChunks(this.camera.origin(), this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom);
     // P10.1: the elder's charm is back on its shelf once the quest is done.
     const charmHome = state.progress.quests.lost_charm === 'done';
     if (charmHome !== this.charmHome) {
       this.charmHome = charmHome;
+      this.envVersion = -1;
+    }
+    // v1.0 (C5): the beach ring glows while it is the gate to the source.
+    const ringOpen = !!state.progress.flags.source_open && !state.progress.flags.source_purified;
+    if (ringOpen !== this.ringOpen) {
+      this.ringOpen = ringOpen;
       this.envVersion = -1;
     }
     if (state.env.version !== this.envVersion || this.hasBraziers) {
@@ -862,10 +908,14 @@ export class GameView {
     for (const e of state.enemies) {
       // P10.4: a core of the murk is drawn by its region's art, only while that is loaded.
       if (e.boss && !this.assets.hasTexture(`enemy.${e.kind}.0`)) continue;
+      // v1.0: the source is drawn by its own bundle, only while that is loaded.
+      if (e.final && !this.assets.hasTexture('enemy.boss_source.idle.0')) continue;
       seen.add(e.id);
+      // v1.0: the source has a frame for each action (front-facing: never flipped).
+      const sourceKey = e.final ? sourceFrameKey(e, timeSec, (k) => this.assets.hasTexture(k)) : null;
       let spr = this.enemySprites.get(e.id);
       if (!spr) {
-        spr = this.makeSprite(`enemy.${e.kind}.0`);
+        spr = this.makeSprite(sourceKey ?? `enemy.${e.kind}.0`);
         this.enemySprites.set(e.id, spr);
         this.actors.addChild(spr);
       }
@@ -873,15 +923,16 @@ export class GameView {
       const ey = lerp(e.prevY, e.y, alpha);
       const moving = Math.hypot(e.x - e.prevX, e.y - e.prevY) > 0.01;
       // v1.0: the release art's frame for what it is doing (enemyAnim.js), else the placeholder.
-      const key = enemyFrameKey(e, timeSec, moving, this.hasTexture, this.enemyFrameCounts);
+      // (the source: its own frame for each state of the fight, sourceView.js)
+      const key = sourceKey ?? enemyFrameKey(e, timeSec, moving, this.hasTexture, this.enemyFrameCounts);
       spr.texture = this.assets.texture(key);
       this.enemyKeys.set(e.id, key);
       spr.position.set(Math.round(ex), Math.round(ey - e.z));
       spr.zIndex = ey;
-      spr.scale.x = e.faceX < -0.2 ? -1 : 1;
+      spr.scale.x = !e.final && e.faceX < -0.2 ? -1 : 1; // (the source faces front: never flipped)
       // Stunned: pale blue (multiplied).
       spr.tint = e.state === 'stun' ? 0xa8b8ff : 0xffffff;
-      spr.alpha = e.state === 'dead' ? defeatAlpha(e.t) : 1;
+      spr.alpha = e.state === 'dead' ? (e.final ? Math.max(0, 1 - e.t / FINAL_BOSS.defeatMs) : defeatAlpha(e.t)) : 1;
       // Telegraph (v1.0, ART_STYLE_GUIDE 5.4 B): the wind-up pulses under a 50% red overlay, faster
       // as the attack nears — laid over the art, so it shows on dark bodies too (flashOverlay.js).
       const flash = warningFlashAlpha(e, timeSec, windupProgress(e));
@@ -904,6 +955,18 @@ export class GameView {
       this.bossRing.circle(Math.round(e.x), Math.round(e.y - e.z), r * k).fill({ color: 0xd0202a, alpha: 0.18 });
       this.bossRing.zIndex = e.y - r;
     }
+    // v1.0: the source's slam / wave reach (on the ground) and its awake seats (above everything).
+    if (!this.sourceGround) {
+      this.sourceGround = new Graphics();
+      this.sourceGround.zIndex = -1e6;
+      this.actors.addChild(this.sourceGround);
+      this.sourceMarks = new Graphics();
+      this.overlay.addChild(this.sourceMarks);
+    }
+    this.sourceGround.clear();
+    /** @type {Graphics} */ (this.sourceMarks).clear();
+    drawSourceTelegraphs(this.sourceGround, state);
+    drawSeatLights(/** @type {Graphics} */ (this.sourceMarks), state, timeSec);
     for (const [id, spr] of this.enemySprites) {
       if (!seen.has(id)) this.dropEnemySprite(id, spr);
     }

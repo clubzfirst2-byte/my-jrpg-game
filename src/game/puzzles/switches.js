@@ -10,6 +10,8 @@
 //
 // Switches share a `link` (the doors they open) and a `group`: when every switch of one group is
 // active at the same moment, the link's doors open for good (saved like the P4 vault).
+// v1.0: seats (`seat: true`) of the final boss are read by it instead and never open anything.
+// The final boss itself never counts as weight on a plate (it is huge and floats).
 import { openDoors, envNeighbours } from '../env/envSim.js';
 import { tileIndexAt } from '../env/envActions.js';
 
@@ -22,6 +24,9 @@ import { tileIndexAt } from '../env/envActions.js';
  * @property {string} link   doors it opens
  * @property {string} group  switches that must be active together
  * @property {InputKind[]} accepts
+ * @property {boolean} [seat]  v1.0 (C7): a seat (座) of 淀みの源. Seats open no doors and are never
+ *   saved as gates: the source reads their state (state.switchActive) every step, and its inversion
+ *   wave puts them out again (finalBoss.js). Their link / group only name them.
  */
 
 export const SWITCH = Object.freeze({
@@ -64,7 +69,7 @@ export function switchActive(state, s, lights) {
     const p = state.player;
     const on = (/** @type {any} */ b) => tileIndexAt(state, b.x, b.y) === i && b.z - map.elev[i] <= 2;
     const o = state.env.objectAt.get(i);
-    if ((!p.dead && p.grounded && on(p)) || (o && !o.gone && o.type === 'crate') || state.enemies.some((/** @type {any} */ e) => e.state !== 'dead' && on(e))) return true;
+    if ((!p.dead && p.grounded && on(p)) || (o && !o.gone && o.type === 'crate') || state.enemies.some((/** @type {any} */ e) => e.state !== 'dead' && !e.final && on(e))) return true;
   }
   if (accepts.has('light')) {
     const cx = s.tx * ts + ts / 2;
@@ -121,6 +126,7 @@ export function stepSwitches(state) {
   for (const s of /** @type {SwitchDef[]} */ (state.switches)) {
     const on = switchActive(state, s, lights);
     state.switchActive[s.id] = on;
+    if (s.seat) continue; // read by the final boss, never a door
     const key = `${s.link}\u0000${s.group}`;
     groups.set(key, (groups.get(key) ?? true) && on);
   }
@@ -142,4 +148,12 @@ export function lightSconce(state, o) {
   o.lit = true;
   state.env.version++;
   state.events.push({ type: 'sconceLit', tick: state.tick });
+}
+
+/** v1.0 (C7): puts a sconce out (the source's inversion wave). @param {any} state @param {any} o */
+export function unlightSconce(state, o) {
+  if (!o.lit) return;
+  o.lit = false;
+  state.env.version++;
+  state.events.push({ type: 'sconceOut', tick: state.tick });
 }

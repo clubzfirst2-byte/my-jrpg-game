@@ -1,9 +1,13 @@
 // @ts-check
 // Villagers (P9): they stroll around their home spot, stop and face the player when spoken to,
 // and are talked to with the attack button (like opening a chest). Pure logic.
+// v1.0 (C3): a villager may be there only while conditions hold (`if`, the same conditions as a
+// dialogue's start: flags, quest states, cores purified…) — added and removed as the progress
+// changes — and may be see-through (`ghost`: the princess's 写し身, clearer with each core purified).
 import { moveAndCollide, groundHeightUnder } from '../physics/collision.js';
 import { roll } from '../core/hashRandom.js';
 import { Ground } from '../world/tilemap.js';
+import { conditionHolds, coresPurified } from './talk.js';
 
 export const NPC = Object.freeze({
   speed: 24,
@@ -15,17 +19,28 @@ export const NPC = Object.freeze({
   talkRange: 28,
   /** Villagers stop walking when the player is this close. */
   stopNear: 40,
+  /** How opaque a ghost is with no core purified, and how much clearer each core makes it. */
+  ghostAlpha: 0.45,
+  ghostAlphaPerCore: 0.1,
 });
 
 /**
  * @typedef {{ id: string, name: string, dialogue: string, look: number, x: number, y: number, z: number,
  *   prevX: number, prevY: number, homeX: number, homeY: number, tx: number, ty: number, waitMs: number,
- *   facing: string, moving: boolean, walkTime: number, halfWidth: number, height: number, stay: boolean, reach: number }} Npc
- * stay: never strolls (a shopkeeper behind the counter, P10.1); reach: talk range (across a counter)
+ *   facing: string, moving: boolean, walkTime: number, halfWidth: number, height: number, stay: boolean, reach: number, ghost: boolean, art: string }} Npc
+ * stay: never strolls (a shopkeeper behind the counter, P10.1); reach: talk range (across a counter);
+ * ghost: drawn see-through (v1.0); art: the name of its release frames npc.<art>.* (v1.0: the
+ * princess stands in seven places under seven ids, all drawn from npc.princess.*)
  */
 
 /**
- * @param {any} map @param {{ id: string, name: string, dialogue: string, look?: number, tx: number, ty: number, stay?: boolean, reach?: number }[]} defs
+ * @typedef {{ id: string, name: string, dialogue: string, look?: number, tx: number, ty: number, stay?: boolean, reach?: number,
+ *   if?: import('./talk.js').Condition[], ghost?: boolean, art?: string }} NpcDef
+ * if: there only while all these conditions hold (v1.0)
+ */
+
+/**
+ * @param {any} map @param {NpcDef[]} defs
  * @returns {Npc[]}
  */
 export function createNpcs(map, defs) {
@@ -56,8 +71,57 @@ export function createNpcs(map, defs) {
       height: 6,
       stay: !!d.stay,
       reach: d.reach ?? NPC.talkRange,
+      ghost: !!d.ghost,
+      art: d.art ?? d.id,
     };
   });
+}
+
+/** Whether a villager is there now (all of its `if` conditions hold). @param {any} state @param {NpcDef} def */
+export function npcPresent(state, def) {
+  for (const c of def.if ?? []) if (!conditionHolds(state, c)) return false;
+  return true;
+}
+
+/** @param {Npc[]} npcs @param {string} id */
+function indexOfNpc(npcs, id) {
+  for (let k = 0; k < npcs.length; k++) if (npcs[k].id === id) return k;
+  return -1;
+}
+
+/**
+ * Adds the villagers whose conditions now hold and removes those whose no longer do (v1.0, C3).
+ * Someone being talked to stays until the conversation ends. Villagers keep the order of their
+ * definitions; ones added by hand (debug) stay at the end. Cheap: run every step.
+ * @param {any} state @returns {boolean} whether anyone came or went
+ */
+export function syncNpcs(state) {
+  /** @type {NpcDef[]} */
+  const defs = state.npcDefs ?? [];
+  let changed = false;
+  for (const d of defs) {
+    if (!d.if) continue;
+    const want = npcPresent(state, d);
+    const k = indexOfNpc(state.npcs, d.id);
+    if (want && k < 0) {
+      state.npcs.push(...createNpcs(state.map, [d]));
+      changed = true;
+    } else if (!want && k >= 0 && state.dialogue?.npc !== d.id) {
+      state.npcs.splice(k, 1);
+      changed = true;
+    }
+  }
+  if (changed) {
+    const order = new Map(defs.map((d, k) => [d.id, k]));
+    state.npcs.sort((/** @type {Npc} */ a, /** @type {Npc} */ b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity));
+  }
+  return changed;
+}
+
+/** How opaque a villager is drawn: 1, or a ghost's alpha (clearer with each core purified). @param {any} state @param {Npc} n */
+export function npcAlpha(state, n) {
+  if (!n.ghost) return 1;
+  return Math.min(1, NPC.ghostAlpha + NPC.ghostAlphaPerCore * coresPurified(state));
 }
 
 /**
@@ -65,6 +129,7 @@ export function createNpcs(map, defs) {
  * @param {any} state @param {number} dt seconds
  */
 export function stepNpcs(state, dt) {
+  syncNpcs(state);
   const p = state.player;
   const map = state.map;
   for (const n of /** @type {Npc[]} */ (state.npcs)) {

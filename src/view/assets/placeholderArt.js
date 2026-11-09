@@ -1116,7 +1116,15 @@ const LOOKS = [
   ['i', 'Z', 'k'], // 3: guard (red coat)
   ['g', 'd', 'N'], // 4: merchant (green)
   ['y', 'A', 'f'], // 5: child (yellow)
+  // v1.0 (C4): placeholders until their release art (npc.<id>.*) is in
+  ['O', 'j', 'F'], // 6: village woman (lilac)
+  ['F', 'T', 'k'], // 7: smith (leather apron)
+  ['r', 'm', 'P'], // 8: traveller (grey cloak)
+  ['W', 'w', 'R'], // 9: princess (pale blue, silver hair)
 ];
+
+/** The princess's look: her placeholder is in the base bundle (she stands by record stones in every region). */
+export const PRINCESS_LOOK = 9;
 
 /** Villager walk frames (same shapes as the player, another outfit). @param {number} look */
 export function villagerFrames(look) {

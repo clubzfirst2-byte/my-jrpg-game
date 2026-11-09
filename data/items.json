@@ -67,6 +67,17 @@
       "desc": "刃が熱を帯びている。斬った草木に火がつく。"
     },
     {
+      "id": "star_steel_sword",
+      "name": "星鋼の剣",
+      "type": "weapon",
+      "damage": 2,
+      "reach": 0,
+      "speed": 1.0,
+      "durability": 45,
+      "price": 160,
+      "desc": "澱の結晶を鍛えた剣。刃がほんのり青く光る。"
+    },
+    {
       "id": "wood_bow",
       "name": "木の弓",
       "type": "bow",

@@ -34,8 +34,12 @@ for (const w of WORLD.warps) {
   warpsFrom.set(i, [...(warpsFrom.get(i) ?? []), w.toTy * W + w.toTx]);
 }
 
+// v1.0 (C5): the beach ring is a doorway only with the flag source_open (warps with `if`). The
+// playthrough counts it open; a second exploration shows that without it the source is out of reach.
+const conditional = new Set(WORLD.warps.filter((w) => w.if).map((w) => w.ty * W + w.tx));
+
 /** Every tile the player can stand on, starting from the spawn. */
-function explore(useWarps = true) {
+function explore(useWarps = true, conditionalOpen = true) {
   const seen = new Uint8Array(W * map.height);
   const start = Math.floor(map.spawn.y / 16) * W + Math.floor(map.spawn.x / 16);
   const queue = [start];
@@ -43,7 +47,7 @@ function explore(useWarps = true) {
   while (queue.length) {
     const i = /** @type {number} */ (queue.pop());
     const x = i % W;
-    const next = useWarps ? [...(warpsFrom.get(i) ?? [])] : [];
+    const next = useWarps && (conditionalOpen || !conditional.has(i)) ? [...(warpsFrom.get(i) ?? [])] : [];
     if (x > 0) next.push(i - 1);
     if (x < W - 1) next.push(i + 1);
     if (i >= W) next.push(i - W);
@@ -89,6 +93,35 @@ describe('a playthrough of the whole world: everything can be reached from the s
     expect(at(WORLD.chests.find((c) => c.id === 'mine'))).toBe(0);
     expect(at(WORLD.checkpoints.find((c) => c.id === 'forest'))).toBe(0);
     expect(walled[Math.floor(map.spawn.y / 16) * W + Math.floor(map.spawn.x / 16)]).toBe(1);
+  });
+
+  it('v1.0: the source\'s antechamber, its record stone and the arena are reached through the beach ring', () => {
+    const gate = WORLD.warps.find((w) => w.id === 'source-gate');
+    const into = WORLD.warps.find((w) => w.id === 'source-arena-in');
+    expect(conditional.size).toBe(1);
+    expect(conditional.has(gate.ty * W + gate.tx)).toBe(true);
+    const stone = WORLD.checkpoints.find((c) => c.id === 'source');
+    const boss = WORLD.finalBoss;
+    for (const [tx, ty] of [[gate.toTx, gate.toTy], [stone.tx, stone.ty + 1], [into.toTx, into.toTy], [boss.tx, boss.ty + 2]]) expect(seen[ty * W + tx], `${tx},${ty}`).toBe(1);
+    // Every seat can be reached (stood next to).
+    for (const sw of WORLD.switches.filter((x) => x.seat)) expect(reached(sw.tx, sw.ty), sw.id).toBe(true);
+  });
+
+  it('v1.0: without source_open (the ring only a ring) the source cannot be reached at all', () => {
+    const closed = explore(true, false);
+    const gate = WORLD.warps.find((w) => w.id === 'source-gate');
+    const boss = WORLD.finalBoss;
+    const stone = WORLD.checkpoints.find((c) => c.id === 'source');
+    expect(closed[gate.ty * W + gate.tx]).toBe(1); // (the ring itself stands on the open beach)
+    for (const a of WORLD.areas.filter((x) => x.id === 'source_gate' || x.id === 'source_arena')) {
+      for (let ty = a.ty; ty < a.ty + a.th; ty++) for (let tx = a.tx; tx < a.tx + a.tw; tx++) expect(closed[ty * W + tx], `${a.id} ${tx},${ty}`).toBe(0);
+    }
+    expect(closed[(stone.ty + 1) * W + stone.tx]).toBe(0);
+    expect(closed[(boss.ty + 2) * W + boss.tx]).toBe(0);
+    // Everything else stays reachable without it.
+    const others = [...WORLD.chests, ...WORLD.checkpoints.filter((c) => c.id !== 'source'), ...WORLD.bosses];
+    const reach = (o) => [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => closed[(o.ty + dy) * W + o.tx + dx]);
+    expect(others.filter((o) => !reach(o)).map((o) => o.id)).toEqual([]);
   });
 
   it('all six regions, all four cores and all six trials are on the way', () => {

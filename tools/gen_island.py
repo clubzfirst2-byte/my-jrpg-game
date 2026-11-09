@@ -412,9 +412,34 @@ for c in features['chests'] + features['checkpoints'] + features['campfires']:
 for sw in SWITCHES:
     assert g[sw['ty']][sw['tx']] in '.=sum', ('switch on', sw, g[sw['ty']][sw['tx']])
 features['envObjects'] = ENV_OBJECTS
+# --- v1.0 (C5): the small 星環 on the beach, where the hero woke. Placed last so nothing above moves.
+# Once the four cores are purified and the princess's image is told (flag source_open), walking up
+# into the ring leads to the antechamber of 淀みの源 (the desert's strip of rooms, gen_world.py);
+# after the source is purified the ring is only a ring again. At least 5 tiles west of the start
+# and the beach stone (DESIGN: docs/story/V1_STORY_PROPOSAL.md C5).
+RING = (42, 67)
+assert g[RING[1]][RING[0]] == 's' and g[RING[1] + 1][RING[0]] == 's', 'the star ring stands on the sand'
+assert RING[0] <= SPAWN[0] - 5 and RING[0] <= features['checkpoints'][0]['tx'] - 5, 'the ring is west of the start and the stone'
+for lst in ('chests', 'checkpoints', 'campfires', 'enemies', 'pickups', 'envObjects'):
+    for o in features[lst]:
+        assert (o['tx'], o['ty']) not in (RING, (RING[0], RING[1] + 1)), ('the ring spot is taken', lst, o)
+ENV_OBJECTS.append({'type': 'star_ring', 'tx': RING[0], 'ty': RING[1]})
+features['passes'] = [{
+    'id': 'source-gate', 'tx': RING[0], 'ty': RING[1], 'facing': 'up',
+    'to': {'region': 'desert', 'tx': 104, 'ty': 31},
+    'if': [{'flag': 'source_open'}, {'flag': 'source_purified', 'is': False}],
+}]
 # enemies must not stand on environment objects
 for e in features['enemies']:
     assert not any(o['tx'] == e['tx'] and o['ty'] == e['ty'] for o in ENV_OBJECTS), e
+
+# v1.0 (docs/story/V1_STORY_PROPOSAL.md C4): the princess's 写し身 beside the beach record stone, where she
+# is first met (east of it: the beach gate of C5 is to the west). Placed last so nothing else moves.
+# Drawn from npc.princess.*; a short talk range (18 px) as by the other stones (tools/gen_world.py).
+bx, by = features['checkpoints'][0]['tx'], features['checkpoints'][0]['ty']
+assert free(bx + 1, by, h[by][bx]) and (bx + 1, by) not in taken and g[by][bx + 1] != '=', 'princess_beach spot'
+features['npcs'] = [{'id': 'princess_beach', 'name': '星環の姫', 'dialogue': 'princess', 'look': 9, 'art': 'princess', 'tx': bx + 1, 'ty': by, 'stay': True, 'reach': 18,
+                     'if': [{'flag': 'source_purified', 'is': False}, {'flag': 'ending_seen', 'is': False}], 'ghost': True}]
 
 fmt = lambda rows: ',\n'.join("    '" + r + "'" for r in rows)
 out = f"""// @ts-check

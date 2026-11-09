@@ -3,6 +3,7 @@
 // knockback. Health is in quarter hearts for the player and plain points for enemies.
 import { COMBAT, dodgeInvulnerable } from '../entities/playerCombat.js';
 import { direction, fromFront } from './hitbox.js';
+import { hitFinalBoss } from '../entities/finalBoss.js';
 
 /**
  * @typedef {object} Hit
@@ -61,6 +62,7 @@ export function hitPlayer(state, hit) {
  * @returns {boolean} whether it landed
  */
 export function hitEnemy(state, e, hit) {
+  if (e.final) return hitFinalBoss(state, e, hit); // v1.0: only a staggered source can be hurt
   if (e.state === 'dead' || e.lastHitId === hit.id) return false;
   e.lastHitId = hit.id;
   // P10.4: a core that burns takes double damage from fire. v1.0: the sentinel takes double from
