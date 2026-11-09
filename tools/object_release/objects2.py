@@ -1,4 +1,5 @@
-"""Release wave 2: every remaining object, puzzle part, icon, effect and UI sprite (49 sprites).
+"""Release wave 2: every remaining object, puzzle part, icon, effect and UI sprite (45 sprites;
+rock, bramble, stump and cactus are the terrain producer's, art/terrain-release).
 
 Same method as the approved wave-1 samples (objects.py): materials with 5-tone ramps, light from the top
 left, the selective outline (Canvas.colours), hand-placed pixels and shapes; no mixed colours, every pixel
@@ -923,151 +924,10 @@ def sensor():
     return out
 
 
-# ================================================================== nature props (not trees: terrain wave)
-
-def rock():
-    """obj.rock 32x28: a field boulder (background object: darker and calmer than things you touch)."""
-    c = cv(32, 28)
-    c.ellipse(15, 15.5, 13.6, 11.2, "stone")
-    c.ellipse(22, 19, 8, 7.5, "stone")
-    for x in range(32):
-        for y in (26, 27):
-            c.mat[y][x] = None
-    round_shade(c, "stone", 13, 13, 16, 14, cuts=(0.96, 0.72, 0.28))
-    for y in range(28):
-        for x in range(32):
-            if c.m(x, y) == "stone" and c.tone[y][x] == 4:
-                c.tone[y][x] = 3
-    # facets and cracks
-    for x, y in ((14, 6), (15, 7), (15, 8), (16, 9), (17, 9), (18, 10), (12, 16), (13, 17), (13, 18), (22, 14), (23, 15)):
-        c.shade(x, y, 1)
-    for x, y in ((8, 6), (9, 6), (6, 8), (7, 7)):
-        c.shade(x, y, 4)
-    for x, y in ((3, 22), (4, 23), (5, 24), (6, 24), (25, 24), (26, 24), (10, 24), (11, 25)):
-        c.put(x, y, "moss", 2 if y > 23 else 3)
-    for x, y in ((6, 4), (7, 3), (8, 3)):
-        c.put(x, y, "moss", 3)
-    return {"obj.rock": drop(to_rgba(c))}
-
-
-def bramble():
-    """obj.bramble 32x24: a thorn bush (burns): dark clumps, light thorns pointing out."""
-    c = cv(32, 24)
-    clumps = [("b0", 9, 14, 7.0, 6.0), ("b1", 22, 13, 7.5, 6.2), ("b2", 15, 9, 6.5, 5.4), ("b3", 15, 17, 8.5, 5.0)]
-    for m, cx, cy, rx, ry in clumps:
-        c.ramps[m] = c.ramps["bramble"]
-        c.ellipse(cx, cy, rx, ry, m)
-        round_shade(c, m, cx - 1, cy - 1, rx + 1, ry + 1, cuts=(0.95, 0.68, 0.2))
-    overlap_shadow(c, [m[0] for m in clumps])
-    for y in range(24):
-        for x in range(32):
-            if y >= 22:
-                c.mat[y][x] = None
-    # leaf texture
-    for x, y in ((6, 11), (11, 12), (19, 10), (24, 11), (14, 6), (17, 15), (9, 18), (21, 18), (26, 15)):
-        if c.m(x, y):
-            c.shade(x, y, 3)
-            c.shade(x + 1, y + 1, 1)
-    # thorns: little spikes out of the edge, wood lit
-    thorns = [(2, 12, -1, 0), (3, 17, -1, 1), (6, 7, -1, -1), (12, 3, 0, -1), (19, 4, 1, -1), (26, 6, 1, -1),
-              (29, 11, 1, 0), (29, 17, 1, 1), (24, 21, 0, 1), (8, 21, 0, 1)]
-    for x, y, dx, dy in thorns:
-        c.put(x, y, "wood", 3)
-        c.put(x + dx, y + dy, "bone", 2)
-    for x, y in ((10, 9), (20, 14), (13, 15), (24, 9), (7, 15)):
-        c.put(x, y, "bone", 3)
-    for x, y in ((12, 7), (22, 16)):  # two dark berries
-        c.put(x, y, "berry", 1)
-    return {"obj.bramble": drop(to_rgba(c))}
-
-
-def stump():
-    """obj.stump 28x16: a burnt stump: charred top with rings and a last ember, bark sides, roots."""
-    c = cv(28, 16)
-    for y in range(4, 14):
-        for x in range(5, 23):
-            c.put(x, y, "wood", 3 if x < 8 else 1 if x > 19 else 2)
-    for x in (10, 14, 18):
-        vline(c, x, 7, 13, "wood", 1)
-    # roots
-    for pts in (((5, 12), (2, 14)), ((22, 12), (25, 14)), ((12, 13), (11, 14))):
-        (x0, y0), (x1, y1) = pts
-        c.line(x0, y0, x1, y1, "wood", 2)
-        if y1 > y0:
-            c.line(x0, y0 + 1, x1, y1, "wood", 1)
-    hline(c, 3, 24, 14, "wood", 1)
-    # the top: charred, rings
-    c.ellipse(14, 4.5, 9.2, 3.4, "ash", 2)
-    for x, y in ring_px(14, 4.5, 3.0, 4.2, 0.4):
-        if c.m(x, y) == "ash":
-            c.tone[y][x] = 1
-    hline(c, 8, 18, 2, "ash", 3)
-    c.put(13, 4, "fire", 3)
-    c.put(14, 4, "fire", 2)
-    c.put(15, 5, "fire", 1)
-    for x in range(5, 24):
-        if c.m(x, 7) == "ash":
-            c.tone[7][x] = 0
-    for x, y in ((6, 9), (7, 10), (20, 8)):
-        c.put(x, y, "ash", 1)  # char on the bark
-    return {"obj.stump": drop(to_rgba(c))}
-
-
-def cactus():
-    """obj.cactus 24x40: a ribbed column cactus with two arms, spines, on a sand mound."""
-    c = cv(24, 40)
-    K = "cactus"
-
-    def col(x0, x1, y0, y1):
-        for y in range(y0, y1 + 1):
-            for x in range(x0, x1 + 1):
-                if y == y0 and x in (x0, x1):
-                    continue
-                c.put(x, y, K)
-
-    col(9, 15, 2, 34)
-    col(2, 6, 9, 20)
-    col(3, 8, 18, 21)
-    col(18, 22, 5, 17)
-    col(15, 20, 15, 18)
-    for y in range(40):
-        for x in range(24):
-            if c.m(x, y) != K:
-                continue
-            l, r = c.m(x - 1, y) != K, c.m(x + 1, y) != K
-            u = c.m(x, y - 1) != K
-            t = 3 if l else 1 if r else 2
-            if u and not r:
-                t = 3
-            c.tone[y][x] = t
-    for y in range(4, 34):  # ribs on the trunk
-        c.shade(11, y, 3)
-        c.shade(13, y, 1)
-    for y in range(11, 19):
-        c.shade(4, y, 1)
-    for y in range(7, 15):
-        c.shade(20, y, 1)
-    for y in range(4, 34, 4):  # spines
-        c.put(8 if y % 8 else 16, y, "bone", 3)
-        if y < 30:
-            c.shade(12, y + 1, 4)
-    for x, y in ((1, 12), (23, 9), (1, 17), (23, 14)):
-        c.put(x, y, "bone", 3)
-    c.put(11, 3, K, 4)
-    for x, y in ((11, 1), (12, 1), (13, 1), (12, 0)):  # a small flower on top
-        c.put(x, y, "pepper", 3 if y == 0 else 2)
-    # the sand mound
-    c.ellipse(12, 37, 9, 2.6, "desert_sand")
-    round_shade(c, "desert_sand", 12, 37, 9, 2.6)
-    for x in range(24):
-        c.mat[39][x] = None
-    return {"obj.cactus": to_rgba(c)}
-
-
 # ================================================================== icons (20x20; content within 18x18)
 
 def icon_bow():
-    """Wood, string (bone), leather grip: a thick bow on the diagonal, bowing up-left, gold-capped tips."""
+    """Wood, string (bone), leather grip: a thick bow on the diagonal, bowing up-left, lit wooden tips."""
     c = cv(20, 20)
     P0, P1, P2 = (3.5, 15.5), (2.6, 2.6), (15.5, 3.5)
     pts = []
@@ -1086,12 +946,10 @@ def icon_bow():
     for x, y in ((5, 6), (6, 5), (4, 8)):
         c.put(x, y, "wood", 4)
     c.line(4, 16, 16, 4, "bone", 3)  # the string
-    for x, y in ((3, 16), (4, 15)):
-        c.put(x, y, "gold", 3)
-    for x, y in ((15, 3), (16, 4)):
-        c.put(x, y, "gold", 3)
-    c.put(4, 16, "gold", 2)
-    c.put(16, 3, "gold", 2)
+    for x, y in ((3, 16), (4, 15), (15, 3), (16, 4)):  # the tips: lit wood (3 materials: wood, string, grip)
+        c.put(x, y, "wood", 4)
+    c.put(4, 16, "wood", 3)
+    c.put(16, 3, "wood", 3)
     for x, y, t in ((5, 6, 3), (6, 6, 2), (6, 5, 3), (7, 6, 2), (6, 7, 1)):  # the grip
         c.put(x, y, "leather", t)
     return to_rgba(c)
@@ -1472,7 +1330,7 @@ def all_wave2():
     out = {}
     for f in (door, cave, stairs, lowwall, bed, table, shelves, counter, stove, barrel, mat, anvil,
               brazier, crystal, receiver, sconce, resonance_stone, pillar, altar, sensor,
-              rock, bramble, stump, cactus, icons2, glider, shadow, arrow, orb, shield_fx, bow_fx, smoke,
+              icons2, glider, shadow, arrow, orb, shield_fx, bow_fx, smoke,
               light_orb, marker):
         out.update(f())
     return out
@@ -1487,7 +1345,6 @@ SIZES2 = {
     "obj.receiver.off": (24, 32), "obj.receiver.on": (24, 32), "obj.sconce.off": (20, 36),
     "obj.sconce.on": (20, 36), "obj.stone.off": (24, 32), "obj.stone.on": (24, 32),
     "obj.pillar": (24, 48), "obj.altar": (32, 28), "sw.sensor.off": (24, 28), "sw.sensor.on": (24, 28),
-    "obj.rock": (32, 28), "obj.bramble": (32, 24), "obj.stump": (28, 16), "obj.cactus": (24, 40),
     **{f"icon.{n}": (20, 20) for n in ("bow", "armor", "mushroom", "berry", "pepper", "fang", "shard", "arrows", "food")},
     "fx.glider": (44, 20), "fx.shadow": (24, 10), "fx.arrow": (20, 6), "fx.orb": (12, 12),
     "fx.shield": (16, 18), "fx.bow": (10, 24), "fx.smoke": (12, 12), "fx.light": (16, 16),

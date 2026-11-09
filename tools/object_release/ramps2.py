@@ -1,7 +1,7 @@
 """Ramps added for the release wave (wave 2). 5 tones each: 0 outline, 1 shadow, 2 core, 3 light, 4 highlight.
 
 GUIDE2: copied unchanged from ART_STYLE_GUIDE.md (origin/docs/art-style-guide 7e0f6bc).
-  Those from 2.5 (cave_rock, mount_rock, room_rug, desert_sand) are still marked provisional there:
+  Those from 2.5 (cave_rock, mount_rock, room_rug) are still marked provisional there:
   if the terrain table changes them, change them here too and re-run gen_release.py.
 NEW2: new ramps (marked 新 in docs/art-release/objects/PRODUCTION.md) for the art director to register in
   chapter 2 of the guide, like the wave-1 NEW ramps in draw.py.
@@ -15,13 +15,10 @@ GUIDE2 = {
     "cave_rock": ["#0c0c12", "#1c1c26", "#2c2c3a", "#403e52", "#585670"],  # 2.5 (provisional) cave dark
     "mount_rock": ["#1c1a24", "#3a3846", "#585668", "#7a788c", "#9e9cb0"],  # 2.5 (provisional) mine stairs
     "room_rug": ["#2a0a10", "#5a1a22", "#7e2a30", "#a04440", "#c06a5a"],  # 2.5 rug (mat, blanket)
-    "desert_sand": ["#3e1e12", "#82442a", "#a8603c", "#c27e54", "#daa274"],  # 2.5 (provisional) cactus foot
 }
 
 NEW2 = {
     "linen": ["#3e3a34", "#a49c8c", "#d8d2c4", "#ece8de", "#faf8f2"],  # bed sheet and pillow
-    "bramble": ["#0e1a10", "#1e3420", "#2e4a2a", "#466236", "#62804a"],  # thorn bush (darker than leaf)
-    "cactus": ["#0c2218", "#1e4a34", "#2e6a46", "#4a8a58", "#78b07a"],  # blue-green, not the cloak's
     "shock": ["#2a2a10", "#7a7020", "#c8c040", "#eeea88", "#fffff0"],  # shock crystal (electric)
     "berry": ["#2a0a1a", "#6a1630", "#a8263e", "#e05060", "#ffb0b8"],  # red berries
     "cap": ["#3a1008", "#8a2a14", "#c84a24", "#e8783e", "#ffb07a"],  # mushroom cap

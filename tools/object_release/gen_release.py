@@ -1,6 +1,7 @@
-"""Release art for every object / puzzle part / icon / effect / UI sprite (except trees: terrain wave).
+"""Release art for every object / puzzle part / icon / effect / UI sprite (not trees or nature props).
 
-  wave 1 (objects.py, approved samples, unchanged) + wave 2 (objects2.py) = 66 sprites
+  wave 1 (objects.py, approved samples, unchanged) + wave 2 (objects2.py) = 62 sprites
+  (rock, bramble, stump, cactus: the terrain producer, art/terrain-release)
   -> src/art-release/objects/<name>.png         (the game's sprite names; NOT wired into the game)
   -> docs/art-release/objects/review_*.png       (self-check sheets, review.py)
 Run: python3 tools/object_release/gen_release.py   (deterministic: the same PNGs every time)

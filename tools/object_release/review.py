@@ -29,7 +29,7 @@ GROUPS = [
     ("furniture", ["obj.lowwall", "obj.bed", "obj.table", "obj.shelf", "obj.charm_shelf", "obj.charm_shelf.on",
                    "obj.counter", "obj.stove", "obj.barrel", "obj.mat", "obj.anvil"]),
     ("props", ["obj.chest.closed", "obj.chest.open", "obj.jar", "obj.crate", "obj.campfire.0", "obj.campfire.1",
-               "obj.rock", "obj.bramble", "obj.stump", "obj.cactus"]),
+               ]),
     ("puzzle / ruin", ["obj.checkpoint.off", "obj.checkpoint.on", "obj.brazier.0", "obj.brazier.1", "obj.crystal",
                        "obj.receiver.off", "obj.receiver.on", "obj.sconce.off", "obj.sconce.on", "obj.stone.off",
                        "obj.stone.on", "obj.pillar", "obj.altar", "sw.plate.off", "sw.plate.on", "sw.sensor.off",
@@ -125,8 +125,7 @@ def scenes(S, hero):
     # a cliff band with the cave
     c.alpha_composite(flat((5 * 32, 48), [(0x3A, 0x2A, 0x1C), (0x57, 0x40, 0x2A), (0x74, 0x58, 0x3A)], 4), (0, 16))
     put_all(c, S, [
-        ("obj.cave", 16 + 32 * 2, 64), ("obj.rock", 16 + 32 * 6, 96), ("obj.bramble", 16 + 32 * 7, 96),
-        ("obj.stump", 16 + 32 * 8, 96), ("obj.cactus", 16 + 32 * 10, 96), ("obj.campfire.1", 16 + 32 * 1, 192),
+        ("obj.cave", 16 + 32 * 2, 64), ("obj.campfire.1", 16 + 32 * 1, 192),
         ("fx.fire.0", 16 + 32 * 9, 192), ("obj.chest.closed", 16 + 32 * 10, 192), ("icon.berry", 16 + 32 * 6, 186),
         ("icon.mushroom", 16 + 32 * 7, 186), ("icon.arrows", 16 + 32 * 8, 186),
     ], hero, (16 + 32 * 4, 160))

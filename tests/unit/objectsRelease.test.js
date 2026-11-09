@@ -54,8 +54,7 @@ const SIZES = {
   'obj.brazier.0': [24, 32], 'obj.brazier.1': [24, 32], 'obj.crystal': [24, 36], 'obj.receiver.off': [24, 32],
   'obj.receiver.on': [24, 32], 'obj.sconce.off': [20, 36], 'obj.sconce.on': [20, 36], 'obj.stone.off': [24, 32],
   'obj.stone.on': [24, 32], 'obj.pillar': [24, 48], 'obj.altar': [32, 28], 'sw.sensor.off': [24, 28],
-  'sw.sensor.on': [24, 28], 'obj.rock': [32, 28], 'obj.bramble': [32, 24], 'obj.stump': [28, 16],
-  'obj.cactus': [24, 40], 'fx.glider': [44, 20], 'fx.shadow': [24, 10], 'fx.arrow': [20, 6], 'fx.orb': [12, 12],
+  'sw.sensor.on': [24, 28], 'fx.glider': [44, 20], 'fx.shadow': [24, 10], 'fx.arrow': [20, 6], 'fx.orb': [12, 12],
   'fx.shield': [16, 18], 'fx.bow': [10, 24], 'fx.smoke': [12, 12], 'fx.light': [16, 16], 'ui.marker': [14, 14],
   ...Object.fromEntries(['bow', 'armor', 'mushroom', 'berry', 'pepper', 'fang', 'shard', 'arrows', 'food'].map((n) => [`icon.${n}`, [20, 20]])),
 };
@@ -63,10 +62,10 @@ const NAMES = Object.keys(SIZES).sort();
 const CENTRE = new Set(['fx.slash', 'fx.shadow', 'fx.arrow', 'fx.orb', 'fx.shield', 'fx.bow', 'fx.smoke', 'fx.light', 'ui.marker']);
 
 describe('release objects (src/art-release/objects)', () => {
-  it('holds exactly the expected 66 sprites, every one a real sprite key of the game', () => {
+  it('holds exactly the expected 62 sprites (rock, bramble, stump, cactus belong to the terrain producer), every one a real sprite key of the game', () => {
     const files = readdirSync(DIR).sort();
     expect(files).toEqual(NAMES.map((n) => `${n}.png`).sort());
-    expect(NAMES).toHaveLength(66);
+    expect(NAMES).toHaveLength(62);
     const keys = new Set([...placeholderEntries(), ...Object.values(REGION_ENTRIES).flatMap((f) => f())].map((e) => e.key));
     for (const n of NAMES) expect(keys.has(n), n).toBe(true);
   });
