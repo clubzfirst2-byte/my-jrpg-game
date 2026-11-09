@@ -9,6 +9,8 @@ import { NPC_ANIM, npcFrameKey, idleOffset } from '../../src/view/npcAnim.js';
 //   batch 2  the village woman, the inn's cook, the village child and the blacksmith
 //   revision batch 1 with the review's fixes, in its own folder (src/art-release/npc-revision/)
 //   revision-b2  batch 2 with the review's fixes (woman, child, smith), in src/art-release/npc-revision-b2/
+//   batch 3  the princess of the star ring and the traveller (new files only; nothing pinned yet),
+//            revised after the review (docs/npc/release/batch3/README.md: hair, cape, bedroll, face, stick)
 // and how the game picks the frames.
 
 const DIR = new URL('../../src/art-release/npc/', import.meta.url);
@@ -16,7 +18,8 @@ const HERO = new URL('../../src/art-release/hero/', import.meta.url);
 const REVISION = new URL('../../src/art-release/npc-revision/', import.meta.url);
 const BATCH1 = ['elder', 'merchant', 'guard'];
 const BATCH2 = ['woman', 'cook', 'child', 'smith'];
-const IDS = [...BATCH1, ...BATCH2];
+const BATCH3 = ['princess', 'traveller'];
+const IDS = [...BATCH1, ...BATCH2, ...BATCH3];
 const PINNED = JSON.parse(readFileSync(new URL('./fixtures/npc-batch1-sha256.json', import.meta.url), 'utf8'));
 const PINNED_B2 = JSON.parse(readFileSync(new URL('./fixtures/npc-batch2-sha256.json', import.meta.url), 'utf8'));
 const REVISION_B2 = new URL('../../src/art-release/npc-revision-b2/', import.meta.url);
@@ -46,11 +49,12 @@ const expected = IDS.flatMap((id) => Object.entries(NPC_ANIM).flatMap(([a, { fra
 const BODY = { x0: 8, x1: 24 };
 
 describe('NPC release art, batch 1 (src/art-release/npc)', () => {
-  it('280 frames: 7 villagers × (idle 4 + walk 6) × 4 directions (batch 2 adds 160), named npc.<id>.<idle|walk>.<dir>.<n>, nothing else', () => {
-    expect(expected).toHaveLength(280);
+  it('360 frames: 9 villagers × (idle 4 + walk 6) × 4 directions (batch 2 adds 160, batch 3 adds 80), named npc.<id>.<idle|walk>.<dir>.<n>, nothing else', () => {
+    expect(expected).toHaveLength(360);
     expect(expected.filter((f) => BATCH2.includes(f.split('.')[1]))).toHaveLength(160);
+    expect(expected.filter((f) => BATCH3.includes(f.split('.')[1]))).toHaveLength(80);
     expect([...files].sort()).toEqual([...expected].sort());
-    for (const f of files) expect(f).toMatch(/^npc\.(elder|merchant|guard|woman|cook|child|smith)\.(idle|walk)\.(down|up|right|left)\.\d$/);
+    for (const f of files) expect(f).toMatch(/^npc\.(elder|merchant|guard|woman|cook|child|smith|princess|traveller)\.(idle|walk)\.(down|up|right|left)\.\d$/);
   });
 
   it('batch 1 (approved) is unchanged: all 120 files byte for byte as approved', () => {
@@ -167,7 +171,7 @@ describe('NPC release art, batch 1 (src/art-release/npc)', () => {
     }
   });
 
-  it('facing left, what is held or worn on one side (staff, book, spear, basket, ladle, towel, pinwheel, bag, hammer) stays on that side: left frames are drawn on their own', () => {
+  it('facing left, what is held or worn on one side (staff, book, spear, basket, ladle, towel, pinwheel, bag, hammer, bracelet, walking stick, scarf end) stays on that side: left frames are drawn on their own', () => {
     const isMirror = (a, b) => {
       const A = frame(a);
       const B = frame(b);
@@ -195,6 +199,11 @@ describe('NPC release art, batch 1 (src/art-release/npc)', () => {
     expect(t.guard).toBeLessThanOrEqual(hero + 1);
     expect(t.child).toBeGreaterThan(t.elder + 3);
     expect(t.woman).toBeGreaterThan(t.cook);
+    // batch 3: the traveller is the tallest (the hat's crown at the top of the frame); the princess
+    // is two pixels shorter than the hero
+    for (const id of IDS) expect(t.traveller, `traveller at least as tall as ${id}`).toBeLessThanOrEqual(t[id]);
+    expect(t.traveller).toBe(0);
+    expect(t.princess).toBe(hero + 2);
     // bulk: the figure's area (the guard's spear and the elder's staff aside, the smith is the biggest)
     const bulk = (id) => {
       const img = read(new URL(`npc.${id}.idle.down.0.png`, DIR));
@@ -240,6 +249,95 @@ describe('NPC release art, batch 1 (src/art-release/npc)', () => {
   });
 });
 
+describe('NPC release art, batch 3 revision 1 (the review of docs/npc/release/batch3)', () => {
+  // ramps from tools/npc_release/princess.py and traveller.py (and the shared wood / gold)
+  const ramp = (...hex) => new Set(hex.map((h) => parseInt(h.slice(1), 16)));
+  const HAIR = ramp('#5e6888', '#98a2c0', '#c6cee4', '#eef2fc'); // the princess's silver (outline aside)
+  const GOLD = ramp('#5a4018', '#a07a30', '#e8c060', '#f8dc88', '#fff4c8');
+  const WOOD = ramp('#4a2c16', '#6e4424', '#906038', '#b07e50'); // the stick itself (its outline aside)
+  const BEDROLL = ramp('#141c10', '#34442a', '#4e6240', '#6a7e58', '#8c9e78');
+  const SKIN_T = ramp('#5a2e1c', '#bc7c56', '#daa47a', '#ecbc92', '#f8d2aa');
+  const pixels = (name, set) => {
+    const img = frame(name);
+    const out = [];
+    for (let y = 0; y < 56; y++) for (let x = 0; x < 32; x++) if (img.alpha(x, y) && set.has(img.at(x, y) >>> 8)) out.push([x, y]);
+    return out;
+  };
+  const each = (id, dirs, fn) => {
+    for (const [a, { frames }] of Object.entries(NPC_ANIM)) for (const d of dirs) for (let i = 0; i < frames; i++) fn(`npc.${id}.${a}.${d}.${i}`, a, d, i);
+  };
+
+  it('the princess: from the front the long hair falls past the shoulders at both sides, and in every view it ends at the waist', () => {
+    each('princess', ['down'], (f) => {
+      const hair = pixels(f, HAIR);
+      const outside = (side) => hair.filter(([x, y]) => y >= 30 && y <= 36 && (side < 0 ? x <= 5 : x >= 26)).length;
+      expect(outside(-1), `${f}: hair beside the cape (image left)`).toBeGreaterThan(8);
+      expect(outside(1), `${f}: hair beside the cape (image right)`).toBeGreaterThan(8);
+    });
+    each('princess', DIRS, (f) => {
+      expect(Math.max(...pixels(f, HAIR).map(([, y]) => y)), `${f}: the hair ends at the waist`).toBeLessThanOrEqual(39);
+    });
+  });
+
+  it('the princess: the bracelet on her left wrist shows from the front (image right) and facing left (near); left frames are the mirror of right plus the bracelet', () => {
+    each('princess', ['down'], (f) => {
+      expect(pixels(f, GOLD).filter(([x, y]) => x >= 19 && x <= 21 && y >= 38 && y <= 42).length, f).toBeGreaterThanOrEqual(2);
+    });
+    each('princess', ['left'], (f, a, d, i) => {
+      const L = frame(f);
+      const R = frame(`npc.princess.${a}.right.${i}`);
+      const diff = [];
+      for (let y = 0; y < 56; y++) for (let x = 0; x < 32; x++) if (L.at(x, y) !== R.at(31 - x, y)) diff.push([x, y]);
+      expect(diff.length, `${f}: mirror + bracelet`).toBeGreaterThan(0);
+      expect(diff.length, `${f}: mirror + bracelet`).toBeLessThanOrEqual(8);
+      expect(diff.filter(([x, y]) => GOLD.has(L.at(x, y) >>> 8)).length, `${f}: the bracelet`).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it('the traveller: standing, the stick does not move (its foot stays planted; only the hand shifts its grip)', () => {
+    for (const d of DIRS) {
+      const low = (i) => JSON.stringify(pixels(`npc.traveller.idle.${d}.${i}`, WOOD).filter(([, y]) => y >= 40));
+      for (let i = 1; i < 4; i++) expect(low(i), `traveller idle ${d} ${i}`).toBe(low(0));
+    }
+  });
+
+  it('the traveller: walking, the stick is planted (its foot on the ground) and then lifted and set down again', () => {
+    for (const d of ['down', 'right']) {
+      const foot = [...Array(6).keys()].map((i) => Math.max(...pixels(`npc.traveller.walk.${d}.${i}`, WOOD).map(([, y]) => y)));
+      expect(foot.filter((y) => y === 55).length, `${d}: planted`).toBeGreaterThanOrEqual(3);
+      expect(Math.min(...foot), `${d}: lifted`).toBeLessThan(55);
+    }
+    // facing right the stick leans forward as the walker passes it (its top ahead of its foot)
+    const lean = pixels('npc.traveller.walk.right.3', WOOD).filter(([x]) => x > 20);
+    const top = lean.filter(([, y]) => y < 12).map(([x]) => x);
+    const foot = lean.filter(([, y]) => y > 50).map(([x]) => x);
+    expect(Math.min(...top)).toBeGreaterThan(Math.min(...foot));
+  });
+
+  it('the traveller: from the front the bedroll only shows small above the shoulders (not as shoulder pads), the face is lit under the brim', () => {
+    each('traveller', ['down'], (f) => {
+      const roll = pixels(f, BEDROLL);
+      expect(Math.max(...roll.map(([, y]) => y)), `${f}: above the shoulders`).toBeLessThanOrEqual(18);
+      expect(Math.min(...roll.map(([x]) => x)), `${f}: not past the shoulders`).toBeGreaterThanOrEqual(4);
+      expect(Math.max(...roll.map(([x]) => x)), `${f}: not past the shoulders`).toBeLessThanOrEqual(27);
+    });
+    // the mean brightness (luma, 0-100) of the face's skin: 55 before the review, now near the smith and the elder
+    const img = frame('npc.traveller.idle.down.0');
+    let sum = 0;
+    let n = 0;
+    for (let y = 0; y < 26; y++) {
+      for (let x = 0; x < 32; x++) {
+        const c = img.at(x, y) >>> 8;
+        if (!img.alpha(x, y) || !SKIN_T.has(c)) continue;
+        sum += (0.299 * (c >> 16) + 0.587 * ((c >> 8) & 0xff) + 0.114 * (c & 0xff)) / 2.55;
+        n++;
+      }
+    }
+    expect(n).toBeGreaterThan(80);
+    expect(sum / n).toBeGreaterThanOrEqual(65);
+  });
+});
+
 describe('npcFrameKey: which frame a villager shows', () => {
   const release = new Set(expected);
   const has = (k) => release.has(k);
@@ -267,12 +365,15 @@ describe('npcFrameKey: which frame a villager shows', () => {
   });
 
   it('a villager without release art keeps the placeholder frames (npc.<look>.walk.<dir>.<0..2>)', () => {
-    expect(npcFrameKey(npc({ id: 'traveller', look: 2 }), 5, has)).toBe('npc.2.walk.down.0');
+    expect(npcFrameKey(npc({ id: 'stranger', look: 2 }), 5, has)).toBe('npc.2.walk.down.0');
     const walking = new Set();
-    for (let w = 0; w < 1; w += 0.05) walking.add(npcFrameKey(npc({ id: 'princess', look: 5, moving: true, walkTime: w }), 0, has));
+    for (let w = 0; w < 1; w += 0.05) walking.add(npcFrameKey(npc({ id: 'pilgrim', look: 5, moving: true, walkTime: w }), 0, has));
     expect([...walking].sort()).toEqual(['npc.5.walk.down.0', 'npc.5.walk.down.1', 'npc.5.walk.down.2']);
     // batch 2: the cook and the child (in the village) now have their own
     expect(npcFrameKey(npc({ id: 'cook', look: 2 }), 0, has)).toMatch(/^npc\.cook\.idle\.down\./);
+    // batch 3: the princess and the traveller have their own (not placed in the game yet)
+    expect(npcFrameKey(npc({ id: 'princess', look: 5, facing: 'left' }), 0, has)).toMatch(/^npc\.princess\.idle\.left\./);
+    expect(npcFrameKey(npc({ id: 'traveller', look: 2, moving: true, walkTime: 0.01 }), 0, has)).toBe('npc.traveller.walk.down.0');
     // with no release art at all (?npc=placeholder), everyone keeps it
     expect(npcFrameKey(npc({}), 0, () => false)).toBe('npc.1.walk.down.0');
   });
