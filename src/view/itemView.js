@@ -11,6 +11,8 @@ const ICON_BY_ID = /** @type {Record<string, string>} */ ({
   beast_fang: 'icon.fang',
   murk_crystal: 'icon.shard',
   arrow: 'icon.arrows',
+  star_shard: 'icon.star_shard', // v1.0: the key items' own icons
+  lost_charm: 'icon.charm',
 });
 const ICON_BY_TYPE = /** @type {Record<string, string>} */ ({ weapon: 'icon.sword', bow: 'icon.bow', armor: 'icon.armor', food: 'icon.food', material: 'icon.berry', ammo: 'icon.arrows' });
 

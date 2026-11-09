@@ -9,13 +9,13 @@ export const PRECACHE_STATIC = ['./', 'index.html', 'manifest.webmanifest', 'ico
 
 /**
  * Release art groups (src/art-release/<group>) loaded only on demand, never in normal play:
- * objects (not used by the game yet) and the review sets npc-revision* (?npc=revision…). The
- * terrain is drawn in normal play since v1.0, so it is kept.
+ * the review sets npc-revision* (?npc=revision…). The terrain and the objects are drawn in
+ * normal play since v1.0, so they are kept.
  * A group the game starts to load in normal play must be taken off this list (else it is not
- * available offline).
+ * available offline): terrain and objects since v1.0 (terrainArt.js, objectsArt.js).
  * @param {string} group
  */
-export const onDemandReleaseGroup = (group) => group === 'objects' || group.startsWith('npc-revision');
+export const onDemandReleaseGroup = (group) => group.startsWith('npc-revision');
 
 /** The release art group of an emitted sheet / frame table (release-<group>.png|json), or null. @param {string} name */
 export const releaseGroupOf = (name) => /^release-(.+)\.(png|json)$/.exec(name)?.[1] ?? null;

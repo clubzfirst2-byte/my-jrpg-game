@@ -3,6 +3,7 @@
 import { itemDef, baseId } from '../game/items/inventory.js';
 import { shopDef, buy, sell, sellPrice } from '../game/npc/talk.js';
 import { scrollCue } from './scrollCue.js';
+import { itemIconElement } from '../view/assets/objectsArt.js';
 
 export class ShopMenu {
   /**
@@ -76,7 +77,7 @@ export class ShopMenu {
             const r = buy(s, shopId, e.item);
             this.hooks.toast(r === 'ok' ? `${d.name}を買った` : r === 'money' ? '星貨が足りない' : r === 'full' ? 'これ以上持てない' : '売っていない');
             this.render();
-          }),
+          }, e.item),
         );
       }
     } else {
@@ -90,7 +91,7 @@ export class ShopMenu {
             const r = sell(s, shopId, id);
             this.hooks.toast(r === 'ok' ? `${d.name}を売った（+${price}）` : r === 'worn' ? '身につけている物は売れない' : '売れない');
             this.render();
-          }),
+          }, id),
         );
       }
     }
@@ -108,11 +109,15 @@ function button(id, text, onClick) {
   return b;
 }
 
-/** @param {string} id @param {string} title @param {string} detail @param {boolean} enabled @param {(() => void) | null} onClick */
-function row(id, title, detail, enabled, onClick) {
+/**
+ * @param {string} id @param {string} title @param {string} detail @param {boolean} enabled @param {(() => void) | null} onClick
+ * @param {string} [item] the item the row is about: its icon goes before the title (v1.0)
+ */
+function row(id, title, detail, enabled, onClick, item) {
   const el = document.createElement('div');
   el.className = `inv-row${onClick && enabled ? ' clickable' : ''}`;
   el.id = id;
+  if (item) el.append(itemIconElement(item));
   const t = document.createElement('div');
   t.className = 'inv-row-title';
   t.textContent = title;
