@@ -131,7 +131,7 @@ export class WeatherView {
     this.app = app;
     this.renderer = app.renderer;
     this.makeSprite = makeSprite;
-    /** The ambient light indoors (caves, mines, trial rooms); v1.0: set by the view (terrainArt.indoorLight). */
+    /** The ambient light indoors (caves, mines, trial rooms); v1.0: set by the view (terrainArt.indoorLight). @type {{ r: number, g: number, b: number }} */
     this.indoorAmbient = AMB_INDOOR;
     // Light map.
     /** The soft disc for lights, made on first use. @type {Texture | null} */
