@@ -6,7 +6,7 @@
 // is taller: 96×112, approved). So no renaming is needed: once the group is loaded its frames replace
 // the placeholders of the same names in every bundle (the base one and the region ones), and the
 // existing view code (open / closed, on / off, the 2-frame fires, the effects' scale and alpha) draws
-// them unchanged.
+// them unchanged. The beach ring (obj.star_ring.off / .on, 48×52) is in the set too (base bundle).
 //
 //   normal play       loaded with the release hero (like the villagers and the enemies)
 //   ?objects=placeholder   left out (before / after comparison); also left out with ?hd=0,
@@ -29,13 +29,11 @@ export const OBJECTS_GROUP = 'objects';
 export const TERRAIN_OBJECT_KEYS = Object.freeze(['obj.tree', 'obj.rock', 'obj.bramble', 'obj.stump', 'obj.cactus']);
 /**
  * Keys with no release art yet: they keep the placeholder (drawn at 1 art pixel per game pixel).
- * Nothing else is needed when their art arrives: a file src/art-release/objects/<key>.png is picked
- * up by name like the others (then drop the entry here).
+ * None now (the beach ring's art landed). A key's art is picked up by name once its file
+ * src/art-release/objects/<key>.png is there; until then list it here, with the reason.
+ * @type {Readonly<Record<string, string>>}
  */
-export const PLACEHOLDER_FALLBACK_KEYS = Object.freeze({
-  'obj.star_ring.off': 'the beach ring (v1.0 C5) is not in the objects release set',
-  'obj.star_ring.on': 'the beach ring (v1.0 C5) is not in the objects release set',
-});
+export const PLACEHOLDER_FALLBACK_KEYS = Object.freeze({});
 
 /**
  * Whether this view loads the objects' release art (see the top of the file).

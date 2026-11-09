@@ -20,7 +20,7 @@ import { areaAt } from '../game/world/features.js';
 import { sourceFrameKey, drawSourceTelegraphs, drawSeatLights } from './sourceView.js';
 import { FeatureView } from './featureView.js';
 import { EnvView } from './envView.js';
-import { WeatherView } from './weatherView.js';
+import { WeatherView, starRingOpen } from './weatherView.js';
 import { ItemView } from './itemView.js';
 import { PuzzleView } from './puzzleView.js';
 import { NpcView } from './npcView.js';
@@ -775,7 +775,7 @@ export class GameView {
     // v1.0 (C5): the beach ring glows while it is the gate to the source.
     // v1.0 (C9): it flashes once in the opening.
     // (open — and glowing — until the ending is seen: the way back to the princess by the source)
-    const ringOpen = (!!state.progress.flags.source_open && !state.progress.flags.ending_seen) || !!openingView(state)?.flash;
+    const ringOpen = starRingOpen(state);
     if (ringOpen !== this.ringOpen) {
       this.ringOpen = ringOpen;
       this.envVersion = -1;

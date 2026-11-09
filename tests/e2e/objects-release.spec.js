@@ -26,8 +26,13 @@ test('normal play draws the objects from their release art (2 px per game px), w
   for (const [key, w, h] of [['obj.chest.closed', 16, 14], ['sw.plate.on', 14, 10], ['fx.slash', 16, 20], ['icon.sword', 10, 10], ['ui.marker', 7, 7]]) {
     expect(await api(page, 'objectTexture', key), key).toEqual({ key, w, h, res: 2 });
   }
-  // the beach ring: its placeholder (1 px per game px) until its release art lands, then that art
-  expect([1, 2]).toContain((await api(page, 'objectTexture', 'obj.star_ring.off')).res);
+  // the beach ring (base bundle): its release art, 48×52 (24×26 game px), closed and open
+  for (const key of ['obj.star_ring.off', 'obj.star_ring.on']) expect(await api(page, 'objectTexture', key)).toEqual({ key, w: 24, h: 26, res: 2 });
+  await api(page, 'teleport', 43, 69);
+  await expect.poll(async () => (await api(page, 'objectSprites')).find((s) => s.kind === 'star_ring')?.key).toBe('obj.star_ring.off');
+  await api(page, 'setFlag', 'source_open');
+  await expect.poll(async () => (await api(page, 'objectSprites')).find((s) => s.kind === 'star_ring')?.key).toBe('obj.star_ring.on');
+  await api(page, 'setFlag', 'source_open', false);
   // the village (the plains bundle): the houses are the approved 96×112 (48×56 game px)
   await api(page, 'teleport', 24, 89);
   await expect.poll(async () => (await api(page, 'objectSprites')).filter((s) => s.kind === 'house').length, { timeout: 10_000 }).toBeGreaterThan(0);

@@ -21,17 +21,17 @@ const covered = (k) => ART.has(k) || fallback.has(k);
 
 describe('objects release art: names → the game keys', () => {
   it('every release sprite is a key the game draws (no renaming needed)', () => {
-    expect(ART.size).toBeGreaterThanOrEqual(62); // 62 + the beach ring's 2 once they land
+    expect(ART.size).toBe(64); // 62 + the beach ring's 2
     for (const k of ART) expect(KEYS.has(k), k).toBe(true);
   });
 
   it('every object / switch / effect / icon / UI key of the game has release art or a deliberate fallback', () => {
     const missing = [...KEYS].filter((k) => OBJECT_LIKE.test(k) && !covered(k));
     expect(missing).toEqual([]);
-    // terrain's keys are never in the objects art; the beach ring is a fallback only until its art
-    // lands in src/art-release/objects (then it is picked up by name, like every other sprite)
+    // terrain's keys are never in the objects art; nothing else falls back now — the beach ring has its art
     for (const k of TERRAIN_OBJECT_KEYS) expect(ART.has(k), k).toBe(false);
-    expect(Object.keys(PLACEHOLDER_FALLBACK_KEYS).sort()).toEqual(['obj.star_ring.off', 'obj.star_ring.on']);
+    expect(PLACEHOLDER_FALLBACK_KEYS).toEqual({});
+    for (const k of ['obj.star_ring.off', 'obj.star_ring.on']) expect(ART.has(k), k).toBe(true);
   });
 
   it('every map object and switch of the world maps to a covered key, in each of its states', () => {
@@ -88,5 +88,16 @@ describe('objects release art: whole art pixels', () => {
     expect(bigFireScale(/** @type {any} */ ({ source: { resolution: 1 } }))).toBe(1.6);
     // 24x28 art px at 1.5 on a 2-px-per-game-px canvas: every art px is 3 canvas px, the sprite 36x42
     expect([1.5 * 24, 1.5 * 28].every(Number.isInteger)).toBe(true);
+  });
+});
+
+describe('the beach ring at night', () => {
+  it('is lit (a blue light) only while it is open', async () => {
+    const { starRingOpen, STAR_RING_LIGHT } = await import('../../src/view/weatherView.js');
+    const st = (flags) => ({ progress: { flags }, opening: null });
+    expect(starRingOpen(st({}))).toBe(false);
+    expect(starRingOpen(st({ source_open: true }))).toBe(true);
+    expect(starRingOpen(st({ source_open: true, ending_seen: true }))).toBe(false);
+    expect(STAR_RING_LIGHT).toEqual({ radius: 40, color: 0x7fe8ff });
   });
 });
