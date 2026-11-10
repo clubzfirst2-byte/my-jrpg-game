@@ -180,7 +180,14 @@ async function boot() {
 
   // --- assets / logic / view ---
   const assets = new AssetManager();
-  assets.register('placeholder', () => buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides), ...releaseEnemyEntries(artOverrides), ...releaseTerrainEntries('placeholder', artOverrides)], artOverrides));
+  // gfx W1: the v2 ground's island grounds and water (terrainArt.js "common:ground") go in the base atlas,
+  // packed tallest first so that it stays 2048×1024 (no second atlas). Without the v2 ground: as before.
+  const groundV2Entries = releaseTerrainEntries('common:ground', artOverrides);
+  assets.register('placeholder', () =>
+    buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides), ...releaseEnemyEntries(artOverrides), ...releaseTerrainEntries('placeholder', artOverrides), ...groundV2Entries], artOverrides, {
+      tallestFirst: groundV2Entries.length > 0,
+    }),
+  );
   // P8: each region's art is its own bundle, loaded by the view near the region.
   for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name, artOverrides));
   // v1.0: the final boss's art (loaded by the view only near its arena).

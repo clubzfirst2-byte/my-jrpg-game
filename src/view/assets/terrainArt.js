@@ -35,7 +35,7 @@ export function wantsTerrainArt(params, releaseHero) {
 }
 
 /** Region grounds: <region>.<ground>.<variant> (gameView.surfaceKey). */
-const REGION_GROUND = /^(desert\.sand|plains\.grass|forest\.grass|mountains\.snow|lake\.grass)\.\d+$/;
+const REGION_GROUND = /^(desert\.sand|plains\.grass|forest\.grass|mountains\.snow|lake\.grass)\.(?:\d+|macro[23]?\.\d|edge\.\d+\.\d)$/;
 
 /** The nature objects drawn by the terrain art (the other obj.* keys are the objects art's). */
 export const TERRAIN_OBJECTS = Object.freeze(['obj.tree', 'obj.rock', 'obj.bramble', 'obj.stump', 'obj.cactus', 'forest.pine', 'mountains.pine']);
@@ -127,6 +127,8 @@ const TOP_LEFT = /** @type {[number, number]} */ ([0, 0]);
 const EDGE = '(?:\\d+|inner\\.(?:ne|se|sw|nw))\\.[01]';
 const PART = '(?:top|mid)(?:-base)?\\.(?:4|8)';
 const LIP = 'top(?:-base)?\\.(?:4|8)';
+/** Ground v2 pieces: macro (2×2 macro / macro2, 3×3 macro3) and transition edges. */
+const V2_PIECE = '(?:macro[2]?\\.[0-3]|macro3\\.[0-8]|edge\\.\\d+\\.[01])';
 /** v1.1 keys → the bundle that holds them ('placeholder' = the base bundle, a region's, a season's). */
 const V11_KEYS = /** @type {[RegExp, string][]} */ ([
   [new RegExp(`^tile\\.(?:shore|bank)\\.${EDGE}$`), 'placeholder'],
@@ -140,7 +142,27 @@ const V11_KEYS = /** @type {[RegExp, string][]} */ ([
   [new RegExp(`^autumn\\.face\\.stone\\.${LIP}(?:\\.v[12])?$`), 'season:autumn'],
   [/^autumn\.(?:forest\.grass|mountains\.snow)\.\d$/, 'season:autumn'],
   [/^autumn\.(?:forest|mountains)\.pine$/, 'season:autumn'],
+  // Ground v2 (src/art-release-v2/terrain, gfx W1; drawn with ?terrain=v2 until enabled): the 16
+  // edge-matched tiles of each ground, its macro pieces (2×2 macro / macro2, 3×3 macro3), transition
+  // edges and the 4-frame water. The island's grounds and the water are listed apart
+  // (common:ground; main.js packs them into the base atlas, tallest first, which stays 2048×1024), the regions' and the
+  // seasons' in theirs. Keys the v1 bundles already hold (tile.grass.0-2, plains.grass.0-3,
+  // tile.water.0/1, ...) are not repeated.
+  [new RegExp(`^tile\\.(?:grass\\.(?:[3-9]|1[0-5])|(?:sand|path|ruin)\\.(?:[1-9]|1[0-5]))$`), 'common:ground'],
+  [new RegExp(`^tile\\.(?:grass|sand|path|ruin)\\.${V2_PIECE}$`), 'common:ground'],
+  [/^tile\.water\.(?:[2-3]|v1\.[0-3]|deep(?:\.v1)?\.[0-3]|deep\.edge\.\d+\.[0-3]|foam\.\d+\.[0-3])$/, 'common:ground'],
+  [new RegExp(`^plains\\.grass\\.(?:[4-9]|1[0-5]|${V2_PIECE})$`), 'region:plains'],
+  [new RegExp(`^lake\\.grass\\.(?:[4-9]|1[0-5]|${V2_PIECE})$`), 'region:lake'],
+  [new RegExp(`^forest\\.grass\\.(?:[4-9]|1[0-5]|${V2_PIECE})$`), 'region:forest'],
+  [new RegExp(`^mountains\\.snow\\.(?:[4-9]|1[0-5]|${V2_PIECE})$`), 'region:mountains'],
+  [new RegExp(`^desert\\.sand\\.(?:[3-9]|1[0-5]|${V2_PIECE})$`), 'region:desert'],
+  [new RegExp(`^autumn\\.(?:tile\\.grass\\.(?:[3-9]|1[0-5])|(?:plains|lake|forest)\\.grass\\.(?:[4-9]|1[0-5])|(?:tile|plains|lake|forest)\\.grass\\.${V2_PIECE})$`), 'season:autumn'],
+  [new RegExp(`^winter\\.(?:tile\\.grass\\.(?:[3-9]|1[0-5])|(?:plains|lake|forest)\\.grass\\.(?:[4-9]|1[0-5])|(?:tile|plains|lake|forest)\\.grass\\.${V2_PIECE})$`), 'season:winter'],
 ]);
+
+/** A key only the v2 ground has (its 4-frame water): the v2 ground is drawn when it is loaded. */
+export const GROUND_V2_KEY = 'tile.water.3';
+const V11_WATER_EDGE = /^tile\.(?:shore|shore-desert|bank)\./;
 
 /** The bundle a v1.1 terrain key belongs in ('placeholder' = the base bundle), or null. @param {string} key */
 export function v11Bundle(key) {
@@ -157,8 +179,11 @@ export function v11Bundle(key) {
  */
 export function releaseTerrainEntries(bundle, overrides) {
   if (!overrides?.size) return [];
+  // Ground v2 replaces the v1.1 water edges (shore tiles, banks) with foam + transitions: with the v2
+  // ground given, those pieces get no slot (it keeps the base atlas at 2048×1024).
+  const groundV2 = overrides.has(GROUND_V2_KEY);
   return [...overrides.keys()]
-    .filter((k) => v11Bundle(k) === bundle)
+    .filter((k) => v11Bundle(k) === bundle && !(groundV2 && V11_WATER_EDGE.test(k)))
     .sort()
     .map((key) => {
       if (key.endsWith('.pine')) return { key, rows: Array(30).fill('.'.repeat(16)), anchor: FEET };
@@ -286,7 +311,7 @@ export function terrainDebugApi(assets, view) {
     terrainEdges: () => {
       const chunks = /** @type {{ edges?: { sprite: { texture: { label?: string } }, key: string }[] }[]} */ ([...(view?.chunks?.values() ?? [])]);
       const edges = chunks.flatMap((c) => c.edges ?? []);
-      return { count: edges.length, keys: [...new Set(edges.map((e) => e.key))].sort(), frame: view?.waterFrame ?? -1, fallbacks: view?.edgeStats?.fallbacks ?? 0 };
+      return { count: edges.length, keys: [...new Set(edges.map((e) => e.key))].sort(), frame: view?.waterFrame ?? -1, fallbacks: view?.edgeStats?.fallbacks ?? 0, groundV2: !!view?.groundV2, water: { ...(view?.waterStats ?? {}) } };
     },
   };
 }
