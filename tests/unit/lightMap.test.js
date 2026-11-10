@@ -67,6 +67,30 @@ describe('warning lights (final QA B-1: the wind-up warning stays in the world, 
     const [ring] = warningLights([{ boss: true, bossKind: 'frost', kind: 'boss_frost', pattern: 'ring', state: 'windup', x: 0, y: 0, z: 0 }]);
     expect(ring.r).toBe(WARNING_LIGHT.bossRadius);
   });
+
+  it('the far edge of every slam ring still gets at least 20% of its light (the smooth falloff)', () => {
+    const slams = [
+      [{ kind: 'sentinel', state: 'windup', x: 0, y: 0, z: 0 }, ENEMY_KINDS.sentinel.slamRadius],
+      ...Object.keys(BOSS_KINDS).filter((k) => BOSS_KINDS[k].slamRadius).map((k) => [{ boss: true, bossKind: k, kind: `boss_${k}`, pattern: 'slam', state: 'windup', x: 0, y: 0, z: 4 }, BOSS_KINDS[k].slamRadius]),
+    ];
+    for (const [e, r] of slams) {
+      const [l] = warningLights([e]);
+      // the ring is drawn around (x, y - z): its farthest point from the light
+      let worst = 1;
+      for (let a = 0; a < 360; a += 5) {
+        const px = e.x + r * Math.cos((a * Math.PI) / 180);
+        const py = e.y - e.z + r * Math.sin((a * Math.PI) / 180);
+        worst = Math.min(worst, lightFalloff(Math.hypot(px - l.x, py - l.y) / l.r));
+      }
+      expect(worst, e.kind).toBeGreaterThanOrEqual(0.2);
+      expect(l.r, e.kind).toBeLessThan(r * 1.5); // not much wider than the ring
+    }
+    // 淀みの源's ring light (ringCover) too
+    for (const [pattern, reach] of [['slam', FINAL_BOSS.slamRadius], ['wave', FINAL_BOSS.waveRadius]]) {
+      const ground = warningLights([{ final: true, kind: 'boss_source', pattern, state: 'windup', x: 0, y: 0, z: 0 }]).find((l) => l.y === 0);
+      expect(lightFalloff(reach / ground.r), pattern).toBeGreaterThanOrEqual(0.2);
+    }
+  });
 });
 
 describe('the final boss lights its slam ring and its wave (v1.0 final)', () => {
