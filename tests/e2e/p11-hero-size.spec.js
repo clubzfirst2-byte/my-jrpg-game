@@ -111,6 +111,7 @@ test('P12 round 1 prototypes (?proto=all): elder, watchman, beast and goblin dra
   // Each group can be asked for alone.
   const page2 = await page.context().newPage();
   await open(page2, '&enemy=proto');
-  // the enemy prototypes only (4 frames) next to the adopted release hero (248 frames, 16×28)
-  expect(await api(page2, 'art')).toMatchObject({ overrides: 4 + 248, hero: { h: 28 } });
+  // the enemy prototypes only (4 frames) next to the adopted release hero (248 frames, 16×28) and,
+  // with it, the terrain release art (375 frames: 111 of v1.0, 264 of v1.1)
+  expect(await api(page2, 'art')).toMatchObject({ overrides: 4 + 248 + 375, hero: { h: 28 } });
 });

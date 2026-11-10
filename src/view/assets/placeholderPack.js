@@ -90,6 +90,8 @@ import {
   PRINCESS_LOOK,
 } from './placeholderArt.js';
 import { sourceFrames, starRingSprite } from './sourceArt.js';
+import { ICON_ANCHORS } from './iconAnchors.js';
+import { releaseTerrainEntries } from './terrainArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
 const TOP_LEFT = /** @type {[number, number]} */ ([0, 0]);
@@ -150,7 +152,7 @@ export function placeholderEntries() {
   entries.push({ key: 'obj.stump', rows: stumpSprite(), anchor: FEET });
   // P6 items.
   entries.push({ key: 'obj.anvil', rows: anvilSprite(), anchor: FEET });
-  for (const [key, rows] of Object.entries(itemIcons())) entries.push({ key, rows, anchor: FEET });
+  for (const [key, rows] of Object.entries(itemIcons())) entries.push({ key, rows, anchor: ICON_ANCHORS[key] ?? FEET });
   // P7 puzzles.
   entries.push({ key: 'tile.pit', rows: pitTile(), anchor: TOP_LEFT });
   entries.push({ key: 'tile.vine', rows: vineTile(), anchor: TOP_LEFT });
@@ -284,7 +286,7 @@ export function sourceEntries() {
 
 /** @param {string} name @param {Map<string, ArtSource>} [overrides] */
 export function buildRegionPack(name, overrides) {
-  return buildPlaceholderPack([...REGION_ENTRIES[name](), ...releaseBossEntries(name, overrides)], overrides);
+  return buildPlaceholderPack([...REGION_ENTRIES[name](), ...releaseBossEntries(name, overrides), ...releaseTerrainEntries(name, overrides)], overrides);
 }
 
 /** Enemy release frames: enemy.<kind>.<action>.<n> (docs/art-release/enemy/frames.json on the art branch). */

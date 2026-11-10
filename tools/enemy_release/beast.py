@@ -7,6 +7,8 @@ Wind-up shows by SHAPE: crouched low, head down, jaw open, crystals 2 px taller.
 
 import math
 
+import numpy as np
+
 from rig import Rig
 
 W, H = 44, 32
@@ -41,8 +43,9 @@ def front_leg(r, sx, sy, px, py, **k):
     ex, ey = sx - 1.5 + (px - sx) * 0.3, sy + (py - sy) * 0.45
     wx, wy = px - 0.5, py - 2
     m = r.mask_of(r.m_limb(sx, sy, ex, ey, 2.6, 1.6), r.m_ellipse(ex, ey, 1.7, 1.5), r.m_limb(ex, ey, wx, wy, 1.3, 1.0),
-                  r.m_ellipse(wx - 0.3, wy, 1.3, 1.1), r.m_ellipse(px + 0.6, py - 0.6, 2.0, 1.2))
-    return r.add(m, "ashfur", tex=("fur", 95, 4), **k)
+                  r.m_ellipse(wx - 0.3, wy, 1.3, 1.1), r.m_ellipse(px + 0.6, py - 0.6, 2.0, 1.2),
+                  r.m_poly([(ex, ey - 1.4), (ex - 2.6, ey + 0.6), (ex + 0.4, ey + 1.2)]))  # the elbow corner
+    return _leg(r, m, k)
 
 
 def hind_leg(r, hx_, hy, px, py, **k):
@@ -50,8 +53,25 @@ def hind_leg(r, hx_, hy, px, py, **k):
     kx, ky = hx_ + 2.5 + (px - hx_) * 0.4, hy + (py - hy) * 0.38
     hkx, hky = px - 2.2, py - 4.5
     m = r.mask_of(r.m_limb(hx_, hy, kx, ky, 3.4, 2.0), r.m_limb(kx, ky, hkx, hky, 1.8, 1.3),
-                  r.m_limb(hkx, hky, px, py - 1, 1.2, 1.0), r.m_ellipse(hkx - 0.4, hky, 1.4, 1.3), r.m_ellipse(px + 0.6, py - 0.6, 2.0, 1.2))
-    return r.add(m, "ashfur", tex=("fur", 95, 5), **k)
+                  r.m_limb(hkx, hky, px, py - 1, 1.2, 1.0), r.m_ellipse(hkx - 0.4, hky, 1.4, 1.3), r.m_ellipse(px + 0.6, py - 0.6, 2.0, 1.2),
+                  r.m_poly([(hkx - 0.2, hky - 1.6), (hkx - 2.8, hky + 0.2), (hkx + 0.2, hky + 1.2)]))  # the heel (hock) corner
+    return _leg(r, m, k)
+
+
+def _leg(r, m, k):
+    """Draw a leg; a NEAR leg (not darkened) also gets a 1-px tone-3 edge on its top-left, so it
+    does not sink into dark ground (swamp, cave)."""
+    r.add(m, "ashfur", **k)
+    if not k.get("dark"):
+        up = np.zeros_like(m)
+        up[1:, :] = ~m[:-1, :]
+        left = np.zeros_like(m)
+        left[:, 1:] = ~m[:, :-1]
+        right = np.zeros_like(m)
+        right[:, :-1] = ~m[:, 1:]
+        edge = m & (left | (up & ~right))
+        r.add(edge, "ashfur", tone=3, cast=False)
+    return m
 
 
 def draw(p):
@@ -74,22 +94,67 @@ def draw(p):
     t2 = (t1[0] + 4 * math.cos(a - 0.9), t1[1] - 4 * math.sin(a - 0.9))
     r.chain([t0, t1, t2], [3.0, 2.2, 1.1], "murk", soft=1)
     r.px([(round(t0[0]) - 1, round(t0[1]) + 3)], "murk", 1)  # a drip
-    # body: haunch + barrel + deep chest + neck, one volume
+    # body (beast finish): haunch + barrel + deep chest + neck, with fur tufts cut into the outline.
+    # Shaded BY MASS, not by a light that sweeps the whole tube: each round mass (haunch, chest,
+    # neck) has its own lit crescent on its upper-left and its own shadow crescent on its
+    # lower-right; the barrel between them stays the core tone. No light-back / dark-belly bands.
     neck = (31.5 + X + p.stretch * 0.7 + p.head[0] * 0.5, by - 2 + p.pitch * 1.2 + p.head[1] * 0.5)
-    body = r.mask_of(
-        r.m_ellipse(hip[0] + 0.5, hip[1] - 2.5, 6.2, 5.6),
-        r.m_limb(hip[0] + 2, hip[1] - 3.5, sh[0] - 1, sh[1] - 3.5, 4.3, 5.6),
-        r.m_ellipse(sh[0], sh[1] - 2.5, 5.2, 6.0),
-        r.m_limb(sh[0] + 1, sh[1] - 4, neck[0], neck[1], 4.2, 3.4),
-    )
-    # belly tucked up between chest and haunch
+    H_ = (hip[0] + 0.5, hip[1] - 2.5, 6.2, 5.6)
+    C_ = (sh[0], sh[1] - 2.5, 5.2, 6.0)
+    haunch, chest = r.m_ellipse(*H_), r.m_ellipse(*C_)
+    barrel = r.m_limb(hip[0] + 2, hip[1] - 3.5, sh[0] - 1, sh[1] - 3.5, 4.3, 5.6)
+    neckm = r.m_limb(sh[0] + 1, sh[1] - 4, neck[0], neck[1], 4.2, 3.4)
+    body = r.mask_of(haunch, barrel, chest, neckm)
     belly_cut = r.m_ellipse((hip[0] + sh[0]) / 2, hip[1] + 4.5, 6.5, 3.2)
     body &= ~belly_cut
-    r.add(body, "ashfur", tex=("fur", 172, 1))
+    # fur tufts on the silhouette: hanging points under the belly and chest, a ruff jutting at the
+    # throat, a tuft at the back of the haunch (each a small hand-set triangle)
+    bx0, bx1 = (hip[0] + sh[0]) / 2 - 5, (hip[0] + sh[0]) / 2 + 5
+    belly_y = hip[1] + 1.4 + (p.pitch * 0.4)
+    tufts = []
+    for i, tx in enumerate((bx0, bx0 + 3.5, bx0 + 7, bx1)):
+        ty = belly_y + (sh[1] - hip[1]) * ((tx - hip[0]) / max(sh[0] - hip[0], 1)) * 0.4
+        tufts.append([(tx - 1.8, ty - 1.5), (tx + 1.6, ty - 1.5), (tx - 0.8, ty + 2.6 + (i % 2))])
+    cx_, cy_ = C_[0], C_[1]
+    tufts.append([(cx_ - 2.2, cy_ + 4.5), (cx_ + 1.8, cy_ + 4.5), (cx_ - 1.4, cy_ + 8.4)])  # chest
+    tufts.append([(cx_ + 3, cy_ + 2.5), (cx_ + 5.5, cy_ - 0.5), (cx_ + 4.4, cy_ + 5.2)])  # throat
+    hx0, hy0 = H_[0], H_[1]
+    tufts.append([(hx0 - 4, hy0 - 3.5), (hx0 - 7.4, hy0 - 2.4), (hx0 - 5, hy0 + 0.5)])  # rump
+    tufts.append([(hx0 - 2, hy0 + 3), (hx0 - 5.6, hy0 + 4.6), (hx0 - 2.4, hy0 + 5.6)])  # haunch
+    for t_ in tufts:
+        body |= r.m_poly(t_)
+
+    def crescent(e, d):
+        cx0, cy0, rx0, ry0 = e
+        return r.m_ellipse(cx0, cy0, rx0, ry0) & ~r.m_ellipse(cx0 + d, cy0 + d, rx0, ry0)
+
+    lit = (crescent(H_, 1.3) | crescent(C_, 1.3)) & body
+    nl = neckm & ~r.m_limb(sh[0] + 1.6, sh[1] - 3.0, neck[0] + 1.0, neck[1] + 1.0, 4.2, 3.4)
+    lit |= nl & body
+    dark = (crescent(H_, -1.3) | crescent(C_, -1.3)) & body
+    # the underside: the lowest row of the belly and of each tuft
+    below = r.mask_of(body)
+    below[:-1, :] = body[:-1, :] & ~body[1:, :]
+    dark |= below
+    dark &= ~lit
+    r.add(body & ~lit & ~dark, "ashfur", tone=2)
+    r.add(dark, "ashfur", tone=1)
+    r.add(lit, "ashfur", tone=3)
     # mane ruff on the neck and shoulders (paler, tufted)
     rx, ry = sh[0] + 2, sh[1] - 6
-    r.add(r.m_poly([(rx - 7, ry), (rx - 5, ry - 2), (rx - 3, ry - 4), (rx - 1, ry - 3), (rx + 2, ry - 5), (rx + 5, ry - 1), (rx + 3, ry + 1),
-                    (rx + 2, ry + 3), (rx, ry + 1), (rx - 2, ry + 3), (rx - 4, ry + 1)]), "ashfur", lit=1, soft=1)
+    ruff = r.m_poly([(rx - 7, ry), (rx - 5, ry - 2), (rx - 3, ry - 4), (rx - 1, ry - 3), (rx + 2, ry - 5), (rx + 5, ry - 1), (rx + 3, ry + 1),
+                     (rx + 2, ry + 3), (rx, ry + 1), (rx - 2, ry + 3), (rx - 4, ry + 1)])
+    r.add(ruff, "ashfur", tone=2)
+    # fur locks, hand-drawn (beast finish): three bold locks flowing back along the back, each a
+    # 2-px lit band over a dark 1-px underside, spaced by the core tone -- a clear light / dark
+    # rhythm at 1x; two locks on the ruff
+    leg_ = {"3": ("ashfur", 3), "1": ("ashfur", 1), "2": ("ashfur", 2)}
+    LOCK = [".33333", "311111"]
+    for i, (ox, oy) in enumerate(((0, -1), (8, 2), (15, -2))):  # staggered: no continuous stripe
+        lx = round(hip[0] + ox - 2 + p.stretch * (ox / 18))
+        ly = round(by - 3 + oy + p.pitch * (ox / 16))
+        r.stamp(lx, ly, LOCK, leg_)
+    r.stamp(round(rx) - 6, round(ry) + 1, [".3333", "31111"], leg_)
     # murk melting on the flank: a patch on the haunch with drips
     fx, fy = hip[0] + 3, hip[1] - 1
     r.ellipse(fx, fy, 5.0, 2.6, "murk", soft=1)
@@ -109,7 +174,7 @@ def draw(p):
         mouth = r.m_poly([(hx_ + 0.5, hy + 1.4), (hx_ + 9, hy + 1.2), (hx_ + 7.6, hy + 1.6 + jaw * 1.5)])
         r.add(mouth, "murk", tone=0)
         head &= ~r.m_poly([(hx_ + 0.5, hy + 1.4), (hx_ + 10, hy + 1.2), (hx_ + 10, hy + 4), (hx_ + 0.5, hy + 4)])
-    r.add(head, "ashfur", soft=2, tex=("fur", 180, 6))
+    r.add(head, "ashfur", soft=2)
     # brow ridge and stop (breaks the box of the head): a dark crease from the eye down the muzzle
     r.shade(r.m_line(hx_ + 0.5, hy - 2.6, hx_ + 3, hy - 2.2), lambda t: max(1, t - 1))
     r.shade(r.m_line(hx_ + 4, hy + 0.6, hx_ + 8, hy + 0.4), lambda t: max(1, t - 1))
@@ -121,15 +186,21 @@ def draw(p):
     r.add(r.m_poly([(hx_ - 2.6, hy - 2.6), (et[0] + 0.7, et[1] + 2.6), (hx_ - 0.4, hy - 3.2)]), "ashfur", tone=1)
     r.px([(round(hx_ + 9), round(hy - 0.6))], "ashfur", 0)  # nose
     r.px([(round(hx_ + 9), round(hy - 1.6))], "ashfur", 3)  # a glint on the nose bridge
-    # fangs (bone): the attacking part, brighter than the body
+    # fangs (bone), hand-set: a long upper fang near the nose and a short one behind; when the jaw
+    # opens a row of lower teeth shows against the dark mouth (the bite reads at 1x)
     fy_ = round(hy + 1.6)
-    r.px([(round(hx_ + 7), fy_), (round(hx_ + 3.5), fy_)], "bone", 3)
-    if jaw >= 2:
+    if jaw:
+        r.px([(round(hx_ + 7), fy_), (round(hx_ + 7), fy_ + 1), (round(hx_ + 4), fy_)], "bone", 4)
+        r.px([(round(hx_ + 7), fy_ + 2)] if jaw >= 2 else [], "bone", 2)
         jy = round(hy + 1.0 + jaw * 1.5)
-        r.px([(round(hx_ + 7), fy_ + 1), (round(hx_ + 6), jy), (round(hx_ + 3), jy + 1)], "bone", 2)
+        r.px([(round(hx_ + 6), jy), (round(hx_ + 4), jy + 1), (round(hx_ + 2), jy + 1)], "bone", 3)
+    else:
+        r.px([(round(hx_ + 7), fy_), (round(hx_ + 3.5), fy_)], "bone", 3)
     # eye: hand-placed yellow eye with a dark lid
     ex, ey = round(hx_ + 1.5), round(hy - 1.6)
-    r.stamp(ex, ey, ["ab", "c."], {"a": ("eye", 3), "b": ("eye", 2), "c": ("eye", 0)})
+    # hand-drawn: a heavy dark brow slanting down to the snout over a bright 2x2 eye with a dark rim
+    r.stamp(ex - 1, ey - 1, ["00..", ".000", ".ab0", ".c0."], {"0": ("ashfur", 0), "a": ("eye", 4), "b": ("eye", 2), "c": ("eye", 1)})
+    r.add(r.m_line(hx_ + 3.5, hy - 2.6, hx_ + 8, hy - 1.4), "ashfur", tone=3, cast=False)  # lit bridge of the muzzle
     # spine crystals (glow, the enemy.magic magenta): 5 shards, tallest over the shoulders
     for i, (ox, h) in enumerate(((-2, 3), (3, 5), (8, 6), (12, 5), (16, 3))):
         cx = hip[0] + 1 + ox + p.stretch * (ox / 18)
@@ -137,8 +208,6 @@ def draw(p):
         h = h + p.spike
         lean = 1.2  # shards lean back
         r.poly([(cx - 1.8, base + 1.5), (cx - lean, base - h), (cx + 1.6, base + 1.5)], "glow", soft=1)
-    # fur strands on the back and haunch (a darker groove and a lit ridge)
-    r.shade(r.m_line(hip[0] - 2, hip[1] - 1, hip[0] + 2, hip[1] + 2), lambda t: max(1, t - 1))
     return r
 
 
@@ -150,8 +219,24 @@ def lying(r, p):
     # legs sticking out forward (toward the viewer: down-right)
     for i, (x0, x1) in enumerate(((12, 16), (15, 19), (27, 30), (30, 33))):
         r.limb(x0, gy - 5, x1, gy - 1.5, 1.8, 1.3, "ashfur", dark=1 if i % 2 == 0 else 0)
-    body = r.mask_of(r.m_ellipse(20, gy - 6, 12, 4.6), r.m_ellipse(10, gy - 6.5, 5, 4.4))
-    r.add(body, "ashfur")
+    B_, R_ = (20, gy - 6, 12, 4.6), (10, gy - 6.5, 5, 4.4)
+    body = r.mask_of(r.m_ellipse(*B_), r.m_ellipse(*R_))
+    # fur tufts on the outline: the back (top edge) and the rump
+    for tx in (14, 20, 26):
+        body |= r.m_poly([(tx - 1.8, gy - 10.2), (tx + 1.6, gy - 10.2), (tx - 1.2, gy - 12.6)])
+    body |= r.m_poly([(6, gy - 9), (3.4, gy - 10.4), (5, gy - 6.5)])
+
+    def crescent(e, d):
+        return r.m_ellipse(*e) & ~r.m_ellipse(e[0] + d, e[1] + d, e[2], e[3])
+
+    lit = (crescent(B_, 1.3) | crescent(R_, 1.3)) & body
+    dark = (crescent(B_, -1.3) | crescent(R_, -1.3)) & body & ~lit
+    r.add(body & ~lit & ~dark, "ashfur", tone=2)
+    r.add(dark, "ashfur", tone=1)
+    r.add(lit, "ashfur", tone=3)
+    # the same wedge locks as standing
+    for lx in (12, 19):
+        r.stamp(lx, gy - 8, [".33333", "311111"], {"3": ("ashfur", 3), "1": ("ashfur", 1)})
     # head lying flat, snout forward, jaw slack
     hx_, hy = 33, gy - 5
     r.add(r.mask_of(r.m_ellipse(hx_, hy, 4.2, 3.4), r.m_poly([(hx_ + 1, hy - 2), (hx_ + 8, hy + 0.5), (hx_ + 7.5, hy + 2), (hx_ + 1, hy + 2.2)])), "ashfur")

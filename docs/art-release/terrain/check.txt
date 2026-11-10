@@ -1,6 +1,6 @@
 # 自動の確認（gen_release.py が毎回書く）
 
-枚数: 111
+枚数: 375
 半透明の点・ランプ外の色・大きさの違い: なし（全部 OK）
 水の 2 コマの違い: 19 ドット（ガイド 3.5：12〜30）
 
@@ -20,7 +20,7 @@
   tile.ruin                  #5a6468  70%  4番 0.0%  明るさ 38.2（マント差 +10.6・色合い 197°）  端の差 左右 0.0 上下 24.7（中の最大 24.7）  ざらつき 7.1
   tile.metal                 #6c7480  58%  4番 1.6%  明るさ 45.1（マント差  +3.7・色合い 216°）  端の差 左右 19.6 上下 19.6（中の最大 51.1）  ざらつき 16.3
   tile.pit                   #0c0c12  77%  4番 0.0%  明るさ  5.0（マント差 +43.8・色合い 240°）  端の差 左右 0.0 上下 31.5（中の最大  9.6）  ざらつき 8.4  ← 端の差が中より大きい
-  tile.wood                  #6e4424  54%  4番 0.0%  明るさ 30.2（マント差 +18.6・色合い  26°）  端の差 左右 5.0 上下 31.8（中の最大 31.8）  ざらつき 10.4
+  tile.wood                  #6e4424  56%  4番 0.0%  明るさ 30.2（マント差 +18.6・色合い  26°）  端の差 左右 0.0 上下 21.0（中の最大 21.0）  ざらつき 6.9
   desert.sand.0              #a8603c  97%  4番 0.0%  明るさ 44.5（マント差  +4.3・色合い  20°）  端の差 左右 0.0 上下 0.0（中の最大  2.5）  ざらつき 2.0
   desert.sand.1              #a8603c  96%  4番 0.1%  明るさ 44.5（マント差  +4.3・色合い  20°）  端の差 左右 0.0 上下 0.0（中の最大  2.9）  ざらつき 2.5
   desert.sand.2              #a8603c  96%  4番 0.1%  明るさ 44.5（マント差  +4.3・色合い  20°）  端の差 左右 0.0 上下 0.0（中の最大  2.9）  ざらつき 2.6
@@ -62,6 +62,14 @@
   winter.forest.grass.1      #b8c8e0  98%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  7.0）  ざらつき 4.3
   winter.forest.grass.2      #b8c8e0  98%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  6.7）  ざらつき 4.5
   winter.forest.grass.3      #b8c8e0  98%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  6.7）  ざらつき 4.5
+  autumn.forest.grass.0      #36402a  93%  4番 0.8%  明るさ 22.9（マント差 +25.9・色合い  87°）  端の差 左右 0.0 上下 0.0（中の最大  3.4）  ざらつき 3.2
+  autumn.mountains.snow.0    #b8c8e0  97%  4番 0.0%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.7 上下 0.0（中の最大  4.4）  ざらつき 2.8
+  autumn.forest.grass.1      #36402a  92%  4番 0.8%  明るさ 22.9（マント差 +25.9・色合い  87°）  端の差 左右 1.2 上下 0.0（中の最大  3.4）  ざらつき 3.8
+  autumn.mountains.snow.1    #b8c8e0  88%  4番 2.1%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  8.0）  ざらつき 5.9
+  autumn.forest.grass.2      #36402a  92%  4番 0.8%  明るさ 22.9（マント差 +25.9・色合い  87°）  端の差 左右 0.0 上下 0.0（中の最大  3.4）  ざらつき 3.3
+  autumn.mountains.snow.2    #b8c8e0  89%  4番 1.7%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  6.2）  ざらつき 5.8
+  autumn.forest.grass.3      #36402a  91%  4番 1.2%  明るさ 22.9（マント差 +25.9・色合い  87°）  端の差 左右 1.2 上下 0.0（中の最大  7.7）  ざらつき 6.1
+  autumn.mountains.snow.3    #b8c8e0  87%  4番 2.1%  明るさ 77.6（マント差 -28.8・色合い 216°）  端の差 左右 0.0 上下 0.0（中の最大  5.9）  ざらつき 6.0
 
 使ったランプ: autumn.foliage, autumn.grass, cactus, cave.rock, desert.sand, desert.stone, earth.face, fire, flower.pink, flower.white, flower.yellow, forest.moss, forest.pine, forest.swamp, iron, island.sand, lake.grass, lake.reed, lake.shore, mount.ice, mount.rock, mount.snow, pebble, plains.grass, plains.path, room.plaster, ruin.stone, shell, tree.bark, tree.leaf, wall.stone, water.surface, wood
 新規のランプ（ガイド 2.5 に登録してほしいもの）: autumn.foliage, cactus, flower.pink, flower.white, flower.yellow, island.sand, lake.reed, pebble, shell, tree.bark, tree.leaf, wall.stone, water.surface

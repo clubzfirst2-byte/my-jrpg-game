@@ -88,30 +88,163 @@ def _hash(a, b, seed=0):
     return ((h ^ (h >> 16)) & 0xFFFF) / 65535.0
 
 
-TEX = {  # kind -> (strand length, jitter of the light bands, share of dark strokes, share of lit strokes)
-    "fur": (4, 0.30, 0.10, 0.05),
-    "shag": (6, 0.36, 0.13, 0.06),
-    "bark": (8, 0.26, 0.16, 0.04),
+# Hand-drawn clusters for fur and bark (v1.0 finish). Each map is a lock of fur drawn the way
+# the hero's hair locks are: a lit stroke on its upper-left (L = one tone up) and a dark trailing
+# tip on its lower-right (D = one tone down). They are stamped on a staggered grid anchored to the
+# part (so they move with it and never flicker), only where the whole lock fits one pixel inside
+# the part (the silhouette edge and the tone-0 outline stay clean).
+LOCKS = {
+    # hanging locks (angle ~90: hair hangs down), 3 variants
+    "down": [
+        ["L..", "LL.", ".LD", "..D", "..D"],
+        [".L.", "LL.", "LD.", ".D.", ".DD"],
+        ["L..", "LL.", "LLD", ".LD", "..D"],
+    ],
+    # long shaggy locks (the frost elk's coat)
+    # long shaggy locks (the frost elk's coat): 3-4 px wide bundles, lit body, dark right side,
+    # a dark tip pointing down (v1.0 finish 2: no thin 1-px strokes)
+    "shag": [
+        ["LL...", "LLL..", "LLLD.", ".LLD.", ".LDD.", "..D..", "..D.."],
+        [".LL..", "LLLD.", "LLLD.", ".LLD.", "..DD.", "..D.."],
+        ["LLL..", "LLLD.", ".LLD.", ".LLD.", "..DD.", "...D."],
+    ],
+    # locks flowing back (angle ~180: the beast faces right, its coat lies back to the left)
+    "back": [
+        ["...LL", ".LLD.", "LDD.."],
+        ["..LL.", "LLDD.", "DD..."],
+        ["...LL", "..LD.", "LDD.."],
+    ],
 }
+LOCK_GRID = {"down": (4, 5, 2), "shag": (6, 7, 3), "back": (5, 3, 2)}  # step x, step y, row stagger
 
 
-def _texture(tex, I, oy, ox):
-    """Fur / bark: the light is broken along strands. tex = (kind, angle in degrees of the strands,
-    seed). Strands are 1 px wide and L px long, anchored to the part (they move with it), so the
-    band edges become tufts and the core gets a few hand-like hair / grain strokes."""
-    kind, ang = tex[0], math.radians(tex[1])
+def _erode(m):
+    e = m.copy()
+    e[1:, :] &= m[:-1, :]
+    e[:-1, :] &= m[1:, :]
+    e[:, 1:] &= m[:, :-1]
+    e[:, :-1] &= m[:, 1:]
+    return e
+
+
+def _clusters(tex, t, m, oy, ox, org=(0, 0)):
+    """Re-tone the volume shading `t` (tones 1..4) inside mask `m` with hand-drawn clusters.
+    tex = (kind, angle, seed[, options]): kind "fur" / "shag" (locks) or "bark" (plates).
+    org = the frame coordinates of t[0, 0]."""
+    kind, ang = tex[0], tex[1]
     seed = tex[2] if len(tex) > 2 else 0
-    L, amp, dark, lit = TEX[kind]
-    h, w = I.shape
+    opt = tex[3] if len(tex) > 3 else {}
+    h, w = t.shape
+    out = t.copy()
+    inner = _erode(m)
+    if kind == "bark":
+        return _plates(out, t, m, inner, oy, ox, ang, seed, opt, org)
+    style = "shag" if kind == "shag" else ("down" if 45 <= ang % 180 <= 135 else "back")
+    flip = style == "back" and (ang % 360) < 90  # a coat flowing to the right
+    sx, sy, stag = LOCK_GRID[style]
+    maps = LOCKS[style]
+    for row in range(-(oy // sy) - 2, (h - oy) // sy + 2):
+        for col in range(-(ox // sx) - 2, (w - ox) // sx + 2):
+            hv = _hash(np.array([col]), np.array([row]), seed)[0]
+            if hv < 0.12:  # a few gaps keep it from reading as a pattern
+                continue
+            lock = maps[int(hv * 997) % len(maps)]
+            jx = int(hv * 7919) % 3 - 1
+            jy = int(hv * 104729) % 3 - 1
+            X0 = ox + col * sx + (row % 2) * stag + jx
+            Y0 = oy + row * sy + jy
+            cells = []
+            ok = True
+            for j, r_ in enumerate(lock):
+                if flip:
+                    r_ = r_[::-1]
+                for i, ch in enumerate(r_):
+                    if ch == ".":
+                        continue
+                    X, Y = X0 + i, Y0 + j
+                    if not (0 <= X < w and 0 <= Y < h and inner[Y, X]):
+                        ok = False
+                        break
+                    cells.append((X, Y, ch))
+                if not ok:
+                    break
+            if not ok:
+                continue
+            for X, Y, ch in cells:
+                b = t[Y, X]
+                if ch == "L" and b <= 2:
+                    out[Y, X] = b + 1
+                elif ch == "D" and b >= 2:
+                    out[Y, X] = b - 1
+    return out
+
+
+def _keep_runs(mask):
+    """Drop pixels of `mask` that have no 8-neighbour in it (no lone dots: lines and edges only)."""
+    p = np.pad(mask, 1)
+    n = np.zeros(mask.shape, int)
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            if dy or dx:
+                n += p[1 + dy:1 + dy + mask.shape[0], 1 + dx:1 + dx + mask.shape[1]]
+    return mask & (n > 0)
+
+
+def _connect4(mask):
+    """Make diagonal steps of a 1-px line 4-connected (a pixel under each diagonal step), so the
+    line reads as a line and never as a chain of lone dots."""
+    m = mask.copy()
+    dr = np.zeros_like(m)
+    dr[:-1, :-1] = mask[:-1, :-1] & mask[1:, 1:] & ~mask[1:, :-1] & ~mask[:-1, 1:]
+    m[1:, :-1] |= dr[:-1, :-1]
+    dl = np.zeros_like(m)
+    dl[:-1, 1:] = mask[:-1, 1:] & mask[1:, :-1] & ~mask[1:, 1:] & ~mask[:-1, :-1]
+    m[1:, 1:] |= dl[:-1, 1:]
+    return m
+
+
+def _plates(out, t, m, inner, oy, ox, ang, seed, opt, org):
+    """Bark (v1.0 finish 2): long plates (8 px along the root, ~3.6 px across) running along each
+    root -- or out from a centre for the body (ang "radial") -- with a 1-px seam only between
+    some plates (about every 2-3), tone 3 only on the top-left lip of a plate below / right of a
+    seam, the rest of each plate a flat tone 2. Around opt["calm"] = (x, y, r) nothing is drawn
+    and the face is a calm tone 2 (the core sits there)."""
+    h, w = t.shape
     yy, xx = np.mgrid[0:h, 0:w]
-    yy, xx = yy - oy, xx - ox
-    u = xx * math.cos(ang) + yy * math.sin(ang)  # along the strand
-    v = np.round(-xx * math.sin(ang) + yy * math.cos(ang)).astype(int)  # across: one strand per px
-    off = _hash(v, np.zeros_like(v), seed + 7) * L
-    seg = np.floor((u + off) / L).astype(int)
-    n = _hash(v, seg, seed)
-    I = I + (n - 0.5) * amp
-    return I, (n > 1 - dark, n < lit)
+    fy, fx = yy + org[0], xx + org[1]  # frame coordinates
+    if ang == "radial":
+        cx, cy = opt["centre"]
+        dx, dy = fx - cx, fy - cy
+        u = np.hypot(dx, dy)
+        v = np.arctan2(dy, dx) * 16.0
+    else:
+        a = math.radians(ang)
+        ly, lx = yy - oy, xx - ox
+        u = lx * math.cos(a) + ly * math.sin(a)  # along the grain: plates are long
+        v = -lx * math.sin(a) + ly * math.cos(a)
+    WID, LEN = 3.6, 8.0
+    row = np.floor(v / WID).astype(int)
+    roff = _hash(row, np.zeros_like(row), seed + 11) * LEN
+    seg = np.floor((u + roff) / LEN).astype(int)
+    drawn = _hash(row, seg, seed + 5) < 0.42  # a seam only for some plates
+    along = np.floor((v + 1.0) / WID).astype(int) != row
+    across = np.floor((u + roff + 1.0) / LEN).astype(int) != seg
+    calm = np.zeros((h, w), bool)
+    if opt.get("calm"):
+        x, y, r = opt["calm"]
+        calm = np.hypot(fx - x, fy - y) <= r
+    seam = (along | across) & drawn & inner & ~calm
+    seam = _connect4(_keep_runs(seam)) & inner & ~calm
+    out[seam] = np.maximum(t[seam] - 1, 1)
+    lit = np.zeros_like(seam)
+    lit[1:, :] |= seam[:-1, :]
+    lit[:, 1:] |= seam[:, :-1]
+    lit &= inner & ~seam & (t == 2) & ~calm
+    lit = _connect4(_keep_runs(lit)) & inner & ~seam & (t == 2) & ~calm
+    out[lit] = 3
+    flat = calm & inner & (t == 3)
+    out[flat] = 2
+    return out
 
 
 class Part:
@@ -280,9 +413,6 @@ class Rig:
             nx, ny, nz = -gx * S, -gy * S, np.ones_like(B)
             nn = np.sqrt(nx * nx + ny * ny + nz * nz)
             I = (nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2]) / nn
-            strands = None
-            if p.tex:
-                I, strands = _texture(p.tex, I, ys.min() - y0, xs.min() - x0)
             t = np.full(B.shape, 2)
             t[I > 0.62] = 3
             t[I < 0.30] = 1
@@ -296,10 +426,8 @@ class Rig:
             right = ~np.pad(m, ((0, 0), (0, 1)))[:, 1:]
             t[m & (down | right) & ~(up | left)] = 1
             t[m & (up | left) & ~(down | right) & (t < 3)] = 3
-            if strands is not None:  # hand-like strokes: dark hairs / grain in the core, a few lit ones
-                dk, lt = strands
-                t[dk & (t == 2) & m] = 1
-                t[lt & (t == 2) & m] = 3
+            if p.tex:  # fur locks / bark plates, hand-drawn clusters
+                t = _clusters(p.tex, t, m, ys.min() - y0, xs.min() - x0, (y0 - PAD, x0 - PAD))
             t = np.clip(t - p.dark + p.lit, 1, 4)
             if p.mat not in SHINY:
                 t = np.minimum(t, 3)

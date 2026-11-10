@@ -41,6 +41,7 @@ const read = (name) => {
   return { w, h, alpha: (x, y) => px[y * stride + x * 4 + 3] };
 };
 
+const DISHES = ['grilled_meat', 'mushroom_skewer', 'berry_jam', 'hunter_stew', 'ember_soup', 'hearty_skewer', 'mixed_stew', 'dubious_food'];
 const SIZES = {
   // wave 1 (approved samples, finalised)
   'obj.house': [96, 112], 'obj.chest.closed': [32, 28], 'obj.chest.open': [32, 28], 'obj.jar': [20, 24],
@@ -56,16 +57,24 @@ const SIZES = {
   'obj.stone.on': [24, 32], 'obj.pillar': [24, 48], 'obj.altar': [32, 28], 'sw.sensor.off': [24, 28],
   'sw.sensor.on': [24, 28], 'fx.glider': [44, 20], 'fx.shadow': [24, 10], 'fx.arrow': [20, 6], 'fx.orb': [12, 12],
   'fx.shield': [16, 18], 'fx.bow': [10, 24], 'fx.smoke': [12, 12], 'fx.light': [16, 16], 'ui.marker': [14, 14],
+  // v1.0: the beach star ring (2x the placeholder's 24x26)
+  'obj.star_ring.off': [48, 52], 'obj.star_ring.on': [48, 52],
   ...Object.fromEntries(['bow', 'armor', 'mushroom', 'berry', 'pepper', 'fang', 'shard', 'arrows', 'food'].map((n) => [`icon.${n}`, [20, 20]])),
+  // v1.0: the star shard and the elder's charm get icons of their own
+  'icon.star_shard': [20, 20], 'icon.charm': [20, 20],
+  // v1.0.1: weapons and armour that fell back to icon.sword / icon.armor get icons of their own
+  ...Object.fromEntries(['spear', 'greatsword', 'ember_sword', 'star_sword', 'cap', 'boots'].map((n) => [`icon.${n}`, [20, 20]])),
+  // v1.0.1: one icon per dish (icon.food stays the fallback)
+  ...Object.fromEntries(DISHES.map((n) => [`icon.dish.${n}`, [20, 20]])),
 };
 const NAMES = Object.keys(SIZES).sort();
 const CENTRE = new Set(['fx.slash', 'fx.shadow', 'fx.arrow', 'fx.orb', 'fx.shield', 'fx.bow', 'fx.smoke', 'fx.light', 'ui.marker']);
 
 describe('release objects (src/art-release/objects)', () => {
-  it('holds exactly the expected 62 sprites (rock, bramble, stump, cactus belong to the terrain producer), every one a real sprite key of the game', () => {
+  it('holds exactly the expected 80 sprites (rock, bramble, stump, cactus belong to the terrain producer), every one a real sprite key of the game', () => {
     const files = readdirSync(DIR).sort();
     expect(files).toEqual(NAMES.map((n) => `${n}.png`).sort());
-    expect(NAMES).toHaveLength(62);
+    expect(NAMES).toHaveLength(80); // 62 + the star ring (2) + the v1.0 icons (2) + the v1.0.1 icons (6) + the dishes (8)
     const keys = new Set([...placeholderEntries(), ...Object.values(REGION_ENTRIES).flatMap((f) => f())].map((e) => e.key));
     for (const n of NAMES) expect(keys.has(n), n).toBe(true);
   });
@@ -114,7 +123,8 @@ describe('release objects (src/art-release/objects)', () => {
   it('changes state visibly: the two frames of every off/on, open/closed and animated pair differ', () => {
     const pairs = [['obj.chest.closed', 'obj.chest.open'], ['obj.checkpoint.off', 'obj.checkpoint.on'], ['obj.campfire.0', 'obj.campfire.1'],
       ['sw.plate.off', 'sw.plate.on'], ['fx.fire.0', 'fx.fire.1'], ['obj.brazier.0', 'obj.brazier.1'], ['obj.receiver.off', 'obj.receiver.on'],
-      ['obj.sconce.off', 'obj.sconce.on'], ['obj.stone.off', 'obj.stone.on'], ['sw.sensor.off', 'sw.sensor.on'], ['obj.charm_shelf', 'obj.charm_shelf.on']];
+      ['obj.sconce.off', 'obj.sconce.on'], ['obj.stone.off', 'obj.stone.on'], ['sw.sensor.off', 'sw.sensor.on'], ['obj.charm_shelf', 'obj.charm_shelf.on'],
+      ['obj.star_ring.off', 'obj.star_ring.on']];
     for (const [a, b] of pairs) {
       const A = read(a);
       const B = read(b);
@@ -122,6 +132,16 @@ describe('release objects (src/art-release/objects)', () => {
       for (let y = 0; y < A.h; y++) for (let x = 0; x < A.w; x++) if ((A.alpha(x, y) > 0) !== (B.alpha(x, y) > 0)) shape++;
       // guide 4.2: the shape changes by 6 px or more (a fire's frames: its flame tips move)
       expect(shape, `${a} -> ${b}`).toBeGreaterThanOrEqual(6);
+    }
+  });
+
+  it('draws the star ring at 2x its placeholder, feet-anchored like it', () => {
+    const entries = placeholderEntries();
+    for (const n of ['obj.star_ring.off', 'obj.star_ring.on']) {
+      const e = entries.find((k) => k.key === n);
+      expect(e, n).toBeTruthy();
+      expect(SIZES[n], n).toEqual([e.rows[0].length * 2, e.rows.length * 2]);
+      expect(e.anchor, n).toEqual([0.5, 1]);
     }
   });
 });

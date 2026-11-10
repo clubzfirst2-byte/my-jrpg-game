@@ -2,7 +2,7 @@
 // Game state and the single fixed-step update entry point for the logic layer.
 import { parseMap } from './world/tilemap.js';
 import { groundHeightUnder } from './physics/collision.js';
-import { createPlayer, updatePlayer, respawn } from './entities/player.js';
+import { createPlayer, updatePlayer, respawn, PLAYER_MOVE } from './entities/player.js';
 import { combatStep, initCombat, COMBAT } from './entities/playerCombat.js';
 import { createBoss, settleBosses } from './entities/bosses.js';
 import { placeFinalBoss, settleFinalBoss, FINAL_BOSS } from './entities/finalBoss.js';
@@ -31,7 +31,7 @@ import { areaAt } from './world/features.js';
 import { ISLAND } from './world/maps/island.js';
 import { WORLD } from './world/world.js';
 import { objectBaseline } from './world/worldDiff.js';
-import { createNpcs, stepNpcs, syncNpcs } from './npc/npcs.js';
+import { createNpcs, stepNpcs, syncNpcs, blockPlayerByNpcs, playerFrom } from './npc/npcs.js';
 import { TEST_FIELD } from './world/maps/testField.js';
 import { HEIGHT_TEST } from './world/maps/heightTest.js';
 
@@ -94,6 +94,8 @@ export const ENEMY_CORPSE_MS = 600;
  * @property {any[]} objectBaseline  P8: objects as the map made them (for saving differences)
  * @property {import('./npc/npcs.js').Npc[]} npcs  P9: villagers (the ones there now)
  * @property {import('./npc/npcs.js').NpcDef[]} npcDefs  v1.0: every villager of the map, with its appearance condition
+ * @property {{ id: string, ms: number } | null} [npcPush]  v1.0 final: how long the player has pushed into one villager
+ * @property {string | null} [npcPassId]  v1.0 final: the villager letting the player squeeze by (no room to step aside)
  * @property {{ id: string, npc: string | null, node: string, line: number } | null} dialogue  P9: the conversation going on
  * @property {{ ms: number } | null} opening  v1.0 (C9): the opening playing (story/story.js)
  * @property {'screen' | null} ending  v1.0 (C10): the ending screen is showing (story/story.js)
@@ -154,6 +156,8 @@ export function createGameState(def = HEIGHT_TEST) {
     objectBaseline: [],
     npcs: [],
     npcDefs: f.npcs ?? [],
+    npcPush: null,
+    npcPassId: null,
     dialogue: null,
     opening: null,
     ending: null,
@@ -269,7 +273,10 @@ export function stepGame(state, input) {
   const enemyScale = worldScale * (state.flurryMs > 0 ? COMBAT.flurryScale : 1);
   state.flurryMs = Math.max(0, state.flurryMs - STEP_SEC * 1000);
 
+  const from = playerFrom(p);
   updatePlayer(p, input, state.map, STEP_SEC * worldScale);
+  // v1.0 final: villagers have a solid body (npcs.js NPC_BODY).
+  blockPlayerByNpcs(state, from, Math.hypot(input.moveX ?? 0, input.moveY ?? 0) > 0.2, STEP_SEC, PLAYER_MOVE.stepHeight);
   touchCheckpoints(state);
   checkWarps(state);
   discoverLandmarks(state, SIGHT_PX);

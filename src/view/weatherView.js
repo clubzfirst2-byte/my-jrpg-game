@@ -4,15 +4,39 @@
 // lightning (a warning flicker on the target, then a bolt and a flash). Reads state only.
 //
 // Cost: by day in clear weather the light map is skipped entirely. Otherwise it is one small
-// render-to-texture at the internal resolution (lightMs is measured for the debug overlay).
+// render-to-texture at half the internal resolution (LIGHT_MAP_RESOLUTION; the map is only soft
+// gradients and flat tint, upscaled with linear filtering), and it is redrawn only when a light, the
+// ambient colour or the screen size changed (lightMs is measured for the debug overlay).
+// v1.0 (iPhone perf): night rain in software rendering ran at about half the day's frame rate. Per
+// frame the view no longer rebuilds the flash Graphics, re-renders an unchanged light map, allocates
+// for the lightning lookup, or sets every raindrop's rotation; see `stats` for the counts.
 import { Container, Graphics, RenderTexture, Sprite, Texture } from 'pixi.js';
 import { ambientAt, isDark, isRaining } from '../game/env/weather.js';
 import { playerWeather } from '../game/env/weatherActions.js';
 import { ENEMY_KINDS } from '../game/entities/enemies.js';
 import { BOSS_KINDS } from '../game/entities/bosses.js';
+import { FINAL_BOSS } from '../game/entities/finalBoss.js';
+import { openingView } from '../game/story/story.js';
 
-/** A winding-up enemy's warning light (world px): the colour added to the light map. */
-export const WARNING_LIGHT = Object.freeze({ color: 0xffd0c0, enemyRadius: 26, bossRadius: 44, ringMargin: 10 });
+/**
+ * A winding-up enemy's warning light (world px): the colour added to the light map.
+ * `ringCover`: a ground light reaches the ring (plus `ringMargin`) at this fraction of its radius,
+ * where its falloff still adds about 40% (at the very edge of a light it adds nothing).
+ * `slamCover`: a slam's ring (the sentinel's, a core's) lies at this fraction of its light's radius,
+ * where lightFalloff still adds 26%. (v1.0 inspection of the minor fixes: the slam light used to be
+ * `slamRadius + ringMargin` around the body, which put the ring's far edge near the light's rim:
+ * about 0.20 with the old cone and 0.13 with the smooth falloff.)
+ */
+export const WARNING_LIGHT = Object.freeze({ color: 0xffd0c0, enemyRadius: 26, bossRadius: 44, ringMargin: 10, ringCover: 0.62, slamCover: 0.7 });
+
+/**
+ * 淀みの源's ground reach for its slam / inversion wave (the ring sourceView.js draws), or 0.
+ * @param {any} e
+ */
+export function sourceReach(e) {
+  if (!e.final) return 0;
+  return e.pattern === 'slam' ? FINAL_BOSS.slamRadius : e.pattern === 'wave' ? FINAL_BOSS.waveRadius : 0;
+}
 
 /**
  * v1.0 (final QA B-1): the wind-up warning is drawn in the world, sorted with its enemy, so a tree
@@ -21,36 +45,85 @@ export const WARNING_LIGHT = Object.freeze({ color: 0xffd0c0, enemyRadius: 26, b
  * overlay and the ring then show at about daylight strength, and the glow itself says "about to
  * strike". (Drawing the warning above the light map instead kept it bright but floated it over
  * trees.)
+ *
+ * v1.0 final: 淀みの源 (`final`, no `bossKind`) used to get only its 44 px body light, so most of its
+ * slam ring (44) and inversion wave (64) lay in the dark. Its slam and wave now add a light on the
+ * ground centred on the ring, wide enough to light all of it, and kept on while the shockwave goes
+ * out (`attack`), so the hit itself reads too.
  * @param {any[]} enemies @returns {{ x: number, y: number, r: number }[]}
  */
 export function warningLights(enemies) {
   const out = [];
   for (const e of enemies) {
+    const reach = sourceReach(e);
+    if (reach > 0 && (e.state === 'windup' || e.state === 'attack')) {
+      out.push({ x: e.x, y: e.y - e.z, r: Math.ceil((reach + WARNING_LIGHT.ringMargin) / WARNING_LIGHT.ringCover) });
+    }
     if (e.state !== 'windup') continue;
     const slam = e.boss && e.bossKind ? (e.pattern === 'slam' ? BOSS_KINDS[e.bossKind]?.slamRadius : 0) : e.kind === 'sentinel' ? ENEMY_KINDS.sentinel.slamRadius : 0;
     const body = e.boss || e.final ? WARNING_LIGHT.bossRadius : WARNING_LIGHT.enemyRadius;
-    out.push({ x: e.x, y: e.y - e.z - (e.boss || e.final ? 16 : 6), r: Math.max(body, slam ? slam + WARNING_LIGHT.ringMargin : 0) });
+    // A slam: one light centred on its ring (drawn around the feet), the ring at slamCover of it.
+    if (slam) out.push({ x: e.x, y: e.y - e.z, r: Math.max(body, Math.ceil(slam / WARNING_LIGHT.slamCover)) });
+    else out.push({ x: e.x, y: e.y - e.z - (e.boss || e.final ? 16 : 6), r: body });
   }
   return out;
 }
+
+/** The light map's pixels per screen pixel (0.5: a quarter of the pixels to fill). */
+export const LIGHT_MAP_RESOLUTION = 0.5;
 
 const RAIN_SPEED = 320; // px/s on screen
 const RAIN_WIND = 120;
 const FLASH_MS = 260;
 
-/** A soft white disc (radial falloff) for lights. */
+/**
+ * A light's strength at `t` (0 at its centre, 1 at its edge): (1 - t²)², a smooth bell.
+ *
+ * v1.0 (final QA L-1, "the lights in rooms look like blotchy patches"): the disc used to be a
+ * straight cone (stops 1, 0.55 at 45%, 0: that is 1 - t), with a sharp peak in the middle and a
+ * hard crease where it stops at the edge. Over flat stone the eye reads such creases as edges (Mach
+ * bands), and two or three overlapping lights in a room made a patchwork of them. This curve is
+ * flat at the centre and meets 0 with a flat slope, and gives the same total light as the cone
+ * (both 1/3 of a full disc), so nights and the dark trials keep their light.
+ * @param {number} t
+ */
+export const lightFalloff = (t) => (t >= 1 ? 0 : (1 - t * t) ** 2);
+
+/** A soft white disc (radial falloff, lightFalloff) for lights. */
 function lightTexture() {
-  const size = 64;
+  const size = 128;
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const g = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
   const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.45, 'rgba(255,255,255,0.55)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  const steps = 24; // the canvas interpolates linearly between stops: 24 follow the curve within 1%
+  for (let k = 0; k <= steps; k++) grad.addColorStop(k / steps, `rgba(255,255,255,${lightFalloff(k / steps).toFixed(4)})`);
   g.fillStyle = grad;
   g.fillRect(0, 0, size, size);
   return Texture.from(c);
+}
+
+const AMB_DARK_ROOM = Object.freeze({ r: 0.1, g: 0.1, b: 0.16 });
+const AMB_HOME = Object.freeze({ r: 0.94, g: 0.86, b: 0.72 });
+const AMB_INDOOR = Object.freeze({ r: 0.55, g: 0.55, b: 0.65 });
+
+/** @typedef {{ radius: number, color: number }} FireLight */
+/** A fire's light (campfire, brazier, lit sconce): radius (world px) and colour. @type {Readonly<FireLight>} */
+export const FIRE_LIGHT = Object.freeze({ radius: 64, color: 0xffb070 });
+/**
+ * v1.0 (inspection of the minor fixes): a fire in a lit room (a cave, a mine, a trial that is not
+ * dark) reaches a little further. Its warm pool reads against the brighter room light
+ * (terrainArt.indoorLight) as it did before; near the fire the light map is at full strength
+ * either way, so only the reach can add to it.
+ */
+/** @type {Readonly<FireLight>} */
+export const FIRE_LIGHT_ROOM = Object.freeze({ radius: 72, color: 0xffb070 });
+
+/** @param {number[]} a @param {number[]} b */
+function sameNumbers(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }
 
 /** @param {{ r: number, g: number, b: number }} c */
@@ -66,15 +139,35 @@ const toHex = (c) => (Math.round(Math.min(1, c.r) * 255) << 16) | (Math.round(Ma
  * the first update: the light map was drawn at 8×8 then and stayed an 8×8 dot in the corner for
  * good, so the world was never darkened. (Without the title, the first draw came after the resize,
  * so it happened to work.) Hence `dynamic: true`, and the map stays hidden until it is first filled.
+ * v1.0 (iPhone perf): drawn at LIGHT_MAP_RESOLUTION and stretched back with linear filtering. With
+ * an odd screen size the texture is up to one map pixel larger than the screen (it still starts at
+ * the top left, so screen and map coordinates match).
  */
 export function createLightMap() {
-  const rt = RenderTexture.create({ width: 8, height: 8, dynamic: true });
+  const rt = RenderTexture.create({ width: 8, height: 8, dynamic: true, resolution: LIGHT_MAP_RESOLUTION, scaleMode: 'linear' });
   const overlay = new Sprite(rt);
   overlay.blendMode = 'multiply';
   overlay.label = 'light-map';
   overlay.visible = false;
   return { rt, overlay };
 }
+
+/**
+ * v1.0 (C5, C9): whether the beach ring is open (lit): a gate to the source until the ending is seen,
+ * and its one flash in the opening. Drawn as obj.star_ring.on (gameView) and lit at night (below).
+ * @param {any} state
+ */
+export const starRingOpen = (state) => (!!state.progress?.flags.source_open && !state.progress.flags.ending_seen) || !!openingView(state)?.flash;
+
+/**
+ * The shock crystal's night light: the placeholder's cyan, or with the release art (a pale-yellow
+ * crystal) the shock ramp's 3rd step #eeea88, the colour of its lit faces (v1.0).
+ * @param {import('pixi.js').Texture} tex the crystal's texture in use
+ */
+export const crystalLightColor = (tex) => (tex.source.resolution >= 2 ? 0xeeea88 : 0x60d8ff);
+
+/** The lit ring's light: the hero's gem blue, about the size of the ring's glow (v1.0). */
+export const STAR_RING_LIGHT = Object.freeze({ radius: 40, color: 0x7fe8ff });
 
 export class WeatherView {
   /**
@@ -86,8 +179,18 @@ export class WeatherView {
     this.app = app;
     this.renderer = app.renderer;
     this.makeSprite = makeSprite;
+    /** The ambient light indoors (caves, mines, trial rooms); v1.0: set by the view (terrainArt.indoorLight). @type {{ r: number, g: number, b: number }} */
+    this.indoorAmbient = AMB_INDOOR;
+    /** The shock crystals' light colour (crystalLightColor; set by the game view from the art in use). */
+    this.crystalLight = 0x60d8ff;
+    /** Fires' light (campfire, brazier, lit sconce): FIRE_LIGHT, or FIRE_LIGHT_ROOM in a lit room. */
+    /** @type {FireLight} */
+    this.fire = { ...FIRE_LIGHT };
+    /** @type {FireLight} */
+    this.fireRoom = { ...FIRE_LIGHT_ROOM };
     // Light map.
-    this.lightTex = lightTexture();
+    /** The soft disc for lights, made on first use. @type {Texture | null} */
+    this.lightTex = null;
     this.lightScene = new Container();
     this.ambientFill = new Sprite(Texture.WHITE);
     this.lightScene.addChild(this.ambientFill);
@@ -120,6 +223,35 @@ export class WeatherView {
     this.lightMs = 0;
     this.lightOn = false;
     this.enabled = true;
+    /** The light map's requested size (the texture may round up by one map pixel). */
+    this.rtW = 0;
+    this.rtH = 0;
+    /** What the light map was last drawn from (screen size, ambient, every light); reused buffers. */
+    this.lightSig = /** @type {number[]} */ ([]);
+    this.lastLightSig = /** @type {number[]} */ ([]);
+    this.flashW = 0;
+    this.flashH = 0;
+    this.rainAngle = NaN;
+    this.rainDrops = 0;
+    /** Work counters (unit tests and profiling): light map renders and skips, flash rebuilds. */
+    this.stats = { lightRenders: 0, lightSkips: 0, flashRebuilds: 0 };
+    // The light map is redrawn only when its inputs change, but its pixels live on the GPU: when
+    // iOS drops the WebGL context (the app in the background) and Pixi restores it, the texture
+    // comes back empty while the hero may still be standing still. Redraw after a context restore,
+    // when the page becomes visible again and after the renderer is resized.
+    const r = /** @type {any} */ (this.renderer);
+    r.runners?.contextChange?.add({ contextChange: () => this.invalidateLightMap() });
+    r.on?.('resize', () => this.invalidateLightMap());
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') this.invalidateLightMap();
+      });
+    }
+  }
+
+  /** Forgets what the light map was drawn from, so the next update draws it again. */
+  invalidateLightMap() {
+    this.lastLightSig.length = 0;
   }
 
   /** Adds the screen-space layers in order: light map, rain, snow, bolt, flash. @param {Container} stage @param {number} index */
@@ -146,7 +278,13 @@ export class WeatherView {
     const nowMs = timeSec * 1000;
 
     // --- lightning ---
-    const bolt = [...state.events].reverse().find((e) => e.type === 'lightning');
+    let bolt = null;
+    for (let j = state.events.length - 1; j >= 0; j--) {
+      if (state.events[j].type === 'lightning') {
+        bolt = state.events[j];
+        break;
+      }
+    }
     if (bolt && bolt.tick !== this.lastBoltTick) {
       this.lastBoltTick = bolt.tick;
       this.flashUntil = nowMs + FLASH_MS;
@@ -154,9 +292,18 @@ export class WeatherView {
     }
     const flashing = nowMs < this.flashUntil;
     const k = flashing ? (this.flashUntil - nowMs) / FLASH_MS : 0;
-    this.flash.clear();
     this.bolt.alpha = k;
-    if (flashing && !indoor) this.flash.rect(0, 0, sw, sh).fill({ color: 0xffffff, alpha: 0.45 * k });
+    // The flash is one white rect built once per screen size; only its alpha changes per frame.
+    this.flash.visible = flashing && !indoor;
+    if (this.flash.visible) {
+      if (this.flashW !== sw || this.flashH !== sh) {
+        this.flashW = sw;
+        this.flashH = sh;
+        this.flash.clear().rect(0, 0, sw, sh).fill({ color: 0xffffff, alpha: 1 });
+        this.stats.flashRebuilds++;
+      }
+      this.flash.alpha = 0.45 * k;
+    }
     const st = env.strike;
     this.warn.visible = !!st;
     if (st) {
@@ -173,19 +320,38 @@ export class WeatherView {
     const t0 = performance.now();
     // Indoors is dim; a dark trial room is nearly black until something gives light (P7).
     // P10.1: a lived-in room is warm and lamp-lit at any hour.
-    const amb = area?.dark ? { r: 0.1, g: 0.1, b: 0.16 } : area?.home ? { r: 0.94, g: 0.86, b: 0.72 } : indoor ? { r: 0.55, g: 0.55, b: 0.65 } : ambientAt(env.now, w.kind);
+    const amb = area?.dark ? AMB_DARK_ROOM : area?.home ? AMB_HOME : indoor ? this.indoorAmbient : ambientAt(env.now, w.kind);
     const white = amb.r >= 0.999 && amb.g >= 0.999 && amb.b >= 0.999;
     this.lightOn = this.enabled && !white;
     this.overlay.visible = this.lightOn;
     if (this.lightOn) {
-      if (this.rt.width !== sw || this.rt.height !== sh) this.rt.resize(sw, sh);
-      this.ambientFill.width = sw;
-      this.ambientFill.height = sh;
-      this.ambientFill.tint = toHex(amb);
+      if (this.rtW !== sw || this.rtH !== sh) {
+        this.rtW = sw;
+        this.rtH = sh;
+        this.rt.resize(sw, sh, LIGHT_MAP_RESOLUTION);
+      }
+      const ambHex = toHex(amb);
+      this.ambientFill.width = this.rt.width;
+      this.ambientFill.height = this.rt.height;
+      this.ambientFill.tint = ambHex;
+      const sig = this.lightSig;
+      sig.length = 0;
+      sig.push(sw, sh, ambHex);
       let n = 0;
-      if (isDark(amb) || indoor) n = this.placeLights(state, origin, zoom, timeSec, sw, sh);
+      // A lit room (caves, mines, trials that are not dark): its fires get FIRE_LIGHT_ROOM.
+      const fire = amb === this.indoorAmbient ? this.fireRoom : this.fire;
+      if (isDark(amb) || indoor) n = this.placeLights(state, origin, zoom, timeSec, sw, sh, sig, fire);
       for (let j = n; j < this.lights.length; j++) this.lights[j].visible = false;
-      this.renderer.render({ container: this.lightScene, target: this.rt, clear: true });
+      if (sameNumbers(sig, this.lastLightSig)) {
+        this.stats.lightSkips++; // nothing moved, flickered or changed colour: the map is still right
+      } else {
+        this.renderer.render({ container: this.lightScene, target: this.rt, clear: true });
+        this.stats.lightRenders++;
+        this.lightSig = this.lastLightSig;
+        this.lastLightSig = sig;
+      }
+    } else {
+      this.lastLightSig.length = 0; // redraw when the map is next needed
     }
     this.lightMs = performance.now() - t0;
 
@@ -210,9 +376,11 @@ export class WeatherView {
       this.snow.addChild(s);
       this.flakes.push({ s, x: Math.random() * sw, y: Math.random() * sh, phase: Math.random() * 6.28, speed: big ? 34 : 22 });
     }
-    this.flakes.forEach((f, j) => {
+    const flakes = this.flakes;
+    for (let j = 0; j < flakes.length; j++) {
+      const f = flakes[j];
       f.s.visible = j < want;
-      if (j >= want) return;
+      if (j >= want) continue;
       f.x += (w.windX * 30 + Math.sin(timeSec * 1.7 + f.phase) * 10) * dt;
       f.y += f.speed * dt;
       if (f.y > sh) {
@@ -222,11 +390,11 @@ export class WeatherView {
       if (f.x < 0) f.x += sw;
       if (f.x > sw) f.x -= sw;
       f.s.position.set(Math.round(f.x), Math.round(f.y));
-    });
+    }
   }
 
   /** @returns {number} lights used */
-  placeLights(/** @type {any} */ state, /** @type {{ x: number, y: number }} */ o, /** @type {number} */ zoom, /** @type {number} */ timeSec, /** @type {number} */ sw, /** @type {number} */ sh) {
+  placeLights(/** @type {any} */ state, /** @type {{ x: number, y: number }} */ o, /** @type {number} */ zoom, /** @type {number} */ timeSec, /** @type {number} */ sw, /** @type {number} */ sh, /** @type {number[]} */ sig = [], fire = this.fire) {
     const env = state.env;
     const map = state.map;
     const ts = map.tileSize;
@@ -238,7 +406,7 @@ export class WeatherView {
       if (x < -r || y < -r || x > sw + r || y > sh + r) return;
       let s = this.lights[n];
       if (!s) {
-        s = new Sprite(this.lightTex);
+        s = new Sprite((this.lightTex ??= lightTexture()));
         s.anchor.set(0.5);
         s.blendMode = 'add';
         this.lightScene.addChild(s);
@@ -249,6 +417,7 @@ export class WeatherView {
       s.position.set(x, y);
       s.width = s.height = r * 2;
       s.tint = color;
+      sig.push(x, y, r, color);
     };
     const flicker = (/** @type {number} */ i) => 1 + 0.08 * Math.sin(timeSec * 9 + i);
     // The player's own small glow, so night is dark but playable.
@@ -261,12 +430,13 @@ export class WeatherView {
       if (ob.gone) continue;
       const x = (i % map.width) * ts + ts / 2;
       const y = ((i / map.width) | 0) * ts + ts / 2 - map.elev[i];
-      if (ob.type === 'campfire' || ob.type === 'brazier' || (ob.type === 'sconce' && ob.lit)) add(x, y - 6, 64 * flicker(i), 0xffb070);
+      if (ob.type === 'campfire' || ob.type === 'brazier' || (ob.type === 'sconce' && ob.lit)) add(x, y - 6, fire.radius * flicker(i), fire.color);
       else if (ob.type === 'stove') add(x, y - 4, 40 * flicker(i), 0xffa860);
       else if (ob.type === 'stone' && ob.glow) add(x, y - 8, 30, 0x7fe8ff);
       else if (ob.type === 'pillar' || ob.type === 'altar') add(x, y - 10, 30, 0x7fe8ff);
-      else if (ob.type === 'crystal') add(x, y - 8, 26, 0x60d8ff);
+      else if (ob.type === 'crystal') add(x, y - 8, 26, this.crystalLight);
       else if (ob.type === 'receiver' && ob.on) add(x, y - 8, 22, 0x60d8ff);
+      else if (ob.type === 'star_ring' && starRingOpen(state)) add(x, y - 12, STAR_RING_LIGHT.radius, STAR_RING_LIGHT.color);
     }
     if (state.orb) add(state.orb.x, state.orb.y - state.orb.z, 80, 0xfff0c8); // 灯火
     if (env.sparks) for (const i of env.sparks.cells) add((i % map.width) * ts + ts / 2, ((i / map.width) | 0) * ts + ts / 2, 20, 0xfff27a);
@@ -290,9 +460,20 @@ export class WeatherView {
     const vx = w.windX * RAIN_WIND;
     const vy = RAIN_SPEED;
     const angle = Math.atan2(vx, vy);
-    this.drops.forEach((d, j) => {
-      d.s.visible = j < want;
-      if (j >= want) return;
+    // All drops share the wind's angle: set it only when the wind changes (or new drops appear).
+    const turn = angle !== this.rainAngle || this.drops.length !== this.rainDrops;
+    this.rainAngle = angle;
+    this.rainDrops = this.drops.length;
+    const drops = this.drops;
+    for (let j = 0; j < drops.length; j++) {
+      const d = drops[j];
+      const s = d.s;
+      if (turn) s.rotation = -angle;
+      if (j >= want) {
+        s.visible = false;
+        continue;
+      }
+      s.visible = true;
       d.x += vx * dt;
       d.y += vy * dt;
       if (d.y > sh) {
@@ -301,9 +482,8 @@ export class WeatherView {
       }
       if (d.x < 0) d.x += sw;
       if (d.x > sw) d.x -= sw;
-      d.s.position.set(Math.round(d.x), Math.round(d.y));
-      d.s.rotation = -angle;
-    });
+      s.position.set(Math.round(d.x), Math.round(d.y));
+    }
   }
 
   /** A zigzag bolt from the top of the screen to the strike. */

@@ -11,6 +11,17 @@ const ICON_BY_ID = /** @type {Record<string, string>} */ ({
   beast_fang: 'icon.fang',
   murk_crystal: 'icon.shard',
   arrow: 'icon.arrows',
+  star_shard: 'icon.star_shard', // v1.0: the key items' own icons
+  lost_charm: 'icon.charm',
+  // v1.0.1: weapons and armour that borrowed another icon (tools/object_release/icons_v1_1.py ITEM_ICONS)
+  guard_spear: 'icon.spear',
+  rusty_greatsword: 'icon.greatsword',
+  ember_sword: 'icon.ember_sword',
+  star_steel_sword: 'icon.star_sword',
+  insulated_cap: 'icon.cap',
+  grip_boots: 'icon.boots',
+  // v1.0.1: one icon per dish (icon.food stays the fallback of the food type)
+  ...Object.fromEntries(['grilled_meat', 'mushroom_skewer', 'berry_jam', 'hunter_stew', 'ember_soup', 'hearty_skewer', 'mixed_stew', 'dubious_food'].map((id) => [id, `icon.dish.${id}`])),
 });
 const ICON_BY_TYPE = /** @type {Record<string, string>} */ ({ weapon: 'icon.sword', bow: 'icon.bow', armor: 'icon.armor', food: 'icon.food', material: 'icon.berry', ammo: 'icon.arrows' });
 

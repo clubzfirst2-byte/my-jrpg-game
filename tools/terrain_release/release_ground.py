@@ -282,14 +282,20 @@ def ruin_floor():
 # ---------------------------------------------------------------------------------------------
 # Wood floor (wood): boards 8 px tall, joints staggered per row, grain marks, a knot.
 # ---------------------------------------------------------------------------------------------
-WOOD_ROWS = [(0, 8, 0, [20, 12]), (8, 8, 7, [14, 18]), (16, 8, 3, [24, 8]), (24, 8, 12, [10, 22])]
-GRAIN = [(4, 3, 5, 1), (24, 4, 4, 3), (12, 11, 6, 1), (27, 13, 3, 3), (6, 19, 4, 3), (17, 20, 6, 1), (2, 27, 5, 1),
+# Long boards: one end joint per row in a tile, staggered (short boards in staggered rows read as bricks).
+WOOD_ROWS = [(0, 8, 5, [32]), (8, 8, 21, [32]), (16, 8, 13, [32]), (24, 8, 28, [32])]
+GRAIN = [(14, 4, 5, 1), (24, 3, 4, 3), (12, 11, 6, 1), (27, 13, 3, 3), (6, 19, 4, 3), (17, 20, 6, 1), (2, 27, 5, 1),
          (20, 28, 4, 3)]  # (x, y, length, tone)
 KNOT = [
     ".11.",
     "1331",
     ".11.",
 ]
+
+
+# Plank seams use tone 1, not 0 (approved by the human, art/inn-floor): with near-black seams (0 =
+# #1e1008, 18 % of the tile) and short boards the darkened interior floor read as a brick wall in the game.
+WOOD_SEAM = 1
 
 
 def wood_floor():
@@ -300,14 +306,14 @@ def wood_floor():
             for k in range(w):
                 t.put(x + k, y0, "wood", 3)
                 t.put(x + k, y0 + hgt - 2, "wood", 1)
-                t.put(x + k, y0 + hgt - 1, "wood", 0)
+                t.put(x + k, y0 + hgt - 1, "wood", WOOD_SEAM)
             for y in range(y0, y0 + hgt - 1):
-                t.put(x, y, "wood", 0)
+                t.put(x, y, "wood", WOOD_SEAM)
             x += w
     for x, y, n, tn in GRAIN:
         for k in range(n):
             t.put(x + k, y, "wood", tn)
-    t.stamp(9, 2, KNOT, tones("wood"))
+    t.stamp(8, 2, KNOT, tones("wood"))
     return t
 
 

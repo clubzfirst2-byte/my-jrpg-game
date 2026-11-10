@@ -22,6 +22,8 @@ import {
 } from '../game/items/inventory.js';
 import { ABILITY_NAMES } from '../game/puzzles/abilities.js';
 import { questLog } from '../game/npc/talk.js';
+import { scrollCue } from './scrollCue.js';
+import { itemIconElement } from '../view/assets/objectsArt.js';
 
 /** @typedef {'weapon' | 'bow' | 'armor' | 'material' | 'food' | 'power' | 'quest' | 'cook' | 'forge'} Tab */
 
@@ -83,6 +85,7 @@ export class InventoryMenu {
     this.body.className = 'inv-body';
     this.el.append(this.head, this.body);
     root.append(this.bagButton, this.useButton, this.el);
+    this.cue = scrollCue(this.el, () => this.body);
   }
 
   get isOpen() {
@@ -116,6 +119,8 @@ export class InventoryMenu {
 
   close() {
     this.el.hidden = true;
+    this.cooked = null; // the "できた" row is only for the visit to the pot it was cooked in
+    this.cookedNew = false;
     this.hooks.onClose();
   }
 
@@ -124,7 +129,13 @@ export class InventoryMenu {
     else this.open();
   }
 
+  /** Draws the menu, then updates its "more below" cue. */
   render() {
+    this.renderContent();
+    this.cue();
+  }
+
+  renderContent() {
     const s = this.hooks.getState();
     const inv = s.progress.inv;
     this.money.textContent = `★ ${inv.money} 星貨`;
@@ -135,6 +146,7 @@ export class InventoryMenu {
     this.tabs.replaceChildren(
       ...tabs.map((t) => {
         const b = button(`inv-tab-${t}`, TAB_NAMES[t], () => {
+          if (this.tab !== t) this.body.scrollTop = 0; // v1.0 QA2: a new tab starts at its top
           this.tab = t;
           this.render();
         });
@@ -167,7 +179,7 @@ export class InventoryMenu {
             row(`inv-${kind}-${i}`, `${on ? '◆ ' : ''}${d.name}${g.lvl ? ` +${g.lvl}` : ''}`, `耐久 ${g.dur}/${d.durability}  ${d.desc}`, on, () => {
               equipGear(inv, kind, i);
               this.render();
-            }),
+            }, g.id),
           );
         });
         break;
@@ -183,7 +195,7 @@ export class InventoryMenu {
             row(`inv-armor-${id}`, `${on ? '◆ ' : ''}${d.name}（${slot}）`, `防御 ${d.defense}  ${d.desc}`, on, () => {
               equipArmor(inv, id);
               this.render();
-            }),
+            }, id),
           );
         }
         break;
@@ -199,7 +211,7 @@ export class InventoryMenu {
           const effect = d.effect ? `・${EFFECT_NAMES[d.effect.kind]}` : '';
           const canEat = heal > 0 || !!d.effect;
           list.append(
-            row(`inv-item-${id.replace(':', '-')}`, `${d.name} ×${inv.items[id]}`, `${canEat ? `食べる：回復 ${heal / 4} ハート${effect}  ` : ''}${d.desc}`, false, canEat ? () => this.eat(id) : null),
+            row(`inv-item-${id.replace(':', '-')}`, `${d.name} ×${inv.items[id]}`, `${canEat ? `食べる：回復 ${heal / 4} ハート${effect}  ` : ''}${d.desc}`, false, canEat ? () => this.eat(id) : null, id),
           );
         }
         break;
@@ -258,7 +270,7 @@ export class InventoryMenu {
       );
     }
     const n = countOf(pr.inv, 'star_shard');
-    const line = row('inv-shards', `星の欠片 ×${n}`, `1 つで ハート +1（最大 ${SHARD.maxHearts}）か がんばり +${SHARD.stamina}（最大 ${SHARD.maxStamina}）`, false, null);
+    const line = row('inv-shards', `星の欠片 ×${n}`, `1 つで ハート +1（最大 ${SHARD.maxHearts}）か がんばり +${SHARD.stamina}（最大 ${SHARD.maxStamina}）`, false, null, 'star_shard');
     const actions = document.createElement('div');
     actions.className = 'inv-actions';
     for (const [kind, label] of /** @type {const} */ ([['heart', 'ハート +1'], ['stamina', 'がんばり +']])) {
@@ -294,17 +306,30 @@ export class InventoryMenu {
       const hint = document.createElement('span');
       hint.className = 'inv-hint';
       hint.textContent = `→ ${known ? itemDef(result).name : '？？？'}`;
+      if (known) {
+        const icon = itemIconElement(result);
+        icon.style.marginRight = '4px';
+        hint.prepend(icon);
+      }
       pot.append(
         hint,
         button('inv-cook', '料理する', () => {
           const r = cook(inv, this.pot);
-          if (r) this.hooks.toast(`${r.name}ができた！${r.discovered ? '（新しいレシピ）' : ''}`);
+          // v1.0 QA4 (L-4): no toast here: it covered the pot and the できた row, which already
+          // says what was made (and whether the recipe is new).
+          this.cooked = r ? r.result : null;
+          this.cookedNew = !!r?.discovered;
           this.pot = [];
           this.render();
         }),
       );
     }
     list.append(pot);
+    // v1.0.1: what was just cooked, with its icon (until the next ingredient goes in)
+    if (this.cooked && this.pot.length === 0 && (inv.items[this.cooked] ?? 0) > 0) {
+      const id = this.cooked;
+      list.append(row('inv-cooked', `できた：${itemDef(baseId(id)).name}${this.cookedNew ? '（新しいレシピ）' : ''}`, `持ち物 ×${inv.items[id] ?? 0}`, false, null, id));
+    }
     const mats = Object.keys(inv.items).filter((id) => itemDef(baseId(id)).type === 'material');
     if (mats.length === 0) {
       const p = document.createElement('p');
@@ -315,11 +340,13 @@ export class InventoryMenu {
     for (const id of mats) {
       const used = this.pot.filter((x) => x === id).length;
       const left = inv.items[id] - used;
+      if (left <= 0) continue; // all of it is in the pot (or used up): no "×0" row
       list.append(
         row(`inv-add-${id}`, `${itemDef(id).name} ×${left}`, '鍋に入れる（3 つまで）', false, left > 0 && this.pot.length < 3 ? () => {
+          this.cooked = null;
           this.pot.push(id);
           this.render();
-        } : null),
+        } : null, id),
       );
     }
     const known = ITEMS.recipes.filter((/** @type {any} */ r) => inv.recipes.includes(r.result));
@@ -341,7 +368,7 @@ export class InventoryMenu {
       const d = itemDef(g.id);
       const up = nextUpgrade(g);
       const cost = up ? `${up.money} 星貨${Object.entries(up.materials ?? {}).map(([id, n]) => `・${itemDef(id).name}×${n}`).join('')}` : '';
-      const line = row(`inv-forge-${i}`, `${d.name}${g.lvl ? ` +${g.lvl}` : ''}`, `耐久 ${g.dur}/${d.durability}${up ? `  強化（+${up.level}）：${cost}` : '  これ以上は強化できない'}`, false, null);
+      const line = row(`inv-forge-${i}`, `${d.name}${g.lvl ? ` +${g.lvl}` : ''}`, `耐久 ${g.dur}/${d.durability}${up ? `  強化（+${up.level}）：${cost}` : '  これ以上は強化できない'}`, false, null, g.id);
       const actions = document.createElement('div');
       actions.className = 'inv-actions';
       const upB = button(`inv-upgrade-${i}`, '強化', () => {
@@ -364,7 +391,7 @@ export class InventoryMenu {
     inv.bows.forEach((/** @type {any} */ g, /** @type {number} */ i) => {
       const d = itemDef(g.id);
       const rc = repairCost(g);
-      const line = row(`inv-forge-bow-${i}`, d.name, `耐久 ${g.dur}/${d.durability}`, false, null);
+      const line = row(`inv-forge-bow-${i}`, d.name, `耐久 ${g.dur}/${d.durability}`, false, null, g.id);
       const fix = button(`inv-repair-bow-${i}`, rc > 0 ? `修理 ${rc}` : '修理', () => {
         const r = repairGear(inv, 'bow', i);
         this.hooks.toast(r === 'ok' ? `${d.name}を直した` : r === 'cost' ? '星貨が足りない' : '傷んでいない');
@@ -390,11 +417,13 @@ function button(id, text, onClick) {
 /**
  * @param {string} id @param {string} title @param {string} detail @param {boolean} active
  * @param {(() => void) | null} onClick
+ * @param {string} [item] the item the row is about: its icon goes before the title (v1.0)
  */
-function row(id, title, detail, active, onClick) {
+function row(id, title, detail, active, onClick, item) {
   const el = document.createElement('div');
   el.className = `inv-row${active ? ' active' : ''}`;
   el.id = id;
+  if (item) el.append(itemIconElement(item));
   const t = document.createElement('div');
   t.className = 'inv-row-title';
   t.textContent = title;

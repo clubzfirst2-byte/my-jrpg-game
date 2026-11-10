@@ -62,6 +62,16 @@ def draw(p):
     torso = r.m_poly([(cx - 10, top), (cx + 10, top - 1), (cx + 11, top + 5), (cx + 8, hip_y - 3), (cx - 7, hip_y - 3), (cx - 10, top + 5)])
     r.add(torso, "oldstone", soft=3)
     r.add(r.m_poly([(cx - 9, top + 11), (cx + 10, top + 10), (cx + 9.6, top + 13), (cx - 8.6, top + 14)]), "bronze", soft=1)
+    # armour detail, hand-placed (v1.0 finish): rivets on the band, the seam between the chest
+    # plates with a lit lip, and the line where the shoulder plate overlaps the chest
+    # (v1.0 finish 2) rivets 2x2 with a lit top-left pixel, so they read at 1x
+    for x_, y_ in ((cx - 7, top + 11), (cx - 2, top + 11), (cx + 3, top + 10), (cx + 7, top + 10)):
+        r.stamp(x_, y_, ["ab", "bc"], {"a": ("bronze", 4), "b": ("bronze", 3), "c": ("bronze", 0)})
+    # plate edges: a dark seam (tone 0) with a bright lip beside it
+    r.add(r.m_line(cx + 4, top + 1, cx + 4, top + 9), "oldstone", tone=0, cast=False)
+    r.add(r.m_line(cx + 5, top + 1, cx + 5, top + 9), "oldstone", tone=4, cast=False)
+    r.add(r.m_line(cx - 9, top + 8, cx + 3, top + 8), "oldstone", tone=0, cast=False)
+    r.add(r.m_line(cx - 9, top + 9, cx + 3, top + 9), "oldstone", tone=3, cast=False)
     # the chest plate emblem: a dim diamond with a centre point (the light gone out, tainted glow).
     # Symmetric left-right, so it reads the same when the game mirrors the sprite (no letter shape)
     r.stamp(cx - 2, top + 3, ["..a..", ".a.a.", "a.b.a", ".a.a.", "..a.."], {"a": ("glow", 1), "b": ("glow", 2)})

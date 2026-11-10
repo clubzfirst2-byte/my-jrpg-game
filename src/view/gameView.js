@@ -8,7 +8,8 @@
 // Sort keys: characters/objects use their feet y; an elevated terrain row uses its NORTH edge.
 // That one rule puts a character behind a cliff when north of it, on top of it when standing on it,
 // and in front of it when south of it.
-import { Container, Graphics, Sprite } from 'pixi.js';
+import { Container, Graphics, Rectangle, Sprite, Texture, TexturePool } from 'pixi.js';
+import { chunkRange, CHUNK_KEEP_MARGIN_TILES, CHUNK_LOAD_MARGIN_TILES } from './chunkRange.js';
 import { Ground, Shape, LEVEL_PX, inBounds, northEdgeHeight, southEdgeHeight } from '../game/world/tilemap.js';
 import { lerp } from '../game/core/math.js';
 import { Camera } from './camera.js';
@@ -20,7 +21,7 @@ import { areaAt } from '../game/world/features.js';
 import { sourceFrameKey, drawSourceTelegraphs, drawSeatLights } from './sourceView.js';
 import { FeatureView } from './featureView.js';
 import { EnvView } from './envView.js';
-import { WeatherView } from './weatherView.js';
+import { WeatherView, starRingOpen, crystalLightColor } from './weatherView.js';
 import { ItemView } from './itemView.js';
 import { PuzzleView } from './puzzleView.js';
 import { NpcView } from './npcView.js';
@@ -28,6 +29,7 @@ import { regionAt, outdoorAt } from '../game/world/world.js';
 import { seasonAt } from '../game/env/weather.js';
 import { SEASON_ENTRIES, seasonKeys, SOURCE_BUNDLE, SOURCE_REGIONS } from './assets/placeholderPack.js';
 import { HeroAnimator } from './heroAnim.js';
+import { faceMaterial, faceVariant, groundCacheResolution, groundVariant, indoorLight, levelBrightness, releaseSeasonKeys, usesReleaseTerrain, waterAround, waterEdgePieces } from './assets/terrainArt.js';
 import { openingView } from '../game/story/story.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
 import { SilhouetteCache, placeFlash } from './flashOverlay.js';
@@ -37,8 +39,30 @@ import { EnemySlots } from './enemySlots.js';
 export const CHUNK = 32;
 
 /**
+ * The area a chunk's flat ground is cached over (world px): always the whole chunk, never just the
+ * part that has flat ground in it.
+ *
+ * v1.0 final (QA C-1, "a thin black line across the grass north of the beach ring"): the cache
+ * texture used to be sized to the flat ground's bounds. A chunk whose top rows are raised (drawn in
+ * the Y-sorted rows instead) then asked for e.g. 512×384, and PixiJS's texture pool (8.21+) gave it a
+ * texture backed at the SCREEN's height (394 at 852×393, DPR 2) rather than a power of two. With a
+ * backing taller than the frame, the tiles' pixel snapping in that render lands a few tile edges one
+ * texel off, leaving 1-texel rows of the cache transparent: a dark line across the whole chunk
+ * (island chunk 1,1: world rows 46 and 58). It only showed at screen sizes whose height a chunk's flat
+ * part fits under. A whole chunk is 512×512 (CHUNK × 16 px, a power of two): the pool always backs
+ * that at exactly 512×512, so frame and backing match at every screen size. (Also a chunk at the
+ * edge of a map whose size is not a whole number of chunks: the area past the edge stays transparent.)
+ * @param {number} cx @param {number} cy @param {number} ts tile size (px)
+ */
+export function chunkCacheArea(cx, cy, ts) {
+  const size = CHUNK * ts;
+  return { x: cx * size, y: cy * size, width: size, height: size };
+}
+
+/**
  * @typedef {import('../game/world/world.js').RegionInfo} RegionInfo
  * @typedef {{ cx: number, cy: number, base: Container, rows: Map<number, Container>, water: Sprite[],
+ *   edges: { sprite: Sprite, key: string }[],
  *   extents: Map<number, { x0: number, x1: number, y0: number, y1: number }[]>, bundles: string[] }} Chunk
  */
 
@@ -64,11 +88,13 @@ const CLIFF_SHADOW_ALPHA = 0.32;
 
 /**
  * Higher ground is drawn slightly brighter so levels read at a glance (multiplicative tint).
+ * v1.0: the release terrain is tinted less (terrainArt.levelBrightness).
  * @param {number} heightPx
+ * @param {boolean} [release] whether the terrain is the release art
  */
-export function levelTint(heightPx) {
+export function levelTint(heightPx, release = false) {
   const level = heightPx / LEVEL_PX;
-  const v = Math.round(255 * Math.min(1, 0.8 + 0.07 * level));
+  const v = Math.round(255 * levelBrightness(level, release));
   return (v << 16) | (v << 8) | v;
 }
 
@@ -83,6 +109,8 @@ export class GameView {
   constructor(app, assets, state) {
     this.app = app;
     this.assets = assets;
+    /** v1.0: the terrain is drawn from its release art (its brightness and variants, terrainArt.js). */
+    this.releaseTerrain = usesReleaseTerrain(assets);
     /** P10.2: the season the world is drawn for, and its art bundle (held while it lasts). */
     /** @type {string | null} */
     this.season = null;
@@ -123,6 +151,21 @@ export class GameView {
     this.objectSprites = new Map();
     /** @type {RegionInfo[]} */
     this.regions = state.regions ?? [];
+    /**
+     * v1.0 QA4 L-6: the desert's trees stand on a tile of grass (the map's tree tile), which read as
+     * a square green patch in the sand; with the release terrain those tiles are drawn as desert sand
+     * (only the look: the ground stays grass for the game, so fire and saves are unchanged).
+     * @type {Set<number>}
+     */
+    /** QA4 L-1: quarters of shore pieces, per texture (dropped with it). @type {WeakMap<Texture, Map<string, Texture>>} */
+    this.edgeQuarters = new WeakMap();
+    this.sandUnderTrees = new Set(
+      this.releaseTerrain
+        ? (state.map.objects ?? [])
+            .filter((/** @type {any} */ o) => o.type === 'tree' && state.map.ground[o.ty * state.map.width + o.tx] === Ground.GRASS && regionAt(this.regions, o.tx, o.ty)?.id === 'desert')
+            .map((/** @type {any} */ o) => o.ty * state.map.width + o.tx)
+        : [],
+    );
     /** Bundles being loaded (async). @type {Set<string>} */
     this.bundlesLoading = new Set();
     /** Bundles loaded ahead of their chunks (one reference held here). @type {Set<string>} */
@@ -130,6 +173,10 @@ export class GameView {
     /** Load every chunk at once (?chunks=all: for comparing against streaming). */
     this.loadAll = false;
     this.chunkStats = { built: 0, freed: 0, pending: 0, updates: 0 };
+    /** Chunks were freed since the last update: their cache textures sit idle in the TexturePool. */
+    this.chunkCachesFreed = false;
+    /** v1.1: shore tiles whose corner water has no piece (left plain sand), counted as chunks are built. */
+    this.edgeStats = { fallbacks: 0 };
     this.hasBraziers = this.map.objects.some((o) => o.type === 'brazier');
     // Screen-space layer above the world (landmark markers).
     this.screenLayer = new Container();
@@ -172,7 +219,9 @@ export class GameView {
     );
     // Time of day and weather (P5): light map, rain, lightning, above the world.
     this.weather = new WeatherView(app, (key) => this.makeSprite(key), this.actors);
+    this.weather.crystalLight = crystalLightColor(assets.texture('obj.crystal'));
     this.weather.attach(app.stage, app.stage.getChildIndex(this.world) + 1);
+    this.weather.indoorAmbient = indoorLight(this.releaseTerrain);
     // (v1.0 attack warnings stay in the world, sorted with their enemy, so trees in front hide them;
     // at night the light map lights each winding-up enemy instead: weatherView.js warningLights.)
 
@@ -284,20 +333,23 @@ export class GameView {
     this.seasonLoaded = null;
     this.season = want;
     this.seasonKeySet = seasonKeys(want);
+    // v1.1: the release terrain's own season keys (autumn forest and mountains, the lips of the cliff
+    // variants), where the season's bundle has them.
+    if (this.releaseTerrain) for (const k of releaseSeasonKeys(want)) if (this.assets.hasTexture(`${want}.${k}`)) this.seasonKeySet.add(k);
     this.envVersion = -1;
   }
 
   /** @param {number} tx @param {number} ty */
   surfaceKey(tx, ty) {
-    const g = this.map.ground[ty * this.map.width + tx];
+    const g = this.drawnGround(tx, ty);
     // P8: each region dresses the same ground in its own art (its asset bundle).
     const region = regionAt(this.regions, tx, ty);
-    if (region?.id === 'desert' && g === Ground.SAND) return `desert.sand.${hash(tx, ty) % 3}`;
-    if (region?.id === 'plains' && g === Ground.GRASS) return `plains.grass.${hash(tx, ty) % 4}`;
+    if (region?.id === 'desert' && g === Ground.SAND) return `desert.sand.${this.variant(tx, ty, 3)}`;
+    if (region?.id === 'plains' && g === Ground.GRASS) return `plains.grass.${this.variant(tx, ty, 4)}`;
     // P10.3: the east column.
-    if (region?.id === 'forest' && g === Ground.GRASS) return `forest.grass.${hash(tx, ty) % 4}`;
-    if (region?.id === 'mountains' && g === Ground.GRASS) return `mountains.snow.${hash(tx, ty) % 4}`;
-    if (region?.id === 'lake' && g === Ground.GRASS) return `lake.grass.${hash(tx, ty) % 4}`;
+    if (region?.id === 'forest' && g === Ground.GRASS) return `forest.grass.${this.variant(tx, ty, 4)}`;
+    if (region?.id === 'mountains' && g === Ground.GRASS) return `mountains.snow.${this.variant(tx, ty, 4)}`;
+    if (region?.id === 'lake' && g === Ground.GRASS) return `lake.grass.${this.variant(tx, ty, 4)}`;
     if (g === Ground.WOOD) return 'tile.wood';
     if (g === Ground.WALL) return 'tile.walltop';
     if (g === Ground.DARK) return 'tile.dark';
@@ -306,8 +358,73 @@ export class GameView {
     if (g === Ground.RUIN) return 'tile.ruin';
     if (g === Ground.SAND) return 'tile.sand';
     if (g === Ground.METAL) return 'tile.metal';
-    if (g === Ground.PIT) return 'tile.pit';
-    return `tile.grass.${hash(tx, ty) % 3}`;
+    if (g === Ground.PIT) {
+      // v1.0: a pit's far wall is drawn on its top row only; below a pit tile it is all dark.
+      if (this.releaseTerrain && ty > 0 && this.map.ground[(ty - 1) * this.map.width + tx] === Ground.PIT) return 'tile.dark';
+      return 'tile.pit';
+    }
+    return `tile.grass.${this.variant(tx, ty, 3)}`;
+  }
+
+  /** Which of a ground's n variants tile (tx, ty) shows (terrainArt.groundVariant). @param {number} tx @param {number} ty @param {number} n */
+  variant(tx, ty, n) {
+    return groundVariant(hash(tx, ty), n, this.releaseTerrain);
+  }
+
+  /**
+   * v1.1: the water-edge pieces of a flat tile next to water (release terrain): a shore tile in place
+   * of the island's or the desert's sand, bank overlays on grass-like ground (terrainArt.waterEdgePieces).
+   * Only water at the same height counts. Counts the corners left plain (edgeStats.fallbacks).
+   * @param {number} tx @param {number} ty @returns {{ base: string | null, overlays: string[] } | null}
+   */
+  waterEdge(tx, ty) {
+    const map = this.map;
+    const i = ty * map.width + tx;
+    const g = this.drawnGround(tx, ty);
+    // v1.0 QA4 L-2: paths get the grass's bank too (their straight edge stood out beside the banks).
+    if (g !== Ground.SAND && g !== Ground.GRASS && g !== Ground.PATH) return null;
+    const water = (/** @type {number} */ dx, /** @type {number} */ dy) => {
+      const nx = tx + dx;
+      const ny = ty + dy;
+      if (!inBounds(map, nx, ny)) return false;
+      const j = ny * map.width + nx;
+      return map.ground[j] === Ground.WATER && map.elev[j] === map.elev[i];
+    };
+    const around = waterAround(water);
+    if (!around.mask && !around.corners.length) return null;
+    const kind = g !== Ground.SAND ? 'bank' : regionAt(this.regions, tx, ty)?.id === 'desert' ? 'shore-desert' : 'shore';
+    const pieces = waterEdgePieces(kind, around);
+    if (pieces.fallback) this.edgeStats.fallbacks++;
+    // Art missing (should not happen with the release terrain): the plain ground.
+    const ok = (/** @type {string} */ k) => this.assets.hasTexture(`${k.split('#')[0]}.0`);
+    return { base: pieces.base && ok(pieces.base) ? pieces.base : null, overlays: pieces.overlays.filter(ok) };
+  }
+
+  /**
+   * The texture of a water-edge piece at a water frame. "<key>#<corner>" (QA4 L-1) is that corner's
+   * quarter of the piece, cut once per texture and kept with it.
+   * @param {string} key @param {number} frame @returns {Texture}
+   */
+  edgeTexture(key, frame) {
+    const [k, quarter] = key.split('#');
+    const tex = this.assets.texture(`${k}.${frame}`);
+    if (!quarter) return tex;
+    let cut = this.edgeQuarters.get(tex);
+    if (!cut) this.edgeQuarters.set(tex, (cut = new Map()));
+    let q = cut.get(quarter);
+    if (!q) {
+      const f = tex.frame;
+      const [qx, qy] = edgeQuarterOffset(key, f.width);
+      q = new Texture({ source: tex.source, frame: new Rectangle(f.x + qx, f.y + qy, f.width / 2, f.height / 2) });
+      cut.set(quarter, q);
+    }
+    return q;
+  }
+
+  /** The ground a flat tile is drawn as (v1.0 QA4 L-6: desert tree tiles as sand). @param {number} tx @param {number} ty */
+  drawnGround(tx, ty) {
+    const i = ty * this.map.width + tx;
+    return this.sandUnderTrees.has(i) ? Ground.SAND : this.map.ground[i];
   }
 
   /** @param {number} cx @param {number} cy */
@@ -339,6 +456,8 @@ export class GameView {
     base.label = `chunk-${cx},${cy}`;
     /** @type {Sprite[]} */
     const water = [];
+    /** v1.1: water-edge pieces (shore tiles, bank overlays), animated with the water. @type {{ sprite: Sprite, key: string }[]} */
+    const edges = [];
     /** @type {Map<number, Container>} */
     const rows = new Map();
     /** @type {Map<number, { x0: number, x1: number, y0: number, y1: number }[]>} */
@@ -366,9 +485,20 @@ export class GameView {
         const x = tx * ts;
 
         if (h === 0 && !isRamp) {
-          const s = this.makeSprite(this.surfaceKey(tx, ty));
+          // v1.1: next to water, the release terrain's sand becomes a shore tile and grass gets a bank.
+          const edge = this.releaseTerrain ? this.waterEdge(tx, ty) : null;
+          const frame = Math.max(0, this.waterFrame);
+          const s = edge?.base ? new Sprite(this.assets.texture(`${edge.base}.${frame}`)) : this.makeSprite(this.surfaceKey(tx, ty));
           s.position.set(x, ty * ts);
           base.addChild(s);
+          if (edge?.base) edges.push({ sprite: s, key: edge.base });
+          for (const key of edge?.overlays ?? []) {
+            const o = new Sprite(this.edgeTexture(key, frame));
+            const [qx, qy] = edgeQuarterOffset(key, ts);
+            o.position.set(x + qx, ty * ts + qy);
+            base.addChild(o);
+            edges.push({ sprite: o, key });
+          }
           if (map.ground[i] === Ground.WATER) {
             if (this.waterFrame >= 0) s.texture = this.assets.texture(`tile.water.${this.waterFrame}`);
             water.push(s);
@@ -380,7 +510,7 @@ export class GameView {
         const top = ty * ts - h;
         const surface = this.makeSprite(isRamp ? 'tile.ramp' : this.surfaceKey(tx, ty));
         surface.position.set(x, top);
-        surface.tint = levelTint(isRamp ? h - LEVEL_PX / 2 : h);
+        surface.tint = levelTint(isRamp ? h - LEVEL_PX / 2 : h, this.releaseTerrain);
         row.addChild(surface);
 
         // South face: from this tile's south edge down to the south neighbor's north edge.
@@ -416,10 +546,14 @@ export class GameView {
         extents.set(ty, list);
       }
     }
-    base.tint = levelTint(0);
+    base.tint = levelTint(0, this.releaseTerrain);
     this.base.addChild(base);
-    // A chunk's flat ground -> one textured quad per frame.
-    base.cacheAsTexture({ scaleMode: 'nearest', antialias: false });
+    // A chunk's flat ground -> one textured quad per frame, cached over the whole chunk (see
+    // chunkCacheArea: a partial area could get a screen-sized texture and seams), at the terrain art's
+    // density (2 with the release terrain, else its fine pixels were halved: terrainArt.groundCacheResolution).
+    const area = chunkCacheArea(cx, cy, ts);
+    base.boundsArea = new Rectangle(area.x, area.y, area.width, area.height);
+    base.cacheAsTexture({ scaleMode: 'nearest', antialias: false, resolution: groundCacheResolution(this.releaseTerrain) });
 
     // Objects standing in this chunk now.
     for (const o of map.objects) {
@@ -427,7 +561,7 @@ export class GameView {
       this.addObjectSprite(o);
     }
     this.chunkStats.built++;
-    return { cx, cy, base, rows, water, extents, bundles: this.chunkBundles(cx, cy) };
+    return { cx, cy, base, rows, water, edges, extents, bundles: this.chunkBundles(cx, cy) };
   }
 
   /** @param {Chunk} c */
@@ -462,14 +596,16 @@ export class GameView {
     const size = CHUNK * ts;
     const ncx = Math.ceil(this.map.width / CHUNK);
     const ncy = Math.ceil(this.map.height / CHUNK);
-    const range = (/** @type {number} */ margin) => ({
-      x0: this.loadAll ? 0 : Math.max(0, Math.floor((origin.x - margin) / size)),
-      x1: this.loadAll ? ncx - 1 : Math.min(ncx - 1, Math.floor((origin.x + viewW + margin) / size)),
-      y0: this.loadAll ? 0 : Math.max(0, Math.floor((origin.y - margin) / size)),
-      y1: this.loadAll ? ncy - 1 : Math.min(ncy - 1, Math.floor((origin.y + viewH + margin + 64) / size)),
-    });
-    const want = range(ts * 4); // a little beyond the screen (raised ground draws up to 4 tiles higher)
-    const keep = range(size); // hysteresis: freed only once well out of view
+    const range = (/** @type {number} */ margin) => chunkRange(origin, viewW, viewH, margin, { chunkPx: size, ncx, ncy, all: this.loadAll });
+    const want = range(ts * CHUNK_LOAD_MARGIN_TILES); // a little beyond the screen
+    const keep = range(ts * CHUNK_KEEP_MARGIN_TILES); // hysteresis: freed only once out of view
+    // v1.0 (perf review of the terrain cache): the chunk caches (cacheAsTexture) are the only users of
+    // PixiJS's TexturePool, which keeps every texture given back and never shrinks: 4 MB each with
+    // the release terrain. Once chunks have been freed (the frame before), let the idle ones go.
+    if (this.chunkCachesFreed) {
+      TexturePool.clear(true);
+      this.chunkCachesFreed = false;
+    }
     this.chunkStats.updates++;
     let pending = 0;
     for (let cy = want.y0; cy <= want.y1; cy++) {
@@ -492,6 +628,7 @@ export class GameView {
       if (c.cx < keep.x0 || c.cx > keep.x1 || c.cy < keep.y0 || c.cy > keep.y1) {
         this.destroyChunk(c);
         this.chunks.delete(key);
+        this.chunkCachesFreed = true;
       }
     }
     // A bundle loaded for chunks that were left behind before being built: let it go.
@@ -597,14 +734,17 @@ export class GameView {
     let remaining = faceBottom - faceTop;
     if (remaining <= 0) return;
     const g = this.map.ground[ty * this.map.width + tx];
-    const mountains = regionAt(this.regions, tx, ty)?.id === 'mountains';
-    const mat = g === Ground.RUIN ? 'ruin' : g === Ground.WALL ? 'wall' : mountains ? 'stone' : 'earth';
+    const kind = g === Ground.RUIN ? 'ruin' : g === Ground.WALL ? 'wall' : g === Ground.SAND ? 'sand' : g === Ground.PATH ? 'path' : 'other';
+    // v1.1 (release terrain): plateau faces for sand and paths, and a band variant per tile.
+    const mat = faceMaterial(kind, regionAt(this.regions, tx, ty)?.id, this.releaseTerrain);
+    const variant = faceVariant(hash(tx, ty), mat, this.releaseTerrain);
     let y = faceTop;
     let first = true;
     while (remaining > 0) {
       const seg = remaining >= 8 ? 8 : 4;
       const last = remaining - seg <= 0;
-      const s = this.makeSprite(`face.${mat}.${first ? 'top' : 'mid'}${last ? '-base' : ''}.${seg}`);
+      const key = `face.${mat}.${first ? 'top' : 'mid'}${last ? '-base' : ''}.${seg}`;
+      const s = this.makeSprite(variant && this.assets.hasTexture(this.seasonal(key + variant)) ? key + variant : key);
       s.position.set(x, y);
       row.addChild(s);
       y += seg;
@@ -655,7 +795,8 @@ export class GameView {
     this.actors.addChild(s);
     /** @type {Occluder | null} */
     let occluder = null;
-    if (o.type === 'tree') {
+    // Trees and houses (v1.0: the release house is 56 game px tall) fade when the player is behind them.
+    if (o.type === 'tree' || o.type === 'house') {
       const w = s.width / 2;
       occluder = { sprite: s, x0: x - w, x1: x + w, y0: feetY - z - s.height, y1: feetY - z, key: feetY };
     }
@@ -774,7 +915,7 @@ export class GameView {
     // v1.0 (C5): the beach ring glows while it is the gate to the source.
     // v1.0 (C9): it flashes once in the opening.
     // (open — and glowing — until the ending is seen: the way back to the princess by the source)
-    const ringOpen = (!!state.progress.flags.source_open && !state.progress.flags.ending_seen) || !!openingView(state)?.flash;
+    const ringOpen = starRingOpen(state);
     if (ringOpen !== this.ringOpen) {
       this.ringOpen = ringOpen;
       this.envVersion = -1;
@@ -1058,11 +1199,23 @@ export class GameView {
     this.waterFrame = frame;
     const tex = this.assets.texture(`tile.water.${frame}`);
     for (const c of this.chunks.values()) {
-      if (c.water.length === 0) continue;
+      // (a chunk can have edge pieces of water in the next chunk, and no water of its own)
+      if (c.water.length === 0 && c.edges.length === 0) continue;
       for (const s of c.water) s.texture = tex;
+      for (const e of c.edges) e.sprite.texture = this.edgeTexture(e.key, frame);
       c.base.updateCacheTexture();
     }
   }
+}
+
+/**
+ * Where a quarter piece ("<key>#<ne|se|sw|nw>", QA4 L-1) sits in its tile: its top-left corner.
+ * @param {string} key @param {number} size the tile's size @returns {[number, number]}
+ */
+function edgeQuarterOffset(key, size) {
+  const quarter = key.split('#')[1];
+  if (!quarter) return [0, 0];
+  return [quarter.endsWith('e') ? size / 2 : 0, quarter.startsWith('s') ? size / 2 : 0];
 }
 
 /** Stable per-tile variation. @param {number} x @param {number} y */

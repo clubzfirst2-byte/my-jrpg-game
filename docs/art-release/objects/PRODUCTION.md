@@ -1,4 +1,4 @@
-# 建物・物・アイコン・効果・UI の絵 製品版（62 枚）
+# 建物・物・アイコン・効果・UI の絵 製品版（80 枚）
 
 承認された見本（PR #54 `design/object-samples`）と絵柄のガイド（PR #51 `docs/art-style-guide` 7e0f6bc）の決まりで、**残りの物の絵 45 枚を作り、見本 17 枚を仕上げて**、製品版の大きさで書き出しました。
 
@@ -22,7 +22,7 @@
 - 光の色：**星環の物＝主人公の宝石の青**（記録の石・受信機・祭壇・長老のお守り）、**遺跡の仕掛け＝遺跡の青緑**（踏むスイッチ・光センサー・共鳴石・柱・扉の紋）、火＝ガイドの炎の色
 - 効果も半透明の点なし（薄くするのはプログラム）
 
-## 一覧（62 枚）
+## 一覧（80 枚）
 
 基準点：足＝足元（下の真ん中）、中＝中心。「主な色」は使ったランプ（**新**＝今回新しく作ったランプ、**ガ**＝ガイドのランプを今回この道具に足したもの）。
 
@@ -59,6 +59,7 @@
 | `obj.jar` | 20×24 | 足 | 見本のまま | clay glaze |
 | `obj.crate` | 32×32 | 足 | 見本のまま | crate steel |
 | `obj.campfire.0` / `.1` | 32×28 | 足 | 見本のまま（2 コマ） | stone ash wood string fire |
+| `obj.star_ring.off` / `.on` | 48×52 | 足 | v1.0 で追加。浜辺の星環の輪（源へ行く門）。石の段の台に立つ、切り石を組んだ太い輪。輪の面に宝石の青の溝と、上・左右・下に 4 つの座の石。消＝溝と座は暗い紺、輪の中は空いて砂が見える／点＝輪の中が同じ青のランプで光で満ち（真ん中がいちばん明るい、全部不透明）、溝と座が光り、光のそばの石が明るくなり、輪の横と上に光の粒（形の違い 573 点） | stone gem |
 
 ### 仕掛け・遺跡
 
@@ -89,6 +90,22 @@
 | `icon.shard` | 澱の結晶のかけら（澱の紫）、中に敵の魔法の赤紫の光 | miasma(ガ) enemy_magic(ガ) |
 | `icon.arrows` | 矢 2 本を斜めに（木の矢柄・鋼の矢じり・白い羽） | wood steel bone |
 | `icon.food` | 料理（素焼きの器にシチュー、緑の葉） | clay stew(新) leaf |
+| `icon.star_shard` | v1.0 で追加。星のかけら（星環・主人公のペンダントにつながるごほうび）。宝石の青の太い四つ星を面で切り、左上が明るい。下の先が欠けている（かけら）。紫の澱の結晶 `icon.shard` と色も形も分ける | gem |
+| `icon.charm` | v1.0 で追加。長老のお守り。棚の上のお守り（`obj.charm_shelf.on`）と同じ、金の輪に青い宝石、上に細いひもの輪 | gold gem string |
+| `icon.spear` | v1.0.1。見張りの槍。斜めの長い木の柄、先に細い木の葉形の鋼の穂、その下に革の巻き、石突き | wood steel leather |
+| `icon.greatsword` | v1.0.1。錆びた大剣。まっすぐ上を向く幅 6 の刃（みぞ・欠け・2 ドットずつの赤さび）、広いつば、長い両手の握り | iron clay leather |
+| `icon.ember_sword` | v1.0.1。灯火の剣。剣と同じ向きだが、刃の明るい側と芯が炎の色、刃から炎が 2 つ立つ | steel fire leather |
+| `icon.star_sword` | v1.0.1。星鋼の剣。刃が星環の青（宝石の青）で光り、金のつばの真ん中に青い星、柄頭は金の四つ星（剣の四角い柄頭と形でも違う） | gem steel gold |
+| `icon.cap` | v1.0.1。雷よけの帽子。耳当てのある革の帽子、白い麻の帯、前に雷の結晶の黄色の稲妻 | leather shock linen |
+| `icon.boots` | v1.0.1。岩登りの靴。横向きの革のブーツ、前にひも、鉄の鋲のついた厚い底（底がでこぼこ） | leather iron string |
+| `icon.dish.grilled_meat` | v1.0.1。焼き肉（`grilled_meat`）。焼いた骨つき肉。こげ茶の肉に斜めの焼き目、上につや、右下に骨 | stew bone fire |
+| `icon.dish.mushroom_skewer` | v1.0.1。きのこ串（`mushroom_skewer`）。細い棒に、丸いかさのきのこ 3 つ（白い点と白い柄） | wood cap bone |
+| `icon.dish.berry_jam` | v1.0.1。木の実のジャム（`berry_jam`）。ガラスびんの赤いジャム。口に布をかぶせてひもで結ぶ | glass berry linen |
+| `icon.dish.hunter_stew` | v1.0.1。狩人の煮込み（`hunter_stew`）。鉄の小鍋に具だくさんの煮込み、大きな骨が突き出る、取っ手 2 つ | iron stew bone |
+| `icon.dish.ember_soup` | v1.0.1。火照りのスープ（`ember_soup`）。青緑の器に赤いスープ、炎が立つ | glaze pepper fire |
+| `icon.dish.hearty_skewer` | v1.0.1。がっつり串（`hearty_skewer`）。斜めの太い串。大きな焼いた肉の角切りと緑の野菜を交互に | wood stew leaf |
+| `icon.dish.mixed_stew` | v1.0.1。ごった煮（`mixed_stew`）。木の器に平らな茶色の煮汁、緑の葉と黒っぽい具が浮く、泡が光る | wood stew leaf |
+| `icon.dish.dubious_food` | v1.0.1。あやしい料理（`dubious_food`）。白い皿に、ゆがんだ黒こげのかたまり、くるっと煙（おかしいが、汚くはない） | linen ash smoke |
 
 
 ### 効果・UI
@@ -143,7 +160,7 @@
 
 | 確認 | 結果 |
 |---|---|
-| 名前・大きさ・基準点が仮の絵と同じ（2 倍） | 62 枚とも合う（`placeholderPack.js` の名前に全部ある。テストで確認） |
+| 名前・大きさ・基準点が仮の絵と同じ（2 倍） | 66 枚とも合う（`placeholderPack.js` の名前に全部ある。テストで確認） |
 | 半透明の点が無い | 全部 0 か 255（作るときとテストの 2 回） |
 | 全部の色がランプの中 | 作るときに自動で確認（ガイドのランプ＋見本と今回の新しいランプ） |
 | 足元の物が最後の行に立つ | 全部（作るときとテスト） |
@@ -195,3 +212,109 @@
 決まりはそのまま守れている（作るときの確認とテスト）：アルファ 0/255、色は全部ランプの中、アイコンの 1 ドットの余白、素材 3 つまで（鎧＝leather steel gold、弓＝wood bone leather、料理＝clay stew leaf）。確認画像 5 枚も作り直した。`npx vitest run` 38 ファイル・482 件合格、`npm run lint` 合格。
 
 人が決めること（確認の 2・4 と「決めてほしいこと」1〜5）はそのまま残っています。
+
+## v1.0 の追加：星環の輪（`obj.star_ring.off` / `.on`）
+
+- 仮の絵（`sourceArt.js` の `starRingSprite`、`placeholderPack.js` で `obj.star_ring.off/.on`、24×26、基準点は足）の 2 倍の **48×52**、基準点は足。テストで仮の絵の大きさの 2 倍・基準点が同じことを確かめる
+- 作り方：`objects2.py` の `star_ring()`。これまでの 62 枚は 1 ドットも変えていません（作り直してもバイト単位で同じ）
+- 色：星環の物なので**宝石の青**（`gem`）、石は村・野原の `stone`。点けた時の光も同じ `gem` のランプの 2〜4 番で、半透明は使わない（アルファ 0/255）
+- 消→点：形の違い 573 点（輪の中が埋まる＋光の粒）、色の違い 856 点
+- 確かめた絵：`/tmp/claude-0/-home-user-my-jrpg-game/b046b55c-c649-5668-ab0a-0dc53b730c1c/scratchpad/team/v1objects/star_ring.png`（製品版の砂のタイルの上に、消・主人公・点を等倍と 3 倍で。左＝昼、右＝夜。夜は地面と消えた輪を暗く青くし、点いた輪はそのまま＝光る物として）。主人公（32×56）とほぼ同じ高さで、昼の砂の上では灰色の石と暗い紺の溝で見え、夜は点いた輪がいちばん目立つ
+- 確認画像：`review_sheet.png` の props の行と `review_compare.png`（仮の絵の絵は docs/art-kit に無いので新しい方だけ）
+- 残り：ゲームにつなぐのは別の作業（ほかの製品版の絵と同じ）。夜の見え方はゲームの夜の重ね方で実機確認したい
+
+## v1.0 の追加：アイコン 2 枚（`icon.star_shard`・`icon.charm`）
+
+ゲームでは星のかけらが澱の結晶と同じ `icon.shard`（紫）、長老のお守りが料理の `icon.food` で出ていたので、それぞれ専用のアイコンを作りました。これまでの 62 枚は 1 ドットも変えていません。
+
+- 20×20、中身は 18×18 の中（1 ドットの余白）、アルファ 0/255、全部ランプの色（作るときとテストで確認）
+- `icon.star_shard`：`gem` だけ（星環の青）。紫の `icon.shard` とは色（青と紫）も形（四つ星と石のかたまり）も違う
+- `icon.charm`：`gold` `gem` `string` の 3 つ。棚の上のお守りと同じ形・色にした
+- 背景との明るさの差が 20 以上ある点の割合（確認と同じ測り方）：
+
+| アイコン | UI `#20242c` | 草 | 道 | 雪 | 赤い砂 | 遺跡の床 | 暗闇 |
+|---|---|---|---|---|---|---|---|
+| `icon.star_shard` | 55% | 39% | 69% | 61% | 69% | 69% | 71% |
+| `icon.charm` | 64% | 40% | 53% | 64% | 53% | 53% | 87% |
+
+- 確かめた絵：`/tmp/claude-0/-home-user-my-jrpg-game/b046b55c-c649-5668-ab0a-0dc53b730c1c/scratchpad/team/v1objects/icons_v1.png`（左から 星のかけら・澱の結晶・お守り・料理を、UI・草・赤い砂・雪・暗闇の上に等倍と 4 倍で）。`review_icons.png` にも足した
+- **ゲームにつなぐには**（別の作業。ここではゲームのコードを変えていない）：`src/view/itemView.js` の `ICON_BY_ID` に星のかけら → `icon.star_shard`、長老のお守り → `icon.charm` を足し、`placeholderArt.js` / `placeholderPack.js` に同じ名前の仮の絵を足す。それまではテストでこの 2 つだけ「ゲームの名前にあること」を外している
+
+## v1.0.1 の追加：武器・防具のアイコン 6 枚
+
+ゲームでは、自分のアイコンが無い武器は全部 `icon.sword`、防具は全部 `icon.armor` で出ていました（`src/view/itemView.js` の `ICON_BY_TYPE`）。`data/items.json` と `ICON_BY_ID` を照らし合わせ、形がまるで違う物（槍・大剣・帽子・靴）と、見た目に特徴のある剣 2 本（炎・青く光る）にアイコンを作りました。これまでの 66 枚は 1 ドットも変えていません。作る道具は `tools/object_release/icons_v1_1.py`（`gen_release.py` から呼ぶ）。
+
+| 新しいアイコン | 持ち物の id | 今まで出ていたアイコン |
+|---|---|---|
+| `icon.spear` | `guard_spear`（見張りの槍） | `icon.sword` |
+| `icon.greatsword` | `rusty_greatsword`（錆びた大剣） | `icon.sword` |
+| `icon.ember_sword` | `ember_sword`（灯火の剣） | `icon.sword` |
+| `icon.star_sword` | `star_steel_sword`（星鋼の剣） | `icon.sword` |
+| `icon.cap` | `insulated_cap`（雷よけの帽子） | `icon.armor` |
+| `icon.boots` | `grip_boots`（岩登りの靴） | `icon.armor` |
+
+ほかの借りもの（今回は作っていない。人が決めるなら追加する）：
+- `wood_sword`・`travel_sword` → `icon.sword`：どちらも片手剣なので剣のアイコンのままでよいと考えた
+- `wood_bow`・`hunter_bow` → `icon.bow`、`bark_vest` → `icon.armor`：弓・胴当てそのものなので合っている
+- 料理 8 つ → `icon.food`：下の「料理のアイコン 8 枚」で 1 つずつ作った（`icon.food` は料理の仮の・予備のアイコンとして残す）
+
+決まり：20×20、1 ドットの余白、素材 3 つまで、アルファ 0/255、全部ランプの色（作るときとテストで確認）。`icon.sword` との違い：槍・大剣・帽子・靴は形、灯火の剣・星鋼の剣は剣と同じ向きだが刃の色（炎・青）と炎・つばの星。
+
+背景との明るさの差が 20 以上ある点の割合（確認と同じ測り方）。暗い革・木が多いので、ガイド 6.1 のとおり 3 番を広くとって、UI の上は見本の 42〜63% の中に入れた：
+
+| アイコン | UI `#20242c` | 草 | 道 | 雪 | 赤い砂 | 遺跡の床 | 暗闇 |
+|---|---|---|---|---|---|---|---|
+| `icon.spear` | 46% | 64% | 72% | 93% | 72% | 61% | 46% |
+| `icon.greatsword` | 49% | 66% | 49% | 89% | 49% | 66% | 62% |
+| `icon.ember_sword` | 50% | 61% | 67% | 85% | 67% | 73% | 54% |
+| `icon.star_sword` | 45% | 44% | 57% | 71% | 57% | 57% | 73% |
+| `icon.cap` | 46% | 45% | 59% | 81% | 59% | 43% | 60% |
+| `icon.boots` | 48% | 44% | 43% | 96% | 43% | 39% | 64% |
+| `icon.sword`（くらべる見本） | 42% | 51% | 54% | 88% | 54% | 51% | 69% |
+
+確かめた絵：`/tmp/claude-0/-home-user-my-jrpg-game/b046b55c-c649-5668-ab0a-0dc53b730c1c/scratchpad/team/v1objects/icons_v1_1.png`（左から 剣（くらべる見本）・槍・大剣・灯火の剣・星鋼の剣・鎧（くらべる見本）・帽子・靴。上から UI・草・道・赤い砂・雪・遺跡の床・暗闇。等倍と 4 倍）。`review_icons.png` にも足した。
+
+**ゲームにつなぐには**（別の作業。ここではゲームのコードを変えていない）：`src/view/itemView.js` の `ICON_BY_ID` に上の表の 6 つを足し、仮の絵（`placeholderArt.js` / `placeholderPack.js`）に同じ名前を足す。それまでテストではこの 6 つだけ「ゲームの名前にあること」を外している（`NOT_YET_KEYS`）。
+
+### 料理のアイコン 8 枚（v1.0.1）
+
+料理は全部 `icon.food`（器のシチュー）で出ていたので、1 つずつ作りました。名前は `icon.dish.<持ち物の id>`。`icon.food` はそのまま（予備）。作る道具は `tools/object_release/icons_dishes.py`、id → アイコンの表は `icons_v1_1.py` の `ITEM_ICONS`（`DISH_ICONS` を含む）。
+
+| 持ち物の id | 料理 | 新しいアイコン |
+|---|---|---|
+| `grilled_meat` | 焼き肉 | `icon.dish.grilled_meat` |
+| `mushroom_skewer` | きのこ串 | `icon.dish.mushroom_skewer` |
+| `berry_jam` | 木の実のジャム | `icon.dish.berry_jam` |
+| `hunter_stew` | 狩人の煮込み | `icon.dish.hunter_stew` |
+| `ember_soup` | 火照りのスープ | `icon.dish.ember_soup` |
+| `hearty_skewer` | がっつり串 | `icon.dish.hearty_skewer` |
+| `mixed_stew` | ごった煮 | `icon.dish.mixed_stew` |
+| `dubious_food` | あやしい料理 | `icon.dish.dubious_food` |
+
+見分け方：焼き肉＝骨つきの丸い肉、きのこ串＝縦の棒にかさ 3 つ、がっつり串＝斜めの太い角切り、ジャム＝赤いびん、狩人の煮込み＝灰色の鉄鍋と骨、火照りのスープ＝青緑の器に炎、ごった煮＝木の器に茶色の煮汁と浮く葉、あやしい料理＝皿に黒こげと煙（笑える失敗。汚い色・したたり・虫は使っていない）。
+
+背景との明るさの差が 20 以上ある点の割合（確認と同じ測り方）。UI の上は全部 44% 以上：
+
+| アイコン | UI `#20242c` | 草 | 道 | 雪 | 赤い砂 | 遺跡の床 | 暗闇 |
+|---|---|---|---|---|---|---|---|
+| `icon.dish.grilled_meat` | 51% | 55% | 63% | 86% | 41% | 34% | 73% |
+| `icon.dish.mushroom_skewer` | 47% | 68% | 59% | 82% | 59% | 57% | 59% |
+| `icon.dish.berry_jam` | 53% | 42% | 58% | 85% | 58% | 42% | 57% |
+| `icon.dish.hunter_stew` | 52% | 47% | 38% | 88% | 38% | 36% | 74% |
+| `icon.dish.ember_soup` | 47% | 52% | 44% | 88% | 44% | 45% | 68% |
+| `icon.dish.hearty_skewer` | 56% | 75% | 60% | 80% | 58% | 58% | 62% |
+| `icon.dish.mixed_stew` | 43% | 44% | 44% | 94% | 42% | 33% | 64% |
+| `icon.dish.dubious_food` | 44% | 38% | 80% | 72% | 68% | 54% | 47% |
+| `icon.food`（今までの予備） | 49% | 44% | 36% | 90% | 34% | 40% | 77% |
+
+確かめた絵は上と同じ `icons_v1_1.png`（下の段に料理 8 つと `icon.food`）。`review_icons.png` にも足した。ゲームにつなぐには `ICON_BY_ID` に上の 8 つを足し、仮の絵に同じ名前を足す。それまでテストではこの 8 つも「ゲームの名前にあること」を外している。
+
+### 確認（`inspect_icons_v1_1.md`、合格）の軽い注意への対応
+
+| # | アイコン | 直したこと | 前 → 後 |
+|---|---|---|---|
+| 1 | `icon.dish.mixed_stew` | サラダ・茂みに見えた緑の山をやめ、木の器に**平らな茶色の煮汁**（stew）、浮く葉と黒っぽい具、光る泡。素材は 3 つまでの決まりがあるので赤い実（berry）は外した（木・煮汁・葉） | 遺跡の床 28% → **33%**、UI 48% → 43%、道 36% → 44%、赤い砂 36% → 42% |
+| 2 | `icon.greatsword` | 1 ドットずつ散っていた赤さびを 2 ドットのかたまりに（刃 3 か所・つば 1 か所） | UI 49% → 49% |
+| 3 | `icon.star_sword` | 柄頭を四角から**金の四つ星**（真ん中に青）にして、剣と形でも違うようにした。握りは 1 段短く | UI 44% → 45% |
+
+名前（キー）は変えていません。確認画像と `icons_v1_1.png` を作り直しました。

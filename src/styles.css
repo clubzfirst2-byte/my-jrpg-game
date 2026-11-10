@@ -88,7 +88,9 @@ body {
   background: #24364a;
   border: 1px solid #3c5571;
   border-radius: 6px;
-  min-height: 36px;
+  /* v1.0 (iPhone): every button is at least a 44 pt tap target (Apple HIG; 1 CSS px = 1 pt). */
+  min-height: 44px;
+  min-width: 44px;
   padding: 6px 10px;
 }
 
@@ -237,19 +239,25 @@ body {
   font-weight: bold;
   touch-action: none;
   padding: 0;
+  /* Sized by the cluster below (all ≥ 44 px at the medium size); labels fit by tighter spacing. */
+  min-height: 0;
+  min-width: 0;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
 }
 
 #ui .action-button.active {
   background: rgba(95, 179, 255, 0.75);
 }
 
-/* Right-hand cluster (DESIGN.md 5.8). Attack sits under the thumb; the others arc around it. */
+/* Right-hand cluster (DESIGN.md 5.8). Attack sits under the thumb; the others arc around it.
+   v1.0 QA2 (M-2): the labels never go below 12 px; at 小 only the circles shrink. */
 #ui #attack-button {
   right: calc(18px * var(--btn) + var(--safe-right));
   bottom: calc(22px * var(--btn) + var(--safe-bottom));
   width: calc(78px * var(--btn));
   height: calc(78px * var(--btn));
-  font-size: calc(14px * var(--btn));
+  font-size: max(12px, calc(14px * var(--btn)));
 }
 
 #ui #jump-button {
@@ -257,7 +265,8 @@ body {
   bottom: calc(14px * var(--btn) + var(--safe-bottom));
   width: calc(60px * var(--btn));
   height: calc(60px * var(--btn));
-  font-size: calc(11px * var(--btn));
+  font-size: max(12px, calc(12px * var(--btn)));
+  letter-spacing: -0.08em; /* 4 characters inside the 51 px circle at 小 */
 }
 
 #ui #dodge-button {
@@ -265,7 +274,7 @@ body {
   bottom: calc(110px * var(--btn) + var(--safe-bottom));
   width: calc(58px * var(--btn));
   height: calc(58px * var(--btn));
-  font-size: calc(12px * var(--btn));
+  font-size: max(12px, calc(12px * var(--btn)));
 }
 
 #ui #bow-button {
@@ -273,7 +282,7 @@ body {
   bottom: calc(84px * var(--btn) + var(--safe-bottom));
   width: calc(52px * var(--btn));
   height: calc(52px * var(--btn));
-  font-size: calc(13px * var(--btn));
+  font-size: max(12px, calc(13px * var(--btn)));
 }
 
 #ui #guard-button {
@@ -281,15 +290,24 @@ body {
   bottom: calc(40px * var(--btn) + var(--safe-bottom));
   width: calc(52px * var(--btn));
   height: calc(52px * var(--btn));
-  font-size: calc(10px * var(--btn));
+  font-size: max(12px, calc(12px * var(--btn)));
 }
 
 #ui #dash-button {
   right: calc(160px * var(--btn) + var(--safe-right));
   bottom: calc(104px * var(--btn) + var(--safe-bottom));
-  width: calc(48px * var(--btn));
-  height: calc(48px * var(--btn));
-  font-size: calc(9px * var(--btn));
+  /* ≥ 44 pt at every button size (小 would be 40.8); at 小 it still clears 能力 above it by ~2 px */
+  width: max(44px, calc(48px * var(--btn)));
+  height: max(44px, calc(48px * var(--btn)));
+  font-size: max(12px, calc(12px * var(--btn)));
+  letter-spacing: -0.12em; /* 4 characters inside a 48 px circle */
+  /* At 小 the circle is 44 px: the label then breaks at its <wbr> into ダッ / シュ (touchControls.js) */
+  white-space: normal;
+  line-height: 1.1;
+}
+
+#ui #dash-button span {
+  white-space: nowrap;
 }
 
 /* ---- HUD ---- */
@@ -313,7 +331,7 @@ body {
   position: absolute;
   top: calc(8px + var(--safe-top));
   left: calc(8px + var(--safe-left));
-  min-width: 40px;
+  min-width: 44px;
   font-weight: bold;
 }
 
@@ -338,10 +356,10 @@ body {
   font-weight: bold;
 }
 
+/* In the centred column, right under the title (pulled up into the column gap); nothing else
+   is drawn there at any landscape size. */
 .pause-version {
-  position: absolute;
-  left: calc(10px + var(--safe-left));
-  top: calc(10px + var(--safe-top));
+  margin-top: -10px;
   font-size: 11px;
   color: var(--muted);
 }
@@ -506,7 +524,9 @@ body {
   position: absolute;
   left: 50%;
   top: 100%;
-  width: min(560px, 86vw);
+  /* v1.0 (iPhone): narrow enough that the credits never pass under とばす (bottom right; its
+     right offset + width + a gap = 128 px), kept centred so both sides lose the same. */
+  width: min(560px, 86vw, calc(100% - 2 * (128px + max(var(--safe-left), var(--safe-right)))));
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
@@ -582,7 +602,7 @@ body {
 
 /* (zoomed, the roll keeps within a 667 px wide phone) */
 #ui.text-large .ending-roll {
-  width: min(460px, 70vw);
+  width: min(460px, 70vw, calc(100% - 2 * (128px + max(var(--safe-left), var(--safe-right)))));
 }
 
 @keyframes ending-in {
@@ -602,7 +622,8 @@ body {
 /* ---- toast ---- */
 #toast {
   position: absolute;
-  top: calc(44px + var(--safe-top));
+  /* v1.0 QA2: below the HUD's clock and money / weapon line (it used to cover them) */
+  top: calc(80px + var(--safe-top));
   left: 50%;
   transform: translateX(-50%);
   /* final QA C-6: as wide as its text up to the limit (an absolutely placed box at left: 50% would
@@ -614,12 +635,46 @@ body {
   background: var(--panel);
   font-size: 14px;
   text-align: center;
+  /* v1.0 QA2 (C-6 again): a message longer than the box wraps into even lines, never leaving its
+     last character alone on a line (Toast.balance() does the same where this is unsupported) */
+  text-wrap: balance;
+  /* final QA L-6 rest: break between phrases only (Toast puts a <wbr> between them), never inside a
+     word ("目を開け／た。"); a phrase longer than the line still wraps */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  /* and where a phrase must still wrap, no line starts with ー or a small kana (マネ／ージャー) */
+  line-break: strict;
   pointer-events: none;
   z-index: 7; /* above the inventory menu */
 }
 
 #toast[hidden] {
   display: none;
+}
+
+/* v1.0 QA4 (L-3): in a boss fight (main.js sets #ui.boss-fight while the boss bar shows) the top of
+   the screen is where the boss stands: messages go to the bottom, centred in the space between the
+   stick side's edge and the button cluster (its widest reach is 228 px × button size from its
+   edge). Only the cluster side is avoided: the toast ignores touches, so it may lie over the
+   stick side. At 734×343 with a notch and 大 buttons that leaves ~330 px (2–3 lines at most). */
+#ui.boss-fight #toast {
+  top: auto;
+  bottom: calc(14px + var(--safe-bottom));
+  left: calc(10px + var(--safe-left));
+  right: calc(228px * var(--btn) + 10px + var(--safe-right));
+  transform: none;
+  width: fit-content;
+  max-width: none;
+  margin: 0 auto;
+}
+#ui.boss-fight.left-handed #toast {
+  left: calc(228px * var(--btn) + 10px + var(--safe-left));
+  right: calc(10px + var(--safe-right));
+}
+/* (unzoomed there, so the space above is in screen px; the large text keeps its size) */
+#ui.boss-fight.text-large #toast {
+  zoom: 1;
+  font-size: 17px;
 }
 
 #toast[data-kind='error'] {
@@ -658,10 +713,11 @@ body {
 /* ---- items (P6) ---- */
 #ui #bag-button {
   position: absolute;
-  top: calc(52px + var(--safe-top));
+  /* Under the 44 px pause button; narrow enough (≤ 52 px) to stay left of the HUD text column. */
+  top: calc(58px + var(--safe-top));
   left: calc(8px + var(--safe-left));
-  font-size: 11px;
-  padding: 4px 8px;
+  font-size: 12px;
+  padding: 4px 6px;
 }
 
 #ui #use-button {
@@ -733,6 +789,8 @@ body {
 
 .inv-row {
   display: flex;
+  min-height: 44px;
+  box-sizing: border-box;
   flex-wrap: wrap;
   align-items: center;
   gap: 2px 10px;
@@ -762,7 +820,7 @@ body {
   flex: 1;
   min-width: 50%;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .inv-actions {
@@ -795,7 +853,7 @@ body {
   bottom: calc(158px * var(--btn) + var(--safe-bottom));
   width: calc(52px * var(--btn));
   height: calc(52px * var(--btn));
-  font-size: calc(11px * var(--btn));
+  font-size: max(12px, calc(12px * var(--btn)));
   background: rgba(30, 80, 100, 0.75);
   border-color: rgba(127, 232, 255, 0.85);
 }
@@ -805,14 +863,18 @@ body {
   display: none;
 }
 
+/* v1.0 QA2 (M-1): ⇄ sits right above the ability button with a 6 px gap, centred on it, a full
+   44 × 44 target that touches no other button (it used to overlap the ability button's corner). */
 #ui #ability-next {
   position: absolute;
-  right: calc(150px * var(--btn) + var(--safe-right));
-  bottom: calc(196px * var(--btn) + var(--safe-bottom));
-  min-height: calc(26px * var(--btn));
-  padding: 2px 6px;
-  font-size: calc(12px * var(--btn));
-  border-radius: 13px;
+  right: calc(176px * var(--btn) + 26px * var(--btn) - 22px + var(--safe-right));
+  bottom: calc(210px * var(--btn) + 6px + var(--safe-bottom));
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 18px;
+  border-radius: 50%;
 }
 
 /* ---- conversations and the shop (P9) ---- */
@@ -895,6 +957,37 @@ body {
   white-space: nowrap;
 }
 
+/* v1.0 (iPhone): a list that scrolls shows there is more below it (src/ui/scrollCue.js): its
+   bottom edge fades out and a small ▼ sits there, both gone once the list is at its end. */
+.more-below > .inv-body {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), rgba(0, 0, 0, 0.25));
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), rgba(0, 0, 0, 0.25));
+}
+#inv-menu.more-below::after,
+#shop-menu.more-below::after {
+  content: '▼';
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: #8cc4ff;
+  text-shadow: 0 0 4px #000;
+  pointer-events: none;
+  animation: more-below-bob 1.4s ease-in-out infinite;
+}
+@keyframes more-below-bob {
+  50% {
+    transform: translate(-50%, 2px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #inv-menu.more-below::after,
+  #shop-menu.more-below::after {
+    animation: none;
+  }
+}
+
 /* P10.4: boss health */
 #boss-bar {
   position: absolute;
@@ -938,6 +1031,10 @@ body {
   display: flex;
   gap: 10px;
   justify-content: center;
+}
+/* (min-width restated with #ui: the 44 px minimum on `#ui button` would otherwise win) */
+#ui .pause-sound button {
+  min-width: 112px;
 }
 .pause-sound button {
   min-width: 112px;
@@ -990,7 +1087,8 @@ body {
   gap: 6px;
 }
 #settings-menu .settings-choices button {
-  min-height: 34px;
+  min-height: 44px;
+  min-width: 44px;
   padding: 4px 12px;
   border-radius: 8px;
   font-size: 14px;
@@ -1004,6 +1102,18 @@ body {
   margin: 6px 0;
   font-size: 13px;
   color: #ffd75e;
+}
+/* v1.0 (iPhone): the menu is taller than a landscape phone, so the footer with 閉じる sticks to the
+   bottom of the scrolling panel (settingsMenu.js) and can always be reached without scrolling. */
+.settings-foot {
+  position: sticky;
+  bottom: -12px;
+  display: flex;
+  justify-content: center;
+  margin: 0 -16px -12px;
+  padding: 8px 16px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgb(10, 16, 26);
 }
 #ui #settings-close {
   min-width: 120px;
@@ -1056,5 +1166,5 @@ body {
 }
 #ui.left-handed #ability-next {
   right: auto;
-  left: calc(150px * var(--btn) + var(--safe-left));
+  left: calc(176px * var(--btn) + 26px * var(--btn) - 22px + var(--safe-left));
 }

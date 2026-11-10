@@ -43,12 +43,23 @@ export function sourceFrameKey(e, timeSec, has) {
 export function drawSourceTelegraphs(g, state) {
   const e = state.enemies.find((/** @type {any} */ x) => x.final && x.state !== 'dead');
   if (!e) return;
-  if (e.state === 'windup' && (e.pattern === 'slam' || e.pattern === 'wave')) {
+  if (e.pattern !== 'slam' && e.pattern !== 'wave') return;
+  const r = e.pattern === 'slam' ? FINAL_BOSS.slamRadius : FINAL_BOSS.waveRadius;
+  // v1.0 final: brighter colours (the wave's purple was close to the murk on the stone floor) on a
+  // dark under-line, so the edge reads on the light stone and in the dark alike (the ring is also lit:
+  // weatherView.js warningLights).
+  const color = e.pattern === 'slam' ? 0xff3040 : 0xe060ff; // the wave: the murk's glow
+  const x = Math.round(e.x);
+  const y = Math.round(e.y - e.z);
+  if (e.state === 'windup') {
     const k = windupProgress(e);
-    const r = e.pattern === 'slam' ? FINAL_BOSS.slamRadius : FINAL_BOSS.waveRadius;
-    const color = e.pattern === 'slam' ? 0xd0202a : 0xb040b0; // the wave: the murk's glow
-    g.circle(Math.round(e.x), Math.round(e.y - e.z), r).stroke({ width: 2, color, alpha: 0.6 + 0.4 * k });
-    g.circle(Math.round(e.x), Math.round(e.y - e.z), r * k).fill({ color, alpha: 0.18 });
+    g.circle(x, y, r * k).fill({ color, alpha: 0.22 });
+    g.circle(x, y, r).stroke({ width: 4, color: 0x12060e, alpha: 0.45 });
+    g.circle(x, y, r).stroke({ width: 2, color, alpha: 0.7 + 0.3 * k });
+  } else if (e.state === 'attack') {
+    // The shockwave going out (it hurts now; jumping clears it).
+    g.circle(x, y, r).fill({ color, alpha: 0.3 });
+    g.circle(x, y, r).stroke({ width: 3, color: 0xffffff, alpha: 0.9 });
   }
 }
 

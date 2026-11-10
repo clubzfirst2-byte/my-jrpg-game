@@ -876,6 +876,24 @@ export function itemIcons() {
     'icon.shard': ['....kk....', '...kjjk...', '..kjXjjk..', '..kjXjjk..', '.kjjjjzjk.', '.kjjjzzjk.', '..kjjzjk..', '..kjzzjk..', '...kzzk...', '....kk....'],
     'icon.arrows': ['k.........', '.kak......', '.kaak.....', '..kAk.....', '...kAk.k..', '....kAkak.', '.....kAak.', '.....kAAk.', '......kXXk', '.......kkk'],
     'icon.food': ['..........', '..k.k.k...', '..........', '.kkkkkkkk.', 'kvvvvvvvvk', 'kKyKyKyKvk', 'kvyKyKyvvk', '.kvvvvvvk.', '..kkkkkk..', '..........'],
+    // v1.0: the star shard (a blue four-pointed star) and the elder's charm (a gold ring, a blue gem)
+    'icon.star_shard': ['....kk....', '...kIIk...', '.kkIWWIkk.', 'kIIWWWWIIk', '.kkIWWIkk.', '...kIIk...', '....kk....', '..........', '..........', '..........'],
+    // v1.0.1: weapons and armour that borrowed another icon, and one icon per dish (placeholders)
+    'icon.spear': ['........ka', '.......kak', '......kAk.', '.....kAk..', '....kAk...', '...kAk....', '..kAk.....', '.kAk......', 'kAk.......', 'kk........'],
+    'icon.greatsword': ['......kkk.', '.....kaak.', '....kaak..', '...kaak...', '..kaak....', 'k.kaak....', 'kkaak.....', '.kyk......', 'kyk.k.....', 'kk........'],
+    'icon.ember_sword': ['.......kk.', '......kJk.', '.....kKJk.', '....kKJk..', '...kKJk...', 'k.kKJk....', 'kkKk......', '.kyk......', 'kyk.k.....', 'kk........'],
+    'icon.star_sword': ['.......kk.', '......kWk.', '.....kIWk.', '....kIWk..', '...kIWk...', 'k.kIWk....', 'kkIk......', '.kYk......', 'kYk.k.....', 'kk........'],
+    'icon.cap': ['..........', '...kkkk...', '..kYYYYk..', '.kYJYYYYk.', '.kYYYYYYk.', 'kkkkkkkkkk', 'kNNNNNNNNk', '.kkkkkkkk.', '..........', '..........'],
+    'icon.boots': ['..kkkk....', '..kNNk....', '..kNNk....', '..kNNk....', '..kNNk....', '..kNNNkk..', '..kNNNNNk.', '..kTTTTTk.', '..kkkkkkk.', '..........'],
+    'icon.dish.grilled_meat': ['.........k', '........kA', '...kkk.kA.', '..kiXkkA..', '..kXiAk...', '...kAkkk..', '..kAkiXk..', '.kA.kXik..', 'kA...kkk..', 'k.........'],
+    'icon.dish.mushroom_skewer': ['.........k', '........kA', '...kkk.kA.', '..kKXkkA..', '..kXKAk...', '...kAkkk..', '..kAkKXk..', '.kA.kXKk..', 'kA...kkk..', 'k.........'],
+    'icon.dish.berry_jam': ['...kkkk...', '..kXXXXk..', '..kkkkkk..', '.kiiiiiik.', '.kiXiiiik.', '.kiiiiiik.', '.kiiiiiik.', '..kkkkkk..', '..........', '..........'],
+    'icon.dish.hunter_stew': ['..........', '..k.k.k...', '..........', '.kkkkkkkk.', 'kvvvvvvvvk', 'kNyNyNyNvk', 'kvyNyNyvvk', '.kvvvvvvk.', '..kkkkkk..', '..........'],
+    'icon.dish.ember_soup': ['..........', '..k.k.k...', '..........', '.kkkkkkkk.', 'kvvvvvvvvk', 'kKJKJKJKvk', 'kvJKJKJvvk', '.kvvvvvvk.', '..kkkkkk..', '..........'],
+    'icon.dish.hearty_skewer': ['.........k', '........kA', '...kkk.kA.', '..kihkkA..', '..khiAk...', '...kAkkk..', '..kAkihk..', '.kA.khik..', 'kA...kkk..', 'k.........'],
+    'icon.dish.mixed_stew': ['..........', '..k.k.k...', '..........', '.kkkkkkkk.', 'kvvvvvvvvk', 'khyhyhyhvk', 'kvyhyhyvvk', '.kvvvvvvk.', '..kkkkkk..', '..........'],
+    'icon.dish.dubious_food': ['..........', '..k.k.k...', '..........', '.kkkkkkkk.', 'kvvvvvvvvk', 'kzZzZzZzvk', 'kvZzZzZvvk', '.kvvvvvvk.', '..kkkkkk..', '..........'],
+    'icon.charm': ['...kkkk...', '..kY..Yk..', '..kY..Yk..', '...kYYk...', '...kIIk...', '..kIWWIk..', '..kIIIIk..', '...kIIk...', '....kk....', '..........'],
   };
 }
 

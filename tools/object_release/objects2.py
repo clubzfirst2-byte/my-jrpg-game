@@ -722,7 +722,7 @@ def receiver():
             for x, y, t in ((11, 1, 4), (10, 1, 3), (12, 1, 3), (11, 0, 3), (11, 2, 3), (4, 3, 3), (19, 3, 3)):
                 c.put(x, y, "gem", t)
             lit_by(c, {"gem"}, "gold", 4)
-            lit_by(c, {"gem"}, S, 3)
+            lit_by(c, {"gem"}, S, 3)  # only the inner rim catches the light (before the inlay is set)
         else:
             c.put(10, 8, "gem", 1)
         out["obj.receiver." + ("on" if on else "off")] = to_rgba(c)
@@ -934,6 +934,75 @@ def sensor():
             for x, y in ((6, 13), (5, 14), (9, 14), (9, 15), (14, 14), (14, 15), (17, 13), (18, 14)):
                 c.put(x, y, S, 0)
         out["sw.sensor." + ("on" if on else "off")] = drop(to_rgba(c))
+    return out
+
+
+def star_ring():
+    """obj.star_ring.off / .on 48x52 (feet): the 星環 standing ring on the beach (the gate to the source).
+    A thick ring of field stone, built of blocks, stands in a two-step plinth; a gem-blue inlay runs round
+    its face with four set stones (the seats) at the top, the sides and the bottom. Gem blue = 星環 (guide).
+    Off: dormant: the inlay and the seats are dark blue, the middle is open (the sand shows through).
+    On: the middle fills with light on the same gem ramp (bright core, opaque pixels only), the inlay and the
+    seats light up, the stone beside them catches the light, and sparks rise beside the ring (shape + light)."""
+    out = {}
+    S = "stone"
+    cx, cy, ro, ri = 24.0, 22.5, 21.0, 14.0
+    for on in (False, True):
+        c = cv(48, 52)
+        # the ring: blocks of stone, lit from the top left
+        for x, y in ring_px(cx, cy, ri, ro):
+            c.put(x, y, S, 2)
+        round_shade(c, S, cx, cy, ro, ro, cuts=(0.9, 0.62, 0.15))
+        for k in range(12):  # the joints between the blocks (radial), not across the inlay
+            a = (k + 0.5) / 12 * 2 * math.pi
+            for r10 in range(int(ri * 10) + 5, int(ro * 10) - 4, 3):
+                r = r10 / 10
+                if 16.0 <= r <= 18.6:
+                    continue
+                x, y = int(cx + r * math.cos(a)), int(cy + r * math.sin(a))
+                if c.m(x, y) == S:
+                    c.tone[y][x] = 1
+        if on:
+            # the light in the middle: bright core, the same ramp to the edge
+            for y in range(52):
+                for x in range(48):
+                    d = math.hypot(x + 0.5 - cx, y + 0.5 - cy)
+                    if d < ri - 0.01 and c.m(x, y) is None:
+                        c.put(x, y, "gem", 4 if d < 6.5 else 3 if d < 11.0 else 2)
+            for x, y in ((23, 13), (23, 14), (23, 30), (23, 31), (14, 22), (15, 22), (32, 22), (33, 22),
+                         (17, 16), (30, 16), (17, 28), (30, 28)):  # a faint star of rays through the light
+                c.put(x, y, "gem", 3 if 12 <= x <= 35 and 11 <= y <= 33 and math.hypot(x + 0.5 - cx, y + 0.5 - cy) < 11 else 4)
+            lit_by(c, {"gem"}, S, 3)
+            for x, y, t in ((2, 9, 4), (3, 8, 3), (1, 15, 3), (45, 9, 3), (44, 8, 4), (46, 15, 3),
+                            (24, 0, 4), (8, 1, 3), (39, 1, 3)):  # sparks rising beside the ring
+                c.put(x, y, "gem", t)
+        # the inlay (a groove of gem blue round the face)
+        for x, y in ring_px(cx, cy, 16.6, 18.0):
+            up_left = (x + 0.5 - cx) + (y + 0.5 - cy) < 0
+            c.put(x, y, "gem", (4 if up_left else 3) if on else (1 if up_left else 0))
+        # the four seats: gem stones set in the inlay (N, E, S, W)
+        for sx, sy in ((cx, cy - 17.3), (cx + 17.3, cy), (cx, cy + 17.3), (cx - 17.3, cy)):
+            x0, y0 = int(sx - 1.5), int(sy - 1.5)
+            for dy in range(3):
+                for dx in range(3):
+                    if (dx, dy) in ((0, 0), (2, 0), (0, 2), (2, 2)):
+                        continue
+                    if on:
+                        t = 4 if dx + dy <= 2 else 3
+                    else:
+                        t = 3 if (dx, dy) == (1, 0) else 2 if dx + dy <= 2 else 1
+                    c.put(x0 + dx, y0 + dy, "gem", t)
+        # the plinth the ring stands in: two steps of the same stone
+        box(c, 9, 39, 38, 45, S, top=3, bottom=1)
+        hline(c, 9, 38, 39, S, 4)
+        for x in (16, 24, 31):
+            vline(c, x, 40, 45, S, 1)
+        box(c, 4, 46, 43, 50, S, top=3, bottom=1)
+        hline(c, 4, 43, 46, S, 4)
+        hline(c, 5, 42, 47, S, 3)
+        for x in (12, 21, 30, 38):
+            vline(c, x, 48, 50, S, 1)
+        out["obj.star_ring." + ("on" if on else "off")] = drop(to_rgba(c))
     return out
 
 
@@ -1168,11 +1237,63 @@ def icon_food():
     return to_rgba(c)
 
 
+def icon_star_shard():
+    """v1.0: the star shard (星のかけら), a 星環 reward tied to the hero's pendant: a broad four-pointed star
+    of gem blue (the guide's 星環 colour) cut in facets lit from the top left, its lower point snapped off
+    in a jagged edge (a shard). Gem only, so it never reads as the purple murk crystal (icon.shard)."""
+    c = cv(20, 20)
+    G = "gem"
+    cx, cy = 9.5, 9.0
+    for y in range(2, 18):  # inside 2..17: the outline takes the next pixel (1 px margin left)
+        for x in range(2, 18):
+            fx, fy = x + 0.5 - cx, y + 0.5 - cy
+            if (abs(fx) / 7.9) ** 0.75 + (abs(fy) / 7.9) ** 0.75 > 1:
+                continue
+            if fy > 3.5 + (1 if x % 2 else 0) - (1 if x == 10 else 0):
+                continue  # the snapped-off lower point: a jagged edge
+            # facets: each point has a lit side (toward the top left) and a shaded side
+            if abs(fy) >= abs(fx):
+                t = 3 if fx < 0 else 2 if fy < 0 else 1
+            else:
+                t = 3 if fy < 0 else 2 if fx < 0 else 1
+            c.put(x, y, G, t)
+    c.rect(8, 8, 10, 9, G, 4)  # the bright heart of the star
+    for x, y in ((9, 3), (9, 4), (9, 5), (9, 6), (9, 7), (3, 8), (4, 8), (5, 8), (6, 8), (7, 8)):
+        c.put(x, y, G, 4)  # light running out along the lit ridges
+    for x, y in ((8, 12), (9, 12), (10, 12)):  # the broken face catches light
+        if c.m(x, y) == G:
+            c.put(x, y, G, 3)
+    return to_rgba(c)
+
+
+def icon_charm():
+    """v1.0: the elder's lost charm (お守り), as it stands on the elder's shelf (obj.charm_shelf.on): a gold
+    ring set with a gem-blue stone, hung on a thin cord. Gold, gem, string (3 materials)."""
+    c = cv(20, 20)
+    c.line(6, 7, 9, 2, "string", 3)  # the cord: a thin loop up from the ring
+    c.line(13, 7, 10, 2, "string", 2)
+    c.put(7, 7, "string", 3)
+    c.put(12, 7, "string", 2)
+    for x, y in ring_px(9.5, 12.0, 0, 5.4):
+        c.put(x, y, "gold")
+    round_shade(c, "gold", 9.5, 12.0, 5.4, 5.4, cuts=(0.88, 0.5, 0.05))
+    c.rect(8, 6, 11, 7, "gold", 3)  # the bail the cord runs through
+    c.put(11, 7, "gold", 2)
+    for x, y in ring_px(9.5, 12.0, 0, 3.2):
+        c.put(x, y, "gem")
+    round_shade(c, "gem", 9.5, 12.0, 3.2, 3.2, cuts=(0.85, 0.5, 0.05))
+    for x, y in ring_px(9.5, 12.0, 3.2, 3.9):  # the bezel: a dark groove round the stone
+        c.put(x, y, "gold", 1)
+    c.put(8, 11, "gem", 4)
+    c.put(6, 9, "gold", 4)
+    return to_rgba(c)
+
 def icons2():
     return {
         "icon.bow": icon_bow(), "icon.armor": icon_armor(), "icon.mushroom": icon_mushroom(),
         "icon.berry": icon_berry(), "icon.pepper": icon_pepper(), "icon.fang": icon_fang(),
         "icon.shard": icon_shard(), "icon.arrows": icon_arrows(), "icon.food": icon_food(),
+        "icon.star_shard": icon_star_shard(), "icon.charm": icon_charm(),
     }
 
 
@@ -1354,7 +1475,7 @@ def marker():
 def all_wave2():
     out = {}
     for f in (door, cave, stairs, lowwall, bed, table, shelves, counter, stove, barrel, mat, anvil,
-              brazier, crystal, receiver, sconce, resonance_stone, pillar, altar, sensor,
+              brazier, crystal, receiver, sconce, resonance_stone, pillar, altar, sensor, star_ring,
               icons2, glider, shadow, arrow, orb, shield_fx, bow_fx, smoke,
               light_orb, marker):
         out.update(f())
@@ -1370,7 +1491,9 @@ SIZES2 = {
     "obj.receiver.off": (24, 32), "obj.receiver.on": (24, 32), "obj.sconce.off": (20, 36),
     "obj.sconce.on": (20, 36), "obj.stone.off": (24, 32), "obj.stone.on": (24, 32),
     "obj.pillar": (24, 48), "obj.altar": (32, 28), "sw.sensor.off": (24, 28), "sw.sensor.on": (24, 28),
-    **{f"icon.{n}": (20, 20) for n in ("bow", "armor", "mushroom", "berry", "pepper", "fang", "shard", "arrows", "food")},
+    "obj.star_ring.off": (48, 52), "obj.star_ring.on": (48, 52),
+    **{f"icon.{n}": (20, 20) for n in ("bow", "armor", "mushroom", "berry", "pepper", "fang", "shard", "arrows", "food",
+                                                 "star_shard", "charm")},
     "fx.glider": (44, 20), "fx.shadow": (24, 10), "fx.arrow": (20, 6), "fx.orb": (12, 12),
     "fx.shield": (16, 18), "fx.bow": (10, 24), "fx.smoke": (12, 12), "fx.light": (16, 16),
     "ui.marker": (14, 14),

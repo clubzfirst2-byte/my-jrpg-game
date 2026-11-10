@@ -23,11 +23,11 @@ describe('service worker precache list (perf v1)', () => {
   it('keeps everything normal play needs', () => {
     for (const f of PRECACHE_STATIC) expect(files).toContain(f);
     for (const f of ['assets/index-a.js', 'assets/pixi-b.js', 'assets/legacyObjects-c.js', 'assets/index-f.css']) expect(files).toContain(f);
-    for (const g of ['hero', 'npc', 'enemy']) expect(files).toEqual(expect.arrayContaining([`assets/release-${g}-1.png`, `assets/release-${g}-2.json`]));
+    for (const g of ['hero', 'npc', 'enemy', 'terrain', 'objects']) expect(files).toEqual(expect.arrayContaining([`assets/release-${g}-1.png`, `assets/release-${g}-2.json`]));
   });
 
   it('leaves out the prototype chunks, the review and unused release sheets, and source maps', () => {
-    for (const g of ['npc-revision', 'npc-revision-b2', 'terrain', 'objects']) {
+    for (const g of ['npc-revision', 'npc-revision-b2']) {
       expect(files).not.toContain(`assets/release-${g}-1.png`);
       expect(files).not.toContain(`assets/release-${g}-2.json`);
     }
@@ -46,7 +46,7 @@ describe('service worker precache list (perf v1)', () => {
     expect(releaseGroupOf('release-npc-revision-b2.png')).toBe('npc-revision-b2');
     expect(releaseGroupOf('release-hero.json')).toBe('hero');
     expect(releaseGroupOf('index.css')).toBeNull();
-    expect(['hero', 'npc', 'enemy'].some(onDemandReleaseGroup)).toBe(false);
-    expect(['terrain', 'objects', 'npc-revision', 'npc-revision-b2', 'npc-revision-b3'].every(onDemandReleaseGroup)).toBe(true);
+    expect(['hero', 'npc', 'enemy', 'terrain', 'objects'].some(onDemandReleaseGroup)).toBe(false);
+    expect(['npc-revision', 'npc-revision-b2', 'npc-revision-b3'].every(onDemandReleaseGroup)).toBe(true);
   });
 });

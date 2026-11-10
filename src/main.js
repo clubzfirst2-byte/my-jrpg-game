@@ -20,8 +20,10 @@ import { EndingScreen } from './ui/ending.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
-import { createNpcs } from './game/npc/npcs.js';
+import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
 import { prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
+import { TERRAIN_GROUP, releaseTerrainEntries, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
+import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
 import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
 import { InputManager } from './platform/inputManager.js';
@@ -150,7 +152,11 @@ async function boot() {
   //   so does ?enemy=proto / ?proto=all
   const enemyParam = params.get('enemy');
   if (hdParam !== '0' && enemyParam !== 'placeholder' && !protoGroups.includes('enemy') && (releaseHero || enemyParam === 'release')) releaseGroups.push('enemy');
+  if (wantsTerrainArt(params, releaseHero)) releaseGroups.push(TERRAIN_GROUP); // v1.0: the terrain release art (?terrain=placeholder|release, terrainArt.js)
+  //   v1.0: the objects' release art (buildings, chests, switches, icons, effects; objectsArt.js)
+  releaseGroups.push(...objectsReleaseGroups(params, { releaseHero, protoGroups }));
   for (const frames of await Promise.all(releaseGroups.map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
+  installItemIcons(artOverrides); // the menus' item icons, from the same art
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
 
   /** @type {import('pixi.js').Application} */
@@ -171,7 +177,7 @@ async function boot() {
 
   // --- assets / logic / view ---
   const assets = new AssetManager();
-  assets.register('placeholder', () => buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides), ...releaseEnemyEntries(artOverrides)], artOverrides));
+  assets.register('placeholder', () => buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides), ...releaseEnemyEntries(artOverrides), ...releaseTerrainEntries('placeholder', artOverrides)], artOverrides));
   // P8: each region's art is its own bundle, loaded by the view near the region.
   for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name, artOverrides));
   // v1.0: the final boss's art (loaded by the view only near its arena).
@@ -808,6 +814,7 @@ async function boot() {
     if (bossKey !== shownBoss) {
       shownBoss = bossKey;
       bossBar.hidden = !boss;
+      uiRoot.classList.toggle('boss-fight', !!boss); // toasts move to the bottom (styles.css)
       if (boss) {
         bossName.textContent = boss.name;
         bossFill.style.width = `${(100 * boss.hp) / boss.maxHp}%`;
@@ -954,7 +961,10 @@ async function boot() {
       if (!n) return;
       const p = state.player;
       p.x = p.prevX = n.x;
-      p.y = p.prevY = n.y + 14;
+      // Right against its body, below; a ghost has no body (and some have a short reach, 18): the
+      // old 14 px, always inside the talk reach.
+      const gap = npcSolid(n) ? NPC_BODY.depth + NPC_BODY.front : 14;
+      p.y = p.prevY = n.y + Math.min(gap, n.reach - 4);
       p.z = p.prevZ = p.groundZ = n.z;
       p.facing = 'up';
       p.aimX = 0;
@@ -1055,6 +1065,8 @@ async function boot() {
   };
   Object.assign(api, finalBossDebugApi(state, api.teleport)); // v1.0: the source (flags, arena, seats)
   Object.assign(api, storyDebugApi(state)); // v1.0: the opening and the ending
+  Object.assign(api, terrainDebugApi(assets, view)); // v1.0: which terrain is drawn from the release art (v1.1: water edges)
+  Object.assign(api, objectsDebugApi(state, view, assets)); // v1.0: the objects' art
   /** @type {any} */ (window).__debugApi = api;
   // ?tour=60 starts the auto tour right away (with ?map=..., which skips the title).
   if (params.get('tour') && !withTitle) startTour(Number.parseFloat(params.get('tour') ?? '') || 60);
