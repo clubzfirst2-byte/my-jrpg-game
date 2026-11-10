@@ -21,7 +21,7 @@ const covered = (k) => ART.has(k) || fallback.has(k);
 
 describe('objects release art: names → the game keys', () => {
   it('every release sprite is a key the game draws (no renaming needed)', () => {
-    expect(ART.size).toBe(66); // 62 + the beach ring's 2 + the v1.0 icons (star shard, charm)
+    expect(ART.size).toBe(80); // 62 + the beach ring's 2 + the v1.0 icons (star shard, charm) + the v1.0.1 icons (6) + dishes (8)
     for (const k of ART) expect(KEYS.has(k), k).toBe(true);
   });
 
@@ -55,15 +55,25 @@ describe('objects release art: names → the game keys', () => {
 
   it('every item has an icon with release art (on the ground and in the menus)', () => {
     const items = JSON.parse(readFileSync(new URL('../../data/items.json', import.meta.url), 'utf8')).items;
-    expect(ICON_KEYS).toHaveLength(14);
+    expect(ICON_KEYS).toHaveLength(28); // 12 + star shard, charm (v1.0) + 6 weapons / armour + 8 dishes (v1.0.1)
     for (const k of ICON_KEYS) expect(ART.has(k), k).toBe(true);
     for (const it of items) expect(ART.has(iconFor(it.id)), it.id).toBe(true);
     // key items have their own icons (v1.0), on the ground and in the menus
     expect(iconFor('star_shard')).toBe('icon.star_shard');
     expect(iconFor('lost_charm')).toBe('icon.charm');
+    // v1.0.1 (tools/object_release/icons_v1_1.py ITEM_ICONS): no item borrows another item's icon
+    const ITEM_ICONS = { guard_spear: 'icon.spear', rusty_greatsword: 'icon.greatsword', ember_sword: 'icon.ember_sword', star_steel_sword: 'icon.star_sword', insulated_cap: 'icon.cap', grip_boots: 'icon.boots' };
+    for (const [id, k] of Object.entries(ITEM_ICONS)) expect(iconFor(id), id).toBe(k);
+    for (const it of items.filter((x) => x.type === 'food')) {
+      expect(iconFor(it.id), it.id).toBe(`icon.dish.${it.id}`);
+      expect(iconFor(`${it.id}:7`), `${it.id}:7`).toBe(`icon.dish.${it.id}`); // stacks with a heal value
+    }
+    // every item has an icon of its own, but for two pairs: the wood / traveller's sword (icon.sword) and the two bows (icon.bow)
+    const used = items.map((it) => iconFor(it.id));
+    expect(new Set(used).size).toBe(items.length - 2);
     // the star's drawing ends higher (row 14): its feet sit at row 16 like the other icons' (row 18 + 1 empty row)
     const icons = placeholderEntries().filter((e) => e.key.startsWith('icon.'));
-    expect(icons).toHaveLength(14);
+    expect(icons).toHaveLength(28);
     expect(icons.find((e) => e.key === 'icon.star_shard').anchor).toEqual([0.5, 0.8]);
     for (const e of icons.filter((x) => x.key !== 'icon.star_shard')) expect(e.anchor, e.key).toEqual([0.5, 1]);
   });

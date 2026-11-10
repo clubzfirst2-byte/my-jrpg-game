@@ -16,10 +16,12 @@ from PIL import Image, ImageDraw
 from mock import BG_UI, HERO, SNOW, compare, grass_tile, label, path_tile, place, to_image
 from objects import ANCHOR
 from objects2 import ANCHOR2
+from icons_v1_1 import ANCHOR3
+from icons_dishes import ANCHOR4, DISHES
 
 ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
 OUT = os.path.join(ROOT, "docs", "art-release", "objects")
-AN = {**ANCHOR, **ANCHOR2}
+AN = {**ANCHOR, **ANCHOR2, **ANCHOR3, **ANCHOR4}
 WOOD_FLOOR = [(0x4A, 0x2C, 0x16), (0x6E, 0x44, 0x24), (0x90, 0x60, 0x38)]
 RUIN_FLOOR = [(0x3A, 0x42, 0x46), (0x5A, 0x64, 0x68), (0x7C, 0x86, 0x88)]
 PLASTER = [(0x7A, 0x6A, 0x58), (0xA8, 0x96, 0x7E), (0xC4, 0xB4, 0x9C)]
@@ -36,7 +38,9 @@ GROUPS = [
                        "obj.stone.on", "obj.pillar", "obj.altar", "sw.plate.off", "sw.plate.on", "sw.sensor.off",
                        "sw.sensor.on"]),
     ("icons", ["icon.sword", "icon.bow", "icon.armor", "icon.mushroom", "icon.berry", "icon.herb", "icon.pepper",
-               "icon.meat", "icon.fang", "icon.shard", "icon.arrows", "icon.food", "icon.star_shard", "icon.charm"]),
+               "icon.meat", "icon.fang", "icon.shard", "icon.arrows", "icon.food", "icon.star_shard", "icon.charm",
+               "icon.spear", "icon.greatsword", "icon.ember_sword", "icon.star_sword", "icon.cap", "icon.boots",
+               *[f"icon.dish.{k}" for k in DISHES]]),
     ("fx / ui", ["fx.slash", "fx.fire.0", "fx.fire.1", "fx.glider", "fx.shadow", "fx.arrow", "fx.orb", "fx.shield",
                  "fx.bow", "fx.smoke", "fx.light", "ui.marker"]),
 ]

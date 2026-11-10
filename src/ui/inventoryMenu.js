@@ -119,6 +119,7 @@ export class InventoryMenu {
 
   close() {
     this.el.hidden = true;
+    this.cooked = null; // the "できた" row is only for the visit to the pot it was cooked in
     this.hooks.onClose();
   }
 
@@ -304,17 +305,28 @@ export class InventoryMenu {
       const hint = document.createElement('span');
       hint.className = 'inv-hint';
       hint.textContent = `→ ${known ? itemDef(result).name : '？？？'}`;
+      if (known) {
+        const icon = itemIconElement(result);
+        icon.style.marginRight = '4px';
+        hint.prepend(icon);
+      }
       pot.append(
         hint,
         button('inv-cook', '料理する', () => {
           const r = cook(inv, this.pot);
           if (r) this.hooks.toast(`${r.name}ができた！${r.discovered ? '（新しいレシピ）' : ''}`);
+          this.cooked = r ? r.result : null;
           this.pot = [];
           this.render();
         }),
       );
     }
     list.append(pot);
+    // v1.0.1: what was just cooked, with its icon (until the next ingredient goes in)
+    if (this.cooked && this.pot.length === 0 && (inv.items[this.cooked] ?? 0) > 0) {
+      const id = this.cooked;
+      list.append(row('inv-cooked', `できた：${itemDef(baseId(id)).name}`, `持ち物 ×${inv.items[id] ?? 0}`, false, null, id));
+    }
     const mats = Object.keys(inv.items).filter((id) => itemDef(baseId(id)).type === 'material');
     if (mats.length === 0) {
       const p = document.createElement('p');
@@ -325,8 +337,10 @@ export class InventoryMenu {
     for (const id of mats) {
       const used = this.pot.filter((x) => x === id).length;
       const left = inv.items[id] - used;
+      if (left <= 0) continue; // all of it is in the pot (or used up): no "×0" row
       list.append(
         row(`inv-add-${id}`, `${itemDef(id).name} ×${left}`, '鍋に入れる（3 つまで）', false, left > 0 && this.pot.length < 3 ? () => {
+          this.cooked = null;
           this.pot.push(id);
           this.render();
         } : null, id),
