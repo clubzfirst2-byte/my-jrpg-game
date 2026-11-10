@@ -21,6 +21,7 @@ stay 2 px inside the picture, and among a few candidates the one whose left / ri
 are least alike is kept.
 """
 
+import math
 import os
 import random
 import sys
@@ -31,7 +32,8 @@ import marks as M  # noqa: E402
 
 N_MACRO = 8
 MACRO_NAMES = ["macro"] + [f"macro{k}" for k in range(2, N_MACRO + 1)]
-FAMILY = {"grass": "grass", "plains": "grass", "lake": "grass", "moss": "moss", "path": "path", "snow": "snow"}
+FAMILY = {"grass": "grass", "plains": "grass", "lake": "grass", "moss": "moss", "path": "path", "snow": "snow",
+          "sand": "sand", "dsand": "sand"}
 FLOWER_COLOURS = ["flower.white", "flower.yellow", "flower.pink"]
 
 
@@ -170,6 +172,21 @@ def d_special(c, g, mat, x, y, p, season):
             c.stamp(x + 8, y + 4, [r[:5] for r in M.REED[1:]], "reed")
 
 
+def d_carpet(c, g, mat, x, y, p, season):
+    """Island grass (round 5): a clover carpet on a lit bed, in white bloom in summer. Placements 0 and 4 (two
+    of the 8 pictures in the first round) are wide carpets of 8-9 clover; the others a small group of 3."""
+    bloom = season is None
+    if p % 8 in (0, 4):
+        _patch(c, mat, x + 12, y + 7, 11.0, 6.0, 2, 700 + p, wobble=0.5)
+        spots = [(1, 4), (5, 1), (9, 5), (13, 2), (17, 6), (4, 8), (12, 9), (19, 1), (8, 11), (16, 10)][:9 + p % 2]
+        for j, (dx, dy) in enumerate(spots):
+            _clover(c, mat, x + dx, y + dy, j + p, bloom and j % 3 != 2)
+    else:
+        _patch(c, mat, x + 7, y + 5, 5.5, 3.4, 2, 700 + p, wobble=0.5)
+        for j, (dx, dy) in enumerate([(2, 3), (7, 1), (6, 6)]):
+            _clover(c, mat, x + dx, y + dy, j + p, bloom and j != 1)
+
+
 def d_pebbles(c, g, mat, x, y, p, season):
     c.stamp(x, y, M.PEBBLE_M if p % 2 else M.PEBBLE_S, "pebble")
     c.stamp(x + 5, y + 3, M.PEBBLE_S, "pebble")
@@ -297,6 +314,82 @@ def d_tips(c, g, mat, x, y, p, season):
         M.draw_clump(c, season[1], x + 6, y + 6, "S", light=False)
 
 
+# ------------------------------------------------------------------------------------------------------
+# Round 5: island sand and desert sand (scheme A). Pictures: ripple fields that thin out at their ends, dune
+# swells (lit windward face, lee shade), pebble clusters, shells (beach) / dry grass (desert), pale smooth
+# stretches. Calm tiles: bare sand with a grain and a few short ripples, pebbles, shells / twigs.
+# ------------------------------------------------------------------------------------------------------
+def _stone(g):
+    return "dstone" if g == "dsand" else "pebble"
+
+
+def d_ripples(c, g, mat, x, y, p, season):
+    """A field of 3-4 wind ripples, about 4 px apart, longest in the middle; crest 4 (5 on a short lit run),
+    trough 2 under it; they all wave together."""
+    n = 3 + p % 2
+    for k in range(n):
+        half = (24 - 7 * abs(k - (n - 1) / 2)) / 2
+        x0, x1 = round(x + 12 - half), round(x + 12 + half)
+        y0 = y + 1 + 4 * k - (n - 3) * 2 + 2
+        for xx in range(x0, x1):
+            yy = y0 + round(1.3 * math.sin((xx - x) / 3.7 + 0.9 * p))
+            end = xx in (x0, x1 - 1)
+            c.put(xx, yy, mat, 5 if (xx + 2 * k + p) % 9 < 2 and not end else 4)
+            if not end:
+                c.put(xx, yy + 1, mat, 2)
+
+
+def d_dune(c, g, mat, x, y, p, season):
+    """A low dune swell, lit to the upper left, its lee in shade (three sizes)."""
+    w, h = [(22, 10), (17, 8), (20, 9)][p % 3]
+    _shaded(c, mat, x + (22 - w) // 2, y + (10 - h) // 2, w, h, 560 + p, False)
+
+
+def d_pebcl(c, g, mat, x, y, p, season):
+    st = _stone(g)
+    c.stamp(x, y + 1, M.PEBBLE_M, st)
+    c.stamp(x + 5, y + 3 - p % 2, M.PEBBLE_S, st)
+    if p % 2:
+        c.stamp(x + 7, y, M.PEBBLE_S, st)
+
+
+def d_sandown(c, g, mat, x, y, p, season):
+    """Beach: shells (one or two). Desert: a tuft of dry grass with its shadow."""
+    if g == "sand":
+        c.stamp(x + 1, y + 3, M.SHELL, "shell")
+        if p % 2:
+            c.stamp(x + 6, y + 5, ["65", "43"], "shell")
+    else:
+        M.draw_clump(c, "autumn.grass", x + 5, y + 8, "M" if p % 2 else "S")
+
+
+def d_smooth(c, g, mat, x, y, p, season):
+    """A pale wind-smoothed stretch (three sizes)."""
+    rx, ry = [(7.4, 3.2), (5.6, 2.6), (6.6, 3.6)][p % 3]
+    _patch(c, mat, x + 8, y + 4, rx, ry, 4, 580 + p)
+
+
+def c_ripple(c, g, mat, x, y, p, season):
+    """Calm sand: one or two short ripples."""
+    for k in range(1 + p % 2):
+        for xx in range(8 - 2 * k):
+            yy = y + 4 * k + round(0.9 * math.sin(xx / 2.6 + p))
+            c.put(x + xx + k, yy + 1, mat, 4)
+            if 0 < xx < 7 - 2 * k:
+                c.put(x + xx + k, yy + 2, mat, 2)
+
+
+def c_speb(c, g, mat, x, y, p, season):
+    c.stamp(x, y, M.PEBBLE_S if p % 3 else M.PEBBLE_M, _stone(g))
+
+
+def c_sandown(c, g, mat, x, y, p, season):
+    if g == "sand":
+        c.stamp(x, y, ["65", "43"] if p % 2 else M.SHELL, "shell")
+    else:
+        c.stamp(x, y, M.TWIG, "bark")
+
+
 KINDS = {
     "grass": [("thicket", 24, 16, 8, d_thicket), ("special", 15, 12, 8, d_special), ("lit", 15, 7, 16, d_lit),
               ("clump_m", 10, 9, 8, d_clump_m), ("pebbles", 9, 6, 8, d_pebbles)],
@@ -305,6 +398,8 @@ KINDS = {
     "path": [("worn", 20, 10, 16, d_worn), ("dark", 16, 8, 8, d_dark), ("peb_l", 5, 4, 8, d_peb_l), ("pebbles", 9, 6, 8, d_pebbles),
              ("crack", 7, 6, 8, d_crack), ("tuft", 6, 7, 8, d_tuft)],
 }
+KINDS["sand"] = [("ripples", 24, 16, 16, d_ripples), ("dune", 22, 10, 8, d_dune), ("smooth", 15, 8, 8, d_smooth),
+                 ("pebcl", 10, 6, 8, d_pebcl), ("own", 10, 9, 8, d_sandown)]
 KINDS["snow"] = [("drift", 22, 8, 8, d_drift), ("hollow", 18, 9, 16, d_hollow), ("face", 20, 9, 16, d_face),
                  ("sparkle", 8, 6, 8, d_sparkle), ("rock", 7, 5, 8, d_rock)]
 LEAVES = ("leaves", 7, 5, 8, d_leaves)
@@ -313,6 +408,8 @@ TIPS = ("tips", 10, 8, 8, d_tips)
 
 def kinds_of(ground, season):
     ks = list(KINDS[FAMILY[ground]])
+    if ground == "grass":  # island grass: its own feature is the clover carpet (round 5)
+        ks = [("carpet", 24, 14, 8, d_carpet) if k[0] == "special" else k for k in ks]
     if season == "autumn":
         ks.append(LEAVES)
     if isinstance(season, tuple):  # ("winter", the plant whose tips show): the winter of a grass-like ground, on snow
@@ -398,6 +495,8 @@ CALM_KINDS = {
     "grass": [("clump_s", d_clump_s, 12), ("mini_lit", c_mini_lit, 8), ("mini_dark", c_mini_dark, 8)],
     "moss": [("needle", c_needle, 10), ("clump_s", d_clump_s, 6), ("mini_lit", c_mini_lit, 8), ("mini_dark", c_mini_dark, 8)],
     "path": [("peb", c_peb, 12), ("crack", c_crack, 6), ("mini_lit", c_mini_lit, 8), ("mini_dark", c_mini_dark, 8)],
+    "sand": [("ripple", c_ripple, 10), ("peb", c_speb, 6), ("own", c_sandown, 5), ("mini_lit", c_mini_lit, 8),
+             ("mini_dark", c_mini_dark, 5)],
     "snow": [("sparkle", c_sparkle, 10), ("hollow", c_hollow, 8), ("drift", c_drift, 8), ("mini_lit", c_mini_lit, 6)],
 }
 CALM_OWN = {"grass": ("clover", c_clover, 10), "plains": ("flower", c_flower, 8), "lake": ("reed", c_reed, 6)}
@@ -493,63 +592,87 @@ def calm_layout(ground, season=None):
 
 
 _FIX = {}
-MAX_FIX = 8  # at most this many balancing specks in a calm tile
+MAX_FIX = 10  # at most this many balancing specks in a calm tile (a quarter of a picture)
 
 
 def _balance(ground, season):
-    """Grain specks that flatten the mean row / column brightness of the 16 calm tiles: the small things stay
-    1+ px inside the tile, so the rows / columns near the edges would differ a little on average. A speck
-    (2 px, diagonal, one tone under / over the core, like the grain) goes on a core-tone pair where a row and a
-    column that are both too bright (too dark) cross, in the tiles in turn, until the profiles are flat."""
+    """Grain specks that flatten the mean row / column brightness of the 16 calm tiles (see _flatten)."""
     _FIX.pop((ground, season), None)
     cs = [calm_tile(ground, v, season=season) for v in range(16)]
+    return _flatten([(c, 0, 0) for c in cs], ground, season=season)
+
+
+def _flatten(views, ground, cap=MAX_FIX, thr=0.03, season=None):
+    """The small things stay 1+ px inside a tile, so the rows / columns near the tile edges would differ a little
+    on average, and a ground whose field is very even shows even that. A speck (2 px, diagonal - on snow flat -,
+    one tone under / over the core, like the grain) goes on a core-tone pair where a row and a column that are
+    both too bright (too dark) cross, in the tiles in turn, until the mean profiles over the tiles are flat
+    (largest deviation under thr) or every tile has `cap` specks. views: (canvas, x0, y0) of 32 x 32 tiles;
+    the specks are drawn in place and returned per view."""
+    n = len(views)
     base = (ground, 3)
-    lum = [[[_lum(c.px[y][x]) for x in range(32)] for y in range(32)] for c in cs]
-    fix = [[] for _ in range(16)]
-    R = [sum(lum[v][y][x] for v in range(16) for x in range(32)) / 512 for y in range(32)]
-    C = [sum(lum[v][y][x] for v in range(16) for y in range(32)) / 512 for x in range(32)]
+    if season == "autumn":  # the autumn sets are drawn in the summer ramp and recoloured after: weigh by autumn colours
+        import grounds as G
+        amap = G.AUTUMN_RAMP
+
+        def _lum(v):  # noqa: F811
+            m = amap.get(v[0], v[0]) if v[0] == ground else v[0]
+            r, g, b = RGB[m][v[1]]
+            return 0.299 * r + 0.587 * g + 0.114 * b
+    else:
+        _lum = globals()["_lum"]
+    fix = [[] for _ in range(n)]
+    R, C = [0.0] * 32, [0.0] * 32
+    for c, x0, y0 in views:
+        for y in range(32):
+            for x in range(32):
+                v = _lum(c.px[y0 + y][x0 + x])
+                R[y] += v / (32 * n)
+                C[x] += v / (32 * n)
     lo, hi = _lum((ground, 2)), _lum((ground, 4))
     mid = _lum(base)
     turn = 0
-    for _ in range(600):
+    snow = FAMILY[ground] == "snow"
+    shapes = [((0, 0), (1, 0))] + ([] if snow else [((0, 0), (1, 1)), ((1, 0), (0, 1)), ((0, 0), (0, 1))])
+    for _ in range(40 * n):
         mR, mC = sum(R) / 32, sum(C) / 32
         dR, dC = [r - mR for r in R], [q - mC for q in C]
         big = max(map(abs, dR + dC))
-        if big < 0.12:
+        if big < thr:
             break
-        first = 1 if big == max(dR + dC) else -1  # fix the larger excess first, else the other
-        done = False
-        for sign in (first, -first):
-            ys = sorted(range(31), key=lambda y: -sign * (dR[y] + dR[y + 1]))
-            xs = sorted(range(31), key=lambda x: -sign * (dC[x] + dC[x + 1]))
-            pairs = sorted(((y, x) for y in ys[:6] for x in xs[:16]),
-                           key=lambda q: -sign * (dR[q[0]] + dR[q[0] + 1] + dC[q[1]] + dC[q[1] + 1]))
-            for y, x in pairs:
-                if sign * (dR[y] + dR[y + 1] + dC[x] + dC[x + 1]) < 0.2:
-                    break
-                for k in range(16):
-                    v = (turn + k) % 16
-                    c = cs[v]
-                    if len(fix[v]) >= 2 * MAX_FIX:
+        k0 = [abs(v) for v in dR + dC].index(big)
+        sign = 1 if (dR + dC)[k0] > 0 else -1  # too bright: a dark speck; too dark: a light one
+        cands = []
+        for sh in shapes:
+            for x in range(32 - max(a for a, _ in sh)):
+                for y in range(32 - max(b for _, b in sh)):
+                    pts = [(x + a, y + b) for a, b in sh]
+                    if k0 < 32 and all(py != k0 for _, py in pts) or k0 >= 32 and all(px != k0 - 32 for px, _ in pts):
                         continue
-                    lean = (x + y + v) % 2
-                    if FAMILY[ground] == "snow":
-                        pts = [(x, y + lean), (x + 1, y + lean)]
-                    else:
-                        pts = [(x, y), (x + 1, y + 1)] if lean else [(x + 1, y), (x, y + 1)]
-                    near = [(px + a, py + b) for px, py in pts for a in (-1, 0, 1) for b in (-1, 0, 1)]
-                    if all(not (0 <= px < 32 and 0 <= py < 32) or c.px[py][px] == base for px, py in near):
-                        tone = 2 if sign > 0 else 4
-                        d = (lo if sign > 0 else hi) - mid
-                        for px, py in pts:
-                            c.put(px, py, ground, tone)
-                            fix[v].append((px, py, tone))
-                            R[py] += d / 512
-                            C[px] += d / 512
-                        turn = v + 1
-                        done = True
-                        break
-                if done:
+                    sc = sign * (sum(dR[py] for _, py in pts) + sum(dC[px] for px, _ in pts))
+                    cands.append((-sc, x, y, sh))
+        cands.sort()
+        done = False
+        for negsc, x, y, sh in cands[:60]:
+            if -negsc <= 0:
+                break
+            pts = [(x + a, y + b) for a, b in sh]
+            for k in range(n):
+                v = (turn + k) % n
+                c, x0, y0 = views[v]
+                if len(fix[v]) >= 2 * cap:
+                    continue
+                near = [(px + a, py + b) for px, py in pts for a in (-1, 0, 1) for b in (-1, 0, 1)]
+                if all(not (0 <= px < 32 and 0 <= py < 32) or c.px[y0 + py][x0 + px] == base for px, py in near):
+                    tone = 2 if sign > 0 else 4
+                    d = (lo if sign > 0 else hi) - mid
+                    for px, py in pts:
+                        c.put(x0 + px, y0 + py, ground, tone)
+                        fix[v].append((px, py, tone))
+                        R[py] += d / (32 * n)
+                        C[px] += d / (32 * n)
+                    turn = v + 1
+                    done = True
                     break
             if done:
                 break
@@ -570,8 +693,8 @@ def _try_layout(ground, season, seed):
     placed = [[] for _ in range(N_MACRO)]  # per picture: (kind index, x, y, w, h, p)
     for ki, (name, w, h, n, _fn) in enumerate(kinds_of(ground, season)):
         step = 32 // n
-        rx = [step * k + (ki * 5) % step for k in range(n)]
-        ry = [step * k + (ki * 3 + 1) % step for k in range(n)]
+        rx = [step * k + (ki * 5 + k) % step for k in range(n)]  # one per step, the residue inside the step
+        ry = [step * k + (ki * 3 + 1 + k) % step for k in range(n)]  # cycling (no parity lock, round 5)
         rnd.shuffle(rx)
         rnd.shuffle(ry)
         for rnd_no in range(n // N_MACRO):  # one placement per picture and round
@@ -677,6 +800,7 @@ def macros(ground, season=None):
                 best = (s, cv, lay)
         if best is None:
             raise SystemExit(f"no macro layout for {ground} {season}")
+        _flatten([(c, 32 * (q % 2), 32 * (q // 2)) for c in best[1] for q in range(4)], ground, season=season)  # round 5
         _CACHE[key] = best
     return _CACHE[key][1]
 

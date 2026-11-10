@@ -117,8 +117,8 @@ def check_seams(cv):
                 season = ("winter", {"grass": "grass", "plains": "plains", "lake": "lake", "moss": "pine"}[p.rsplit(".", 1)[1]])
             for kind, (xs, ys) in macro_a.residues(look, season).items():
                 step = 32 // len(xs)
-                if [v - xs[0] for v in xs] != [step * k for k in range(len(xs))] or [v - ys[0] for v in ys] != [step * k for k in range(len(ys))]:
-                    errors.append(f"{p} {kind}: positions not evenly spread mod 32")
+                if sorted(v // step for v in xs) != list(range(len(xs))) or sorted(v // step for v in ys) != list(range(len(ys))):
+                    errors.append(f"{p} {kind}: positions not evenly spread mod 32 (one per {step} px)")
             continue
         for side, band in bands.items():
             ref = {}

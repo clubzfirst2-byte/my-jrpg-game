@@ -1,33 +1,33 @@
 # ground v2: measured (gen_v2.py writes this)
 
-files: 1914 = 189 v1 keys redrawn + 1539 new keys + 186 v1 keys copied unchanged
+files: 1882 = 189 v1 keys redrawn + 1507 new keys + 186 v1 keys copied unchanged
 seam check: OK
 
 ground tiles: colours per tile / lightness spread (std, 0-100)
-  tile.grass.0                   colours  5  spread  1.6
+  tile.grass.0                   colours  5  spread  1.7
   plains.grass.0                 colours  5  spread  1.6
   lake.grass.0                   colours  3  spread  1.3
   forest.grass.0                 colours  5  spread  1.0
-  mountains.snow.0               colours  5  spread  2.5
-  tile.sand                      colours  5  spread  2.8
-  desert.sand.0                  colours  5  spread  4.6
-  tile.path                      colours  8  spread  2.2
+  mountains.snow.0               colours  5  spread  2.7
+  tile.sand                      colours  3  spread  1.3
+  desert.sand.0                  colours  8  spread  2.7
+  tile.path                      colours  8  spread  2.3
   tile.ruin                      colours  5  spread  6.0
-  autumn.tile.grass.0            colours  7  spread  2.9
-  autumn.plains.grass.0          colours  7  spread  2.7
+  autumn.tile.grass.0            colours  7  spread  3.0
+  autumn.plains.grass.0          colours  7  spread  2.8
   autumn.lake.grass.0            colours  5  spread  1.8
   autumn.forest.grass.0          colours  9  spread  1.3
-  winter.tile.grass.0            colours  6  spread  3.1
-  winter.plains.grass.0          colours  5  spread  2.4
-  winter.lake.grass.0            colours  5  spread  2.3
+  winter.tile.grass.0            colours  6  spread  3.2
+  winter.plains.grass.0          colours  5  spread  2.3
+  winter.lake.grass.0            colours  5  spread  2.5
   winter.forest.grass.0          colours  6  spread  2.9
 
 32-px repeat (the inspection's measure: mean |dL| at 32 px / at 24 px on 80x48 fields; target >= 0.8)
-  summer  g:0.97  p:0.96  l:0.97  m:0.97  n:0.97  s:1.08  d:1.10  =:0.96  u:0.89
-  autumn  g:0.96  p:0.97  l:0.96  m:0.96
-  winter  g:0.96  p:0.96  l:0.97  m:0.98
+  summer  g:0.95  p:0.95  l:0.95  m:0.96  n:0.96  s:0.95  d:0.95  =:0.95  u:0.89
+  autumn  g:0.95  p:0.95  l:0.95  m:0.95
+  winter  g:0.95  p:0.95  l:0.95  m:0.95
 
 banding (autocorrelation of the row means / of the column means: at 32 px, then at 64 px; 80x48 fields; target <= 0.3)
-  summer  g:-0.08/+0.01  -0.00/+0.07  p:-0.01/-0.13  +0.01/-0.01  l:-0.02/-0.09  -0.08/-0.08  m:-0.04/+0.09  +0.01/+0.09  n:+0.06/+0.03  +0.06/+0.03  s:+0.21/+0.22  +0.23/+0.18  d:+0.15/+0.29  +0.14/+0.19  =:-0.15/-0.13  +0.01/-0.10  u:-0.12/-0.03  -0.23/+0.27
-  autumn  g:-0.18/-0.19  -0.16/-0.21  p:-0.22/-0.24  -0.19/-0.25  l:-0.12/-0.22  -0.12/-0.21  m:-0.06/-0.03  -0.00/-0.02
-  winter  g:+0.04/+0.06  +0.05/+0.10  p:+0.03/+0.05  +0.06/+0.11  l:+0.09/+0.11  +0.07/+0.13  m:+0.09/+0.17  +0.07/+0.11
+  summer  g:-0.00/-0.04  +0.07/+0.04  p:-0.06/-0.03  +0.04/-0.01  l:+0.01/-0.05  +0.03/+0.03  m:-0.02/-0.08  +0.03/+0.05  n:-0.06/-0.03  +0.04/-0.04  s:-0.06/-0.01  +0.04/-0.00  d:-0.05/+0.04  +0.06/-0.02  =:+0.02/+0.00  -0.02/+0.00  u:-0.12/-0.03  -0.23/+0.27
+  autumn  g:-0.02/-0.02  +0.06/-0.03  p:+0.06/+0.06  +0.12/+0.09  l:-0.01/-0.01  +0.08/+0.01  m:+0.05/+0.04  +0.11/+0.05
+  winter  g:-0.09/+0.20  -0.02/+0.18  p:-0.02/+0.15  +0.05/+0.08  l:+0.03/+0.09  +0.05/+0.07  m:-0.02/+0.19  +0.05/+0.23
