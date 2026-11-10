@@ -12,6 +12,7 @@ import { createOverlay } from './debug/overlay.js';
 import { createRenderer, resizeRenderer } from './view/renderer.js';
 import { RESOLUTION_CANDIDATES, DEFAULT_TARGET_HEIGHT, nextCandidate } from './view/resolution.js';
 import { AssetManager } from './view/assets/assetManager.js';
+import { V2_TABLE, useEnemyFrameTable } from './view/enemyFrames.js';
 import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES, placeholderEntries, releaseHeroEntries, releaseNpcEntries, releaseEnemyEntries, SOURCE_BUNDLE, sourceEntries } from './view/assets/placeholderPack.js';
 import { finalBossDebugApi, finalBossToast } from './debug/finalBossDebug.js';
 import { storyDebugApi } from './debug/storyDebug.js';
@@ -152,6 +153,9 @@ async function boot() {
   //   so does ?enemy=proto / ?proto=all
   const enemyParam = params.get('enemy');
   if (hdParam !== '0' && enemyParam !== 'placeholder' && !protoGroups.includes('enemy') && (releaseHero || enemyParam === 'release')) releaseGroups.push('enemy');
+  //   gfx W3: the enemies' frame counts and speeds come from their art's frames.json — the v2 table
+  //   when the new art ships one (src/art-release-v2/enemy/), unless ?v2=0 / ?enemy=v1
+  if (V2_TABLE && params.get('v2') !== '0' && enemyParam !== 'v1') useEnemyFrameTable(V2_TABLE);
   if (wantsTerrainArt(params, releaseHero)) releaseGroups.push(TERRAIN_GROUP); // v1.0: the terrain release art (?terrain=placeholder|release, terrainArt.js)
   //   v1.0: the objects' release art (buildings, chests, switches, icons, effects; objectsArt.js)
   releaseGroups.push(...objectsReleaseGroups(params, { releaseHero, protoGroups }));

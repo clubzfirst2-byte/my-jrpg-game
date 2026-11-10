@@ -255,7 +255,7 @@ export class GameView {
     /** @type {Map<number, Sprite>} */
     this.flashSprites = new Map();
     this.silhouettes = new SilhouetteCache();
-    /** Frame counts of the enemies' release actions, cleared when the loaded art changes. @type {Map<string, number>} */
+    /** Frame counts and speeds of the enemies' actions (enemyFrames.js), cleared when the loaded art changes. @type {Map<string, { n: number, fps: number }>} */
     this.enemyFrameCounts = new Map();
     this.enemyFrameCountsAt = -1;
     /** @param {string} k */
@@ -1067,7 +1067,7 @@ export class GameView {
       if (e.final && !this.assets.hasTexture('enemy.boss_source.idle.0')) continue;
       seen.add(e.id);
       // v1.0: the source has a frame for each action (front-facing: never flipped).
-      const sourceKey = e.final ? sourceFrameKey(e, timeSec, (k) => this.assets.hasTexture(k)) : null;
+      const sourceKey = e.final ? sourceFrameKey(e, timeSec, this.hasTexture, this.enemyFrameCounts) : null;
       let spr = this.enemySprites.get(e); // (a sprite another enemy left under this id is dropped)
       if (!spr) {
         spr = this.makeSprite(sourceKey ?? `enemy.${e.kind}.0`);

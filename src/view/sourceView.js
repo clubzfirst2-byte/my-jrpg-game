@@ -4,6 +4,7 @@
 // on the ground, and a light over each seat (座) it counts awake. Reads state only.
 import { FINAL_BOSS } from '../game/entities/finalBoss.js';
 import { windupProgress } from '../game/entities/enemies.js';
+import { actionInfo, loopFrame, onceFrame, spreadFrame } from './enemyFrames.js';
 
 /** The art's slot for each attack (the wave uses the 4th attack's frames, `charge`). */
 const ACTION = { volley: 'volley', ring: 'ring', slam: 'slam', wave: 'charge' };
@@ -18,20 +19,29 @@ const SEAT_COLOR = { 'source-fire': 0xff8a3c, 'source-light': 0xffe27a, 'source-
  * - staggered (the ring turned back, it can be hurt): the EYE WIDE OPEN — `idle` / `idle2` (phase 2,
  *   cracked), the art's open-eye frames, animated;
  * - phase change: `transform`; purified: `defeat`.
+ * Frame counts and speeds come from the art's frames.json (enemyFrames.js): any number of frames.
  * @param {any} e the source @param {number} timeSec @param {(key: string) => boolean} has
+ * @param {Map<string, { n: number, fps: number }>} [cache] remembered counts (cleared by the caller when the art changes)
  * @returns {string}
  */
-export function sourceFrameKey(e, timeSec, has) {
-  const k = (/** @type {string} */ action, /** @type {number} */ f) => `enemy.boss_source.${action}.${f}`;
-  const open = k(e.phase === 2 ? 'idle2' : 'idle', Math.floor(timeSec * 3) % 2);
+export function sourceFrameKey(e, timeSec, has, cache) {
+  const B = 'enemy.boss_source';
+  const info = (/** @type {string} */ action) => actionInfo(`${B}.${action}`, has, cache);
+  const k = (/** @type {string} */ action, /** @type {number} */ f) => `${B}.${action}.${f}`;
+  const openAction = e.phase === 2 && info('idle2').n > 0 ? 'idle2' : 'idle';
+  const open = info(openAction).n > 0 ? k(openAction, loopFrame(timeSec, info(openAction))) : k('idle', 0);
   const closed = k('hurt', 0);
+  const of = (/** @type {string} */ action, /** @type {(n: { n: number, fps: number }) => number} */ pick) => {
+    const a = info(action);
+    return a.n > 0 ? k(action, pick(a)) : closed;
+  };
   /** @type {string} */
   let key;
-  if (e.state === 'dead') key = k('defeat', Math.min(5, Math.floor(e.t / (FINAL_BOSS.defeatMs / 6))));
+  if (e.state === 'dead') key = of('defeat', (a) => spreadFrame(e.t / FINAL_BOSS.defeatMs, a.n));
   else if (e.state === 'stagger') key = open;
-  else if (e.transformUntil > e.clock) key = k('transform', Math.min(3, Math.floor((e.clock - e.transformFrom) / 250)));
-  else if (e.state === 'windup' && e.pattern) key = k(`windup_${ACTION[/** @type {'volley'} */ (e.pattern)]}`, Math.floor(timeSec * 4) % 2);
-  else if (e.state === 'attack' && e.pattern) key = k(`attack_${ACTION[/** @type {'volley'} */ (e.pattern)]}`, Math.floor(e.t / 120) % 2);
+  else if (e.transformUntil > e.clock) key = of('transform', (a) => spreadFrame((e.clock - e.transformFrom) / Math.max(1, e.transformUntil - e.transformFrom), a.n));
+  else if (e.state === 'windup' && e.pattern) key = of(`windup_${ACTION[/** @type {'volley'} */ (e.pattern)]}`, (a) => spreadFrame(e.t / (e.windupMs || FINAL_BOSS.windupMs), a.n));
+  else if (e.state === 'attack' && e.pattern) key = of(`attack_${ACTION[/** @type {'volley'} */ (e.pattern)]}`, (a) => onceFrame(e.t, a));
   else key = closed;
   return has(key) ? key : has(closed) ? closed : k('idle', 0);
 }
