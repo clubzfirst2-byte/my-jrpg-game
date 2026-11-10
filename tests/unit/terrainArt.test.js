@@ -42,9 +42,16 @@ for (const m of readFileSync(new URL('../../docs/art-release/terrain/PRODUCTION.
 const FALLBACKS = {};
 
 describe('terrain release art → game sprite keys', () => {
-  it('has the 111 files of the production record, every one a terrain key', () => {
-    expect(ART.size).toBe(111);
-    expect([...RECORD.keys()].sort()).toEqual([...ART.keys()].sort());
+  it('has the 111 files of the production record (+ the v1.1 files of NAMES.md, not wired yet), every one a terrain key', () => {
+    // v1.1 (art/terrain-v1-1): new keys listed in docs/art-release/terrain/NAMES.md ("<0|1>" = the 2 water frames)
+    const v11 = new Set(
+      [...readFileSync(new URL('../../docs/art-release/terrain/NAMES.md', import.meta.url), 'utf8').matchAll(/^\| `([^`]+)` \|/gm)].flatMap((m) =>
+        m[1].endsWith('.<0|1>') ? [0, 1].map((f) => m[1].replace('<0|1>', String(f))) : [m[1]],
+      ),
+    );
+    expect(v11.size).toBe(240);
+    expect(ART.size).toBe(111 + v11.size);
+    expect([...RECORD.keys()].sort()).toEqual([...ART.keys()].filter((k) => !v11.has(k)).sort());
     for (const name of ART.keys()) expect(isTerrainKey(name), name).toBe(true);
   });
 

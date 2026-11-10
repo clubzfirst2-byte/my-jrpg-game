@@ -21,7 +21,8 @@ const GROUND = [
   ...seasonGround.map((n) => `autumn.${n}`),
   ...[...seasonGround, ...range(4).map((i) => `forest.grass.${i}`)].map((n) => `winter.${n}`),
 ];
-const EXPECTED = [
+/** v1.0: the 111 sprites of docs/art-kit/LIST.md. */
+const V10 = [
   ...GROUND,
   'tile.ramp', 'tile.pit', 'tile.vine',
   ...faces('earth'), ...faces('ruin'), ...faces('wall'), ...faces('stone'),
@@ -29,6 +30,30 @@ const EXPECTED = [
   'spring.obj.tree', 'autumn.obj.tree', 'winter.obj.tree', 'winter.forest.pine',
   ...lips('autumn'), ...lips('winter'),
 ];
+
+// v1.1 (docs/art-release/terrain/NAMES.md): water edges, cliff band variants, plateau faces, autumn
+// in the forest and the mountains. Not in LIST.md: sizes by kind (tiles 32×32, faces 32×8 / 32×16, pines 32×60).
+const CORNERS = ['ne', 'se', 'sw', 'nw'];
+/** Water-edge sets: [prefix, its land tile (null = an overlay, transparent on the land side)]. */
+const EDGE_SETS = [['tile.shore', 'tile.sand'], ['tile.shore-desert', 'desert.sand.0'], ['tile.bank', null]];
+const edgeKeys = (p) => [0, 1].flatMap((f) => [...range(15).map((m) => `${p}.${m + 1}.${f}`), ...CORNERS.map((c) => `${p}.inner.${c}.${f}`)]);
+const variants = (names) => names.flatMap((n) => [`${n}.v1`, `${n}.v2`]);
+const GROUND11 = ['autumn.forest.grass', 'autumn.mountains.snow'].flatMap((k) => range(4).map((i) => `${k}.${i}`));
+const V11 = [
+  ...EDGE_SETS.flatMap(([p]) => edgeKeys(p)),
+  ...variants([...faces('earth'), ...faces('ruin'), ...faces('wall'), ...faces('stone')]),
+  ...variants([...lips('autumn'), ...lips('winter')]),
+  ...faces('sand'), ...faces('desert'), ...faces('path'),
+  ...GROUND11, 'autumn.forest.pine', 'autumn.mountains.pine',
+  ...[4, 8].flatMap((h) => ['top', 'top-base'].map((k) => `autumn.face.stone.${k}.${h}`)).flatMap((n) => [n, `${n}.v1`, `${n}.v2`]),
+];
+const EXPECTED = [...V10, ...V11];
+/** @param {string} n */
+const v11Size = (n) => {
+  const base = n.replace(/\.v\d$/, '');
+  if (`.${base}`.includes('.face.')) return [32, base.endsWith('.4') ? 8 : 16];
+  return base.endsWith('.pine') ? [32, 60] : [32, 32];
+};
 
 /** name -> [w, h] from docs/art-kit/LIST.md. */
 const LIST = new Map(
@@ -86,12 +111,16 @@ describe('terrain release art', () => {
     expect(files.sort()).toEqual([...EXPECTED].sort());
   });
 
-  it('every name is in LIST.md, at its release size', () => {
+  it('every v1.0 name is in LIST.md, at its release size; v1.1 sizes by kind', () => {
     for (const n of EXPECTED) {
-      expect(LIST.has(n), n).toBe(true);
       const { w, h, depth, type, interlace } = readPng(n);
       expect([depth, type, interlace], n).toEqual([8, 6, 0]);
-      expect([w, h], n).toEqual(LIST.get(n));
+      if (V10.includes(n)) {
+        expect(LIST.has(n), n).toBe(true);
+        expect([w, h], n).toEqual(LIST.get(n));
+      } else {
+        expect([w, h], n).toEqual(v11Size(n));
+      }
     }
   });
 
@@ -102,8 +131,8 @@ describe('terrain release art', () => {
     }
   });
 
-  it('ground tiles are fully opaque', () => {
-    for (const n of GROUND) {
+  it('ground tiles (and the full water-edge tiles) are fully opaque', () => {
+    for (const n of [...GROUND, ...GROUND11, ...edgeKeys('tile.shore'), ...edgeKeys('tile.shore-desert')]) {
       const { w, h, px } = readPng(n);
       let holes = 0;
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (px(x, y)[3] !== 255) holes++;
@@ -112,7 +141,7 @@ describe('terrain release art', () => {
   });
 
   it('ground tiles wrap without a seam (edge-to-edge change no larger than inside the tile)', () => {
-    for (const n of GROUND) {
+    for (const n of [...GROUND, ...GROUND11]) {
       const { px } = readPng(n);
       const colDiff = (x0, x1) => range(32).reduce((s, y) => s + Math.abs(light(px(x0, y)) - light(px(x1, y))), 0) / 32;
       const rowDiff = (y0, y1) => range(32).reduce((s, x) => s + Math.abs(light(px(x, y0)) - light(px(x, y1))), 0) / 32;
@@ -123,11 +152,73 @@ describe('terrain release art', () => {
   });
 
   it('objects stand on their last row (feet anchor) and leave the top-left corner empty', () => {
-    for (const n of ['obj.tree', 'spring.obj.tree', 'autumn.obj.tree', 'winter.obj.tree', 'forest.pine', 'winter.forest.pine', 'mountains.pine', 'obj.rock', 'obj.bramble', 'obj.stump', 'obj.cactus']) {
+    for (const n of ['obj.tree', 'spring.obj.tree', 'autumn.obj.tree', 'winter.obj.tree', 'forest.pine', 'winter.forest.pine', 'mountains.pine', 'autumn.forest.pine', 'autumn.mountains.pine', 'obj.rock', 'obj.bramble', 'obj.stump', 'obj.cactus']) {
       const { w, h, px } = readPng(n);
       expect(px(0, 0)[3], n).toBe(0);
       expect(range(w).some((x) => px(x, h - 1)[3] === 255), n).toBe(true);
       expect(px(Math.floor(w / 2), h - 1)[3], `${n} bottom centre`).toBe(255);
+    }
+  });
+
+  it('water edges: each side that touches water joins tile.water of the same frame pixel for pixel', () => {
+    const sides = [[1, (k) => [k, 0]], [2, (k) => [31, k]], [4, (k) => [k, 31]], [8, (k) => [0, k]]];
+    for (const [p] of EDGE_SETS) {
+      for (const f of [0, 1]) {
+        const water = readPng(`tile.water.${f}`);
+        for (let m = 1; m < 16; m++) {
+          const t = readPng(`${p}.${m}.${f}`);
+          for (const [bit, at] of sides) {
+            if (!(m & bit)) continue;
+            for (let k = 0; k < 32; k++) expect(t.px(...at(k)).join(), `${p}.${m}.${f} side ${bit} @${k}`).toBe(water.px(...at(k)).join());
+          }
+        }
+      }
+    }
+  });
+
+  it('water edges: the land side joins the plain land tile (a side away from water, outside the water bands)', () => {
+    for (const [p, land] of EDGE_SETS) {
+      if (!land) continue;
+      const g = readPng(land);
+      for (const f of [0, 1]) {
+        // mask 1 (water north): the south row is the plain land's; mask 4 (water south): the north row
+        for (const [m, y] of [[1, 31], [4, 0], [2, null], [8, null]]) {
+          const t = readPng(`${p}.${m}.${f}`);
+          if (y !== null) for (let x = 0; x < 32; x++) expect(t.px(x, y).join(), `${p}.${m}.${f} @${x},${y}`).toBe(g.px(x, y).join());
+          else for (let yy = 0; yy < 32; yy++) {
+            const x = m === 2 ? 0 : 31; // the side away from the water
+            expect(t.px(x, yy).join(), `${p}.${m}.${f} @${x},${yy}`).toBe(g.px(x, yy).join());
+          }
+        }
+      }
+    }
+  });
+
+  it('the bank overlays are transparent on the land side and opaque on the water side', () => {
+    for (const f of [0, 1]) {
+      const t = readPng(`tile.bank.1.${f}`);
+      expect(t.px(16, 0)[3]).toBe(255);
+      expect(t.px(16, 31)[3]).toBe(0);
+    }
+  });
+
+  it('cliff variants join the other variants: earth / stone keep the edge columns, ruin / wall the course rows', () => {
+    for (const mat of ['earth', 'ruin', 'wall', 'stone']) {
+      for (const n of faces(mat)) {
+        const a = readPng(n);
+        for (const v of ['v1', 'v2']) {
+          const b = readPng(`${n}.${v}`);
+          if (mat === 'earth' || mat === 'stone') {
+            // the lip, lit band and dark base follow per-column profiles shared by all variants
+            const diff = (x) => range(a.h).reduce((s, y) => s + Math.abs(light(a.px(x, y)) - light(b.px(x, y))), 0) / a.h;
+            expect(diff(0) + diff(31), `${n}.${v}`).toBeLessThan(12);
+          } else {
+            // blocks: other joint positions, the same courses (row brightness) so the rows line up
+            const row = (t, y) => range(32).reduce((s, x) => s + light(t.px(x, y)), 0) / 32;
+            for (let y = 0; y < a.h; y++) expect(Math.abs(row(a, y) - row(b, y)), `${n}.${v} row ${y}`).toBeLessThan(25);
+          }
+        }
+      }
     }
   });
 

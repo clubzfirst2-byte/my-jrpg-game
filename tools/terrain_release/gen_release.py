@@ -24,6 +24,7 @@ from release_ground import (ALL, tones, set_ramp, lake_grass, forest_grass, dese
                             ruin_floor, wood_floor, metal_floor, pit_tile, dark_tile, vine_tile, ramp_tile)
 from release_faces import KINDS, stone_face, ruin_face, wall_face  # noqa: E402
 from release_nature import tree, pine, rock, bramble, stump, cactus  # noqa: E402
+from release_v11 import build_v11  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 OUT = os.path.join(ROOT, "src", "art-release", "terrain")
@@ -252,6 +253,8 @@ def build():
         for kind in ("top", "top-base"):
             out[f"autumn.face.earth.{kind}.{seg}"] = autumn_lip(kind, seg)
             out[f"winter.face.earth.{kind}.{seg}"] = winter_lip(kind, seg)
+    V10.update(out)
+    out.update(build_v11(autumn_lip, winter_lip))  # v1.1: new sprites only (release_v11.py)
     return {n: t.image() for n, t in out.items()}
 
 
@@ -270,8 +273,23 @@ def hue(rgb):
     return colorsys.rgb_to_hsv(*(c / 255 for c in rgb[:3]))[0] * 360
 
 
+V10 = {}  # the 111 sprites of v1.0 (filled by build)
+
+
+def is_water_edge(name):
+    return name.startswith(("tile.shore", "tile.bank."))
+
+
+def v11_size(name):
+    """The size of a v1.1 sprite (not in LIST.md): tiles 32x32, faces 32x8 / 32x16, pines 32x60."""
+    base = name[:-3] if name[-3:-1] == ".v" else name
+    if ".face." in "." + base:
+        return (32, 8) if base.endswith(".4") else (32, 16)
+    return (32, 60) if base.endswith(".pine") else (32, 32)
+
+
 def is_ground(name, im):
-    return im.size == (32, 32) and name.split(".")[-2:] != ["obj", "tree"] and "vine" not in name
+    return not is_water_edge(name) and im.size == (32, 32) and name.split(".")[-2:] != ["obj", "tree"] and "vine" not in name
 
 
 def ramp_colours():
@@ -303,7 +321,7 @@ def checks(images):
         px = list(im.get_flattened_data())
         alpha = sum(1 for p in px if p[3] not in (0, 255))
         off = {p[:3] for p in px if p[3] == 255 and p[:3] not in cols}
-        size_ok = sizes.get(n) == im.size
+        size_ok = (sizes.get(n) or v11_size(n)) == im.size
         if alpha or off or not size_ok:
             bad.append(f"  {n}: 半透明 {alpha} / ランプ外の色 {len(off)} / 大きさ {im.size} 一覧 {sizes.get(n)}")
     lines.append(f"枚数: {len(images)}")
@@ -436,7 +454,11 @@ def main():
     for n, im in images.items():
         im.save(os.path.join(OUT, f"{n}.png"), optimize=True)
     os.makedirs(DOCS, exist_ok=True)
-    sheet(images).save(os.path.join(DOCS, "sheet.png"))
+    sheet({n: im for n, im in images.items() if n in V10}).save(os.path.join(DOCS, "sheet.png"))
+    sheet({n: im for n, im in images.items() if n not in V10}, cols=12).save(os.path.join(DOCS, "sheet_v11.png"))
+    from review_v11 import reviews, write_names
+    reviews(images, DOCS)
+    write_names(images, V10, os.path.join(DOCS, "NAMES.md"))
     repeats(images, os.path.join(DOCS, "repeat"))
     objects_on_grounds(images).save(os.path.join(DOCS, "objects_on_grounds.png"))
     report, used = checks(images)
