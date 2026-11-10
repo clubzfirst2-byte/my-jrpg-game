@@ -65,6 +65,11 @@ def names_md(files, redrawn, new, copied):
       "all 8 neighbours `m(a±1, b)`, `m(a, b±1)`, `m(a±1, b±1)`; if that leaves no number, avoid only the 4 side "
       "neighbours. `free` = the numbers 0-7 not avoided, in increasing order; `m = free[k(a, b) % len(free)]`. "
       "Name: `macro` for m = 0, else `macro<m+1>` (`macro2` … `macro8`).")
+    a("4b. **Desert dunes** (round 7): for a block whose 9 map cells (step 5) are all desert sand, "
+      "`hd = hash(a + 77, b + 31)`; when `(hd % 1024) / 1024 < 0.1` the block shows the dune picture "
+      "`desert.sand.dune<k>.<q>`, `k = 1 + hash(a + 91, b + 47) % 6`, at the offsets of step 3 — whether or not step 2 gave "
+      "it a picture, and instead of the picture of step 4. About one block in ten: about 5 dunes on a screen, "
+      "6 shapes.")
     a("5. **Draw it** only when it stays on the map (`i0 + 2`, `j0 + 2` inside) and the 9 map cells under its 4 display "
       "tiles (cells `i0 … i0+2`, `j0 … j0+2`) are all one ground of this scheme: `<prefix>.<name>.<q>`, q = 0 NW "
       "`(i0, j0)`, 1 NE, 2 SW, 3 SE.")
@@ -101,6 +106,10 @@ def names_md(files, redrawn, new, copied):
     a("- the ruin's overlay over water is `tile.ruin.edge.<mask>.<R>` (R = 0-10, the same row phase), so the courses "
       "run on from the overlay into the full tiles beside it. No pictures.")
     a("")
+    a("**Changes in round 7** (for the engine): transition overlays have 4 variants per mask (masks 6 / 9: 2) chosen "
+      "by side states (section 2, step 3); new step rims / shadows (section 2b); the desert's dunes are their own "
+      "pictures `desert.sand.dune1-6.0-3` (step 4b; the 8 desert pictures no longer hold dunes). No key removed.")
+    a("")
     a("**Changes in round 6** (for the engine): 32 calm tiles instead of 16 (`.16-.31` added for every ground and "
       "season set of A; island grass, plains, lake, moss, path, snow, sand, desert, and the autumn / winter sets), "
       "chosen by step 6 (light / dark groups by a noise; no calm tile equal to any of its 8 neighbours); the picture "
@@ -129,7 +138,18 @@ def names_md(files, redrawn, new, copied):
     a("2. For each **higher** terrain present, low to high, draw `<prefix>.edge.<mask>.<v>` with **mask = sum of the "
       "corners whose terrain priority is >= this terrain's: NW 1, NE 2, SW 4, SE 8** (1-14). If a higher terrain has all "
       "4 corners, draw its base tile instead.")
-    a("3. `<v>` = 0 or 1, any per-tile hash (they join each other). The ruin floor: `<v>` = its row phase R, 0-10 (section 1 C).")
+    a("3. `<v>` (round 7): masks 6 and 9 (the border crosses all 4 sides): `v = hash(i + 7, j) % 2` (as before). "
+      "Every other mask: `v = sA + 2·sB` (0-3), where A and B are the two sides of the display tile that the border "
+      "crosses, in the order N, E, S, W (a side is crossed when its two corners differ in the mask: N = NW≠NE, "
+      "E = NE≠SE, S = SW≠SE, W = NW≠SW), and `s` is that side's **state**: the side's edge hash is "
+      "`hash(2i+1, 2j)` (N), `hash(2i+2, 2j+1)` (E), `hash(2i+1, 2j+2)` (S), `hash(2i, 2j+1)` (W); "
+      "`s = (edgeHash >> 4) & 1`, except **s = 0** when one of the side's two end cells is water (N: cells (i, j), "
+      "(i+1, j); E: (i+1, j), (i+1, j+1); S: (i, j+1), (i+1, j+1); W: (i, j), (i, j+1)), or when the display tile "
+      "across that side (N: (i, j−1), E: (i+1, j), S: (i, j+1), W: (i−1, j)) has mask 6 or 9 for the same terrain. "
+      "The tiles on both sides of a side compute the same state, so the border joins; with state 1 it crosses "
+      "about 3 px away from state 0, so a straight path's edge no longer repeats tile by tile. The ruin floor: `<v>` "
+      "= its row phase R, 0-10 (section 1 C), unchanged. Round 7 also made every variant's border swing 4+ px "
+      "inside the tile (mask 5 was almost straight); the keys `.0` / `.1` stay, `.2` / `.3` are new.")
     a("")
     a("**Priority**, low → high: water (section 3) < " + " < ".join(f"`{PREFIX[p]}`" for p in PRIORITY) + ".")
     a("Grass-like edges lie over path / sand / ruin, sand drifts over path and ruin, snow over path and ruin, every land "
@@ -146,6 +166,25 @@ def names_md(files, redrawn, new, copied):
     a("- **Height:** blend only corners of the same height; where they differ, draw each cell's own tile as today and let "
       "the cliff faces separate them. (The review images are flat.)")
     a("- Grounds without v2 art (wood, wall top, metal, pit, dark) stay on the cell grid (their v1 keys, copied).")
+    a("")
+    a("## 2b. One-level steps (round 7, new; replaces the 1-px outline)")
+    a("")
+    a("For an elevated cell (gameView: its surface square on the cell grid at `(tx·16, ty·16 − h)`), where v1 draws a "
+      "1-px dark line on the east / west / north side when that neighbour is lower (`lowerEast`, `lowerWest`, "
+      "`lowerNorth`) and a translucent shadow strip on the lower ground east of it:")
+    a("- **Rim:** draw `<prefix>.step.<mask>.<v>` over the cell's surface, same position and size (32×32 art px = one "
+      "cell), instead of the lines. `<prefix>` = the cell's ground prefix (section 1; with the season prefix in autumn / "
+      "winter for the 4 seasonal grounds); `mask = 1·lowerNorth + 2·lowerEast + 4·lowerWest` (1-7); "
+      "`v = hash(tx + 5, ty + 9) % 2`. It holds a dark outline 0-3 px deep that swells, thins and breaks off along "
+      "the side, a lit rim inside it on the north and west sides (they face the light) and a shaded rim on the east "
+      "side. The south side keeps its cliff face (section 4).")
+    a("- **Shadow:** on the lower cell east of it (`tx + 1`), instead of the translucent strip, draw "
+      "`<prefix>.step.shade.<v>` with the LOWER cell's prefix at that cell's position on its own ground "
+      "(`((tx+1)·16, ty·16 − h_east)`), `v = hash(tx + 6, ty + 9) % 2`: a 2-8 px shadow from its west side with a wavy "
+      "edge.")
+    a("- Along a straight step the outline, rim and shadow depths are 32-periodic in the position along the side, so "
+      "they join from cell to cell (variant 1 adds a bump that is 0 at the cell's corners). Keys exist for every "
+      "ground of section 1 and every season set (`tile.ruin.step.*` too).")
     a("")
     a("## 3. Water (4 frames)")
     a("")
@@ -181,6 +220,8 @@ def names_md(files, redrawn, new, copied):
     for k in sorted(new):
         if ".edge." in k:
             head = k.split(".edge.")[0] + ".edge.*"
+        elif ".step." in k:
+            head = k.split(".step.")[0] + ".step.*"
         elif ".macro" in k:
             head = k.rsplit(".", 1)[0] + ".*"
         elif ".foam." in k:

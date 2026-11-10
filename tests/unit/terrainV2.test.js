@@ -28,9 +28,10 @@ const macros = (g, s) => MACROS.flatMap((m) => range(4).map((q) => `${s}${PREFIX
 const scheme = (g) => (g === 'ruin' ? 'C' : 'A');
 const COUNT = { A: 32, C: 66 };
 const RUIN_COMBOS = [[0, 1], [0, 2], [1, 0], [1, 2], [2, 0], [2, 1]]; // [W, E]
-const tiles = (g, s) => [...range(COUNT[scheme(g)]).map((n) => single(g, s, n)), ...(scheme(g) === 'A' ? macros(g, s) : [])];
-const edgeVariants = (g) => (g === 'ruin' ? range(11) : [0, 1]);
-const edges = (g, s) => MASKS.flatMap((m) => edgeVariants(g).map((v) => `${s}${PREFIX[g]}.edge.${m}.${v}`));
+const tiles = (g, s) => [...range(COUNT[scheme(g)]).map((n) => single(g, s, n)), ...(scheme(g) === 'A' ? macros(g, s) : []), ...(g === 'dsand' ? range(6).flatMap((k) => range(4).map((q) => `${s}${PREFIX[g]}.dune${k + 1}.${q}`)) : [])]; // round 7: dune pictures
+// round 7: 4 variants per mask (the states of the 2 sides its border crosses), 2 for masks 6 / 9; ruin: 11 row phases
+const edgeVariants = (g, m) => (g === 'ruin' ? range(11) : [6, 9].includes(m) ? [0, 1] : range(4));
+const edges = (g, s) => MASKS.flatMap((m) => edgeVariants(g, m).map((v) => `${s}${PREFIX[g]}.edge.${m}.${v}`));
 // Cliff faces redrawn in round 3 under their v1 keys (32 x 16 for .8, 32 x 8 for .4).
 const FACE_KEYS = ['earth', 'stone', 'sand', 'desert', 'path'].flatMap((mat) =>
   ['top', 'mid', 'mid-base', 'top-base'].flatMap((kind) =>
@@ -43,10 +44,12 @@ const FACE_KEYS = ['earth', 'stone', 'sand', 'desert', 'path'].flatMap((mat) =>
   ),
 );
 const GROUND_KEYS = SETS.flatMap(([g, s]) => tiles(g, s));
+// round 7: one-level step rims (mask N 1, E 2, W 4) and the shadow east of them, per set
+const STEP_KEYS = SETS.flatMap(([g, s]) => [...range(7).flatMap((m) => [0, 1].map((v) => `${s}${PREFIX[g]}.step.${m + 1}.${v}`)), ...[0, 1].map((v) => `${s}${PREFIX[g]}.step.shade.${v}`)]);
 const OVERLAY_KEYS = SETS.flatMap(([g, s]) => edges(g, s));
 const WATER_TILES = ['tile.water', 'tile.water.v1', 'tile.water.deep', 'tile.water.deep.v1'].flatMap((p) => range(4).map((f) => `${p}.${f}`));
 const WATER_OVERLAYS = ['tile.water.deep.edge', 'tile.water.foam'].flatMap((p) => MASKS.flatMap((m) => range(4).map((f) => `${p}.${m}.${f}`)));
-const TILES32 = [...GROUND_KEYS, ...OVERLAY_KEYS, ...WATER_TILES, ...WATER_OVERLAYS];
+const TILES32 = [...GROUND_KEYS, ...OVERLAY_KEYS, ...WATER_TILES, ...WATER_OVERLAYS, ...STEP_KEYS];
 const DRAWN = [...TILES32, ...FACE_KEYS];
 const v1Keys = readdirSync(V1).filter((f) => f.endsWith('.png')).map((f) => f.slice(0, -4));
 
@@ -203,12 +206,12 @@ describe('ground v2 art', { timeout: 180000 }, () => {  // ~800 PNGs decoded: sl
     }
   });
 
-  it('transition overlays: every mask 1-14 in both variants for every set; corners follow the mask', () => {
+  it('transition overlays: every mask 1-14 in all its variants for every set; corners follow the mask', () => {
     const corner = { 1: [1, 1], 2: [30, 1], 4: [1, 30], 8: [30, 30] };
-    const sets = [...SETS.map(([g, s]) => [`${s}${PREFIX[g]}.edge`, edgeVariants(g)]), ['tile.water.deep.edge', range(4)], ['tile.water.foam', range(4)]];
+    const sets = [...SETS.map(([g, s]) => [`${s}${PREFIX[g]}.edge`, (m) => edgeVariants(g, m)]), ['tile.water.deep.edge', () => range(4)], ['tile.water.foam', () => range(4)]];
     for (const [p, vs] of sets) {
       for (const m of MASKS) {
-        for (const v of vs) {
+        for (const v of vs(m)) {
           const t = png(`${p}.${m}.${v}`);
           for (const [bit, [x, y]] of Object.entries(corner)) {
             const opaque = t.px(x, y)[3] === 255;
@@ -221,20 +224,36 @@ describe('ground v2 art', { timeout: 180000 }, () => {  // ~800 PNGs decoded: sl
     }
   });
 
-  it('transition overlays join their neighbours on the dual grid (shared corners -> the same border)', () => {
+  it('transition overlays join their neighbours on the dual grid (shared corners and side state -> the same border)', () => {
     const op = (t, x, y) => t.px(x, y)[3] === 255;
+    // round 7: a side the border crosses has a state 0 / 1; variant v = state of the 1st + 2 x state of the 2nd
+    // crossed side (order N, E, S, W); masks 6 / 9: all sides state 0
+    const crossed = (m) => {
+      const [nw, ne, sw, se] = [1, 2, 4, 8].map((b) => Boolean(m & b));
+      return ['N', 'E', 'S', 'W'].filter((_, k) => [nw !== ne, ne !== se, sw !== se, nw !== sw][k]);
+    };
+    const state = (m, v, side) => {
+      if (m === 6 || m === 9) return 0;
+      const k = crossed(m).indexOf(side);
+      return k < 0 ? 0 : (v >> k) & 1;
+    };
+    const vs = (m) => edgeVariants('grass', m);
     for (const p of ['tile.grass', 'tile.sand', 'mountains.snow', 'winter.plains.grass']) {
       for (const a of MASKS) {
         for (const b of MASKS) {
-          const A = png(`${p}.edge.${a}.0`);
-          const B = png(`${p}.edge.${b}.1`);
-          if (Boolean(a & 2) === Boolean(b & 1) && Boolean(a & 8) === Boolean(b & 4)) {
-            const miss = range(32).filter((y) => op(A, 31, y) !== op(B, 0, y)).length;
-            expect(miss, `${p} ${a}|${b}`).toBeLessThanOrEqual(3);
-          }
-          if (Boolean(a & 4) === Boolean(b & 1) && Boolean(a & 8) === Boolean(b & 2)) {
-            const miss = range(32).filter((x) => op(A, x, 31) !== op(B, x, 0)).length;
-            expect(miss, `${p} ${a}/${b}`).toBeLessThanOrEqual(3);
+          for (const va of vs(a)) {
+            for (const vb of vs(b)) {
+              const A = png(`${p}.edge.${a}.${va}`);
+              const B = png(`${p}.edge.${b}.${vb}`);
+              if (Boolean(a & 2) === Boolean(b & 1) && Boolean(a & 8) === Boolean(b & 4) && state(a, va, 'E') === state(b, vb, 'W')) {
+                const miss = range(32).filter((y) => op(A, 31, y) !== op(B, 0, y)).length;
+                expect(miss, `${p} ${a}.${va}|${b}.${vb}`).toBeLessThanOrEqual(3);
+              }
+              if (Boolean(a & 4) === Boolean(b & 1) && Boolean(a & 8) === Boolean(b & 2) && state(a, va, 'S') === state(b, vb, 'N')) {
+                const miss = range(32).filter((x) => op(A, x, 31) !== op(B, x, 0)).length;
+                expect(miss, `${p} ${a}.${va}/${b}.${vb}`).toBeLessThanOrEqual(3);
+              }
+            }
           }
         }
       }

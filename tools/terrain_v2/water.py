@@ -60,7 +60,7 @@ def deep_overlay(mask, frame, variant=0):
     c = Canvas(32, 32, None, wrap=False)
     for y in range(32):
         for x in range(32):
-            f = field(mask, x, y, variant)
+            f = field(mask, x, y, variant, legacy=True)
             if f > 0.5:
                 c.px[y][x] = tex.px[y][x]
                 if f < 0.53:

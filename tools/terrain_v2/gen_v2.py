@@ -14,6 +14,7 @@ import grounds as G  # noqa: E402
 import marks as M  # noqa: E402
 import transitions as T  # noqa: E402
 import water as WA  # noqa: E402
+import steps as ST  # noqa: E402
 from ramps_v2 import EXT, BASE5, NEW_RAMPS  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -40,6 +41,10 @@ def ground_tiles(ground, season=None):
         for name, big in zip(macro_a.MACRO_NAMES, macro_a.macros(look, mseason)):
             for q, piece in enumerate(macro_a.cut(big)):
                 out[f"{name}.{q}"] = piece
+        if look == "dsand":  # round 7: the dune pictures
+            for k, big in enumerate(macro_a.dunes(look)):
+                for q, piece in enumerate(macro_a.cut(big)):
+                    out[f"dune{k + 1}.{q}"] = piece
     if season == "autumn":
         for c in out.values():
             c.remap({ground: G.AUTUMN_RAMP[ground]})
@@ -61,7 +66,7 @@ def overlay_tiles(ground, tex, season=None):
         mat, style = G.AUTUMN_RAMP[ground], T.STYLE[ground]
     else:
         mat, style = ground, T.STYLE[ground]
-    return {f"e{m}.{v}": T.overlay(tex, mat, m, v, style) for m in MASKS for v in (0, 1)}
+    return {f"e{m}.{v}": T.overlay(tex, mat, m, v, style) for m in MASKS for v in range(T.n_variants(m))}  # round 7: 4 per mask (6, 9: 2)
 
 
 def build():
@@ -71,11 +76,14 @@ def build():
         tiles = ground_tiles(g)
         out.update({f"g2.{g}.{k}": c for k, c in tiles.items()})
         out.update({f"g2.{g}.{k}": c for k, c in overlay_tiles(g, tiles["0"]).items()})
+        out.update({f"g2.{g}.{k}": c for k, c in ST.step_tiles(g).items()})  # round 7: step rims / shade
     for season in ("autumn", "winter"):
         for g in G.SEASONAL:
             tiles = ground_tiles(g, season)
             out.update({f"{season}.g2.{g}.{k}": c for k, c in tiles.items()})
             out.update({f"{season}.g2.{g}.{k}": c for k, c in overlay_tiles(g, tiles["0"], season).items()})
+            out.update({f"{season}.g2.{g}.{k}": c
+                        for k, c in ST.step_tiles("snow" if season == "winter" else G.AUTUMN_RAMP[g]).items()})
     for depth in ("shallow", "deep"):
         for v in (0, 1):
             for f in range(WA.FRAMES):

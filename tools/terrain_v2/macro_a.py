@@ -780,12 +780,14 @@ def bd_carpet(c, g, mat, season, cx, cy, seed):
     return lambda bx, by: ((bx - cx) / rx) ** 2 + ((by - cy) / ry) ** 2 <= 1.1  # keep other features off it
 
 
-def bd_dune(c, g, mat, season, y0, slope, amp, phase):
-    for x in range(2, 62):
-        t = (x - 2) / 59
+def bd_dune(c, g, mat, season, y0, slope, amp, phase, x0=2, x1=62, lit_h=5.5, arc=0.0):
+    """A dune ridge from x0 to x1: lit windward face above it (its top edge waving), the crest, lee shade under
+    it; it fades out at both ends. slope tilts it, amp / phase wave it, arc bows it (round 7: 6 shapes)."""
+    for x in range(x0, x1):
+        t = (x - x0) / (x1 - 1 - x0)
         e = math.sin(math.pi * t) ** 0.6
-        ridge = round(y0 + slope * (t - 0.5) * 20 + amp * math.sin(math.pi * 1.3 * t + phase))
-        lit = round(1 + e * (5.5 + 2.0 * math.sin(x / 4.3 + phase) + 1.2 * math.sin(x / 1.9 + 2 * phase)))
+        ridge = round(y0 + slope * (t - 0.5) * 20 + amp * math.sin(math.pi * 1.3 * t + phase) - arc * math.sin(math.pi * t))
+        lit = round(1 + e * (lit_h + 2.0 * math.sin(x / 4.3 + phase) + 1.2 * math.sin(x / 1.9 + 2 * phase)))
         lee = round(1 + 4 * e)
         for k in range(1, lit + 1):
             c.put(x, ridge - k, mat, 4)
@@ -797,9 +799,34 @@ def bd_dune(c, g, mat, season, y0, slope, amp, phase):
 
 BACKDROPS = {
     "grass": {0: lambda c, g, mat, s: bd_carpet(c, g, mat, s, 30, 28, 811), 4: lambda c, g, mat, s: bd_carpet(c, g, mat, s, 33, 35, 823)},
-    "dsand": {1: lambda c, g, mat, s: bd_dune(c, g, mat, s, 26, 0.8, 5, 0.3), 4: lambda c, g, mat, s: bd_dune(c, g, mat, s, 38, -0.9, 4, 1.7),
-              6: lambda c, g, mat, s: bd_dune(c, g, mat, s, 31, 0.3, 6, 3.4)},
 }
+
+# Round 7: the desert's dunes are their own 2x2 pictures (`desert.sand.dune1` ... `dune6`), placed on about one
+# block in ten (NAMES.md 1 A, step 4b), so no dune shape shows more than about twice on a screen.
+DUNES = [
+    lambda c, g, mat, s: bd_dune(c, g, mat, s, 24, 0.9, 4, 0.3, 4, 60),
+    lambda c, g, mat, s: bd_dune(c, g, mat, s, 38, -0.8, 3, 1.7, 3, 61, 6.5),
+    lambda c, g, mat, s: bd_dune(c, g, mat, s, 40, 0.0, 1, 0.0, 6, 58, 4.5, arc=9),
+    lambda c, g, mat, s: bd_dune(c, g, mat, s, 30, 0.2, 6, 3.4, 2, 62, 5.0),
+    lambda c, g, mat, s: (bd_dune(c, g, mat, s, 20, -0.4, 2, 0.9, 4, 34, 4.0), bd_dune(c, g, mat, s, 44, 0.5, 2, 2.2, 28, 60, 4.0))[1],
+    lambda c, g, mat, s: bd_dune(c, g, mat, s, 26, 0.0, 2, 1.0, 10, 54, 6.0, arc=-6),
+]
+_DUNE_CACHE = {}
+
+
+def dunes(ground="dsand"):
+    """The 6 dune pictures (64 x 64): grain and the dune; mean rows / columns evened out like the other pictures."""
+    if ground not in _DUNE_CACHE:
+        cs = []
+        for k, fn in enumerate(DUNES):
+            c = Canvas(64, 64, (ground, 3), wrap=False)
+            for q in range(4):
+                draw_grain(c, ground, 32 * (q % 2), 32 * (q // 2), (7 * k + 3 * q + 2) % 16, ground)
+            fn(c, ground, ground, None)
+            cs.append(c)
+        _flatten([(c, 32 * (q % 2), 32 * (q // 2)) for c in cs for q in range(4)], ground)
+        _DUNE_CACHE[ground] = cs
+    return _DUNE_CACHE[ground]
 
 
 def _draw(ground, season, placed_m, m, mat=None):

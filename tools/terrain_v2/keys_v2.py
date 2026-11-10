@@ -41,7 +41,11 @@ def final_name(internal):
     p = PREFIX[g]
     if rest[0].startswith("e"):
         return f"{season}{p}.edge.{rest[0][1:]}.{rest[1]}"
-    if rest[0].startswith("macro"):
+    if rest[0].startswith("stepshade"):  # round 7
+        return f"{season}{p}.step.shade.{rest[1]}"
+    if rest[0].startswith("step"):
+        return f"{season}{p}.step.{rest[0][4:]}.{rest[1]}"
+    if rest[0].startswith(("macro", "dune")):
         return f"{season}{p}.{rest[0]}.{rest[1]}"
     n = rest[0]
     if g in SINGLE and n == "0":
