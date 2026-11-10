@@ -56,21 +56,26 @@ def paste(im, sprite, x, y):
     im.alpha_composite(sprite, (int(x * K), int(y * K)))
 
 
-def title_screen(base, out):
-    W, H = 2556, 1179
+def title_screen(out, css_w=852, css_h=393, dpr=3):
+    """The title at a phone's CSS size and DPR (15 Pro 852x393 x3, SE 667x375 x2): the 960x400 CSS
+    background is centred and cropped, the logo and the buttons sit in the middle column."""
+    global K
+    keep, K = K, dpr
+    W, H = css_w * dpr, css_h * dpr
     flat = Image.new("RGBA", (480, 200))
     for layer in ("sky", "far", "mid", "near"):
         flat.alpha_composite(art(f"title.bg.{layer}"))
-    big = up(flat, 6)  # 2880 x 1200
+    big = up(flat, 2 * dpr)
     im = big.crop(((big.width - W) // 2, (big.height - H) // 2, (big.width - W) // 2 + W, (big.height - H) // 2 + H))
-    logo = up(art("title.logo"), 6)
+    logo = up(art("title.logo"), 2 * dpr)
     im.alpha_composite(logo, ((W - logo.width) // 2, 34 * K))
-    for i, (label, enabled) in enumerate((("はじめから", True), ("つづきから", True))):
+    for i, label in enumerate(("はじめから", "つづきから")):
         bw, bh = 200, 44
-        x, y = (852 - bw) / 2, 196 + i * 54
+        x, y = (css_w - bw) / 2, 196 + i * 54
         paste(im, nine("btn.text.idle" if i else "btn.text.selected", bw, bh), x, y)
-        text(im, (426, y + 22), label, 16, anchor="mm", bold=True)
+        text(im, (css_w / 2, y + 22), label, 16, anchor="mm", bold=True)
     im.save(out)
+    K = keep
 
 
 HUD_BUTTONS = [  # (centre in device px measured on 03_beach, CSS diameter, ring variant, icon, paint-out shift)
@@ -213,13 +218,14 @@ def pause(base, out):
 def main():
     base, out = sys.argv[1], sys.argv[2]
     os.makedirs(out, exist_ok=True)
-    title_screen(base, os.path.join(out, "mock_title.png"))
+    title_screen(os.path.join(out, "mock_title.png"))
+    title_screen(os.path.join(out, "mock_title_se.png"), 667, 375, 2)
     hud(base, os.path.join(out, "mock_hud.png"))
     dialogue(base, os.path.join(out, "mock_dialogue.png"))
     inventory(base, os.path.join(out, "mock_inventory.png"))
     shop(base, os.path.join(out, "mock_shop.png"))
     pause(base, os.path.join(out, "mock_pause.png"))
-    print("wrote 6 mockups to", out)
+    print("wrote 7 mockups to", out)
 
 
 if __name__ == "__main__":

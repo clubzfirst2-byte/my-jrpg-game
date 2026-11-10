@@ -136,9 +136,9 @@
    "cssScale": 1,
    "slice": [
     7,
-    4,
+    5,
     7,
-    4
+    5
    ]
   },
   "btn.ring.gold.66.idle": {
@@ -712,7 +712,7 @@
    "parallax": 0.0
   },
   "title.logo": {
-   "w": 260,
+   "w": 230,
    "h": 64,
    "cssScale": 2
   }

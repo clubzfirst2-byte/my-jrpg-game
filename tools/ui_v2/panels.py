@@ -67,9 +67,11 @@ def star4(im, cx, cy, r, mat):
 
 def panel_menu():
     """Inventory, settings, pause: a dark navy panel with a cool steel-blue rim and gold rivet corners."""
-    im = frame(32, 32, 4, [("navy", 0, "navy", 0), ("gem", 3, "gem", 1), ("navy", 4, "navy", 3),
-                           ("navy", 0, "navy", 0, 200)], ("navy", 1))
-    for cx, cy in ((5, 5), (26, 5), (5, 26), (26, 26)):
+    # bevelled (inspection R-2): outline, steel-blue rim, a 2-px bevel lit top-left / dark bottom-right,
+    # then a dark inner line before the fill
+    im = frame(32, 32, 4, [("navy", 0, "navy", 0), ("gem", 3, "gem", 1), ("navy", 4, "navy", 1),
+                           ("navy", 3, "navy", 2), ("navy", 0, "navy", 0)], ("navy", 1))
+    for cx, cy in ((6, 6), (25, 6), (6, 25), (25, 25)):
         diamond(im, cx, cy, 2, "gold")
     return im, 10
 
@@ -77,7 +79,7 @@ def panel_menu():
 def panel_dialogue():
     """Conversation box: gold rim (warm, the speaker's voice), small 星環 stars in the corners."""
     im = frame(32, 32, 4, [("navy", 0, "navy", 0), ("gold", 3, "gold", 1), ("gold", 2, "chestwood", 1),
-                           ("navy", 0, "navy", 0, 210)], ("navy", 1))
+                           ("navy", 4, "navy", 1), ("navy", 0, "navy", 0)], ("navy", 1))
     for cx, cy in ((6, 6), (25, 6), (6, 25), (25, 25)):
         star4(im, cx, cy, 2, "gem")
     return im, 10
@@ -98,7 +100,8 @@ def panel_shop():
 def panel_ending():
     """The ending: a double gold rim with a gem line between, star-ring medallions in the corners."""
     im = frame(48, 48, 5, [("navy", 0, "navy", 0), ("gold", 4, "gold", 2), ("gold", 3, "gold", 1),
-                           ("navy", 0, "navy", 0), ("gem", 3, "gem", 1), ("navy", 0, "navy", 0, 210)], ("navy", 1))
+                           ("navy", 0, "navy", 0), ("gem", 3, "gem", 1), ("navy", 4, "navy", 1), ("navy", 0, "navy", 0)],
+               ("navy", 1))
     for cx, cy in ((8, 8), (39, 8), (8, 39), (39, 39)):
         for y in range(cy - 5, cy + 6):
             for x in range(cx - 5, cx + 6):
@@ -111,7 +114,7 @@ def panel_ending():
 
 def toast():
     """The toast: a slim panel, gem-blue hairline rim."""
-    im = frame(16, 16, 3, [("navy", 0, "navy", 0), ("gem", 2, "gem", 1)], ("navy", 1), 228)
+    im = frame(16, 16, 3, [("navy", 0, "navy", 0), ("gem", 2, "gem", 1), ("navy", 3, "navy", 1)], ("navy", 1), 228)
     return im, 5
 
 
@@ -222,7 +225,14 @@ def heart(quarters):
                     t = 1
                 im.putpixel((x, y), col("berry", t) if quarters else col("navy", 2))
             else:
-                im.putpixel((x, y), col("navy", 2 if s != "tl" else 3))
+                # the empty part (inspection M-3): a light grey-blue rim inside the navy outline, so an empty
+                # heart still shows on night, cave and indoor black; a dark slate inside
+                edge = any(not (0 <= x + dx < 22 and 0 <= y + dy < 20 and m[y + dy][x + dx])
+                           for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+                if edge:
+                    im.putpixel((x, y), col("steel", 4 if s == "tl" else 3))
+                else:
+                    im.putpixel((x, y), col("steel", 1 if y > 8 else 2))
     from common import outline
     outline(im, col("navy", 0))
     return im
@@ -231,9 +241,11 @@ def heart(quarters):
 def bossbar_frame():
     """The boss bar's track frame: a dark violet slot with a steel rim and gem rivets at the ends."""
     im = frame(24, 12, 3, [("navy", 0, "navy", 0), ("steel", 3, "steel", 1), ("navy", 0, "navy", 0)], ("navy", 0), 220)
-    diamond(im, 4, 5, 1, "miasma", tones=(4, 3, 2, 1))
-    diamond(im, 19, 5, 1, "miasma", tones=(4, 3, 2, 1))
-    return im, (7, 4, 7, 4)
+    # the rivets sit inside the top corners (inspection I-2): the side bands stay uniform, so the frame may
+    # be stretched in height too
+    diamond(im, 4, 2, 1, "miasma", tones=(4, 3, 2, 1))
+    diamond(im, 19, 2, 1, "miasma", tones=(4, 3, 2, 1))
+    return im, (7, 5, 7, 5)
 
 
 def bossbar_fill(phase):

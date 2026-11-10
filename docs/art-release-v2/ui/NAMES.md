@@ -13,7 +13,7 @@ Art px -> CSS px: x`cssScale` (title x2, everything else x1). Always `image-rend
 | `title.bg.mid.png` | 480×200 | 960×400 |  | parallax 0.4 |
 | `title.bg.near.png` | 480×200 | 960×400 |  | parallax 1.0 |
 | `title.bg.sky.png` | 480×200 | 960×400 |  | parallax 0.0 |
-| `title.logo.png` | 260×64 | 520×128 |  |  |
+| `title.logo.png` | 230×64 | 460×128 |  |  |
 
 ## HUD rings (32)
 
@@ -150,7 +150,7 @@ Art px -> CSS px: x`cssScale` (title x2, everything else x1). Always `image-rend
 |---|---|---|---|---|
 | `bossbar.fill.1.png` | 4×4 | 4×4 |  | repeat-x |
 | `bossbar.fill.2.png` | 4×4 | 4×4 |  | repeat-x |
-| `bossbar.frame.png` | 24×12 | 24×12 | 4 7 4 7 |  |
+| `bossbar.frame.png` | 24×12 | 24×12 | 5 7 5 7 |  |
 
 ## HUD buttons: which ring and icon per `--btn` size
 

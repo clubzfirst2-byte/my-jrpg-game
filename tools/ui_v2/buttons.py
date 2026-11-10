@@ -49,15 +49,17 @@ def ring(d, variant, pressed):
                 t = 4 if lit > 0.75 else 3 if lit > 0.15 else 2 if lit > -0.45 else 1
                 im.putpixel((x, y), col(rim, t))
             elif e < 4.5:
-                im.putpixel((x, y), col("navy", 0, 210))
+                im.putpixel((x, y), col("navy", 0))
             else:
+                # dark, dense glass (inspection M-2: at alpha 150 snow and sand turned it light grey and the
+                # cream icons sank): alpha 215, a navy that keeps the icons readable on any ground
                 if pressed:
-                    im.putpixel((x, y), col(rim if variant != "std" else "gem", 1, 200))
+                    im.putpixel((x, y), col(rim if variant != "std" else "gem", 1, 230))
                 else:
-                    im.putpixel((x, y), col("navy", 2, 150))
+                    im.putpixel((x, y), col("navy", 1, 215))
                 # the glass: a crescent of light on the upper left, inside the rim
-                if not pressed and 4.5 <= e < 7.5 and lit > 0.55:
-                    im.putpixel((x, y), col("gem", 4, 70))
+                if not pressed and 4.5 <= e < 7.0 and lit > 0.6:
+                    im.putpixel((x, y), col("navy", 4, 235))
     return im
 
 
@@ -100,11 +102,13 @@ def shape(name, draw, s):
     elif name == "dodge":  # a rolling arrow (three-quarter turn)
         _arc(draw, s, 0.50, 0.52, 0.30, 0.14, 150, 420)
         _poly(draw, s, [(0.62, 0.02), (0.92, 0.26), (0.58, 0.40)])
-    elif name == "bow":  # a bow with an arrow nocked
-        _arc(draw, s, 0.44, 0.50, 0.36, 0.13, 90, 270)
-        _seg(draw, s, (0.44, 0.12), (0.44, 0.88), 0.06)
-        _seg(draw, s, (0.30, 0.50), (0.80, 0.50), 0.09)
-        _poly(draw, s, [(0.97, 0.50), (0.74, 0.32), (0.74, 0.68)])
+    elif name == "bow":  # a drawn bow, side on: the limb ")" bowed forward, the string pulled back to a point
+        # (a ">" shape, open in the middle), the arrow on the string pointing right, its head past the limb
+        _arc(draw, s, -0.14, 0.50, 0.64, 0.13, -46, 46, 32)  # the limb
+        _seg(draw, s, (0.30, 0.04), (0.10, 0.50), 0.06)  # the string, pulled back
+        _seg(draw, s, (0.10, 0.50), (0.30, 0.96), 0.06)
+        _seg(draw, s, (0.08, 0.50), (0.80, 0.50), 0.08)  # the arrow's shaft
+        _poly(draw, s, [(0.98, 0.50), (0.76, 0.34), (0.76, 0.66)])  # its head
     elif name == "guard":  # a heater shield
         _poly(draw, s, [(0.16, 0.12), (0.84, 0.12), (0.84, 0.50), (0.50, 0.92), (0.16, 0.50)])
     elif name == "dash":  # two chevrons, forward
@@ -154,6 +158,19 @@ def icon(name, size):
             if mat == "bone":
                 t = {4: 4, 3: 3, 2: 2}[t]
             im.putpixel((x + 1, y + 1), col(mat, t))
+    if name == "bow":  # the string in a darker tone, so the limb and the arrow read as the bow's parts
+        m2 = Image.new("1", (inner, inner), 0)
+        d2 = ImageDraw.Draw(m2)
+        _seg(d2, inner, (0.30, 0.04), (0.10, 0.50), 0.06)
+        _seg(d2, inner, (0.10, 0.50), (0.30, 0.96), 0.06)
+        m3 = Image.new("1", (inner, inner), 0)
+        d3 = ImageDraw.Draw(m3)
+        _arc(d3, inner, -0.14, 0.50, 0.64, 0.13, -46, 46, 32)
+        _seg(d3, inner, (0.08, 0.50), (0.80, 0.50), 0.08)
+        for y in range(inner):
+            for x in range(inner):
+                if m2.getpixel((x, y)) and not m3.getpixel((x, y)):
+                    im.putpixel((x + 1, y + 1), col("bone", 1))
     if name == "guard":  # the shield's emblem: a gem band down the middle
         for y in range(size):
             for x in (size // 2 - 1, size // 2):

@@ -22,7 +22,7 @@ def L(n):
     return Image.open(os.path.join(D, n + ".png")).convert("RGBA")
 
 
-S = Image.new("RGBA", (1600, 1500), (40, 70, 50, 255))
+S = Image.new("RGBA", (1600, 2380), (40, 70, 50, 255))
 y = 10
 bg = L("title.bg").resize((960, 400), Image.NEAREST)
 S.paste(bg, (10, y))
@@ -73,4 +73,24 @@ for n in ["heart.0", "heart.1", "heart.2", "heart.3", "heart.4", "cue.more.0", "
     x += im.width + 10
 im = nine_slice(L("bossbar.frame"), 180, 12, M["bossbar.frame"]["slice"], 3)
 S.alpha_composite(im, (x, y))
+# the HUD on the grounds it must read on (inspection M-2 / M-3): snow, sand, grass, night, cave
+y += 70
+for gname, g in (("snow", (220, 230, 242)), ("sand", (224, 196, 138)), ("grass", (60, 106, 56)),
+                 ("night", (16, 20, 30)), ("cave", (12, 12, 18))):
+    band = Image.new("RGBA", (1580, 76), g + (255,))
+    xx = 6
+    for ring, ic, sz in (("btn.ring.gold.78.idle", "attack", 34), ("btn.ring.std.52.idle", "bow", 26),
+                         ("btn.ring.std.52.idle", "guard", 26), ("btn.ring.std.44.idle", "dash", 20),
+                         ("btn.ring.teal.52.idle", "ability", 26), ("btn.ring.std.60.pressed", "jump", 26)):
+        r = L(ring)
+        band.alpha_composite(r, (xx, (76 - r.height) // 2))
+        i = L(f"icon.ui.{ic}.{sz}")
+        band.alpha_composite(i, (xx + (r.width - sz) // 2, (76 - sz) // 2))
+        xx += r.width + 8
+    for q in (4, 4, 3, 1, 0, 0):
+        band.alpha_composite(L(f"heart.{q}"), (xx, 8))
+        xx += 25
+    band = band.resize((band.width, band.height), Image.NEAREST)
+    S.alpha_composite(band.crop((0, 0, 790, 76)).resize((1580, 152), Image.NEAREST), (10, y))
+    y += 156
 S.save(out)
