@@ -2,6 +2,7 @@
 
 from keys_v2 import PREFIX, SINGLE
 from transitions import PRIORITY
+from wang import P_TYPE1
 
 LABEL = {"grass": "island grass", "plains": "plains grass", "lake": "lake shore grass", "moss": "forest floor (moss)",
          "snow": "mountain snow", "sand": "island sand", "dsand": "desert sand", "path": "path", "ruin": "ruin floor"}
@@ -21,24 +22,44 @@ def names_md(files, redrawn, new, copied):
     a("")
     a("## 1. Grounds")
     a("")
-    a("| ground | prefix (= the v1 key) | base | variants | macro 2×2 | seasons |")
+    a("| ground | prefix (= the v1 key) | tiles | macro pieces | P(type 1) | seasons |")
     a("|---|---|---|---|---|---|")
     for g, p in PREFIX.items():
-        base = f"`{p}`" if g in SINGLE else f"`{p}.0`"
-        var = f"`{p}.1` – `{p}.3`"
+        base = f"`{p}`, `{p}.1` – `.15`" if g in SINGLE else f"`{p}.0` – `.15`"
         seas = "autumn, winter" if g in ("grass", "plains", "lake", "moss") else "—"
-        a(f"| {LABEL[g]} | `{p}` | {base} | {var} | `{p}.macro.0` – `.3` | {seas} |")
+        a(f"| {LABEL[g]} | `{p}` | {base} | `.macro.0-3`, `.macro2.0-3`, `.macro3.0-8` | {P_TYPE1[g]} % | {seas} |")
     a("")
-    a("- **Base** (`.0`, or the bare v1 key for sand / path / ruin) is the calm tile; `.1` – `.3` carry the features "
-      "(clumps, flowers, reeds, pebbles, roots, drifts, cracks…). 4 variants this round (the engine can use up to 8: "
-      "pick the base on about two thirds of the ground, in noise patches, and `.1`–`.3` elsewhere).")
-    a("- **Macro** `<prefix>.macro.<q>`, q = 0 NW, 1 NE, 2 SW, 3 SE: one 64×64 picture cut in four, for a flat 2×2 block "
-      "of the same ground with no water edge.")
+    a("**Round 2 (after the inspection): the tiles are edge-matched (Wang tiles), so the ground does not repeat every "
+      "32 px.** Every edge between two display tiles has a type, 0 or 1. A ground tile is picked by its 4 edge types:")
+    a("")
+    a("    n = N + 2·E + 4·S + 8·W      (N = type of its top edge, E right, S bottom, W left)  ->  `<prefix>.<n>`")
+    a("")
+    a("(for tile.sand / tile.path / tile.ruin, n = 0 is the bare v1 key.) Two tiles that share an edge agree on its "
+      "type, so whatever crosses that edge (a swale, a clump, a moss bed, a worn stretch, a sand ripple, a snow ridge, a "
+      "paving joint) continues into the next tile; the generator and the test check that every tile with the same type "
+      "on a side has the same 2-px band there.")
+    a("")
+    a("**Edge type** (`render_ref.edge_type`):")
+    a("- the vertical edge left of display tile (i, j) has id `hash(2i, 2j+1)`, the horizontal edge above it `hash(2i+1, 2j)` "
+      "(`hash` = gameView's hash); type 1 when `id % 100 < P`, P per ground in the table (the season's look: winter "
+      "grass-like grounds use the snow P)")
+    a("- type 0 when the two tiles' lowest grounds differ, or the edge is on the outside of a macro block")
+    a("- with P = 10 %, `.0` (all 4 edges type 0, the calm base) covers about two thirds of a grass / path ground "
+      "(0.9⁴ = 66 %); an engine noise patch may raise P (busier ground) or lower it. Sand, snow and ruin are all "
+      "texture (ripples / ridges / paving that every tile continues): P = 50 % there.")
+    a("")
+    a("**Macro pieces** (all with type-0 outer edges, so force the edges around a placed block to type 0):")
+    a("- `<prefix>.macro3.<q>` 3×3 (q = 0-8 in reading order), `<prefix>.macro.<q>` and `<prefix>.macro2.<q>` 2×2 (q = 0 NW, "
+      "1 NE, 2 SW, 3 SE)")
+    a("- render_ref: 3×3 blocks at i, j multiples of 3 whose 16 corner cells are one land ground, `hash(i, j) % 6 == 0` "
+      "(sand / snow / ruin: `% 12`); then 2×2 blocks at even i, j (9 corner cells one ground, not overlapping): "
+      "`hash(i+1, j) % 4` (sand / snow / ruin `% 8`): 0 → `.macro`, 1 → `.macro2`")
     a("- **Seasons:** `autumn.<key>` / `winter.<key>` for every key of the 4 seasonal grounds (the existing season-key "
       "scheme). `autumn.mountains.snow.*` stays the v1.1 art (copied).")
-    a("- All base / variant / macro tiles of a ground join each other in any order (a shared 2-px edge band; the generator "
-      "and the test check it). Macro pieces join each other only in their 2×2 arrangement.")
+    a("- The repeat measure of the inspection (mean |ΔL| at 32 px ÷ at 24 px, 40×24 fields) is in `check.txt`: all ≥ 0.8.")
     a("")
+
+
     a("## 2. Transitions — dual grid, 4 corners, layered overlays")
     a("")
     a("**Scheme.** Draw the ground on a grid shifted by half a cell (+8, +8 game px). Display tile `(i, j)` covers the "
@@ -76,13 +97,14 @@ def names_md(files, redrawn, new, copied):
     a("| `tile.water.deep.edge.<mask>.<f>` | deep over shallow (mask = deep corners, 1-14) |")
     a("| `tile.water.foam.<mask>.<f>` | shore foam over the water (mask = LAND corners, 1-14), lapping in and out |")
     a("")
-    a("- A water cell is **deep** when no land cell is within 2 cells (Chebyshev), otherwise **shallow** "
-      "(the shallow band follows every shore).")
+    a("- A water cell is **deep** when no land cell is within 2 cells (Chebyshev) **and it lies in a 2×2 block of such "
+      "cells** (so a 1-cell-wide strip stays shallow: no dark 1-cell trenches); otherwise **shallow** (the shallow band "
+      "follows every shore).")
     a("- Display tile with water corners: shallow `.<f>` (deep if all 4 corners are deep); if deep corners are mixed, "
       "`tile.water.deep.edge.<mask>.<f>`; if any corner is land, `tile.water.foam.<landmask>.<f>`; then the land "
       "overlays of section 2 (water is the lowest terrain).")
     a("- All water keys switch frames together, 4 frames (suggested 0.25–0.3 s each). Water tiles change 12–30 px per "
-      "frame (guide 3.5); a foam overlay changes 16–40 px on a straight shore (72 on a diagonal 2-shore tile).")
+      "frame (guide 3.5); a foam overlay changes at most 36 px (on the diagonal 2-shore tiles 6 / 9 only one shore laps).")
     a("- This replaces the v1.1 water edges (`tile.shore.*`, `tile.shore-desert.*`, `tile.bank.*`, still in the folder, "
       "copied): a shore is now foam overlay + the land's own overlay.")
     a("")
@@ -90,8 +112,14 @@ def names_md(files, redrawn, new, copied):
     a("")
     groups = {}
     for k in sorted(new):
-        head = k.split(".edge.")[0] + ".edge.*" if ".edge." in k else (k.split(".macro.")[0] + ".macro.*" if ".macro." in k else
-                                                                     (k.rsplit(".", 2)[0] + ".*" if ".foam." in k else k.rsplit(".", 1)[0] + ".*"))
+        if ".edge." in k:
+            head = k.split(".edge.")[0] + ".edge.*"
+        elif ".macro" in k:
+            head = k.rsplit(".", 1)[0] + ".*"
+        elif ".foam." in k:
+            head = k.rsplit(".", 2)[0] + ".*"
+        else:
+            head = k.rsplit(".", 1)[0] + ".*"
         groups[head] = groups.get(head, 0) + 1
     for head, n in groups.items():
         a(f"- `{head}` — {n}")

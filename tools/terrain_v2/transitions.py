@@ -89,26 +89,36 @@ def overlay(tex, mat, mask, variant, style):
                     c.put(x, y, mat, 1 if f < 0.5 + RIM / 2 else 4)
                 elif style == "moss":
                     c.put(x, y, mat, 4 if lit_side else 2)
-    if style == "grass":  # blades over the edge: 2-px blades standing on the turf edge, lit tips
+    if style == "grass":  # tufts over the turf edge: uneven heights (1-3 px), widths and gaps, some leaning
         for y in range(32):
             for x in range(32):
                 f = F[y][x]
-                if 0.5 - 0.05 < f <= 0.5 and _comb(x, y):
-                    gx, gy = gradient(mask, x, y)
-                    if gy >= 0:  # the turf is below: blades stick up out of it
-                        c.put(x, y, mat, 4)
-                        if y - 1 >= 0 and F[y - 1][x] <= 0.5:
-                            c.put(x, y - 1, mat, 5)
-                    else:
-                        c.put(x, y, mat, 3)
-                        if y + 1 < 32 and F[y + 1][x] <= 0.5:
-                            c.put(x, y + 1, mat, 2)
+                if not (0.5 - 0.05 < f <= 0.5):
+                    continue
+                r = _rnd(x, y, mask, variant)
+                if r > 0.42:
+                    continue  # a gap
+                h = 1 + int(r * 17) % 3
+                lean = (-1, 0, 0, 1)[int(r * 41) % 4]
+                gx, gy = gradient(mask, x, y)
+                step = -1 if gy >= 0 else 1  # the turf below: blades rise; the turf above: they hang
+                xx, yy = x, y
+                for k in range(h):
+                    if not (0 <= xx < 32 and 0 <= yy < 32) or (k and F[yy][xx] > 0.5):
+                        break
+                    tip = k == h - 1
+                    c.put(xx, yy, mat, (5 if tip else 4) if step < 0 else (2 if tip else 3))
+                    yy += step
+                    if k == 1:
+                        xx += lean
     return c
 
 
-def _comb(x, y):
-    """Where blades stand along a grass edge: hand-chosen 32-periodic pattern of 2-3 px groups."""
-    return (x * 5 + y * 3) % 11 in (0, 1)
+def _rnd(x, y, mask, variant):
+    """A fixed pseudo-random value per pixel, mask and variant (so no two edges show the same row of tufts)."""
+    h = (x * 73856093) ^ (y * 19349663) ^ ((mask * 7 + variant * 3 + 1) * 83492791)
+    h = (h ^ (h >> 13)) * 1274126177 & 0xFFFFFFFF
+    return ((h ^ (h >> 16)) & 0xFFFF) / 65536
 
 
 STYLE = {"grass": "grass", "plains": "grass", "lake": "grass", "moss": "moss", "snow": "snow", "sand": "sand",
