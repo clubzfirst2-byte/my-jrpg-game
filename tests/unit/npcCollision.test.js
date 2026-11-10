@@ -35,7 +35,10 @@ describe('villagers have a solid body', () => {
       stepGame(s, { ...none, moveY: -1 });
       expect(npcOverlap(p.x, p.y, p, elder)).toBe(0);
     }
-    expect(elder.y - p.y).toBeLessThanOrEqual(-NPC_BODY.depth + 0.01); // right against it, below
+    // right against it, below: final QA L-5, 14 px (its front) so the hero no longer hides it
+    expect(p.y - elder.y).toBeGreaterThanOrEqual(6 + NPC_BODY.front - 0.01);
+    expect(p.y - elder.y).toBeLessThan(6 + NPC_BODY.front + 2);
+    expect(NPC_BODY.front).toBe(8);
     expect(Math.abs(p.x - elder.x)).toBeLessThan(1);
     expect(npcInReach(s)?.id).toBe('elder');
     stepGame(s, { ...none, attack: true });
@@ -253,7 +256,7 @@ describe('review fixes (v1-final-a)', () => {
     const fx = C * 16 - 6; // the player's right side 1 px short of the cliff
     const fy = R * 16 + 2; // the box spans rows R-1 and R
     const [villager] = createNpcs(map, [{ id: 'v', name: 'v', dialogue: 'elder', tx: C - 1, ty: R - 1 }]);
-    Object.assign(villager, { x: fx + 3, y: fy - 6, z: 0 });
+    Object.assign(villager, { x: fx + 3, y: fy - 6 - NPC_BODY.front, z: 0 }); // its body (with its front) ends where the box starts
     s.npcs = [villager];
     s.npcDefs = [];
     const p = s.player;

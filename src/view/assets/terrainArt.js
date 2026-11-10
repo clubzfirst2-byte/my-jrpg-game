@@ -91,11 +91,14 @@ export function groundCacheResolution(release) {
  * The ambient light indoors (caves, mines, trial rooms, the source's rooms; not the dark trial rooms
  * or the lived-in houses, which have their own). The release ruin and cave stone is darker than the
  * placeholders', so under the placeholders' 0.55 the floors were near black with little contrast
- * against the walls (re-inspection of a25fb7d); the release terrain gets 0.65 / 0.65 / 0.75.
+ * against the walls (re-inspection of a25fb7d); the release terrain got 0.65 / 0.65 / 0.75.
+ * v1.0 (final QA L-2, "stone rooms are grey and darker than on main"): 0.80 / 0.78 / 0.84, a little
+ * brighter and less blue (the release stone is already blue-grey), so a fire's warm light still
+ * shows. The dark trial rooms (AMB_DARK_ROOM) are not affected, so their puzzles stay dark.
  * @param {boolean} release
  */
 export function indoorLight(release) {
-  return release ? { r: 0.65, g: 0.65, b: 0.75 } : { r: 0.55, g: 0.55, b: 0.65 };
+  return release ? { r: 0.8, g: 0.78, b: 0.84 } : { r: 0.55, g: 0.55, b: 0.65 };
 }
 
 /**

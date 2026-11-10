@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { RenderTexture, Sprite } from 'pixi.js';
-import { createLightMap, warningLights, WARNING_LIGHT, LIGHT_MAP_RESOLUTION } from '../../src/view/weatherView.js';
+import { createLightMap, warningLights, WARNING_LIGHT, LIGHT_MAP_RESOLUTION, lightFalloff } from '../../src/view/weatherView.js';
 import { ENEMY_KINDS } from '../../src/game/entities/enemies.js';
 import { BOSS_KINDS } from '../../src/game/entities/bosses.js';
 import { FINAL_BOSS } from '../../src/game/entities/finalBoss.js';
@@ -89,5 +89,37 @@ describe('the final boss lights its slam ring and its wave (v1.0 final)', () => 
     const volley = warningLights([{ ...at, pattern: 'volley', state: 'windup' }]);
     expect(volley).toHaveLength(1);
     expect(volley[0].r).toBe(WARNING_LIGHT.bossRadius);
+  });
+});
+
+// Final QA L-1: lights in rooms looked like blotchy patches. The old disc was a straight cone
+// (1 - t) with creases at its peak and edge; the new falloff is a smooth bell with the same total light.
+describe('lightFalloff', () => {
+  it('is 1 at the centre, 0 at and beyond the edge, and falls steadily', () => {
+    expect(lightFalloff(0)).toBe(1);
+    expect(lightFalloff(1)).toBe(0);
+    expect(lightFalloff(1.5)).toBe(0);
+    for (let t = 0; t < 1; t += 0.05) expect(lightFalloff(t + 0.05)).toBeLessThan(lightFalloff(t));
+  });
+
+  it('has no crease: flat at the centre and at the edge, and the slope changes smoothly', () => {
+    const h = 0.01;
+    expect(Math.abs(lightFalloff(h) - 1)).toBeLessThan(0.001);
+    expect(lightFalloff(1 - h)).toBeLessThan(0.001);
+    const slope = (/** @type {number} */ t) => (lightFalloff(t + h) - lightFalloff(t)) / h;
+    for (let t = 0; t < 0.98; t += h) expect(Math.abs(slope(t + h) - slope(t))).toBeLessThan(0.1);
+  });
+
+  it('gives the same total light as the old disc (1 → 0.55 at 45% → 0), so nights stay as lit', () => {
+    const old = (/** @type {number} */ t) => 1 - t; // the old stops 1, 0.55 at 0.45, 0
+    let a = 0;
+    let b = 0;
+    const n = 10000;
+    for (let k = 0; k < n; k++) {
+      const t = (k + 0.5) / n;
+      a += old(t) * t;
+      b += lightFalloff(t) * t;
+    }
+    expect(Math.abs(b / a - 1)).toBeLessThan(0.01);
   });
 });

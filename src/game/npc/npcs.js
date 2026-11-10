@@ -24,19 +24,24 @@ import { conditionHolds, coresPurified } from './talk.js';
  * - Only within `zReach` of the player's height (jumping clears it, a ledge above is no wall).
  * - Ghosts (the princess's 写し身 by the record stones) have no body: an apparition you can walk
  *   through reads right, and it stands by the respawn points, where a body could box the player in.
+ * - v1.0 (final QA L-5, "talking from below, the hero covers most of the villager"): against the
+ *   player the body also reaches `front` px in front of (below) the villager's feet, so the player
+ *   stops 14 px below them instead of 6 and the villager's head and shoulders stay in view (both
+ *   are 28 px tall). Only the player keeps this distance: where a villager may stand (walls,
+ *   doorways, corridors) still uses the box at its feet.
  */
-export const NPC_BODY = Object.freeze({ halfWidth: 5, depth: 6, zReach: 12, yieldMs: 900, asideStep: 14 });
+export const NPC_BODY = Object.freeze({ halfWidth: 5, depth: 6, front: 8, zReach: 12, yieldMs: 900, asideStep: 14 });
 
 /** Whether a villager has a solid body. @param {{ ghost?: boolean }} n */
 export const npcSolid = (n) => !n.ghost;
 
 /**
- * How much a player box (feet at x, y) overlaps a villager's body (0 = apart), in px².
+ * How much a player box (feet at x, y) overlaps a villager's body, with its `front` (0 = apart), in px².
  * @param {number} x @param {number} y @param {{ halfWidth: number, height: number }} p @param {{ x: number, y: number }} n
  */
 export function npcOverlap(x, y, p, n) {
   const ox = Math.min(x + p.halfWidth, n.x + NPC_BODY.halfWidth) - Math.max(x - p.halfWidth, n.x - NPC_BODY.halfWidth);
-  const oy = Math.min(y, n.y) - Math.max(y - p.height, n.y - NPC_BODY.depth);
+  const oy = Math.min(y, n.y + NPC_BODY.front) - Math.max(y - p.height, n.y - NPC_BODY.depth);
   return ox > 0 && oy > 0 ? ox * oy : 0;
 }
 
