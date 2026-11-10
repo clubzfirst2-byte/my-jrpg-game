@@ -24,6 +24,7 @@ test('the village at night: shadows on the ground and the windows lit, within th
   await expect.poll(async () => (await api(page, 'fxInfo')).windows.lit, { timeout: 10_000 }).toBeGreaterThan(0);
   const fx = await api(page, 'fxInfo');
   expect(fx.version).toBe('v2');
+  expect((await api(page, 'art')).groups).toContain('v2/enemy'); // the enemies' v2 art by default
   expect(fx.shadows.baked).toBeGreaterThan(0);
   expect(fx.windows.glow).toBeGreaterThan(0.5);
   expect(fx.windows.lights).toBeGreaterThanOrEqual(fx.windows.sprites);
@@ -33,7 +34,32 @@ test('the village at night: shadows on the ground and the windows lit, within th
   // by day the windows are off
   await api(page, 'setHour', 11);
   await expect.poll(async () => (await api(page, 'fxInfo')).windows.lit).toBe(0);
-  expect(await api(page, 'saveNow')).toBe(true); // saving goes on as before
+  expect(errors).toEqual([]);
+});
+
+test('saving and continuing work as before with the effects on (drawing only)', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 40_000 });
+  await page.click('#title-new');
+  await api(page, 'skipOpening');
+  await api(page, 'clearEnemies');
+  await api(page, 'teleport', 24, 91);
+  await settle(page);
+  expect((await api(page, 'fxInfo')).version).toBe('v2');
+  await api(page, 'addMoney', 123);
+  const before = await api(page, 'progress');
+  expect(await api(page, 'saveNow')).toBe(true);
+  await page.reload();
+  await expect(page.locator('#title-continue')).toBeEnabled({ timeout: 40_000 });
+  await page.click('#title-continue');
+  await settle(page);
+  // (what was saved comes back: the bag, with the money added before saving)
+  const after = await api(page, 'progress');
+  expect(after.inv).toEqual(before.inv);
+  expect(after.inv.money).toBeGreaterThanOrEqual(123);
+  expect((await api(page, 'fxInfo')).version).toBe('v2');
   expect(errors).toEqual([]);
 });
 
@@ -75,6 +101,10 @@ for (const q of ['fx=v1', 'v2=0']) {
     for (let i = 0; i < 40 && !(await api(page, 'events')).includes('hitEnemy'); i++) await page.keyboard.press('KeyJ');
     const fx = await api(page, 'fxInfo');
     expect(fx.version).toBe('v1');
+    // ?v2=0 also draws the v1 enemies; ?fx=v1 turns only the effects off
+    const groups = (await api(page, 'art')).groups;
+    expect(groups.includes('v2/enemy')).toBe(q === 'fx=v1');
+    expect(groups.includes('enemy')).toBe(q === 'v2=0');
     expect(fx.shadows).toEqual({ baked: 0, loose: 0, characters: 0 });
     expect(fx.windows.sprites).toBe(0);
     expect(fx.windows.glow).toBe(0);
