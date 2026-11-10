@@ -8,7 +8,7 @@
 // Sort keys: characters/objects use their feet y; an elevated terrain row uses its NORTH edge.
 // That one rule puts a character behind a cliff when north of it, on top of it when standing on it,
 // and in front of it when south of it.
-import { Container, Graphics, Rectangle, Sprite, TexturePool } from 'pixi.js';
+import { Container, Graphics, Rectangle, Sprite, Texture, TexturePool } from 'pixi.js';
 import { chunkRange, CHUNK_KEEP_MARGIN_TILES, CHUNK_LOAD_MARGIN_TILES } from './chunkRange.js';
 import { Ground, Shape, LEVEL_PX, inBounds, northEdgeHeight, southEdgeHeight } from '../game/world/tilemap.js';
 import { lerp } from '../game/core/math.js';
@@ -151,6 +151,21 @@ export class GameView {
     this.objectSprites = new Map();
     /** @type {RegionInfo[]} */
     this.regions = state.regions ?? [];
+    /**
+     * v1.0 QA4 L-6: the desert's trees stand on a tile of grass (the map's tree tile), which read as
+     * a square green patch in the sand; with the release terrain those tiles are drawn as desert sand
+     * (only the look: the ground stays grass for the game, so fire and saves are unchanged).
+     * @type {Set<number>}
+     */
+    /** QA4 L-1: quarters of shore pieces, per texture (dropped with it). @type {WeakMap<Texture, Map<string, Texture>>} */
+    this.edgeQuarters = new WeakMap();
+    this.sandUnderTrees = new Set(
+      this.releaseTerrain
+        ? (state.map.objects ?? [])
+            .filter((/** @type {any} */ o) => o.type === 'tree' && state.map.ground[o.ty * state.map.width + o.tx] === Ground.GRASS && regionAt(this.regions, o.tx, o.ty)?.id === 'desert')
+            .map((/** @type {any} */ o) => o.ty * state.map.width + o.tx)
+        : [],
+    );
     /** Bundles being loaded (async). @type {Set<string>} */
     this.bundlesLoading = new Set();
     /** Bundles loaded ahead of their chunks (one reference held here). @type {Set<string>} */
@@ -326,7 +341,7 @@ export class GameView {
 
   /** @param {number} tx @param {number} ty */
   surfaceKey(tx, ty) {
-    const g = this.map.ground[ty * this.map.width + tx];
+    const g = this.drawnGround(tx, ty);
     // P8: each region dresses the same ground in its own art (its asset bundle).
     const region = regionAt(this.regions, tx, ty);
     if (region?.id === 'desert' && g === Ground.SAND) return `desert.sand.${this.variant(tx, ty, 3)}`;
@@ -365,8 +380,9 @@ export class GameView {
   waterEdge(tx, ty) {
     const map = this.map;
     const i = ty * map.width + tx;
-    const g = map.ground[i];
-    if (g !== Ground.SAND && g !== Ground.GRASS) return null;
+    const g = this.drawnGround(tx, ty);
+    // v1.0 QA4 L-2: paths get the grass's bank too (their straight edge stood out beside the banks).
+    if (g !== Ground.SAND && g !== Ground.GRASS && g !== Ground.PATH) return null;
     const water = (/** @type {number} */ dx, /** @type {number} */ dy) => {
       const nx = tx + dx;
       const ny = ty + dy;
@@ -376,12 +392,39 @@ export class GameView {
     };
     const around = waterAround(water);
     if (!around.mask && !around.corners.length) return null;
-    const kind = g === Ground.GRASS ? 'bank' : regionAt(this.regions, tx, ty)?.id === 'desert' ? 'shore-desert' : 'shore';
+    const kind = g !== Ground.SAND ? 'bank' : regionAt(this.regions, tx, ty)?.id === 'desert' ? 'shore-desert' : 'shore';
     const pieces = waterEdgePieces(kind, around);
     if (pieces.fallback) this.edgeStats.fallbacks++;
     // Art missing (should not happen with the release terrain): the plain ground.
-    const ok = (/** @type {string} */ k) => this.assets.hasTexture(`${k}.0`);
+    const ok = (/** @type {string} */ k) => this.assets.hasTexture(`${k.split('#')[0]}.0`);
     return { base: pieces.base && ok(pieces.base) ? pieces.base : null, overlays: pieces.overlays.filter(ok) };
+  }
+
+  /**
+   * The texture of a water-edge piece at a water frame. "<key>#<corner>" (QA4 L-1) is that corner's
+   * quarter of the piece, cut once per texture and kept with it.
+   * @param {string} key @param {number} frame @returns {Texture}
+   */
+  edgeTexture(key, frame) {
+    const [k, quarter] = key.split('#');
+    const tex = this.assets.texture(`${k}.${frame}`);
+    if (!quarter) return tex;
+    let cut = this.edgeQuarters.get(tex);
+    if (!cut) this.edgeQuarters.set(tex, (cut = new Map()));
+    let q = cut.get(quarter);
+    if (!q) {
+      const f = tex.frame;
+      const [qx, qy] = edgeQuarterOffset(key, f.width);
+      q = new Texture({ source: tex.source, frame: new Rectangle(f.x + qx, f.y + qy, f.width / 2, f.height / 2) });
+      cut.set(quarter, q);
+    }
+    return q;
+  }
+
+  /** The ground a flat tile is drawn as (v1.0 QA4 L-6: desert tree tiles as sand). @param {number} tx @param {number} ty */
+  drawnGround(tx, ty) {
+    const i = ty * this.map.width + tx;
+    return this.sandUnderTrees.has(i) ? Ground.SAND : this.map.ground[i];
   }
 
   /** @param {number} cx @param {number} cy */
@@ -450,8 +493,9 @@ export class GameView {
           base.addChild(s);
           if (edge?.base) edges.push({ sprite: s, key: edge.base });
           for (const key of edge?.overlays ?? []) {
-            const o = new Sprite(this.assets.texture(`${key}.${frame}`));
-            o.position.set(x, ty * ts);
+            const o = new Sprite(this.edgeTexture(key, frame));
+            const [qx, qy] = edgeQuarterOffset(key, ts);
+            o.position.set(x + qx, ty * ts + qy);
             base.addChild(o);
             edges.push({ sprite: o, key });
           }
@@ -1158,10 +1202,20 @@ export class GameView {
       // (a chunk can have edge pieces of water in the next chunk, and no water of its own)
       if (c.water.length === 0 && c.edges.length === 0) continue;
       for (const s of c.water) s.texture = tex;
-      for (const e of c.edges) e.sprite.texture = this.assets.texture(`${e.key}.${frame}`);
+      for (const e of c.edges) e.sprite.texture = this.edgeTexture(e.key, frame);
       c.base.updateCacheTexture();
     }
   }
+}
+
+/**
+ * Where a quarter piece ("<key>#<ne|se|sw|nw>", QA4 L-1) sits in its tile: its top-left corner.
+ * @param {string} key @param {number} size the tile's size @returns {[number, number]}
+ */
+function edgeQuarterOffset(key, size) {
+  const quarter = key.split('#')[1];
+  if (!quarter) return [0, 0];
+  return [quarter.endsWith('e') ? size / 2 : 0, quarter.startsWith('s') ? size / 2 : 0];
 }
 
 /** Stable per-tile variation. @param {number} x @param {number} y */

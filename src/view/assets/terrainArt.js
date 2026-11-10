@@ -250,9 +250,15 @@ export function waterEdgePieces(kind, { mask, corners }) {
   if (kind === 'bank') {
     return { base: null, overlays: [...(mask ? [`tile.bank.${mask}`] : []), ...corners.map((d) => `tile.bank.inner.${d}`)], fallback: false };
   }
-  if (mask) return { base: `tile.${kind}.${mask}`, overlays: [], fallback: corners.length > 0 };
-  if (corners.length === 1) return { base: `tile.${kind}.inner.${corners[0]}`, overlays: [], fallback: false };
-  return { base: null, overlays: [], fallback: corners.length > 1 };
+  // v1.0 QA4 L-1: a corner the full shore tile cannot hold (beside a side piece, or a second inner
+  // corner) is drawn on top from that corner's quarter of the shore's own inner-corner piece
+  // ("<key>#<corner>"): an inner corner's foam stays within its quarter (≤ 10 × 10 art px of 16 × 16),
+  // and the rest of the quarter is the same sand as the piece under it. (The bank's corner, tried
+  // first, drew its dark earth line on the sand.) fallback: true = composited this way.
+  const extra = (/** @type {string[]} */ cs) => cs.map((d) => `tile.${kind}.inner.${d}#${d}`);
+  if (mask) return { base: `tile.${kind}.${mask}`, overlays: extra(corners), fallback: corners.length > 0 };
+  if (corners.length) return { base: `tile.${kind}.inner.${corners[0]}`, overlays: extra(corners.slice(1)), fallback: corners.length > 1 };
+  return { base: null, overlays: [], fallback: false };
 }
 
 /**

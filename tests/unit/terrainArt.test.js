@@ -104,17 +104,35 @@ describe('terrain release art → game sprite keys', () => {
   it('v1.1 water-edge pieces: shore tiles replace the sand (one piece), bank overlays stack on grass', () => {
     expect(waterEdgePieces('shore', { mask: 5, corners: [] })).toEqual({ base: 'tile.shore.5', overlays: [], fallback: false });
     expect(waterEdgePieces('shore-desert', { mask: 0, corners: ['nw'] })).toEqual({ base: 'tile.shore-desert.inner.nw', overlays: [], fallback: false });
-    // a side and the opposite diagonal: the side piece, the corner stays plain (listed)
-    expect(waterEdgePieces('shore', { mask: 1, corners: ['se'] })).toEqual({ base: 'tile.shore.1', overlays: [], fallback: true });
-    expect(waterEdgePieces('shore', { mask: 0, corners: ['ne', 'sw'] })).toEqual({ base: null, overlays: [], fallback: true });
+    // a corner the full tile cannot hold (QA4 L-1): that corner's quarter of the shore's inner piece on top
+    expect(waterEdgePieces('shore', { mask: 1, corners: ['se'] })).toEqual({ base: 'tile.shore.1', overlays: ['tile.shore.inner.se#se'], fallback: true });
+    expect(waterEdgePieces('shore-desert', { mask: 0, corners: ['ne', 'sw'] })).toEqual({ base: 'tile.shore-desert.inner.ne', overlays: ['tile.shore-desert.inner.sw#sw'], fallback: true });
+    expect(waterEdgePieces('shore', { mask: 0, corners: ['ne', 'se', 'sw', 'nw'] }).overlays).toEqual(['tile.shore.inner.se#se', 'tile.shore.inner.sw#sw', 'tile.shore.inner.nw#nw']);
     expect(waterEdgePieces('bank', { mask: 1, corners: ['se'] })).toEqual({ base: null, overlays: ['tile.bank.1', 'tile.bank.inner.se'], fallback: false });
     expect(waterEdgePieces('bank', { mask: 0, corners: ['ne', 'sw'] })).toEqual({ base: null, overlays: ['tile.bank.inner.ne', 'tile.bank.inner.sw'], fallback: false });
+    // the quarter trick holds: an inner corner differs from the plain sand only inside its own quarter
+    for (const [kind, plain] of [['shore', 'tile.sand'], ['shore-desert', 'desert.sand.0']]) {
+      const sand = decodePng(readFileSync(new URL(`${TERRAIN_GROUP}/${plain}.png`, ROOT)));
+      for (const d of ['ne', 'se', 'sw', 'nw']) {
+        for (const f of [0, 1]) {
+          const img = decodePng(readFileSync(new URL(`${TERRAIN_GROUP}/tile.${kind}.inner.${d}.${f}.png`, ROOT)));
+          for (let y = 0; y < 32; y++) {
+            for (let x = 0; x < 32; x++) {
+              const inQuarter = (d.endsWith('e') ? x >= 16 : x < 16) && (d.startsWith('s') ? y >= 16 : y < 16);
+              if (inQuarter) continue;
+              const o = (y * 32 + x) * 4;
+              expect([...img.data.subarray(o, o + 4)], `${kind} ${d}.${f} at ${x},${y}`).toEqual([...sand.data.subarray(o, o + 4)]);
+            }
+          }
+        }
+      }
+    }
     // every piece the selection can name has its 2 frames
     for (const kind of ['shore', 'shore-desert', 'bank']) {
       for (let mask = 0; mask < 16; mask++) {
         for (const corners of [[], ['ne'], ['se'], ['sw'], ['nw']]) {
           const p = waterEdgePieces(kind, { mask, corners });
-          for (const k of [p.base, ...p.overlays].filter(Boolean)) for (const f of [0, 1]) expect(ART.has(`${k}.${f}`), `${k}.${f}`).toBe(true);
+          for (const k of [p.base, ...p.overlays].filter(Boolean).map((x) => x.split('#')[0])) for (const f of [0, 1]) expect(ART.has(`${k}.${f}`), `${k}.${f}`).toBe(true);
         }
       }
     }
