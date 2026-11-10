@@ -79,9 +79,10 @@ def step_overlay(mat, mask, variant):
 def shade_overlay(mat, variant):
     c = Canvas(32, 32, None, wrap=False)
     t_out, t_sh = min(1, dark_tone(mat, OUTLINE)), dark_tone(mat, SHADE)  # outline: never lighter than tone 1 (r7)
+    wide = 1.5 if _lum(mat, t_sh) - _lum(mat, 3) > -20 else 0.0  # round 9: moss / autumn moss / ruin shadows a column wider
     for y in range(32):
         for x in range(32):
-            w = _depth(y, "S", variant, 5.0, 3.0)  # 2-8 px from the west side
+            w = _depth(y, "S", variant, 5.0 + wide, 3.0)  # 2-8 px from the west side (+1.5 on the darkest grounds)
             if x < w:
                 c.put(x, y, mat, t_out if x < 1 else t_sh)
     return c
