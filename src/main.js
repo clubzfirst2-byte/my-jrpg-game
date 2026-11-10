@@ -189,8 +189,8 @@ async function boot() {
     }),
   );
   // P8: each region's art is its own bundle, loaded by the view near the region.
-  // gfx W1: with the v2 ground, a region's own ground is apart (its calm tiles and edges in
-  // "ground:<region>", its pictures in "pictures:<region>"), and so is each seasonal ground's autumn /
+  // gfx W1: with the v2 ground, a region's own ground is apart ("ground:<region>"), and so is each
+  // seasonal ground's autumn /
   // winter art ("season:<season>:<ground>"): terrainArt.v2BundleParts. (REGION_ENTRIES holds the seasons too.)
   for (const name of Object.keys(REGION_ENTRIES)) {
     const parts = groundV2Entries.length > 0 ? v2BundleParts(name) : null;

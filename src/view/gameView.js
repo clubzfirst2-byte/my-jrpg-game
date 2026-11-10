@@ -31,7 +31,7 @@ import { SEASON_ENTRIES, seasonKeys, SOURCE_BUNDLE, SOURCE_REGIONS } from './ass
 import { HeroAnimator } from './heroAnim.js';
 import { DECOR_TYPES, decorOffset, macroQuarter, patchVariant, placementEnabled } from './placement.js';
 import { CORNERS, MACRO_NAMES, PREFIX, PRIORITY, SEASONAL, WATER_FRAMES, WATER_FRAME_SEC as WATER_FRAME_SEC_V2, calmNumber, deepMap, displayLayers, edgeVariantOf, groundClass, landKey, macroPlacement, quarterOfCorner, ruinCellTile, ruinTile, tileScheme } from './groundV2.js';
-import { GROUND_RUIN_BUNDLE, GROUND_V2_KEY, groundBundleOf, picturesBundleOf, seasonGroundBundleOf, faceMaterial, faceVariant, groundCacheResolution, groundVariant, indoorLight, levelBrightness, releaseSeasonKeys, usesReleaseTerrain, waterAround, waterEdgePieces } from './assets/terrainArt.js';
+import { GROUND_RUIN_BUNDLE, GROUND_V2_KEY, groundBundleOf, seasonGroundBundleOf, faceMaterial, faceVariant, groundCacheResolution, groundVariant, indoorLight, levelBrightness, releaseSeasonKeys, usesReleaseTerrain, waterAround, waterEdgePieces } from './assets/terrainArt.js';
 import { openingView } from '../game/story/story.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
 import { SilhouetteCache, placeFlash } from './flashOverlay.js';
@@ -781,17 +781,20 @@ export class GameView {
       .filter((r) => r.bundle && r.tx < x0 + CHUNK && r.tx + r.tw > x0 && r.ty < y0 + CHUNK && r.ty + r.th > y0)
       .map((r) => /** @type {string} */ (r.bundle));
     if (this.groundV2) {
-      // gfx W1: a region's own ground is apart (terrainArt.REGION_GROUND_PREFIX): its calm tiles and
-      // edges ("ground:"), its pictures ("pictures:"); and on the dual grid a chunk's display tiles reach
-      // one cell out of it: the next region's ground too where a cell of that ring has it (only its
-      // calm tiles and edges: a picture always covers a cell of the chunk drawing it)
-      const part = (/** @type {string | null} */ b) => (b && this.assets.builders.has(b) ? b : null);
+      // gfx W1: a region's own ground is a bundle of its own (terrainArt.REGION_GROUND_PREFIX), and on the
+      // dual grid a chunk's display tiles reach one cell out of it: the next region's ground too where a
+      // cell of that ring has it (only its ground, not the rest of its art)
+      const ground = (/** @type {string} */ r) => {
+        const g = groundBundleOf(r);
+        return g && this.assets.builders.has(g) ? g : r;
+      };
       for (const r of [...list]) {
-        for (const b of [part(groundBundleOf(r)), part(picturesBundleOf(r))]) if (b && !list.includes(b)) list.push(b);
+        const g = ground(r);
+        if (g !== r && !list.includes(g)) list.push(g);
       }
       for (const r of this.ringBundles(cx, cy)) {
-        const b = part(groundBundleOf(r)) ?? r;
-        if (!list.includes(b)) list.push(b);
+        const g = ground(r);
+        if (!list.includes(g)) list.push(g);
       }
       // round 3: the ruin floor's edges over water, only where the ruin floor meets water
       if (this.assets.builders.has(GROUND_RUIN_BUNDLE) && this.chunkHasRuinShore(cx, cy)) list.push(GROUND_RUIN_BUNDLE);

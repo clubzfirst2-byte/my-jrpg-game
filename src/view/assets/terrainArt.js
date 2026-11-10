@@ -165,12 +165,10 @@ const V11_KEYS = /** @type {[RegExp, string][]} */ ([
 ]);
 
 /**
- * gfx W1: with the v2 ground, each region's own ground (its grass, moss, snow or desert sand, the v1
- * keys too) is apart from the rest of the region's art, in 2 bundles: "ground:<region>" (its 16 calm
- * tiles and its edges, 256 × 256) and "pictures:<region>" (its 8 pictures' pieces, 256 × 256). A chunk
- * of the region loads both; a chunk whose display tiles reach one cell into the region loads only its
- * ground (no picture can lie there: a picture covers a cell of the chunk drawing it). The region's own
- * atlas keeps its v1 size (gameView.chunkBundles).
+ * gfx W1: with the v2 ground, each region's own ground (its grass, moss, snow or desert sand: 32 calm
+ * tiles, 8 pictures, edges, the v1 keys too; 512 × 256) is a bundle of its own, "ground:<region>", apart
+ * from the rest of the region's art: loaded with the region, and alone by the chunks whose display tiles
+ * reach one cell into that region. The region's own atlas keeps its v1 size (gameView.chunkBundles).
  */
 export const REGION_GROUND_PREFIX = Object.freeze({
   'region:plains': 'plains.grass',
@@ -183,18 +181,10 @@ export const REGION_GROUND_PREFIX = Object.freeze({
 /** The ground bundle of a region bundle ("region:plains" → "ground:plains"), or null. @param {string} region */
 export const groundBundleOf = (region) => (region in REGION_GROUND_PREFIX ? `ground:${region.slice('region:'.length)}` : null);
 
-/** The pictures bundle of a region bundle ("region:plains" → "pictures:plains"), or null. @param {string} region */
-export const picturesBundleOf = (region) => (region in REGION_GROUND_PREFIX ? `pictures:${region.slice('region:'.length)}` : null);
-
-/**
- * Which part of a region's own ground a key is: "pictures" (<prefix>.macro….<q>), "ground" (its other
- * keys), or null (the rest of the region's art). @param {string} region @param {string} key
- * @returns {'ground' | 'pictures' | null}
- */
-export function regionGroundPart(region, key) {
+/** Whether a key is the region's own ground (REGION_GROUND_PREFIX). @param {string} region @param {string} key */
+export function isRegionGround(region, key) {
   const p = /** @type {Record<string, string>} */ (REGION_GROUND_PREFIX)[region];
-  if (!p || (key !== p && !key.startsWith(`${p}.`))) return null;
-  return /^macro\d?\./.test(key.slice(p.length + 1)) ? 'pictures' : 'ground';
+  return !!p && (key === p || key.startsWith(`${p}.`));
 }
 
 /**
@@ -218,17 +208,15 @@ export function seasonGroundOf(season, key) {
 
 /**
  * gfx W1: with the v2 ground, the bundles a region or season bundle is registered as — [name, keep a
- * key?] — or null when it stays whole: a region as itself, "ground:" and "pictures:"; autumn / winter as
+ * key?] — or null when it stays whole: a region as itself and "ground:"; autumn / winter as
  * themselves and one bundle per seasonal ground. @param {string} name @returns {[string, (key: string) => boolean][] | null}
  */
 export function v2BundleParts(name) {
   const ground = groundBundleOf(name);
-  const pictures = picturesBundleOf(name);
-  if (ground && pictures) {
+  if (ground) {
     return [
-      [name, (k) => regionGroundPart(name, k) === null],
-      [ground, (k) => regionGroundPart(name, k) === 'ground'],
-      [pictures, (k) => regionGroundPart(name, k) === 'pictures'],
+      [name, (k) => !isRegionGround(name, k)],
+      [ground, (k) => isRegionGround(name, k)],
     ];
   }
   const season = /^season:(autumn|winter)$/.exec(name)?.[1];

@@ -20,7 +20,7 @@ const keysOf = (/** @type {{ key: string }[]} */ es) => es.map((e) => e.key);
 const BASE = new Set([...keysOf(placeholderEntries()), ...keysOf(releaseTerrainEntries('placeholder', overrides)), ...keysOf(releaseTerrainEntries('common:ground', overrides))]);
 const BUNDLE = new Map([
   [GROUND_RUIN_BUNDLE, new Set(keysOf(releaseTerrainEntries(GROUND_RUIN_BUNDLE, overrides)))],
-  // (with the v2 ground, as main.js registers them: a region's own ground and pictures, and each seasonal
+  // (with the v2 ground, as main.js registers them: a region's own ground, and each seasonal
   // ground's autumn / winter art, are bundles of their own — terrainArt.v2BundleParts)
   ...Object.entries({ ...REGION_ENTRIES, ...SEASON_ENTRIES }).flatMap(([n, make]) => {
     const all = [...keysOf(make()), ...keysOf(releaseTerrainEntries(n, overrides))];
@@ -97,9 +97,8 @@ describe('ground v2 on the world map: no key is ever missing', () => {
       expect([...unloaded]).toEqual([]);
       // a border loads the neighbour's ground, not all of its art: the mountains' south row of chunks (y 64-95) meets the forest at y = 96
       const border = v.chunkBundles(5, 2);
-      expect(border).toEqual(expect.arrayContaining(['region:mountains', 'ground:mountains', 'pictures:mountains', 'ground:forest']));
+      expect(border).toEqual(expect.arrayContaining(['region:mountains', 'ground:mountains', 'ground:forest']));
       expect(border).not.toContain('region:forest');
-      expect(border).not.toContain('pictures:forest');
       // a season's ground art only where that ground is: none in the mountains' heart (snow has no seasons), the plains' in the plains
       if (season !== 'summer') {
         expect(v.chunkBundles(5, 1).filter((b) => b.startsWith(`season:${season}:`))).toEqual([]);
