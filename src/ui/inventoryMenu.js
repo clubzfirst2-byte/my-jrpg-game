@@ -120,6 +120,7 @@ export class InventoryMenu {
   close() {
     this.el.hidden = true;
     this.cooked = null; // the "できた" row is only for the visit to the pot it was cooked in
+    this.cookedNew = false;
     this.hooks.onClose();
   }
 
@@ -314,8 +315,10 @@ export class InventoryMenu {
         hint,
         button('inv-cook', '料理する', () => {
           const r = cook(inv, this.pot);
-          if (r) this.hooks.toast(`${r.name}ができた！${r.discovered ? '（新しいレシピ）' : ''}`);
+          // v1.0 QA4 (L-4): no toast here: it covered the pot and the できた row, which already
+          // says what was made (and whether the recipe is new).
           this.cooked = r ? r.result : null;
+          this.cookedNew = !!r?.discovered;
           this.pot = [];
           this.render();
         }),
@@ -325,7 +328,7 @@ export class InventoryMenu {
     // v1.0.1: what was just cooked, with its icon (until the next ingredient goes in)
     if (this.cooked && this.pot.length === 0 && (inv.items[this.cooked] ?? 0) > 0) {
       const id = this.cooked;
-      list.append(row('inv-cooked', `できた：${itemDef(baseId(id)).name}`, `持ち物 ×${inv.items[id] ?? 0}`, false, null, id));
+      list.append(row('inv-cooked', `できた：${itemDef(baseId(id)).name}${this.cookedNew ? '（新しいレシピ）' : ''}`, `持ち物 ×${inv.items[id] ?? 0}`, false, null, id));
     }
     const mats = Object.keys(inv.items).filter((id) => itemDef(baseId(id)).type === 'material');
     if (mats.length === 0) {

@@ -652,6 +652,20 @@ body {
   display: none;
 }
 
+/* v1.0 QA4 (L-3): in a boss fight the top of the screen is where the boss stands (and its health
+   bar): messages go to the bottom centre instead, between the stick side and the button cluster
+   (its widest reach is 228 px × button size from the right, or the left with the left hand). */
+#ui:has(#boss-bar:not([hidden])) #toast {
+  top: auto;
+  bottom: calc(14px + var(--safe-bottom));
+  max-width: calc(100% - 2 * (228px * var(--btn) + 10px + max(var(--safe-left), var(--safe-right))));
+}
+/* (unzoomed there, so the limit above is in screen px; the large text keeps its size) */
+#ui.text-large:has(#boss-bar:not([hidden])) #toast {
+  zoom: 1;
+  font-size: 17px;
+}
+
 #toast[data-kind='error'] {
   background: rgba(90, 20, 20, 0.92);
   color: #ffd6d6;
