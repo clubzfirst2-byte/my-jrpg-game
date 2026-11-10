@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { frameTable, useEnemyFrameTable, actionInfo, actionFamily, V1_TABLE, V1_FPS, V2_FPS } from '../../src/view/enemyFrames.js';
+import { frameTable, tableFits, tableForArt, useEnemyFrameTable, actionInfo, actionFamily, V1_TABLE, V1_FPS, V2_FPS } from '../../src/view/enemyFrames.js';
 import { enemyFrameKey, ENEMY_ANIM } from '../../src/view/enemyAnim.js';
 import { sourceFrameKey } from '../../src/view/sourceView.js';
 import { createEnemy, ENEMY_KINDS } from '../../src/game/entities/enemies.js';
@@ -120,5 +120,45 @@ describe('8-frame actions play fully', () => {
     expect(seen((i) => sourceFrameKey({ ...e, state: 'windup', pattern: 'ring', t: (i / 100) * FINAL_BOSS.windupMs }, 0, has), 100).size).toBe(8);
     expect(seen((i) => sourceFrameKey({ ...e, state: 'stagger' }, i / 30, has), 60).size).toBe(8);
     expect(seen((i) => sourceFrameKey({ ...e, state: 'attack', pattern: 'slam', t: i * 10 }, 0, has), 100).size).toBe(8);
+  });
+});
+
+describe('the v2 art’s timings (frames.json fps_hint_ms)', () => {
+  it('reads ms-per-frame hints as fps, per action and by family; ignores non-numbers', () => {
+    const t = frameTable(
+      { fps_hint_ms: { idle: 180, move: 90, windup: 'split the wind-up time evenly', attack: 80 }, kinds: { beast: { actions: { idle: { frames: 4 }, move: { frames: 8 }, windup: { frames: 4 }, attack_slam: { frames: 5 } } } } },
+      'v2',
+      V2_FPS,
+    );
+    expect(t.fps.get('enemy.beast.idle')).toBeCloseTo(1000 / 180);
+    expect(t.fps.get('enemy.beast.move')).toBeCloseTo(1000 / 90);
+    expect(t.fps.get('enemy.beast.attack_slam')).toBeCloseTo(1000 / 80);
+    expect(t.fps.has('enemy.beast.windup')).toBe(false);
+    expect(t.frames.get('enemy.beast.attack_slam')).toBe(5);
+  });
+});
+
+describe('the table follows the art that is loaded', () => {
+  const t8 = frameTable({ kinds: { beast: { actions: { idle: { frames: 4 }, move: { frames: 8 }, attack: { frames: 5 } } } } }, 'v2', V2_FPS);
+  const art = (/** @type {Record<string, number>} */ counts) => (/** @type {string} */ key) => {
+    const m = /^(.*)\.(\d+)$/.exec(key);
+    return !!m && Number(m[2]) < (counts[m[1]] ?? 0);
+  };
+  it('fits when every listed action has exactly its frames loaded', () => {
+    expect(tableFits(t8, art({ 'enemy.beast.idle': 4, 'enemy.beast.move': 8, 'enemy.beast.attack': 5 }))).toBe(true);
+    expect(tableFits(t8, art({ 'enemy.beast.idle': 2, 'enemy.beast.move': 4, 'enemy.beast.attack': 3 }))).toBe(false); // (v1-like art)
+    expect(tableFits(t8, art({ 'enemy.beast.idle': 6, 'enemy.beast.move': 12, 'enemy.beast.attack': 9 }))).toBe(false); // (more than listed)
+    expect(tableFits(t8, art({}))).toBe(false);
+  });
+  it('v2 art loaded -> the v2 table; v1 art, placeholders or no v2 table -> v1', () => {
+    const v2Art = art({ 'enemy.beast.idle': 4, 'enemy.beast.move': 8, 'enemy.beast.attack': 5 });
+    expect(tableForArt(v2Art, t8)).toBe(t8);
+    expect(tableForArt(art({ 'enemy.beast.idle': 2, 'enemy.beast.move': 4 }), t8)).toBe(V1_TABLE);
+    expect(tableForArt(art({}), t8)).toBe(V1_TABLE);
+    expect(tableForArt(v2Art, null)).toBe(V1_TABLE);
+  });
+  it('the v1 table fits its own art (every frame its frames.json lists)', () => {
+    const counts = Object.fromEntries(V1_TABLE.frames);
+    expect(tableFits(V1_TABLE, art(counts))).toBe(true);
   });
 });

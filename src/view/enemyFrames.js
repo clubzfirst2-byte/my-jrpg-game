@@ -3,10 +3,15 @@
 // art's own frame table (frames.json), never assumed. Pure (no Pixi), unit-tested.
 //
 //   v1  docs/art-release/enemy/frames.json         (the approved release art: 1–6 frames an action)
-//   v2  src/art-release-v2/enemy/frames.json        (the new art, 4–8 frames an action; or under
-//       docs/art-release-v2/enemy/)                  docs/ — whichever the art branch ships)
+//   v2  src/art-release-v2/enemy/frames.json        (the new art, 4–8 frames an action; or the same
+//       docs/art-release-v2/enemy/frames.json        file under docs/)
+// Which table is used follows the art that is loaded (tableForArt): whatever switch picked the
+// art (?v2=0, ?enemy=v1|v2, the list of approved v2 groups), the frames played are that art's.
 //
-// A table: { kinds: { <kind>: { actions: { <action>: { frames, fps? } } } }, fps?: { <action>: fps } }.
+// A table: { kinds: { <kind>: { actions: { <action>: { frames, fps? } } } }, fps?: { <action>: fps },
+//   fps_hint_ms?: { <action>: ms a frame } } — the v2 art ships its timings as `fps_hint_ms`
+//   (docs/art-release-v2/enemy/PRODUCTION.md: idle 180 ms, move 90, attack 80, hurt 90, stagger
+//   120 …; non-numbers such as the wind-up's "split evenly" are ignored: wind-ups always split).
 // Timing per action:
 //   loops    idle / idle2 / move / stagger / tendril: `fps` (looping by real time)
 //   windup   spread over the wind-up by its progress (whatever the frame count)
@@ -47,7 +52,11 @@ export function frameTable(json, version, defaults) {
     for (const [action, a] of Object.entries(/** @type {any} */ (k).actions ?? {})) {
       const base = `enemy.${kind}.${action}`;
       frames.set(base, Number(/** @type {any} */ (a).frames) || 0);
-      const f = /** @type {any} */ (a).fps ?? json.fps?.[action] ?? json.fps?.[actionFamily(action)];
+      const hint = (/** @type {string} */ name) => {
+        const ms = json.fps_hint_ms?.[name];
+        return typeof ms === 'number' && ms > 0 ? 1000 / ms : undefined;
+      };
+      const f = /** @type {any} */ (a).fps ?? json.fps?.[action] ?? json.fps?.[actionFamily(action)] ?? hint(action) ?? hint(actionFamily(action));
       if (f) fps.set(base, Number(f));
     }
   }
@@ -59,7 +68,29 @@ const v2Json = Object.values(V2_FILES)[0] ?? null;
 /** The v2 table when the new art's frames.json is in the tree, else null. */
 export const V2_TABLE = v2Json ? frameTable(v2Json, 'v2', V2_FPS) : null;
 
-/** The table the view uses now (main.js picks it: v2 when present, unless ?v2=0 / ?enemy=v1). */
+/**
+ * Whether a table describes the art that is loaded: (nearly) every action it lists has exactly its
+ * number of frames there (the last one present, none after it).
+ * @param {FrameTable} table @param {(key: string) => boolean} has
+ */
+export function tableFits(table, has) {
+  let ok = 0;
+  let all = 0;
+  for (const [base, n] of table.frames) {
+    if (n <= 0) continue;
+    all++;
+    if (has(`${base}.${n - 1}`) && !has(`${base}.${n}`)) ok++;
+  }
+  return all > 0 && ok >= all * 0.9;
+}
+
+/**
+ * The table of the enemy art that is loaded: v2 when the loaded frames are the v2 art's, else v1.
+ * @param {(key: string) => boolean} has @param {FrameTable | null} [v2]
+ */
+export const tableForArt = (has, v2 = V2_TABLE) => (v2 && tableFits(v2, has) ? v2 : V1_TABLE);
+
+/** The table the view uses now (main.js picks it by the art loaded: tableForArt). */
 let active = V1_TABLE;
 /** @param {FrameTable} table */
 export function useEnemyFrameTable(table) {
