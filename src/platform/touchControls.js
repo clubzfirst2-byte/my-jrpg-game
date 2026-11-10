@@ -30,6 +30,9 @@ export class TouchControls {
     // Each half is kept whole (styles.css), so the only break is at the <wbr>, never before ュ.
     const half = (/** @type {string} */ t) => Object.assign(document.createElement('span'), { textContent: t });
     this.dash.el.replaceChildren(half('ダッ'), document.createElement('wbr'), half('シュ'));
+    // W4 (v2 UI, text labels): ジャンプ may break the same way into ジャ / ンプ inside the ring's metal edge
+    // (v1 keeps it on one line: white-space: nowrap there, so the <wbr> does nothing).
+    this.jump.el.replaceChildren(half('ジャ'), document.createElement('wbr'), half('ンプ'));
     // P7: the selected 星環 ability (its label shows which one).
     this.ability = new HoldButton(root, 'ability-button', '能力');
 

@@ -277,3 +277,96 @@ test('the saved game is the same in either UI: saved in v1, continued in v2, sav
   expect(ids).toEqual(expect.arrayContaining(['travel_sword', 'guard_spear']));
   expect(errors).toEqual([]);
 });
+
+// ---- W4 inspection, round 2 (W-1 … W-4) ----
+
+test('?ui=v2 W-1: with no save, つづきから is an opaque plate on the title', async ({ page }) => {
+  await page.goto('/?ui=v2');
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
+  const cont = page.locator('#title-continue');
+  await expect(cont).toBeDisabled();
+  expect(await cont.evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, clip: getComputedStyle(el).backgroundClip }))).toEqual({ bg: 'rgb(20, 32, 51)', clip: 'padding-box' });
+});
+
+test('?ui=v2 W-2: the text labels stay inside the rings\' metal edge, every size and hand', async ({ page }) => {
+  const errors = await open(page, '&ui=v2');
+  await api(page, 'grantAbility', 'light');
+  await api(page, 'grantAbility', 'resonance');
+  await expect(page.locator('#ui')).toHaveClass(/ui-labels/);
+  for (const size of ['btn-small', '', 'btn-large']) {
+    for (const left of [false, true]) {
+      const out = await page.evaluate(([size, left]) => {
+        const ui = /** @type {HTMLElement} */ (document.getElementById('ui'));
+        ui.classList.remove('btn-small', 'btn-large');
+        if (size) ui.classList.add(size);
+        ui.classList.toggle('left-handed', left);
+        const bad = [];
+        for (const el of document.querySelectorAll('#ui .action-button')) {
+          if (/** @type {HTMLElement} */ (el).hidden) continue;
+          const b = el.getBoundingClientRect();
+          const cx = b.left + b.width / 2;
+          const cy = b.top + b.height / 2;
+          const r = b.width / 2 - 5; // the metal edge is 5 art px = 5 CSS px
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          // the text's line boxes (wider and taller than the glyphs' ink); 1 px for the corners' round-off
+          for (const t of range.getClientRects())
+            for (const [x, y] of [[t.left, t.top], [t.right, t.top], [t.left, t.bottom], [t.right, t.bottom]])
+              if (Math.hypot(x - cx, y - cy) > r + 1) bad.push(`${el.id} (${b.width} px): ${Math.hypot(x - cx, y - cy).toFixed(1)} > ${r}`);
+          if (parseFloat(getComputedStyle(el).fontSize) < 12) bad.push(`${el.id} font`);
+        }
+        return bad;
+      }, [size, left]);
+      expect(out, `${size || 'medium'} ${left ? 'left' : 'right'}`).toEqual([]);
+    }
+  }
+  expect(errors).toEqual([]);
+});
+
+for (const ui of ['v1', 'v2']) {
+  test(`?ui=${ui} W-3: the ability message keeps clear of the buttons and names the hand`, async ({ page }) => {
+    for (const hand of ['right', 'left']) {
+      await page.addInitScript((hand) => localStorage.setItem('seimyaku.settings.v1', JSON.stringify({ hand, buttonSize: 'large' })), hand);
+      const errors = await open(page, `&ui=${ui}`);
+      await api(page, 'grantAbility', 'light');
+      await api(page, 'grantAbility', 'resonance');
+      const toast = page.locator('#toast');
+      await expect(toast).toBeVisible();
+      await expect(toast).toContainText(`${hand === 'left' ? '左' : '右'}の「能力」ボタン`);
+      await expect(page.locator('#ability-next')).toBeVisible();
+      const t = await toast.boundingBox();
+      for (const id of ['ability-next', 'ability-button', 'dash-button', 'dodge-button', 'bow-button', 'guard-button', 'jump-button', 'attack-button', 'pause-button', 'bag-button']) {
+        const b = await page.locator(`#${id}`).boundingBox();
+        const overlap = t.x < b.x + b.width && b.x < t.x + t.width && t.y < b.y + b.height && b.y < t.y + t.height;
+        expect(overlap, `${hand}: toast over ${id}`).toBe(false);
+      }
+      expect(errors).toEqual([]);
+    }
+  });
+}
+
+test('?ui=v2 W-4: the full-screen panels are opaque and hide the HUD under them (inventory, settings), large text too', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('seimyaku.settings.v1', JSON.stringify({ textSize: 'large' })));
+  const errors = await open(page, '&ui=v2');
+  const hudIds = ['attack-button', 'pause-button', 'bag-button'];
+  const shown = () => page.evaluate((ids) => ids.map((id) => getComputedStyle(/** @type {HTMLElement} */ (document.getElementById(id))).visibility), hudIds);
+  expect(await shown()).toEqual(['visible', 'visible', 'visible']);
+  await page.click('#bag-button');
+  await expect(page.locator('#inv-menu')).toBeVisible();
+  await expect(page.locator('#ui')).toHaveClass(/panel-open/);
+  expect(await shown()).toEqual(['hidden', 'hidden', 'hidden']);
+  expect(await page.locator('#inv-menu').evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgb(11, 18, 29)');
+  // 閉じる with its × icon
+  expect(await artOf(page, '#inv-close', '::before')).toMatchObject({ w: 20, h: 20 });
+  await page.click('#inv-close');
+  await expect(page.locator('#ui')).not.toHaveClass(/panel-open/);
+  expect(await shown()).toEqual(['visible', 'visible', 'visible']);
+  // settings (over the pause screen)
+  await settings(page);
+  await expect(page.locator('#ui')).toHaveClass(/panel-open/);
+  expect(await page.locator('#settings-menu').evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgb(11, 18, 29)');
+  expect(await page.locator('.pause-version').evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(12);
+  await done(page);
+  await expect(page.locator('#ui')).not.toHaveClass(/panel-open/);
+  expect(errors).toEqual([]);
+});

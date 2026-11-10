@@ -652,6 +652,24 @@ body {
   display: none;
 }
 
+/* W4 (inspection W-3): in play the toast keeps clear of the button cluster, whose widest reach is
+   228 px × button size from its screen edge (the ⇄ button above 能力 is the highest part), and of the
+   Ⅱ / 持ち物 column on the left (to 60 px): it is centred in the space between them, on the side away
+   from the cluster for either hand. (It used to be centred on the screen, over ⇄ when long, and with
+   the left hand over the whole cluster's top on an SE.) */
+#ui #toast {
+  left: calc(66px + var(--safe-left));
+  right: calc(228px * var(--btn) + 10px + var(--safe-right));
+  transform: none;
+  width: fit-content;
+  max-width: 520px;
+  margin: 0 auto;
+}
+#ui.left-handed #toast {
+  left: calc(228px * var(--btn) + 10px + var(--safe-left));
+  right: calc(10px + var(--safe-right));
+}
+
 /* v1.0 QA4 (L-3): in a boss fight (main.js sets #ui.boss-fight while the boss bar shows) the top of
    the screen is where the boss stands: messages go to the bottom, centred in the space between the
    stick side's edge and the button cluster (its widest reach is 228 px × button size from its
@@ -1550,4 +1568,85 @@ body {
   padding: 2px 8px;
   border: 1px solid transparent;
   border-image: var(--ui-panel-toast) 5 fill / calc(5px / var(--uz)) stretch;
+}
+
+/* ---- W4 inspection round 2 ---- */
+/* W-1: a disabled plate (e.g. つづきから with no save) is opaque: the art's 170-alpha inside gets its
+   own colour under it (inside the 1-px outline, so the plate's cut corners stay cut) */
+#ui.ui-v2 button:not(.action-button):not(#ability-next)[disabled] {
+  background-color: rgb(20, 32, 51);
+  background-clip: padding-box;
+}
+/* W-4: the full-screen panels are opaque (the art's 236-alpha inside gets its colour under it, inside
+   the 2-px edge), and the HUD under them is hidden while one is open (main.js: panel-open), so nothing
+   shows through and, with large text (zoom), no plate edge peeks out beside them */
+#ui.ui-v2 #inv-menu,
+#ui.ui-v2 #settings-menu,
+#ui.ui-v2 #shop-menu {
+  background-color: rgb(11, 18, 29);
+  background-clip: padding-box;
+}
+#ui.ui-v2.panel-open .action-button,
+#ui.ui-v2.panel-open #ability-next,
+#ui.ui-v2.panel-open #pause-button,
+#ui.ui-v2.panel-open #bag-button,
+#ui.ui-v2.panel-open #use-button,
+#ui.ui-v2.panel-open #hud-hearts,
+#ui.ui-v2.panel-open #hud-clock,
+#ui.ui-v2.panel-open #hud-treasure {
+  visibility: hidden;
+}
+/* W-2: the text labels stay inside the ring's metal edge (5 px): 5-px sides, and the 4-character
+   labels break at their <wbr> into two halves (ダッ / シュ, ジャ / ンプ) when they would not fit */
+#ui.ui-v2.ui-labels .action-button {
+  padding: 0 5px;
+  white-space: normal;
+  line-height: 1.1;
+}
+#ui.ui-v2.ui-labels .action-button span {
+  white-space: nowrap;
+}
+#ui.ui-v2.ui-labels.btn-small #guard-button {
+  letter-spacing: -0.16em; /* ガード inside the 44-px ring's edge */
+}
+/* R-1: 閉じる with the × icon; the equipped row's ▶ mark; the cooking pot strip as a row plate */
+#ui.ui-v2 #inv-close,
+#ui.ui-v2 #shop-close,
+#ui.ui-v2 #settings-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+#ui.ui-v2 #inv-close::before,
+#ui.ui-v2 #shop-close::before,
+#ui.ui-v2 #settings-close::before {
+  content: '';
+  flex: none;
+  width: calc(20px / var(--uz));
+  height: calc(20px / var(--uz));
+  background: var(--ui-icon-ui-close-20) 0 0 / 100% 100% no-repeat;
+}
+#ui.ui-v2 .inv-row.active {
+  position: relative;
+}
+#ui.ui-v2 .inv-row.active::before {
+  content: '';
+  position: absolute;
+  left: calc(2px / var(--uz));
+  top: calc(50% - 4.5px / var(--uz));
+  width: calc(5px / var(--uz));
+  height: calc(9px / var(--uz));
+  background: #ffd75e;
+  /* a stepped (pixel) triangle, 5 × 9 */
+  clip-path: polygon(0 0, 20% 0, 20% 11.11%, 40% 11.11%, 40% 22.22%, 60% 22.22%, 60% 33.33%, 80% 33.33%, 80% 44.44%, 100% 44.44%, 100% 55.56%, 80% 55.56%, 80% 66.67%, 60% 66.67%, 60% 77.78%, 40% 77.78%, 40% 88.89%, 20% 88.89%, 20% 100%, 0 100%);
+}
+#ui.ui-v2 .inv-pot {
+  background: none;
+  border: 1px solid transparent;
+  border-image: var(--ui-row-idle) 6 fill / calc(6px / var(--uz)) stretch;
+}
+/* R-2: the version number 12 px */
+#ui.ui-v2 .pause-version {
+  font-size: 12px;
 }

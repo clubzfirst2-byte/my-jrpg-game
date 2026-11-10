@@ -452,7 +452,7 @@ async function boot() {
       } else if (ev.type === 'noBow') {
         toast.show('弓を持っていない', { ms: 1200 });
       } else if (ev.type === 'ability') {
-        toast.show(`星環の力「${ABILITY_NAMES[ev.id]}」を手に入れた！ 右の「能力」ボタンで使える`, { ms: 4000 });
+        toast.show(`星環の力「${ABILITY_NAMES[ev.id]}」を手に入れた！ ${settings.hand === 'left' ? '左' : '右'}の「能力」ボタンで使える`, { ms: 4000 }); // (W4: the hand the buttons are under)
       } else if (ev.type === 'noAbility') {
         toast.show('星環の力をまだ持っていない', { ms: 1200 });
       } else if (ev.type === 'noTarget') {
@@ -851,6 +851,10 @@ async function boot() {
     // W4 (v2 UI): the round buttons are hidden while the dialogue box is open (styles.css).
     const talking = !!state.dialogue;
     if (uiRoot.classList.contains('talking') !== talking) uiRoot.classList.toggle('talking', talking);
+    // W4 (v2 UI, inspection W-4): the HUD is hidden under the full-screen panels (inventory / cooking,
+    // shop, settings), so nothing shows through them or peeks out at their edges (styles.css).
+    const panelOpen = menu.isOpen || shopMenu.isOpen || settingsMenu.isOpen;
+    if (uiRoot.classList.contains('panel-open') !== panelOpen) uiRoot.classList.toggle('panel-open', panelOpen);
     const showAbility = !!state.progress.ability && !inTitle;
     if (abilityButton.hidden === showAbility) abilityButton.hidden = !showAbility;
     const showNext = showAbility && state.progress.abilities.length > 1;
