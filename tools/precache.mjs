@@ -4,6 +4,8 @@
 //   - release art groups the game does not load yet, or loads only for review (?npc=revision…)
 //   - the P12 prototype art (src/art-proto, ?…=proto): one small JS chunk per frame
 
+import { V2_ENABLED } from '../src/view/assets/artV2.js';
+
 /** The fixed files outside the bundle (public/). */
 export const PRECACHE_STATIC = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'];
 
@@ -13,9 +15,11 @@ export const PRECACHE_STATIC = ['./', 'index.html', 'manifest.webmanifest', 'ico
  * normal play since v1.0, so they are kept.
  * A group the game starts to load in normal play must be taken off this list (else it is not
  * available offline): terrain and objects since v1.0 (terrainArt.js, objectsArt.js).
+ * Graphics v2 groups (release-v2-<group>, src/art-release-v2) are kept once enabled (artV2.js
+ * V2_ENABLED, i.e. drawn by default); until then they load on demand (?<group>=v2).
  * @param {string} group
  */
-export const onDemandReleaseGroup = (group) => group.startsWith('npc-revision');
+export const onDemandReleaseGroup = (group) => group.startsWith('npc-revision') || (group.startsWith('v2-') && !V2_ENABLED.includes(group.slice(3)));
 
 /** The release art group of an emitted sheet / frame table (release-<group>.png|json), or null. @param {string} name */
 export const releaseGroupOf = (name) => /^release-(.+)\.(png|json)$/.exec(name)?.[1] ?? null;

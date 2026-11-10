@@ -29,6 +29,7 @@ import { regionAt, outdoorAt } from '../game/world/world.js';
 import { seasonAt } from '../game/env/weather.js';
 import { SEASON_ENTRIES, seasonKeys, SOURCE_BUNDLE, SOURCE_REGIONS } from './assets/placeholderPack.js';
 import { HeroAnimator } from './heroAnim.js';
+import { DECOR_TYPES, decorOffset, macroQuarter, patchVariant, placementEnabled } from './placement.js';
 import { faceMaterial, faceVariant, groundCacheResolution, groundVariant, indoorLight, levelBrightness, releaseSeasonKeys, usesReleaseTerrain, waterAround, waterEdgePieces } from './assets/terrainArt.js';
 import { openingView } from '../game/story/story.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
@@ -168,6 +169,16 @@ export class GameView {
      */
     /** QA4 L-1: quarters of shore pieces, per texture (dropped with it). @type {WeakMap<Texture, Map<string, Texture>>} */
     this.edgeQuarters = new WeakMap();
+    /**
+     * W2 (graphics v2): the placement layer — decorative objects drawn off-centre in clusters, ground
+     * variants in patches, 2×2 macro pieces where the art has them (placement.js). Release terrain
+     * only; ?placement=0 to compare.
+     */
+    this.placement = this.releaseTerrain && placementEnabled();
+    /** @type {any[]} the outdoor areas (decorative placement is for outdoors, not the rooms' rock walls) */
+    this.outdoors = state.outdoors ?? [];
+    /** W2: how many variants each ground has in the loaded art (W1 adds more), per bundle state. @type {{ version: string, counts: Map<string, number> }} */
+    this.variantCounts = { version: '', counts: new Map() };
     this.sandUnderTrees = new Set(
       this.releaseTerrain
         ? (state.map.objects ?? [])
@@ -404,12 +415,12 @@ export class GameView {
     const g = this.drawnGround(tx, ty);
     // P8: each region dresses the same ground in its own art (its asset bundle).
     const region = regionAt(this.regions, tx, ty);
-    if (region?.id === 'desert' && g === Ground.SAND) return `desert.sand.${this.variant(tx, ty, 3)}`;
-    if (region?.id === 'plains' && g === Ground.GRASS) return `plains.grass.${this.variant(tx, ty, 4)}`;
+    if (region?.id === 'desert' && g === Ground.SAND) return this.groundKey(tx, ty, 'desert.sand', 3);
+    if (region?.id === 'plains' && g === Ground.GRASS) return this.groundKey(tx, ty, 'plains.grass', 4);
     // P10.3: the east column.
-    if (region?.id === 'forest' && g === Ground.GRASS) return `forest.grass.${this.variant(tx, ty, 4)}`;
-    if (region?.id === 'mountains' && g === Ground.GRASS) return `mountains.snow.${this.variant(tx, ty, 4)}`;
-    if (region?.id === 'lake' && g === Ground.GRASS) return `lake.grass.${this.variant(tx, ty, 4)}`;
+    if (region?.id === 'forest' && g === Ground.GRASS) return this.groundKey(tx, ty, 'forest.grass', 4);
+    if (region?.id === 'mountains' && g === Ground.GRASS) return this.groundKey(tx, ty, 'mountains.snow', 4);
+    if (region?.id === 'lake' && g === Ground.GRASS) return this.groundKey(tx, ty, 'lake.grass', 4);
     if (g === Ground.WOOD) return 'tile.wood';
     if (g === Ground.WALL) return 'tile.walltop';
     if (g === Ground.DARK) return 'tile.dark';
@@ -423,12 +434,64 @@ export class GameView {
       if (this.releaseTerrain && ty > 0 && this.map.ground[(ty - 1) * this.map.width + tx] === Ground.PIT) return 'tile.dark';
       return 'tile.pit';
     }
-    return `tile.grass.${this.variant(tx, ty, 3)}`;
+    return this.groundKey(tx, ty, 'tile.grass', 3);
   }
 
   /** Which of a ground's n variants tile (tx, ty) shows (terrainArt.groundVariant). @param {number} tx @param {number} ty @param {number} n */
   variant(tx, ty, n) {
     return groundVariant(hash(tx, ty), n, this.releaseTerrain);
+  }
+
+  /**
+   * The key of a varied ground ("<base>.<variant>"). W2: with the placement layer, the variant comes
+   * in patches (placement.patchVariant) out of however many variants the loaded art has (at least n),
+   * and a 2×2 macro piece ("<base>.macro.<q>") replaces 4 tiles of the same ground where the art has one.
+   * @param {number} tx @param {number} ty @param {string} base @param {number} n the variants every set has
+   */
+  groundKey(tx, ty, base, n) {
+    if (!this.placement) return `${base}.${this.variant(tx, ty, n)}`;
+    const macro = this.macroKey(tx, ty, base);
+    if (macro) return macro;
+    return `${base}.${patchVariant(tx, ty, this.variantCount(base, n))}`;
+  }
+
+  /** How many variants "<base>.<k>" the loaded art has (n at least; W1 may give 6–8). @param {string} base @param {number} n */
+  variantCount(base, n) {
+    const version = `${this.assets.version}|${this.season}`;
+    if (this.variantCounts.version !== version) this.variantCounts = { version, counts: new Map() };
+    let c = this.variantCounts.counts.get(base);
+    if (c === undefined) {
+      c = n;
+      // (a ground the season redraws counts only the variants the season has too)
+      const seasonal = this.seasonKeySet.has(`${base}.0`);
+      while (c < 8 && this.assets.hasTexture(`${base}.${c}`) && (!seasonal || this.assets.hasTexture(`${this.season}.${base}.${c}`))) c++;
+      this.variantCounts.counts.set(base, c);
+    }
+    return c;
+  }
+
+  /**
+   * W2: a 2×2 macro piece's key for this tile, when the art has macro pieces for this ground, the block
+   * is chosen (placement.macroQuarter), and its 4 tiles are flat ground of the same kind with no water edge.
+   * @param {number} tx @param {number} ty @param {string} base @returns {string | null}
+   */
+  macroKey(tx, ty, base) {
+    if (!this.assets.hasTexture(`${base}.macro.0`)) return null;
+    const q = macroQuarter(tx, ty);
+    if (q < 0) return null;
+    const bx = tx - (q % 2);
+    const by = ty - (q >> 1);
+    const map = this.map;
+    const g = this.drawnGround(tx, ty);
+    const region = regionAt(this.regions, tx, ty);
+    for (let k = 0; k < 4; k++) {
+      const x = bx + (k % 2);
+      const y = by + (k >> 1);
+      if (!inBounds(map, x, y)) return null;
+      const i = y * map.width + x;
+      if (this.drawnGround(x, y) !== g || map.elev[i] !== 0 || map.shape[i] === Shape.RAMP_N || regionAt(this.regions, x, y) !== region || this.waterEdge(x, y)) return null;
+    }
+    return `${base}.macro.${q}`;
   }
 
   /**
@@ -888,9 +951,15 @@ export class GameView {
     const sh = new Sprite(this.shadowTex);
     sh.anchor.set(0.5);
     sh.tint = SHADOW.color;
-    placeShadow(sh, o.tx * ts + ts / 2, o.ty * ts + ts, g);
+    const [dx, dy] = this.decorShift(o); // (W2: under the object where it is drawn)
+    placeShadow(sh, o.tx * ts + ts / 2 + dx, o.ty * ts + ts + dy, g);
     sh.visible = !o.gone && this.fxOn.shadows;
     return sh;
+  }
+
+  /** W2: an object's draw offset from its tile (decorative objects outdoors; [0, 0] otherwise). @param {any} o @returns {[number, number]} */
+  decorShift(o) {
+    return this.placement && DECOR_TYPES.includes(o.type) && outdoorAt(this.outdoors, o.tx, o.ty) ? decorOffset(o.tx, o.ty) : [0, 0];
   }
 
   /**
@@ -901,8 +970,11 @@ export class GameView {
     const map = this.map;
     const ts = map.tileSize;
     const s = this.makeSprite(this.objectKey(o, 0));
-    const x = o.tx * ts + ts / 2;
-    const feetY = o.ty * ts + ts;
+    // W2: decorative objects outdoors are drawn a little off-centre, in clusters (placement.decorOffset);
+    // only the drawing: collision and saves stay keyed to the tile. dy <= 0, so it still sorts by its tile.
+    const [dx, dy] = this.decorShift(o);
+    const x = o.tx * ts + ts / 2 + dx;
+    const feetY = o.ty * ts + ts + dy;
     const z = map.elev[o.ty * map.width + o.tx];
     s.position.set(x, feetY - z);
     // The door mat lies flat on the floor: under anyone standing on it.
@@ -1135,7 +1207,8 @@ export class GameView {
         if (baked) {
           for (const b of baked) {
             b.sprite.visible = show;
-            if (g) placeShadow(b.sprite, o.tx * ts + ts / 2, o.ty * ts + ts, g);
+            const [dx, dy] = this.decorShift(o);
+            if (g) placeShadow(b.sprite, o.tx * ts + ts / 2 + dx, o.ty * ts + ts + dy, g);
             this.shadeDirty.add(b.base);
           }
         }

@@ -40,6 +40,9 @@ function serviceWorker() {
 function releaseArt() {
   const ID = 'virtual:release-art';
   const root = fileURLToPath(new URL('./src/art-release/', import.meta.url));
+  // Graphics v2 (src/view/assets/artV2.js): src/art-release-v2/<group>, packed the same way, emitted as
+  // release-v2-<group>.png / .json and named "v2/<group>" in the table.
+  const rootV2 = fileURLToPath(new URL('./src/art-release-v2/', import.meta.url));
   let build = false;
   return {
     name: 'release-art',
@@ -52,12 +55,13 @@ function releaseArt() {
     load(id) {
       if (id !== `\0${ID}`) return undefined;
       if (!build) return 'export default null;';
-      const groups = releaseGroups(root).map((group) => {
-        const { png, table, files } = packGroup(join(root, group));
+      const all = [...releaseGroups(root).map((group) => ({ dir: join(root, group), name: group, file: group })), ...releaseGroups(rootV2).map((group) => ({ dir: join(rootV2, group), name: `v2/${group}`, file: `v2-${group}` }))];
+      const groups = all.map(({ dir, name, file }) => {
+        const { png, table, files } = packGroup(dir);
         for (const f of files) this.addWatchFile(f);
-        const sheet = this.emitFile({ type: 'asset', name: `release-${group}.png`, source: png });
-        const frames = this.emitFile({ type: 'asset', name: `release-${group}.json`, source: JSON.stringify(table) });
-        return `  ${JSON.stringify(group)}: { sheet: import.meta.ROLLUP_FILE_URL_${sheet}, table: import.meta.ROLLUP_FILE_URL_${frames} },`;
+        const sheet = this.emitFile({ type: 'asset', name: `release-${file}.png`, source: png });
+        const frames = this.emitFile({ type: 'asset', name: `release-${file}.json`, source: JSON.stringify(table) });
+        return `  ${JSON.stringify(name)}: { sheet: import.meta.ROLLUP_FILE_URL_${sheet}, table: import.meta.ROLLUP_FILE_URL_${frames} },`;
       });
       return `export default {\n${groups.join('\n')}\n};\n`;
     },

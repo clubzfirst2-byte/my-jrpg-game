@@ -35,9 +35,29 @@ export function requestedProtoGroups(params) {
 // In the build each group is ONE sheet PNG + ONE frame table JSON (vite.config.js, releaseArt;
 // docs/perf/release-art-packing.md), so it costs 2 requests instead of one per frame. In the dev
 // server (no sheets) the frame files are loaded one by one; this glob is dropped from the build.
+// Graphics v2: src/art-release-v2/<group>/*.png, named "v2/<group>" in the game (artV2.js).
 const releaseFiles = /** @type {Record<string, () => Promise<string>>} */ (
-  import.meta.env.DEV ? import.meta.glob('../../art-release/*/*.png', { query: '?url', import: 'default' }) : {}
+  import.meta.env.DEV ? import.meta.glob(['../../art-release/*/*.png', '../../art-release-v2/*/*.png'], { query: '?url', import: 'default' }) : {}
 );
+
+/** The release group name of a dev-server frame path ("v2/<folder>" under art-release-v2). @param {string} path */
+const devGroupOf = (path) => (path.includes('/art-release-v2/') ? `v2/${path.split('/').at(-2)}` : /** @type {string} */ (path.split('/').at(-2)));
+
+/**
+ * The graphics v2 groups in this build (the folders under src/art-release-v2), without the "v2/".
+ * @param {Record<string, unknown> | null} [sheets] the packed groups (the build's)
+ * @returns {string[]}
+ */
+export function availableV2Groups(sheets = releaseSheets) {
+  const names = sheets ? Object.keys(sheets) : Object.keys(releaseFiles).map(devGroupOf);
+  return [...new Set(names.filter((n) => n.startsWith('v2/')).map((n) => n.slice(3)))].sort();
+}
+
+/** The v1 release groups in this build (the folders under src/art-release). @param {Record<string, unknown> | null} [sheets] */
+export function availableV1Groups(sheets = releaseSheets) {
+  const names = sheets ? Object.keys(sheets) : Object.keys(releaseFiles).map(devGroupOf);
+  return [...new Set(names.filter((n) => !n.startsWith('v2/')))].sort();
+}
 
 /** @param {string} url @returns {Promise<HTMLImageElement>} */
 function loadSheet(url) {
@@ -50,7 +70,7 @@ function loadSheet(url) {
 }
 
 /**
- * @param {string} group
+ * @param {string} group a folder of src/art-release, or "v2/<folder>" for src/art-release-v2 (artV2.js)
  * @param {Record<string, { sheet: string, table: string }> | null} [sheets] the packed groups (the build's)
  * @returns {Promise<Map<string, import('./placeholderPack.js').ArtSource>>} sprite name → PNG URL (dev),
  *   or → its place on the group's sheet (build)
@@ -67,7 +87,7 @@ export async function releaseFrames(group, sheets = releaseSheets) {
       return new Map();
     }
   }
-  const picked = Object.entries(releaseFiles).filter(([path]) => path.split('/').at(-2) === group);
+  const picked = Object.entries(releaseFiles).filter(([path]) => devGroupOf(path) === group);
   const entries = await Promise.all(picked.map(async ([path, load]) => [/** @type {string} */ (path.split('/').pop()).replace(/\.png$/i, ''), await load()]));
   return new Map(/** @type {[string, string][]} */ (entries));
 }
