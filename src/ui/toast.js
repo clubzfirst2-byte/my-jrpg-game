@@ -71,7 +71,7 @@ const PHRASE_END = /[、。，．,！？!?…‥]/;
 /** Closing brackets: a break may follow, but not before the particle after them (「灯火」を). */
 const CLOSE = /[）)」』】〉》]/;
 /** Never starts a line. */
-const NO_LINE_START = /[、。，．,！？!?…‥）)」』】〉》ー〜～・：:；;]/;
+const NO_LINE_START = /[、。，．,！？!?…‥）)」』】〉》ー〜～・：:；;ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶㇰ-ㇿ]/;
 /** Never ends a line. */
 const NO_LINE_END = /[「『（(【〈《]/;
 
@@ -98,11 +98,40 @@ export function phrases(text) {
   return out;
 }
 
-/** The message as text nodes with a <wbr> between phrases. @param {string} text @returns {Node[]} */
+/** A phrase longer than this may also break inside (see lineChunks). */
+const LONG_PHRASE = 12;
+
+/**
+ * The pieces a toast may break between: its phrases, and a phrase longer than LONG_PHRASE also
+ * between any two of its characters where Japanese allows a line to start (never before ー, a small
+ * kana or closing punctuation). Without those, such a phrase (one long katakana word) only wrapped
+ * through `overflow-wrap: anywhere`, which ignores those rules ("マネ／ージャー"), and Chrome does not
+ * keep small kana off a line's start even with `line-break: strict` (iOS Safari does).
+ * @param {string} text @returns {string[]}
+ */
+export function lineChunks(text) {
+  const out = [];
+  for (const p of phrases(text)) {
+    if (p.length <= LONG_PHRASE) {
+      out.push(p);
+      continue;
+    }
+    let start = 0;
+    for (let i = 1; i < p.length; i++) {
+      if (NO_LINE_START.test(p[i]) || NO_LINE_END.test(p[i - 1]) || p[i] === ' ' || p[i - 1] === ' ') continue;
+      out.push(p.slice(start, i));
+      start = i;
+    }
+    out.push(p.slice(start));
+  }
+  return out;
+}
+
+/** The message as text nodes with a <wbr> where it may break (lineChunks). @param {string} text @returns {Node[]} */
 function withBreaks(text) {
   /** @type {Node[]} */
   const nodes = [];
-  for (const p of phrases(text)) {
+  for (const p of lineChunks(text)) {
     if (nodes.length) nodes.push(document.createElement('wbr'));
     nodes.push(document.createTextNode(p));
   }

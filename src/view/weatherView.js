@@ -22,8 +22,12 @@ import { openingView } from '../game/story/story.js';
  * A winding-up enemy's warning light (world px): the colour added to the light map.
  * `ringCover`: a ground light reaches the ring (plus `ringMargin`) at this fraction of its radius,
  * where its falloff still adds about 40% (at the very edge of a light it adds nothing).
+ * `slamCover`: a slam's ring (the sentinel's, a core's) lies at this fraction of its light's radius,
+ * where lightFalloff still adds 26%. (v1.0 inspection of the minor fixes: the slam light used to be
+ * `slamRadius + ringMargin` around the body, which put the ring's far edge near the light's rim:
+ * about 0.20 with the old cone and 0.13 with the smooth falloff.)
  */
-export const WARNING_LIGHT = Object.freeze({ color: 0xffd0c0, enemyRadius: 26, bossRadius: 44, ringMargin: 10, ringCover: 0.62 });
+export const WARNING_LIGHT = Object.freeze({ color: 0xffd0c0, enemyRadius: 26, bossRadius: 44, ringMargin: 10, ringCover: 0.62, slamCover: 0.7 });
 
 /**
  * 淀みの源's ground reach for its slam / inversion wave (the ring sourceView.js draws), or 0.
@@ -58,7 +62,9 @@ export function warningLights(enemies) {
     if (e.state !== 'windup') continue;
     const slam = e.boss && e.bossKind ? (e.pattern === 'slam' ? BOSS_KINDS[e.bossKind]?.slamRadius : 0) : e.kind === 'sentinel' ? ENEMY_KINDS.sentinel.slamRadius : 0;
     const body = e.boss || e.final ? WARNING_LIGHT.bossRadius : WARNING_LIGHT.enemyRadius;
-    out.push({ x: e.x, y: e.y - e.z - (e.boss || e.final ? 16 : 6), r: Math.max(body, slam ? slam + WARNING_LIGHT.ringMargin : 0) });
+    // A slam: one light centred on its ring (drawn around the feet), the ring at slamCover of it.
+    if (slam) out.push({ x: e.x, y: e.y - e.z, r: Math.max(body, Math.ceil(slam / WARNING_LIGHT.slamCover)) });
+    else out.push({ x: e.x, y: e.y - e.z - (e.boss || e.final ? 16 : 6), r: body });
   }
   return out;
 }
@@ -100,6 +106,18 @@ function lightTexture() {
 const AMB_DARK_ROOM = Object.freeze({ r: 0.1, g: 0.1, b: 0.16 });
 const AMB_HOME = Object.freeze({ r: 0.94, g: 0.86, b: 0.72 });
 const AMB_INDOOR = Object.freeze({ r: 0.55, g: 0.55, b: 0.65 });
+
+/** @typedef {{ radius: number, color: number }} FireLight */
+/** A fire's light (campfire, brazier, lit sconce): radius (world px) and colour. @type {Readonly<FireLight>} */
+export const FIRE_LIGHT = Object.freeze({ radius: 64, color: 0xffb070 });
+/**
+ * v1.0 (inspection of the minor fixes): a fire in a lit room (a cave, a mine, a trial that is not
+ * dark) reaches a little further. Its warm pool reads against the brighter room light
+ * (terrainArt.indoorLight) as it did before; near the fire the light map is at full strength
+ * either way, so only the reach can add to it.
+ */
+/** @type {Readonly<FireLight>} */
+export const FIRE_LIGHT_ROOM = Object.freeze({ radius: 72, color: 0xffb070 });
 
 /** @param {number[]} a @param {number[]} b */
 function sameNumbers(a, b) {
@@ -165,6 +183,11 @@ export class WeatherView {
     this.indoorAmbient = AMB_INDOOR;
     /** The shock crystals' light colour (crystalLightColor; set by the game view from the art in use). */
     this.crystalLight = 0x60d8ff;
+    /** Fires' light (campfire, brazier, lit sconce): FIRE_LIGHT, or FIRE_LIGHT_ROOM in a lit room. */
+    /** @type {FireLight} */
+    this.fire = { ...FIRE_LIGHT };
+    /** @type {FireLight} */
+    this.fireRoom = { ...FIRE_LIGHT_ROOM };
     // Light map.
     /** The soft disc for lights, made on first use. @type {Texture | null} */
     this.lightTex = null;
@@ -315,7 +338,9 @@ export class WeatherView {
       sig.length = 0;
       sig.push(sw, sh, ambHex);
       let n = 0;
-      if (isDark(amb) || indoor) n = this.placeLights(state, origin, zoom, timeSec, sw, sh, sig);
+      // A lit room (caves, mines, trials that are not dark): its fires get FIRE_LIGHT_ROOM.
+      const fire = amb === this.indoorAmbient ? this.fireRoom : this.fire;
+      if (isDark(amb) || indoor) n = this.placeLights(state, origin, zoom, timeSec, sw, sh, sig, fire);
       for (let j = n; j < this.lights.length; j++) this.lights[j].visible = false;
       if (sameNumbers(sig, this.lastLightSig)) {
         this.stats.lightSkips++; // nothing moved, flickered or changed colour: the map is still right
@@ -369,7 +394,7 @@ export class WeatherView {
   }
 
   /** @returns {number} lights used */
-  placeLights(/** @type {any} */ state, /** @type {{ x: number, y: number }} */ o, /** @type {number} */ zoom, /** @type {number} */ timeSec, /** @type {number} */ sw, /** @type {number} */ sh, /** @type {number[]} */ sig = []) {
+  placeLights(/** @type {any} */ state, /** @type {{ x: number, y: number }} */ o, /** @type {number} */ zoom, /** @type {number} */ timeSec, /** @type {number} */ sw, /** @type {number} */ sh, /** @type {number[]} */ sig = [], fire = this.fire) {
     const env = state.env;
     const map = state.map;
     const ts = map.tileSize;
@@ -405,7 +430,7 @@ export class WeatherView {
       if (ob.gone) continue;
       const x = (i % map.width) * ts + ts / 2;
       const y = ((i / map.width) | 0) * ts + ts / 2 - map.elev[i];
-      if (ob.type === 'campfire' || ob.type === 'brazier' || (ob.type === 'sconce' && ob.lit)) add(x, y - 6, 64 * flicker(i), 0xffb070);
+      if (ob.type === 'campfire' || ob.type === 'brazier' || (ob.type === 'sconce' && ob.lit)) add(x, y - 6, fire.radius * flicker(i), fire.color);
       else if (ob.type === 'stove') add(x, y - 4, 40 * flicker(i), 0xffa860);
       else if (ob.type === 'stone' && ob.glow) add(x, y - 8, 30, 0x7fe8ff);
       else if (ob.type === 'pillar' || ob.type === 'altar') add(x, y - 10, 30, 0x7fe8ff);

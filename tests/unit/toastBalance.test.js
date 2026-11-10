@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { balancedWidth, phrases } from '../../src/ui/toast.js';
+import { balancedWidth, phrases, lineChunks } from '../../src/ui/toast.js';
 
 // v1.0 QA2 (C-6 / L-6): a toast that wraps must not leave its last character alone on a line.
 describe('balancedWidth (the fallback for text-wrap: balance)', () => {
@@ -43,5 +43,21 @@ describe('phrases (where a toast may break a line)', () => {
   it('a short message without hiragana-to-word changes stays whole', () => {
     expect(phrases('穴に落ちた…')).toEqual(['穴に', '落ちた…']);
     expect(phrases('')).toEqual(['']);
+  });
+});
+
+// Inspection of the minor fixes: a katakana word longer than a line wrapped anywhere ("マネ／ージャー").
+describe('lineChunks (a phrase too long for a line)', () => {
+  it('real messages keep their phrases whole', () => {
+    const t = '裏返った星環——淀みの源が目を開けた。まわりの 4 つの座を目覚めさせよう';
+    expect(lineChunks(t)).toEqual(phrases(t));
+  });
+
+  it('a long word may break inside, but no piece starts with ー, a small kana or closing punctuation', () => {
+    const t = 'プロジェクトマネージャーのスケジュールチェックリスト';
+    const c = lineChunks(t);
+    expect(c.join('')).toBe(t);
+    expect(c.length).toBeGreaterThan(phrases(t).length);
+    for (const x of c.slice(1)) expect(x).not.toMatch(/^[ーァィゥェォッャュョヮヵヶぁぃぅぇぉっゃゅょゎ、。」）]/);
   });
 });

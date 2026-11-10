@@ -642,6 +642,8 @@ body {
      word ("目を開け／た。"); a phrase longer than the line still wraps */
   word-break: keep-all;
   overflow-wrap: anywhere;
+  /* and where a phrase must still wrap, no line starts with ー or a small kana (マネ／ージャー) */
+  line-break: strict;
   pointer-events: none;
   z-index: 7; /* above the inventory menu */
 }

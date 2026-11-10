@@ -92,13 +92,15 @@ export function groundCacheResolution(release) {
  * or the lived-in houses, which have their own). The release ruin and cave stone is darker than the
  * placeholders', so under the placeholders' 0.55 the floors were near black with little contrast
  * against the walls (re-inspection of a25fb7d); the release terrain got 0.65 / 0.65 / 0.75.
- * v1.0 (final QA L-2, "stone rooms are grey and darker than on main"): 0.80 / 0.78 / 0.84, a little
- * brighter and less blue (the release stone is already blue-grey), so a fire's warm light still
- * shows. The dark trial rooms (AMB_DARK_ROOM) are not affected, so their puzzles stay dark.
+ * v1.0 (final QA L-2, "stone rooms are grey and darker than on main"): 0.72 / 0.70 / 0.76, a little
+ * brighter and less blue (the release stone is already blue-grey). (0.80 / 0.78 / 0.84 was brighter
+ * still but left a fire's warm pool only half as distinct; with weatherView's FIRE_LIGHT_ROOM it is
+ * back to about 80% of before.) The dark trial rooms (AMB_DARK_ROOM) are not affected, so their
+ * puzzles stay dark.
  * @param {boolean} release
  */
 export function indoorLight(release) {
-  return release ? { r: 0.8, g: 0.78, b: 0.84 } : { r: 0.55, g: 0.55, b: 0.65 };
+  return release ? { r: 0.72, g: 0.7, b: 0.76 } : { r: 0.55, g: 0.55, b: 0.65 };
 }
 
 /**

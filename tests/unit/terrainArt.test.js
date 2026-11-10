@@ -113,7 +113,7 @@ describe('terrain release art → game sprite keys', () => {
   });
 
   it('indoors is a little brighter with the release terrain (its stone is darker); the placeholders keep 0.55', () => {
-    expect(indoorLight(true)).toEqual({ r: 0.8, g: 0.78, b: 0.84 });
+    expect(indoorLight(true)).toEqual({ r: 0.72, g: 0.7, b: 0.76 });
     expect(indoorLight(false)).toEqual({ r: 0.55, g: 0.55, b: 0.65 });
   });
 
