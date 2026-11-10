@@ -53,23 +53,35 @@ def _perm(v):
 PERMS = [_perm(v) for v in range(16)]
 
 
-def draw_grain(c, mat, ox, oy, v, ground=None):
-    """Two grains of 16 2-px specks each, placed like permutations: the light one (one tone over the core) and
-    a dark one (one tone under). Speck k lies in rows 2k, 2k+1 and in columns 2p, 2p+1. Grass-likes, moss,
-    path: diagonal specks, half lean left, half right, so every row and column of every variant gets exactly
-    one light and one dark pixel. Snow: flat wind-smoothed dashes (2 px across, in row 2k or 2k+1), and the
-    dark grain on every other speck only."""
-    snow = FAMILY.get(ground) == "snow"
-    for perm, tone, off in ((PERMS[v % 16], 4, 0), (PERMS[(v + 7) % 16], 2, 1)):
+def draw_grain(c, mat, ox, oy, v, ground=None, grp=None):
+    """Grains of 2-px specks placed like permutations of 0-15: speck k lies in rows 2k, 2k+1 and in columns
+    2p, 2p+1. Light specks are one tone over the core, dark ones one tone under. Grass-likes, moss, path, sand:
+    diagonal specks, half lean left, half right. Snow: flat wind-smoothed dashes (2 px across, in row 2k or 2k+1).
+    Pictures (grp None): one light and one dark grain (snow: the dark one on every other speck).
+    Round 6, calm tiles: the light group (grp 0) has two light grains and half a dark one, the dark group
+    (grp 1) two dark grains and half a light one, so a stretch of light-group tiles reads lighter and a stretch
+    of dark-group tiles darker (the engine mixes the groups by a large noise). Sand: half of every grain (fewer
+    short lines on the bare sand)."""
+    fam = FAMILY.get(ground)
+    snow = fam == "snow"
+    if grp is None:
+        grains = [(PERMS[v % 16], 4, 0, 1), (PERMS[(v + 7) % 16], 2, 8, 2 if snow else 1)]
+    elif grp == 0:
+        grains = [(PERMS[v % 16], 4, 0, 1), (PERMS[(v + 11) % 16], 4, 4, 1), (PERMS[(v + 7) % 16], 2, 8, 2)]
+    else:
+        grains = [(PERMS[(v + 7) % 16], 2, 8, 1), (PERMS[(v + 11) % 16], 2, 12, 1), (PERMS[v % 16], 4, 0, 2)]
+    for gi, (perm, tone, shift, every) in enumerate(grains):
         for k, p in enumerate(perm):
-            x, y = ox + 2 * ((p + 8 * off) % 16), oy + 2 * k
+            if every == 2 and (k + v) % 2:
+                continue
+            if fam == "sand" and (k + v + gi) % 2:
+                continue
+            x, y = ox + 2 * ((p + shift) % 16), oy + 2 * k
             if snow:
-                if off and (k + v) % 2:
-                    continue
-                yy = y + (k + p + v + off) % 2
+                yy = y + (k + p + v + gi) % 2
                 c.put(x, yy, mat, tone)
                 c.put(x + 1, yy, mat, tone)
-            elif (k + p + v + off) % 2:
+            elif (k + p + v + gi) % 2:
                 c.put(x, y, mat, tone)
                 c.put(x + 1, y + 1, mat, tone)
             else:
@@ -77,15 +89,19 @@ def draw_grain(c, mat, ox, oy, v, ground=None):
                 c.put(x, y + 1, mat, tone)
 
 
+N_CALM = 32  # round 6: calm tiles 0-15 the light group, 16-31 the dark group
+
+
 def calm_tile(ground, v, mat=None, season=None):
-    """Calm tile v (0-15): the grain, and the small things of CALM_KINDS that the calm layout gives tile v."""
+    """Calm tile v (0-31): the grain of its group, and the small things the calm layout of its group gives it."""
     mat = mat or ground
+    grp, w = divmod(v % N_CALM, 16)
     c = Canvas(32, 32, (mat, 3), wrap=False)
-    draw_grain(c, mat, 0, 0, v, ground)
-    kinds = calm_kinds_of(ground, season)
-    for ki, x, y, p in calm_layout(ground, season)[v % 16]:
+    draw_grain(c, mat, 0, 0, w, ground, grp)
+    kinds = calm_kinds_of(ground, season, grp)
+    for ki, x, y, p in calm_layout(ground, season, grp)[w]:
         kinds[ki][1](c, ground, mat, x, y, p, season)
-    for x, y, tone in _FIX.get((ground, season), [[]] * 16)[v % 16]:
+    for x, y, tone in _FIX.get((ground, season, grp), [[]] * 16)[w]:
         c.put(x, y, mat, tone)
     return c
 
@@ -173,18 +189,11 @@ def d_special(c, g, mat, x, y, p, season):
 
 
 def d_carpet(c, g, mat, x, y, p, season):
-    """Island grass (round 5): a clover carpet on a lit bed, in white bloom in summer. Placements 0 and 4 (two
-    of the 8 pictures in the first round) are wide carpets of 8-9 clover; the others a small group of 3."""
+    """Island grass: a small clover group on a darker bed (the wide carpets are backdrops, round 6)."""
     bloom = season is None
-    if p % 8 in (0, 4):
-        _patch(c, mat, x + 12, y + 7, 11.0, 6.0, 2, 700 + p, wobble=0.5)
-        spots = [(1, 4), (5, 1), (9, 5), (13, 2), (17, 6), (4, 8), (12, 9), (19, 1), (8, 11), (16, 10)][:9 + p % 2]
-        for j, (dx, dy) in enumerate(spots):
-            _clover(c, mat, x + dx, y + dy, j + p, bloom and j % 3 != 2)
-    else:
-        _patch(c, mat, x + 7, y + 5, 5.5, 3.4, 2, 700 + p, wobble=0.5)
-        for j, (dx, dy) in enumerate([(2, 3), (7, 1), (6, 6)]):
-            _clover(c, mat, x + dx, y + dy, j + p, bloom and j != 1)
+    _patch(c, mat, x + 7, y + 5, 5.5, 3.4, 2, 700 + p, wobble=0.5)
+    for j, (dx, dy) in enumerate([(2, 3), (7, 1), (6, 6)]):
+        _clover(c, mat, x + dx, y + dy, j + p, bloom and j != 1)
 
 
 def d_pebbles(c, g, mat, x, y, p, season):
@@ -409,7 +418,7 @@ TIPS = ("tips", 10, 8, 8, d_tips)
 def kinds_of(ground, season):
     ks = list(KINDS[FAMILY[ground]])
     if ground == "grass":  # island grass: its own feature is the clover carpet (round 5)
-        ks = [("carpet", 24, 14, 8, d_carpet) if k[0] == "special" else k for k in ks]
+        ks = [("carpet", 15, 11, 8, d_carpet) if k[0] == "special" else k for k in ks]
     if season == "autumn":
         ks.append(LEAVES)
     if isinstance(season, tuple):  # ("winter", the plant whose tips show): the winter of a grass-like ground, on snow
@@ -502,8 +511,13 @@ CALM_KINDS = {
 CALM_OWN = {"grass": ("clover", c_clover, 10), "plains": ("flower", c_flower, 8), "lake": ("reed", c_reed, 6)}
 
 
-def calm_kinds_of(ground, season):
+def calm_kinds_of(ground, season, grp=0):
     ks = list(CALM_KINDS[FAMILY[ground]])
+    # round 6: the light group has more small lit patches, the dark group more small dark ones
+    ks = [(nm, fn, (n * 3 + 1) // 2 if nm == ("mini_lit" if grp == 0 else "mini_dark") else max(1, n // 2)
+           if nm in ("mini_lit", "mini_dark") else n) for nm, fn, n in ks]
+    if ground == "sand":  # round 6: fewer grey pebbles on the beach (they read as salt and pepper)
+        ks = [(nm, fn, 2 if nm == "peb" else n) for nm, fn, n in ks]
     if ground in CALM_OWN:
         ks.append(CALM_OWN[ground])
     if season == "autumn":
@@ -525,8 +539,8 @@ def _bbox(fn, ground, season, p):
 _CALM = {}
 
 
-def _calm_try(ground, season, kinds, seed):
-    rnd = random.Random(f"calm/{ground}/{season}/{seed}")
+def _calm_try(ground, season, kinds, seed, grp=0):
+    rnd = random.Random(f"calm/{ground}/{season}/{seed}" + (f"/{grp}" if grp else ""))
     tiles = [[] for _ in range(16)]
     boxes = [[] for _ in range(16)]
     for ki, (_name, fn, n) in enumerate(kinds):
@@ -565,20 +579,20 @@ def _flatness(cs):
     return out
 
 
-def calm_layout(ground, season=None):
-    """Per calm tile v: [(kind index, x, y, p)]. Of the first 16 layouts that fit, the one whose 16 tiles
-    have the flattest mean row / column brightness is kept (seeded, deterministic)."""
-    key = (ground, season)
+def calm_layout(ground, season=None, grp=0):
+    """Per calm tile w (0-15) of group grp: [(kind index, x, y, p)]. Of the first 16 layouts that fit, the one
+    whose 16 tiles have the flattest mean row / column brightness is kept (seeded, deterministic)."""
+    key = (ground, season, grp)
     if key in _CALM:
         return _CALM[key]
-    kinds = calm_kinds_of(ground, season)
+    kinds = calm_kinds_of(ground, season, grp)
     best, found = None, 0
     for seed in range(400):
-        tiles = _calm_try(ground, season, kinds, seed)
+        tiles = _calm_try(ground, season, kinds, seed, grp)
         if tiles is None:
             continue
         _CALM[key] = tiles
-        f = _flatness([calm_tile(ground, v, season=season) for v in range(16)])
+        f = _flatness([calm_tile(ground, 16 * grp + w, season=season) for w in range(16)])
         if best is None or f < best[0]:
             best = (f, tiles)
         found += 1
@@ -587,7 +601,7 @@ def calm_layout(ground, season=None):
     if best is None:
         raise SystemExit(f"no calm layout for {ground} {season}")
     _CALM[key] = best[1]
-    _FIX[key] = _balance(ground, season)
+    _FIX[key] = _balance(ground, season, grp)
     return best[1]
 
 
@@ -595,10 +609,10 @@ _FIX = {}
 MAX_FIX = 10  # at most this many balancing specks in a calm tile (a quarter of a picture)
 
 
-def _balance(ground, season):
-    """Grain specks that flatten the mean row / column brightness of the 16 calm tiles (see _flatten)."""
-    _FIX.pop((ground, season), None)
-    cs = [calm_tile(ground, v, season=season) for v in range(16)]
+def _balance(ground, season, grp=0):
+    """Grain specks that flatten the mean row / column brightness of the 16 calm tiles of a group (_flatten)."""
+    _FIX.pop((ground, season, grp), None)
+    cs = [calm_tile(ground, 16 * grp + w, season=season) for w in range(16)]
     return _flatten([(c, 0, 0) for c in cs], ground, season=season)
 
 
@@ -745,13 +759,61 @@ def _try_layout(ground, season, seed):
     return placed
 
 
+# ------------------------------------------------------------------------------------------------------
+# Round 6: backdrops, drawn on some pictures before their features: the island clover carpet (2 of the 8
+# pictures, about 2/3 of the picture wide, 20+ white blooms in summer) and the desert's big dunes (3 of 8, a
+# ridge across the whole picture with its lit windward face and lee shade).
+# ------------------------------------------------------------------------------------------------------
+def bd_carpet(c, g, mat, season, cx, cy, seed):
+    rx, ry = 22.0, 13.5
+    bed = set(M.patch_pixels(cx, cy, rx, ry, seed, 0.0, 0.45))
+    for x, y in bed:
+        c.put(x, y, mat, 2)
+    rnd = random.Random(seed)
+    j = 0
+    for gy in range(int(cy - ry) + 2, int(cy + ry) - 2, 5):
+        for gx in range(int(cx - rx) + 1, int(cx + rx) - 3, 6):
+            x, y = gx + rnd.randint(-1, 2) + (3 if (gy // 5) % 2 else 0), gy + rnd.randint(-1, 1)
+            if all((x + a, y + b) in bed for a in (0, 3) for b in (0, 3)):
+                _clover(c, mat, x, y, j, season is None and j % 4 != 3)
+                j += 1
+    return lambda bx, by: ((bx - cx) / rx) ** 2 + ((by - cy) / ry) ** 2 <= 1.1  # keep other features off it
+
+
+def bd_dune(c, g, mat, season, y0, slope, amp, phase):
+    for x in range(2, 62):
+        t = (x - 2) / 59
+        e = math.sin(math.pi * t) ** 0.6
+        ridge = round(y0 + slope * (t - 0.5) * 20 + amp * math.sin(math.pi * 1.3 * t + phase))
+        lit = round(1 + e * (5.5 + 2.0 * math.sin(x / 4.3 + phase) + 1.2 * math.sin(x / 1.9 + 2 * phase)))
+        lee = round(1 + 4 * e)
+        for k in range(1, lit + 1):
+            c.put(x, ridge - k, mat, 4)
+        c.put(x, ridge, mat, 5 if e > 0.45 else 4)
+        for k in range(1, lee + 1):
+            c.put(x, ridge + k, mat, 2)
+    return None
+
+
+BACKDROPS = {
+    "grass": {0: lambda c, g, mat, s: bd_carpet(c, g, mat, s, 30, 28, 811), 4: lambda c, g, mat, s: bd_carpet(c, g, mat, s, 33, 35, 823)},
+    "dsand": {1: lambda c, g, mat, s: bd_dune(c, g, mat, s, 26, 0.8, 5, 0.3), 4: lambda c, g, mat, s: bd_dune(c, g, mat, s, 38, -0.9, 4, 1.7),
+              6: lambda c, g, mat, s: bd_dune(c, g, mat, s, 31, 0.3, 6, 3.4)},
+}
+
+
 def _draw(ground, season, placed_m, m, mat=None):
     mat = mat or ground
     c = Canvas(64, 64, (mat, 3), wrap=False)
     for q in range(4):
         draw_grain(c, mat, 32 * (q % 2), 32 * (q // 2), (5 * m + 3 * q + 1) % 16, ground)
+    keep_off = None
+    if m in BACKDROPS.get(ground, {}):
+        keep_off = BACKDROPS[ground][m](c, ground, mat, season)
     kinds = kinds_of(ground, season)
     for ki, x, y, w, h, p in placed_m:
+        if keep_off and keep_off(x + w / 2, y + h / 2):
+            continue
         kinds[ki][4](c, ground, mat, x, y, p, season)
     return c
 

@@ -1,31 +1,31 @@
 # Ground v2 — key scheme (for wiring)
 
-Folder `src/art-release-v2/terrain/`: **1882 PNGs** = 189 v1 keys redrawn + 1507 new keys + 186 v1 keys copied unchanged (not redrawn: ruin / wall faces, v1.1 shores, trees, rocks, floors…). The group **contains every key of the v1 terrain group**, so it can replace it as a whole (`manifest.json` lists the three groups; the test checks v2 ⊇ v1). All new / redrawn ground tiles are 32×32 art px (= one 16 px map cell), anchor **top-left**, alpha 0 / 255. Generator: `tools/terrain_v2/gen_v2.py`; `tools/terrain_v2/render_ref.py` is a reference renderer of everything below (the review images use it).
+Folder `src/art-release-v2/terrain/`: **2138 PNGs** = 189 v1 keys redrawn + 1763 new keys + 186 v1 keys copied unchanged (not redrawn: ruin / wall faces, v1.1 shores, trees, rocks, floors…). The group **contains every key of the v1 terrain group**, so it can replace it as a whole (`manifest.json` lists the three groups; the test checks v2 ⊇ v1). All new / redrawn ground tiles are 32×32 art px (= one 16 px map cell), anchor **top-left**, alpha 0 / 255. Generator: `tools/terrain_v2/gen_v2.py`; `tools/terrain_v2/render_ref.py` is a reference renderer of everything below (the review images use it).
 
 ## 1. Grounds
 
 | ground | prefix (= the v1 key) | tiles | picked by | macro pieces | seasons |
 |---|---|---|---|---|---|
-| island grass | `tile.grass` | `tile.grass.0` – `.15` | A: calm tile by hash | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | autumn (16 calm tiles + 8 pictures), winter (16 calm snow tiles + 8 pictures, with the plant's tips) |
-| plains grass | `plains.grass` | `plains.grass.0` – `.15` | A: calm tile by hash | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | autumn (16 calm tiles + 8 pictures), winter (16 calm snow tiles + 8 pictures, with the plant's tips) |
-| lake shore grass | `lake.grass` | `lake.grass.0` – `.15` | A: calm tile by hash | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | autumn (16 calm tiles + 8 pictures), winter (16 calm snow tiles + 8 pictures, with the plant's tips) |
-| forest floor (moss) | `forest.grass` | `forest.grass.0` – `.15` | A: calm tile by hash | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | autumn (16 calm tiles + 8 pictures), winter (16 calm snow tiles + 8 pictures, with the plant's tips) |
-| mountain snow | `mountains.snow` | `mountains.snow.0` – `.15` | A: calm tile by hash | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | — |
-| island sand | `tile.sand` | `tile.sand`, `tile.sand.1` – `.15` | A: calm tile by hash | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | — |
-| desert sand | `desert.sand` | `desert.sand.0` – `.15` | A: calm tile by hash | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | — |
-| path | `tile.path` | `tile.path`, `tile.path.1` – `.15` | A: calm tile by hash | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | — |
+| island grass | `tile.grass` | `tile.grass.0` – `.31` | A: steps 1-6 below | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | autumn (32 calm tiles + 8 pictures), winter (32 calm snow tiles + 8 pictures, with the plant's tips) |
+| plains grass | `plains.grass` | `plains.grass.0` – `.31` | A: steps 1-6 below | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | autumn (32 calm tiles + 8 pictures), winter (32 calm snow tiles + 8 pictures, with the plant's tips) |
+| lake shore grass | `lake.grass` | `lake.grass.0` – `.31` | A: steps 1-6 below | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | autumn (32 calm tiles + 8 pictures), winter (32 calm snow tiles + 8 pictures, with the plant's tips) |
+| forest floor (moss) | `forest.grass` | `forest.grass.0` – `.31` | A: steps 1-6 below | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | autumn (32 calm tiles + 8 pictures), winter (32 calm snow tiles + 8 pictures, with the plant's tips) |
+| mountain snow | `mountains.snow` | `mountains.snow.0` – `.31` | A: steps 1-6 below | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | — |
+| island sand | `tile.sand` | `tile.sand`, `tile.sand.1` – `.31` | A: steps 1-6 below | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | — |
+| desert sand | `desert.sand` | `desert.sand.0` – `.31` | A: steps 1-6 below | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | — |
+| path | `tile.path` | `tile.path`, `tile.path.1` – `.31` | A: steps 1-6 below | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | — |
 | ruin floor | `tile.ruin` | `tile.ruin`, `tile.ruin.1` – `.65` | C: row phase + column symbols | — | — |
 
 `hash(i, j)` = gameView's hash (render_ref.dhash). For tile.sand / tile.path / tile.ruin, n = 0 is the bare v1 key. `render_ref.py` does all of this.
 
-**A. Every ground except the ruin floor (round 5; 16 calm tiles + 8 pictures of 2×2 tiles):** island / plains / lake grass, moss, path, mountain snow, island sand, desert sand, and the autumn / winter sets of the 4 seasonal grounds. Integer `hash` values are unsigned 32-bit; `/` below is a float division.
+**A. Every ground except the ruin floor (round 5; 32 calm tiles in a light and a dark group + 8 pictures of 2×2 tiles):** island / plains / lake grass, moss, path, mountain snow, island sand, desert sand, and the autumn / winter sets of the 4 seasonal grounds. Integer `hash` values are unsigned 32-bit; `/` below is a float division.
 
 1. **Blocks.** Cut the display grid (section 2) into blocks of 3×3 display tiles; block `(a, b)` covers display tiles `3a … 3a+2`, `3b … 3b+2`. Every block (a, b ≥ 0, and one block past the map's right / bottom edge) is looked at; `h = hash(a, b)`.
 2. **Is there a picture?** Density noise over the blocks, a value noise on a lattice of 4 blocks: `v(x, y) = (hash(x + 5003, y + 7919) % 1024) / 1023`; `gx = floor(a / 4)`, `gy = floor(b / 4)`, `fx = (a % 4 + 0.5) / 4`, `fy = (b % 4 + 0.5) / 4`, `sx = fx·fx·(3 − 2·fx)`, `sy = fy·fy·(3 − 2·fy)`; `top = v(gx, gy) + (v(gx+1, gy) − v(gx, gy))·sx`, `bot = v(gx, gy+1) + (v(gx+1, gy+1) − v(gx, gy+1))·sx`, `n = top + (bot − top)·sy`. `pNone = min(1, max(0, 2·(n − 0.3)))`. The block has a picture when `((h >> 16) % 1024) / 1024 >= pNone` (thick where n < 0.3, bare where n > 0.8: clusters and open stretches).
 3. **Where in the block.** `OFF = [0, 0, 1, 2, 2, 2]`; raw offsets `rx(a, b) = OFF[hash(a, b) % 6]`, `ry(a, b) = OFF[(hash(a, b) >> 8) % 6]`. Then, in this order: `ox = rx(a, b)`, `oy = ry(a, b)`; if `ox == 2` and `rx(a+1, b) == 0`: `ox = 1`; if `oy == 2` and `ry(a, b+1) == 0`: `oy = 1`; if `ox == 2` and `oy == 2` and `rx(a+1, b+1) == 0` and `ry(a+1, b+1) == 0`: `oy = 1`; if `ox == 2` and `oy == 0` and `rx(a+1, b−1) == 0` and `ry(a+1, b−1) == 2`: `ox = 1`. The picture's NW display tile is `(i0, j0) = (3a + ox, 3b + oy)`; with offset 2 it reaches one tile into the next block. These rules keep pictures from overlapping (they can touch along an edge), and the chances (1/3, 1/6, 1/2) make every column and row of a block equally often covered (no 96-px period).
-4. **Which picture** (no two side-by-side blocks share one): raw number `r(a, b) = hash(a + 409, b + 1031) % 8`. When `a + b` is even, `m = r(a, b)`. When `a + b` is odd: `free` = the numbers 0-7, in increasing order, that are none of `r(a−1, b)`, `r(a+1, b)`, `r(a, b−1)`, `r(a, b+1)`; `m = free[floor(hash(a + 409, b + 1031) / 8) % len(free)]`. Name: `macro` for m = 0, else `macro<m+1>` (`macro2` … `macro8`).
+4. **Which picture** (round 6: no block shares its picture with any of its 8 neighbours where it can be helped): raw number `r(a, b) = hash(a + 409, b + 1031) % 8`, `k(a, b) = floor(hash(a + 409, b + 1031) / 8)`. The blocks are taken in 4 classes by `(a % 2, b % 2)`, each class using the final numbers `m` of earlier classes: **A** `(0, 0)`: `m = r(a, b)`. **B** `(1, 0)`: avoid `m(a−1, b)`, `m(a+1, b)`. **C** `(0, 1)`: avoid `m(a, b−1)`, `m(a, b+1)`, `m(a−1, b−1)`, `m(a+1, b−1)`, `m(a−1, b+1)`, `m(a+1, b+1)`. **D** `(1, 1)`: avoid all 8 neighbours `m(a±1, b)`, `m(a, b±1)`, `m(a±1, b±1)`; if that leaves no number, avoid only the 4 side neighbours. `free` = the numbers 0-7 not avoided, in increasing order; `m = free[k(a, b) % len(free)]`. Name: `macro` for m = 0, else `macro<m+1>` (`macro2` … `macro8`).
 5. **Draw it** only when it stays on the map (`i0 + 2`, `j0 + 2` inside) and the 9 map cells under its 4 display tiles (cells `i0 … i0+2`, `j0 … j0+2`) are all one ground of this scheme: `<prefix>.<name>.<q>`, q = 0 NW `(i0, j0)`, 1 NE, 2 SW, 3 SE.
-6. **Every other display tile** whose lowest ground is of this scheme: calm tile `n = hash(i + 3, j + 11) % 16`. Any calm tile joins any other and any picture (nothing crosses their edges).
+6. **Every other display tile** whose lowest ground is of this scheme gets a calm tile `<prefix>.<c>`, c = 0-31 (round 6): 0-15 the light group (more lit grain, small lit patches), 16-31 the dark group. **Group:** `n2 = ` the value noise of step 2 over display tiles with a lattice of 6 tiles and the lattice values `(hash(x + 12011, y + 3407) % 1024) / 1023` (`gx = floor(i / 6)`, `fx = (i % 6 + 0.5) / 6`, the same for j; smoothstep blend as in step 2); `q = min(1, max(0, 0.8·(n2 − 0.5) + 0.5))`; group `g = 1` when `(hash(i + 71, j + 113) % 1024) / 1024 < q`, else 0. **Raw number** `c0(i, j) = 16·g(i, j) + hash(i + 3, j + 11) % 16`. **Number** (no calm tile shares its number with any of its 8 neighbours): the display tiles in 4 classes by `(i % 2, j % 2)` exactly as the blocks in step 4: **A** `(0, 0)`: `c = c0`. **B** `(1, 0)`: avoid `c(i±1, j)`. **C** `(0, 1)`: avoid `c(i, j±1)` and `c(i±1, j±1)`. **D** `(1, 1)`: avoid all 8 neighbours. `free` = the 16 numbers of the tile's own group `16·g … 16·g + 15` not avoided, in increasing order; `c = free[(hash(i + 3, j + 11) >> 4) % len(free)]`. The neighbours' numbers are computed by this rule whatever is drawn there (a picture, another ground). Any calm tile joins any other and any picture (nothing crosses their edges).
 
 In winter the 4 seasonal grounds use the same rule with their `winter.` keys (snow with the tips of the ground's own plant), in autumn with their `autumn.` keys. The pictures carry the large things (grass: thickets, lit patches, flower clusters / reeds, island clover carpets in white bloom - 2 of the 8 pictures wide ones; moss beds, worn stretches; snow: blue hollows, drift swells, wind ridges, glints, capped stones; sand: ripple fields, dune swells, pale smooth stretches, pebble clusters, shells / dry grass), the calm tiles a grain and the small things. Each kind's positions are spread evenly over x and y (in the pictures: one per 2 or 4 px modulo 32), and the mean row / column brightness of the 16 calm tiles and of the 32 picture quarters is evened out with grain specks, so no 32- / 64-px pattern on average.
 
@@ -34,6 +34,8 @@ In winter the 4 seasonal grounds use the same rule with their `winter.` keys (sn
 - column symbol `s(i)` (0-2) of the vertical line of edges at the west of column i (i ≥ 0), never the same on two neighbouring lines: `k = floor(i / 2)`, `e0 = hash(k, 7) % 3`, `e1 = hash(k + 1, 7) % 3`; `s = e0` when i is even; when i is odd, `s = 3 − e0 − e1` if `e0 ≠ e1`, else `(e0 + 1 + hash(k, 11) % 2) % 3`
 - `W = s(i)`, `E = s(i + 1)`, `n = 6·R + 2·W + (E if E < W else E − 1)`
 - the ruin's overlay over water is `tile.ruin.edge.<mask>.<R>` (R = 0-10, the same row phase), so the courses run on from the overlay into the full tiles beside it. No pictures.
+
+**Changes in round 6** (for the engine): 32 calm tiles instead of 16 (`.16-.31` added for every ground and season set of A; island grass, plains, lake, moss, path, snow, sand, desert, and the autumn / winter sets), chosen by step 6 (light / dark groups by a noise; no calm tile equal to any of its 8 neighbours); the picture number of step 4 now avoids the diagonal neighbours too. Island grass: 2 of the 8 pictures (`.macro`, `.macro5`) carry a wide clover carpet; desert: 3 (`.macro2`, `.macro5`, `.macro7`) a big dune ridge.
 
 **Changes in round 5** (for the engine): island sand and desert sand move from B (64 tiles by ripple phases) to A; B is gone. The picture placement of A is new (steps 2-4 above: density noise, offsets 0 / 1 / 2, no two side-by-side blocks with the same picture). Keys removed (all new in v2; every v1 key stays): `tile.sand.16-63`, `desert.sand.16-63`. Keys added: `tile.sand.macro*.0-3`, `desert.sand.macro*.0-3` (8 pictures each).
 
@@ -79,7 +81,7 @@ Notes:
 
 ## 5. New keys by group
 
-- `autumn.forest.grass.*` — 12
+- `autumn.forest.grass.*` — 28
 - `autumn.forest.grass.edge.*` — 28
 - `autumn.forest.grass.macro.*` — 4
 - `autumn.forest.grass.macro2.*` — 4
@@ -89,7 +91,7 @@ Notes:
 - `autumn.forest.grass.macro6.*` — 4
 - `autumn.forest.grass.macro7.*` — 4
 - `autumn.forest.grass.macro8.*` — 4
-- `autumn.lake.grass.*` — 12
+- `autumn.lake.grass.*` — 28
 - `autumn.lake.grass.edge.*` — 28
 - `autumn.lake.grass.macro.*` — 4
 - `autumn.lake.grass.macro2.*` — 4
@@ -99,7 +101,7 @@ Notes:
 - `autumn.lake.grass.macro6.*` — 4
 - `autumn.lake.grass.macro7.*` — 4
 - `autumn.lake.grass.macro8.*` — 4
-- `autumn.plains.grass.*` — 12
+- `autumn.plains.grass.*` — 28
 - `autumn.plains.grass.edge.*` — 28
 - `autumn.plains.grass.macro.*` — 4
 - `autumn.plains.grass.macro2.*` — 4
@@ -109,7 +111,7 @@ Notes:
 - `autumn.plains.grass.macro6.*` — 4
 - `autumn.plains.grass.macro7.*` — 4
 - `autumn.plains.grass.macro8.*` — 4
-- `autumn.tile.grass.*` — 13
+- `autumn.tile.grass.*` — 29
 - `autumn.tile.grass.edge.*` — 28
 - `autumn.tile.grass.macro.*` — 4
 - `autumn.tile.grass.macro2.*` — 4
@@ -119,7 +121,7 @@ Notes:
 - `autumn.tile.grass.macro6.*` — 4
 - `autumn.tile.grass.macro7.*` — 4
 - `autumn.tile.grass.macro8.*` — 4
-- `desert.sand.*` — 13
+- `desert.sand.*` — 29
 - `desert.sand.edge.*` — 28
 - `desert.sand.macro.*` — 4
 - `desert.sand.macro2.*` — 4
@@ -129,7 +131,7 @@ Notes:
 - `desert.sand.macro6.*` — 4
 - `desert.sand.macro7.*` — 4
 - `desert.sand.macro8.*` — 4
-- `forest.grass.*` — 12
+- `forest.grass.*` — 28
 - `forest.grass.edge.*` — 28
 - `forest.grass.macro.*` — 4
 - `forest.grass.macro2.*` — 4
@@ -139,7 +141,7 @@ Notes:
 - `forest.grass.macro6.*` — 4
 - `forest.grass.macro7.*` — 4
 - `forest.grass.macro8.*` — 4
-- `lake.grass.*` — 12
+- `lake.grass.*` — 28
 - `lake.grass.edge.*` — 28
 - `lake.grass.macro.*` — 4
 - `lake.grass.macro2.*` — 4
@@ -149,7 +151,7 @@ Notes:
 - `lake.grass.macro6.*` — 4
 - `lake.grass.macro7.*` — 4
 - `lake.grass.macro8.*` — 4
-- `mountains.snow.*` — 12
+- `mountains.snow.*` — 28
 - `mountains.snow.edge.*` — 28
 - `mountains.snow.macro.*` — 4
 - `mountains.snow.macro2.*` — 4
@@ -159,7 +161,7 @@ Notes:
 - `mountains.snow.macro6.*` — 4
 - `mountains.snow.macro7.*` — 4
 - `mountains.snow.macro8.*` — 4
-- `plains.grass.*` — 12
+- `plains.grass.*` — 28
 - `plains.grass.edge.*` — 28
 - `plains.grass.macro.*` — 4
 - `plains.grass.macro2.*` — 4
@@ -169,7 +171,7 @@ Notes:
 - `plains.grass.macro6.*` — 4
 - `plains.grass.macro7.*` — 4
 - `plains.grass.macro8.*` — 4
-- `tile.grass.*` — 13
+- `tile.grass.*` — 29
 - `tile.grass.edge.*` — 28
 - `tile.grass.macro.*` — 4
 - `tile.grass.macro2.*` — 4
@@ -179,7 +181,7 @@ Notes:
 - `tile.grass.macro6.*` — 4
 - `tile.grass.macro7.*` — 4
 - `tile.grass.macro8.*` — 4
-- `tile.path.*` — 15
+- `tile.path.*` — 31
 - `tile.path.edge.*` — 28
 - `tile.path.macro.*` — 4
 - `tile.path.macro2.*` — 4
@@ -191,7 +193,7 @@ Notes:
 - `tile.path.macro8.*` — 4
 - `tile.ruin.*` — 65
 - `tile.ruin.edge.*` — 154
-- `tile.sand.*` — 15
+- `tile.sand.*` — 31
 - `tile.sand.edge.*` — 28
 - `tile.sand.macro.*` — 4
 - `tile.sand.macro2.*` — 4
@@ -207,7 +209,7 @@ Notes:
 - `tile.water.deep.v1.*` — 4
 - `tile.water.foam.*` — 56
 - `tile.water.v1.*` — 4
-- `winter.forest.grass.*` — 12
+- `winter.forest.grass.*` — 28
 - `winter.forest.grass.edge.*` — 28
 - `winter.forest.grass.macro.*` — 4
 - `winter.forest.grass.macro2.*` — 4
@@ -217,7 +219,7 @@ Notes:
 - `winter.forest.grass.macro6.*` — 4
 - `winter.forest.grass.macro7.*` — 4
 - `winter.forest.grass.macro8.*` — 4
-- `winter.lake.grass.*` — 12
+- `winter.lake.grass.*` — 28
 - `winter.lake.grass.edge.*` — 28
 - `winter.lake.grass.macro.*` — 4
 - `winter.lake.grass.macro2.*` — 4
@@ -227,7 +229,7 @@ Notes:
 - `winter.lake.grass.macro6.*` — 4
 - `winter.lake.grass.macro7.*` — 4
 - `winter.lake.grass.macro8.*` — 4
-- `winter.plains.grass.*` — 12
+- `winter.plains.grass.*` — 28
 - `winter.plains.grass.edge.*` — 28
 - `winter.plains.grass.macro.*` — 4
 - `winter.plains.grass.macro2.*` — 4
@@ -237,7 +239,7 @@ Notes:
 - `winter.plains.grass.macro6.*` — 4
 - `winter.plains.grass.macro7.*` — 4
 - `winter.plains.grass.macro8.*` — 4
-- `winter.tile.grass.*` — 13
+- `winter.tile.grass.*` — 29
 - `winter.tile.grass.edge.*` — 28
 - `winter.tile.grass.macro.*` — 4
 - `winter.tile.grass.macro2.*` — 4

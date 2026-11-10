@@ -45,7 +45,7 @@ RUIN_COMBOS = [(w, e) for w in range(3) for e in range(3) if w != e]  # index 2w
 
 
 def tile_count(ground):
-    return 64 if ground in LINE_GROUNDS else 66 if ground == "ruin" else 16
+    return 64 if ground in LINE_GROUNDS else 66 if ground == "ruin" else 32  # round 6: A has 32 calm tiles
 
 
 def types_of(n, ground=None):
