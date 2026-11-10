@@ -23,11 +23,10 @@ const single = (g, s, n) => (n === 0 ? base(g, s) : `${s}${PREFIX[g]}.${n}`);
 const MACROS = ['macro', ...range(7).map((k) => `macro${k + 2}`)]; // round 4: 8 pictures of 2 x 2 tiles
 const macros = (g, s) => MACROS.flatMap((m) => range(4).map((q) => `${s}${PREFIX[g]}.${m}.${q}`));
 // The look of a set decides its tile count and how a tile is picked (NAMES.md section 1):
-//   A (round 4) grass-likes, moss, path, snow, every winter set: 16 calm tiles by hash + 8 pictures of 2 x 2;
-//   B sand / desert: 64 tiles by the W / E phases (n = E + 8W); C ruin: 66 tiles by row phase R and the column
-//   symbols (n = 6R + combo), overlays per R.
-const scheme = (g) => (['sand', 'dsand'].includes(g) ? 'B' : g === 'ruin' ? 'C' : 'A');
-const COUNT = { A: 16, B: 64, C: 66 };
+//   A (rounds 4-5) every ground but the ruin, every season set: 16 calm tiles by hash + 8 pictures of 2 x 2;
+//   C ruin: 66 tiles by row phase R and the column symbols (n = 6R + combo), overlays per R.
+const scheme = (g) => (g === 'ruin' ? 'C' : 'A');
+const COUNT = { A: 16, C: 66 };
 const RUIN_COMBOS = [[0, 1], [0, 2], [1, 0], [1, 2], [2, 0], [2, 1]]; // [W, E]
 const tiles = (g, s) => [...range(COUNT[scheme(g)]).map((n) => single(g, s, n)), ...(scheme(g) === 'A' ? macros(g, s) : [])];
 const edgeVariants = (g) => (g === 'ruin' ? range(11) : [0, 1]);
@@ -157,7 +156,7 @@ describe('ground v2 art', { timeout: 180000 }, () => {  // ~800 PNGs decoded: sl
     }
   });
 
-  it('edge-matched tiles (B, C): every tile with the same edge type on a side shows the same outermost row / column there', () => {
+  it('edge-matched tiles (C): every tile with the same edge type on a side shows the same outermost row / column there', () => {
     const band = (t, side) => {
       const pts = [];
       for (let k = 1; k < 31; k++) {
@@ -168,17 +167,15 @@ describe('ground v2 art', { timeout: 180000 }, () => {  // ~800 PNGs decoded: sl
       }
       return pts.join('|');
     };
-    const SIDE = { top: 1, right: 2, bottom: 4, left: 8 }; // A: tile index n = N + 2E + 4S + 8W
+    const SIDES = ['right', 'left'];
     for (const [g, s] of SETS) {
       const sc = scheme(g);
       if (sc === 'A') continue; // A (round 4): any calm tile / picture joins any, nothing crosses their edges
-      for (const [side, bit] of Object.entries(SIDE)) {
-        if (side === 'top' || side === 'bottom') continue; // B, C: nothing is typed on the N / S edges
+      for (const side of SIDES) {
+        // C: nothing is typed on the N / S edges
         const ref = {};
         for (const n of range(COUNT[sc])) {
-          let t = n & bit ? 1 : 0;
-          if (sc === 'B') t = side === 'right' ? n % 8 : Math.floor(n / 8);
-          if (sc === 'C') t = `${Math.floor(n / 6)}:${RUIN_COMBOS[n % 6][side === 'right' ? 1 : 0]}`;
+          const t = `${Math.floor(n / 6)}:${RUIN_COMBOS[n % 6][side === 'right' ? 1 : 0]}`;
           const b = band(png(single(g, s, n)), side);
           if (t in ref) expect(b, `${single(g, s, n)} ${side} type ${t}`).toBe(ref[t]);
           else ref[t] = b;

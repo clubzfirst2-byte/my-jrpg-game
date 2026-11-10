@@ -8,8 +8,9 @@ Steps (NAMES.md has the same in words):
      cells; else SHALLOW
   2. the display grid is shifted half a tile: display tile (i, j) has corners on the cells
      (i, j) NW, (i+1, j) NE, (i, j+1) SW, (i+1, j+1) SE and is drawn at ((i + .5) * 32, (j + .5) * 32)
-  3. grass-likes, moss, path: a 2x2 macro picture per 3x3 block at a hashed offset, else one of 16 calm tiles by a
-     hash; sand / desert / snow: n = E + 8W (the phases 0-7 of its W / E edges); ruin: row phase + column symbols
+  3. every ground but the ruin (scheme A, round 5): at most one 2x2 picture per 3x3 block (density noise, offsets
+     0 / 1 / 2, no two side-by-side blocks with the same picture), else one of 16 calm tiles by a hash; ruin: row
+     phase + column symbols
   4. per display tile: the lowest terrain among its corners as a full tile (water: shallow, or deep if all
      4 corners are deep), then
        water: the deep overlay (mask = deep corners) if mixed; the foam overlay (mask = land corners)
@@ -66,31 +67,89 @@ def lowest_land(grid, i, j):
     return min(ts, key=PRIORITY.index)
 
 
-BUSY_MACRO = {"grass", "plains", "lake", "moss", "path", "snow"}  # the grounds with macro pictures
+BUSY_MACRO = {"grass", "plains", "lake", "moss", "path", "snow", "sand", "dsand"}  # the grounds with pictures (scheme A)
 N_MACRO = 8
 MACRO_NAMES = ["macro"] + [f"macro{k}" for k in range(2, N_MACRO + 1)]
 _SEASON = None
 
+# Round 5 placement (NAMES.md 1 A). Offsets 0 / 1 / 2 tiles with these chances per axis (hash % 6), and an
+# offset 2 (the picture reaches one tile into the next block) taken back to 1 where it would meet the next
+# block's picture: every column / row of a block is then covered equally often (2/3 of the blocks).
+OFF = [0, 0, 1, 2, 2, 2]
+NOISE_CELL = 4  # blocks per cell of the density noise
+
+
+def raw_offsets(a, b):
+    h = dhash(a, b)
+    return OFF[h % 6], OFF[(h >> 8) % 6]
+
+
+def offsets(a, b):
+    ox, oy = raw_offsets(a, b)
+    if ox == 2 and raw_offsets(a + 1, b)[0] == 0:
+        ox = 1
+    if oy == 2 and raw_offsets(a, b + 1)[1] == 0:
+        oy = 1
+    if ox == 2 and oy == 2 and raw_offsets(a + 1, b + 1) == (0, 0):
+        oy = 1
+    if ox == 2 and oy == 0 and raw_offsets(a + 1, b - 1) == (0, 2):
+        ox = 1
+    return ox, oy
+
+
+def density(a, b):
+    """0..1, a smooth noise over the blocks: value noise on a lattice of NOISE_CELL blocks, smoothstep-blended."""
+    gx, gy = a // NOISE_CELL, b // NOISE_CELL
+    fx, fy = (a % NOISE_CELL + 0.5) / NOISE_CELL, (b % NOISE_CELL + 0.5) / NOISE_CELL
+    v = lambda x, y: (dhash(x + 5003, y + 7919) % 1024) / 1023
+    sx, sy = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)
+    top = v(gx, gy) + (v(gx + 1, gy) - v(gx, gy)) * sx
+    bot = v(gx, gy + 1) + (v(gx + 1, gy + 1) - v(gx, gy + 1)) * sx
+    return top + (bot - top) * sy
+
+
+def raw_picture(a, b):
+    return dhash(a + 409, b + 1031) % N_MACRO
+
+
+def picture(a, b):
+    """No two side-by-side blocks get the same number: blocks with a + b even take their raw number; blocks with
+    a + b odd take one of the numbers that none of their 4 side neighbours has raw (k-th, k by hash)."""
+    r = raw_picture(a, b)
+    if (a + b) % 2 == 0:
+        return r
+    taken = {raw_picture(a - 1, b), raw_picture(a + 1, b), raw_picture(a, b - 1), raw_picture(a, b + 1)}
+    free = [m for m in range(N_MACRO) if m not in taken]
+    return free[dhash(a + 409, b + 1031) // N_MACRO % len(free)]
+
+
+def p_none(a, b):
+    """The chance that block (a, b) has no picture: 0 where the noise is under 0.3 (thick), 1 over 0.8 (bare)."""
+    return min(1.0, max(0.0, 2 * (density(a, b) - 0.3)))
+
+
+def has_picture(a, b):
+    return ((dhash(a, b) >> 16) % 1024) / 1024 >= p_none(a, b)
+
 
 def macro_blocks(grid):
-    """Display tiles drawn with a 2x2 macro picture (round 4). The display grid is cut into blocks of 3 x 3
-    tiles; block (a, b) = (i // 3, j // 3) holds at most one picture, at tile (3a + ox, 3b + oy) with
-    h = hash(a, b), ox = h % 2, oy = (h >> 1) % 2 (so pictures are NOT on a fixed 64-px grid and never touch),
-    picture number (h >> 2) % 8, none when (h >> 5) % 8 == 0 or when its 9 corner cells are not one land ground
-    of the 6 grounds that have pictures."""
+    """Display tiles drawn with a 2x2 picture (round 5; NAMES.md 1 A)."""
     H, W = len(grid), len(grid[0])
     out = {}
-    for b in range((H + 2) // 3):
-        for a in range((W + 2) // 3):
-            h = dhash(a, b)
-            i, j = 3 * a + h % 2, 3 * b + (h >> 1) % 2
-            if (h >> 5) % 8 == 0 or i + 2 >= W or j + 2 >= H:
+    for b in range((H + 2) // 3 + 1):
+        for a in range((W + 2) // 3 + 1):
+            if not has_picture(a, b):
+                continue
+            ox, oy = offsets(a, b)
+            i, j = 3 * a + ox, 3 * b + oy
+            if i + 2 >= W or j + 2 >= H:
                 continue
             ts = {terr(grid, i + dx, j + dy) for dx in range(3) for dy in range(3)}
             if len(ts) != 1 or next(iter(ts)) not in BUSY_MACRO:
                 continue
-            name = MACRO_NAMES[(h >> 2) % N_MACRO]
+            name = MACRO_NAMES[picture(a, b)]
             for q in range(4):
+                assert (i + q % 2, j + q // 2) not in out, "pictures overlap"
                 out[(i + q % 2, j + q // 2)] = (name, q, (i, j, 2))
     return out
 

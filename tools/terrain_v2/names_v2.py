@@ -29,39 +29,53 @@ def names_md(files, redrawn, new, copied):
         base = f"`{p}`, `{p}.1` – `.{n - 1}`" if g in SINGLE else f"`{p}.0` – `.{n - 1}`"
         seas = ("autumn (16 calm tiles + 8 pictures), winter (16 calm snow tiles + 8 pictures, with the plant's tips)"
                 if g in ("grass", "plains", "lake", "moss") else "—")
-        how = "A: calm tile by hash" if n == 16 else "B: W / E phases" if n == 64 else "C: row phase + column symbols"
+        how = "A: calm tile by hash" if n == 16 else "C: row phase + column symbols"
         mac = "`.macro.0-3`, `.macro2.0-3` … `.macro8.0-3`" if n == 16 else "—"
         a(f"| {LABEL[g]} | `{p}` | {base} | {how} | {mac} | {seas} |")
     a("")
     a("`hash(i, j)` = gameView's hash (render_ref.dhash). For tile.sand / tile.path / tile.ruin, n = 0 is the bare v1 key. "
       "`render_ref.py` does all of this.")
     a("")
-    a("**A. Island / plains / lake grass, moss, path, mountain snow, and the winter of the 4 seasonal grounds (round 4; "
-      "16 calm tiles + 8 pictures of 2×2 tiles):**")
-    a("- **Pictures first.** Cut the display grid (section 2) into blocks of 3×3 display tiles. Block `(a, b)` covers "
-      "display tiles `3a … 3a+2`, `3b … 3b+2`. Per block: `h = hash(a, b)`; the picture's NW tile is "
-      "`(i0, j0) = (3a + h % 2, 3b + (h >> 1) % 2)` (**a hashed offset of 0 or 1 tile on each axis: pictures are NOT "
-      "on even tiles and never touch**); picture number `m = (h >> 2) % 8`; **no picture** when `(h >> 5) % 8 == 0`, "
-      "when the picture would leave the map, or when the 9 map cells under its 4 display tiles (cells `i0 … i0+2`, "
-      "`j0 … j0+2`) are not all one ground of this scheme. The picture's 4 display tiles are drawn with "
-      "`<prefix>.<name>.<q>`, name = `macro` (m = 0) or `macro<m+1>` (m = 1-7: `macro2` … `macro8`), "
-      "q = 0 NW `(i0, j0)`, 1 NE, 2 SW, 3 SE.")
-    a("- **Every other display tile** whose lowest ground is of this scheme: calm tile `n = hash(i + 3, j + 11) % 16`. "
-      "Any calm tile joins any other and any picture (nothing crosses their edges), so no edge types.")
-    a("- In winter the 4 seasonal grounds use the same rule with their `winter.` keys (snow with the tips of the "
-      "ground's own plant); mountain snow has no seasons.")
-    a("- Why: the 8 pictures carry the large things (thickets, lit patches, clover carpets / flowers / reeds, moss beds, "
-      "worn stretches; on snow: blue hollows, drift swells, wind ridges, glints, capped stones), the calm tiles a grain "
-      "and the small things (clumps, single clover in 4 forms, pebbles, needles, small hollows, glints…). Each kind's "
-      "positions are spread evenly over x and y (in the pictures: all different modulo 32), so no 32- or 64-px "
-      "pattern on average; the hashed offset keeps the pictures off a 64-px grid.")
+    a("**A. Every ground except the ruin floor (round 5; 16 calm tiles + 8 pictures of 2×2 tiles):** island / plains / "
+      "lake grass, moss, path, mountain snow, island sand, desert sand, and the autumn / winter sets of the 4 seasonal "
+      "grounds. Integer `hash` values are unsigned 32-bit; `/` below is a float division.")
     a("")
-    a("**B. Sand, desert sand (64 tiles; round 3):** only the W / E edges "
-      "carry anything: the ripples cross them at one of 8 phases. `n = E + 8·W`, E / W = `(hash(2i, 2j+1) >> 8) % 8` "
-      "for the vertical edge on the left of display tile (i, j) (W) and `(hash(2i+2, 2j+1) >> 8) % 8` on its right (E); "
-      "0 when the two tiles' lowest grounds differ. Nothing crosses the N / S edges. No pictures. Round 4: where the "
-      "ripples bend from their W rows to their E rows depends on `(E − W) mod 8`, so the bends are not on the same "
-      "columns in every tile.")
+    a("1. **Blocks.** Cut the display grid (section 2) into blocks of 3×3 display tiles; block `(a, b)` covers display "
+      "tiles `3a … 3a+2`, `3b … 3b+2`. Every block (a, b ≥ 0, and one block past the map's right / bottom edge) is "
+      "looked at; `h = hash(a, b)`.")
+    a("2. **Is there a picture?** Density noise over the blocks, a value noise on a lattice of 4 blocks: "
+      "`v(x, y) = (hash(x + 5003, y + 7919) % 1024) / 1023`; `gx = floor(a / 4)`, `gy = floor(b / 4)`, "
+      "`fx = (a % 4 + 0.5) / 4`, `fy = (b % 4 + 0.5) / 4`, `sx = fx·fx·(3 − 2·fx)`, `sy = fy·fy·(3 − 2·fy)`; "
+      "`top = v(gx, gy) + (v(gx+1, gy) − v(gx, gy))·sx`, `bot = v(gx, gy+1) + (v(gx+1, gy+1) − v(gx, gy+1))·sx`, "
+      "`n = top + (bot − top)·sy`. `pNone = min(1, max(0, 2·(n − 0.3)))`. The block has a picture when "
+      "`((h >> 16) % 1024) / 1024 >= pNone` (thick where n < 0.3, bare where n > 0.8: clusters and open stretches).")
+    a("3. **Where in the block.** `OFF = [0, 0, 1, 2, 2, 2]`; raw offsets `rx(a, b) = OFF[hash(a, b) % 6]`, "
+      "`ry(a, b) = OFF[(hash(a, b) >> 8) % 6]`. Then, in this order: `ox = rx(a, b)`, `oy = ry(a, b)`; "
+      "if `ox == 2` and `rx(a+1, b) == 0`: `ox = 1`; if `oy == 2` and `ry(a, b+1) == 0`: `oy = 1`; "
+      "if `ox == 2` and `oy == 2` and `rx(a+1, b+1) == 0` and `ry(a+1, b+1) == 0`: `oy = 1`; "
+      "if `ox == 2` and `oy == 0` and `rx(a+1, b−1) == 0` and `ry(a+1, b−1) == 2`: `ox = 1`. "
+      "The picture's NW display tile is `(i0, j0) = (3a + ox, 3b + oy)`; with offset 2 it reaches one tile into the "
+      "next block. These rules keep pictures from overlapping (they can touch along an edge), and the chances "
+      "(1/3, 1/6, 1/2) make every column and row of a block equally often covered (no 96-px period).")
+    a("4. **Which picture** (no two side-by-side blocks share one): raw number `r(a, b) = hash(a + 409, b + 1031) % 8`. "
+      "When `a + b` is even, `m = r(a, b)`. When `a + b` is odd: `free` = the numbers 0-7, in increasing order, that "
+      "are none of `r(a−1, b)`, `r(a+1, b)`, `r(a, b−1)`, `r(a, b+1)`; "
+      "`m = free[floor(hash(a + 409, b + 1031) / 8) % len(free)]`. Name: `macro` for m = 0, else `macro<m+1>` "
+      "(`macro2` … `macro8`).")
+    a("5. **Draw it** only when it stays on the map (`i0 + 2`, `j0 + 2` inside) and the 9 map cells under its 4 display "
+      "tiles (cells `i0 … i0+2`, `j0 … j0+2`) are all one ground of this scheme: `<prefix>.<name>.<q>`, q = 0 NW "
+      "`(i0, j0)`, 1 NE, 2 SW, 3 SE.")
+    a("6. **Every other display tile** whose lowest ground is of this scheme: calm tile `n = hash(i + 3, j + 11) % 16`. "
+      "Any calm tile joins any other and any picture (nothing crosses their edges).")
+    a("")
+    a("In winter the 4 seasonal grounds use the same rule with their `winter.` keys (snow with the tips of the ground's "
+      "own plant), in autumn with their `autumn.` keys. The pictures carry the large things (grass: thickets, lit "
+      "patches, flower clusters / reeds, island clover carpets in white bloom - 2 of the 8 pictures wide ones; moss "
+      "beds, worn stretches; snow: blue hollows, drift swells, wind ridges, glints, capped stones; sand: ripple fields, "
+      "dune swells, pale smooth stretches, pebble clusters, shells / dry grass), the calm tiles a grain and the small "
+      "things. Each kind's positions are spread evenly over x and y (in the pictures: one per 2 or 4 px modulo 32), and "
+      "the mean row / column brightness of the 16 calm tiles and of the 32 picture quarters is evened out with grain "
+      "specks, so no 32- / 64-px pattern on average.")
     a("")
     a("**C. Ruin floor (66 tiles; round 3):** rectangular stones in straight courses 11 art px high that run across the "
       "whole map, their joints staggered course by course.")
@@ -73,11 +87,13 @@ def names_md(files, redrawn, new, copied):
     a("- the ruin's overlay over water is `tile.ruin.edge.<mask>.<R>` (R = 0-10, the same row phase), so the courses "
       "run on from the overlay into the full tiles beside it. No pictures.")
     a("")
-    a("**Changes in round 4** (for the engine): scheme A replaces the round-3 edge types of the grass-likes, moss and "
-      "path (no `N + 2E + 4S + 8W`, no P %), and now also covers mountain snow and the 4 winter sets (round 3: B with 64 "
-      "tiles). `.macro3` is now a 2×2 picture like the others. Keys removed (all were new in v2; every v1 key stays): "
-      "`*.macro3.4-8`, `mountains.snow.16-63`, `winter.<4 grounds>.16-63`. Keys added: `*.macro4.0-3` … `*.macro8.0-3`, "
-      "and `.macro.0-3` … `.macro8.0-3` of `mountains.snow` and of the 4 winter sets.")
+    a("**Changes in round 5** (for the engine): island sand and desert sand move from B (64 tiles by ripple phases) "
+      "to A; B is gone. The picture placement of A is new (steps 2-4 above: density noise, offsets 0 / 1 / 2, no two "
+      "side-by-side blocks with the same picture). Keys removed (all new in v2; every v1 key stays): `tile.sand.16-63`, "
+      "`desert.sand.16-63`. Keys added: `tile.sand.macro*.0-3`, `desert.sand.macro*.0-3` (8 pictures each).")
+    a("")
+    a("Round 4: A replaced the round-3 edge types of the grass-likes, moss and path and took in mountain snow and the 4 "
+      "winter sets (removed then: `*.macro3.4-8`, `mountains.snow.16-63`, `winter.<4 grounds>.16-63`).")
     a("- **Seasons:** `autumn.<key>` / `winter.<key>` for every key of the 4 seasonal grounds (the existing season-key "
       "scheme). `autumn.mountains.snow.*` stays the v1.1 art (copied).")
     a("- Measured (`check.txt`): the repeat measure of the first inspection (mean |ΔL| at 32 px ÷ at 24 px) and the "

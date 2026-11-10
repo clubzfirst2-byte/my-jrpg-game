@@ -39,7 +39,7 @@ P_TYPE1 = {"grass": 22, "plains": 10, "lake": 10, "moss": 12, "path": 10, "snow"
 #   n = 6R + 2W + (E if E < W else E - 1)   (66 tiles)
 # With 8 phases (11 for the ruin) every row of a tile is equally likely to carry a ripple / ridge / joint, so
 # the rows' mean brightness has no 32-px period.
-LINE_GROUNDS = {"sand", "dsand"}  # (round 4: snow is drawn like the grass-likes, macro_a.py)
+LINE_GROUNDS = set()  # (round 4: snow, round 5: sand and desert are drawn like the grass-likes, macro_a.py)
 TEX4 = LINE_GROUNDS | {"ruin"}  # the all-texture grounds: no macro pieces, their own edge alphabets
 RUIN_COMBOS = [(w, e) for w in range(3) for e in range(3) if w != e]  # index 2w + (e if e < w else e - 1)
 
