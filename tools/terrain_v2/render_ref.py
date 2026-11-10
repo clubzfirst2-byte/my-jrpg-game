@@ -9,7 +9,7 @@ Steps (NAMES.md has the same in words):
   2. the display grid is shifted half a tile: display tile (i, j) has corners on the cells
      (i, j) NW, (i+1, j) NE, (i, j+1) SW, (i+1, j+1) SE and is drawn at ((i + .5) * 32, (j + .5) * 32)
   3. macro blocks (3x3 then 2x2) on uniform ground; every other land tile is picked by its 4 edge types
-     (n = N + 2E + 4S + 8W, edge type from a hash of the edge, P_LOOK % type 1)
+     (n = N + 2E + 4S + 8W; sand / desert / snow: n = E + 8W, E / W 0-7; ruin: n = N + 2E + 16S + 32W, E / W 0-7)
   4. per display tile: the lowest terrain among its corners as a full tile (water: shallow, or deep if all
      4 corners are deep), then
        water: the deep overlay (mask = deep corners) if mixed; the foam overlay (mask = land corners)
@@ -66,7 +66,10 @@ def lowest_land(grid, i, j):
     return min(ts, key=PRIORITY.index)
 
 
-BUSY_MACRO = {"grass", "plains", "lake", "moss", "path"}  # line / paving grounds use macros half as often
+BUSY_MACRO = {"grass", "plains", "lake", "moss", "path"}  # macros are placed on these only (on sand / snow / ruin they would force type-0 edges and band the texture)
+
+
+_SEASON = None
 
 
 def macro_blocks(grid):
@@ -83,36 +86,43 @@ def macro_blocks(grid):
     for j in range(0, H - 3, 3):
         for i in range(0, W - 3, 3):
             g = terr(grid, i, j)
-            if uniform(i, j, 3) and dhash(i, j) % (6 if g in BUSY_MACRO else 12) == 0:
+            if g in BUSY_MACRO and _SEASON != "winter" and uniform(i, j, 3) and dhash(i, j) % 6 == 0:
                 for q in range(9):
                     out[(i + q % 3, j + q // 3)] = ("macro3", q, (i, j, 3))
     for j in range(0, H - 2, 2):
         for i in range(0, W - 2, 2):
             cells = [(i, j), (i + 1, j), (i, j + 1), (i + 1, j + 1)]
-            if any(c in out for c in cells) or not uniform(i, j, 2):
+            if any(c in out for c in cells) or not uniform(i, j, 2) or terr(grid, i, j) not in BUSY_MACRO or _SEASON == "winter":
                 continue
-            h = dhash(i + 1, j) % (4 if terr(grid, i, j) in BUSY_MACRO else 8)
+            h = dhash(i + 1, j) % 4
             if h < 2:
                 for q, c in enumerate(cells):
                     out[c] = ("macro" if h == 0 else "macro2", q, (i, j, 2))
     return out
 
 
-from wang import P_TYPE1 as P_LOOK  # noqa: E402
+from wang import P_TYPE1 as P_LOOK, TEX4, LINE_GROUNDS, index_of, ruin_row, ruin_symbol  # noqa: E402
 
 
-def edge_type(grid, macro, a, b, edge_id, look):
-    """The type of the edge between display tiles a and b (NAMES.md): 0 when the two tiles' lowest grounds
-    differ, or the edge is on the outside of a macro block; else 1 with probability P_LOOK[look] %."""
+def edge_type(grid, macro, a, b, edge_id, look, vertical=False):
+    """The type of the edge between display tiles a and b (NAMES.md).
+    Sand / desert / snow: a vertical edge has a phase 0-7 = (hash >> 8) % 8, 0 when the two tiles' lowest grounds
+    differ; nothing crosses their horizontal edges (0).
+    Grass-likes, moss, path: 0 when the two tiles' lowest grounds differ or the edge is on the outside of a macro
+    block; else 1 with probability P_LOOK[look] % (hash % 100)."""
     if lowest_land(grid, *a) != lowest_land(grid, *b):
         return 0
     ma, mb = macro.get(a), macro.get(b)
     if (ma or mb) and (ma is None or mb is None or ma[2] != mb[2]):
         return 0
+    if look in LINE_GROUNDS:
+        return (dhash(*edge_id) >> 8) % 8 if vertical else 0
     return 1 if dhash(*edge_id) % 100 < P_LOOK[look] else 0
 
 
 def render_v2(grid, images, frame=0, season=None):
+    global _SEASON
+    _SEASON = season
     H, W = len(grid), len(grid[0])
     sp = f"{season}." if season else ""
     seasonal = {"grass", "plains", "lake", "moss"}
@@ -147,15 +157,17 @@ def render_v2(grid, images, frame=0, season=None):
                 lowest = min(land, key=PRIORITY.index) if land else None
                 if lowest:
                     mk = macro.get((i, j))
+                    look = "snow" if (season == "winter" and lowest in seasonal) else lowest
                     if mk:
                         name = f"{mk[0]}.{mk[1]}"
+                    elif look == "ruin":  # row phase + the symbols of the column's two edges
+                        name = str(index_of({"R": ruin_row(j), 8: ruin_symbol(i, dhash), 2: ruin_symbol(i + 1, dhash)}, look))
                     else:
-                        look = "snow" if (season == "winter" and lowest in seasonal) else lowest
-                        n = (edge_type(grid, macro, (i, j - 1), (i, j), (2 * i + 1, 2 * j), look)
-                             + 2 * edge_type(grid, macro, (i, j), (i + 1, j), (2 * i + 2, 2 * j + 1), look)
-                             + 4 * edge_type(grid, macro, (i, j), (i, j + 1), (2 * i + 1, 2 * j + 2), look)
-                             + 8 * edge_type(grid, macro, (i - 1, j), (i, j), (2 * i, 2 * j + 1), look))
-                        name = str(n)
+                        t = {1: edge_type(grid, macro, (i, j - 1), (i, j), (2 * i + 1, 2 * j), look),
+                             2: edge_type(grid, macro, (i, j), (i + 1, j), (2 * i + 2, 2 * j + 1), look, True),
+                             4: edge_type(grid, macro, (i, j), (i, j + 1), (2 * i + 1, 2 * j + 2), look),
+                             8: edge_type(grid, macro, (i - 1, j), (i, j), (2 * i, 2 * j + 1), look, True)}
+                        name = str(index_of(t, look))
                     im.alpha_composite(key(lowest, name), (px, py))
             for t in sorted(set(land), key=PRIORITY.index):
                 if t == lowest:
@@ -164,7 +176,8 @@ def render_v2(grid, images, frame=0, season=None):
                 if m == 15:
                     im.alpha_composite(key(t, "0"), (px, py))
                 else:
-                    im.alpha_composite(key(t, f"e{m}.{dhash(i + 7, j) % 2}"), (px, py))
+                    v = ruin_row(j) if t == "ruin" else dhash(i + 7, j) % 2
+                    im.alpha_composite(key(t, f"e{m}.{v}"), (px, py))
     for y in range(H):  # other grounds: their v1 tile, on the cell grid
         for x in range(W):
             if grid[y][x] in V1_OTHER:
