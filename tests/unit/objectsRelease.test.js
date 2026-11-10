@@ -61,17 +61,21 @@ const SIZES = {
   ...Object.fromEntries(['bow', 'armor', 'mushroom', 'berry', 'pepper', 'fang', 'shard', 'arrows', 'food'].map((n) => [`icon.${n}`, [20, 20]])),
   // v1.0: the star shard and the elder's charm get icons of their own
   'icon.star_shard': [20, 20], 'icon.charm': [20, 20],
+  // v1.0.1: weapons and armour that fell back to icon.sword / icon.armor get icons of their own
+  ...Object.fromEntries(['spear', 'greatsword', 'ember_sword', 'star_sword', 'cap', 'boots'].map((n) => [`icon.${n}`, [20, 20]])),
 };
 const NAMES = Object.keys(SIZES).sort();
+// v1.0.1 icons drawn before the game has sprite keys for them (itemView.js still falls back to icon.sword / icon.armor)
+const NOT_YET_KEYS = new Set(['icon.spear', 'icon.greatsword', 'icon.ember_sword', 'icon.star_sword', 'icon.cap', 'icon.boots']);
 const CENTRE = new Set(['fx.slash', 'fx.shadow', 'fx.arrow', 'fx.orb', 'fx.shield', 'fx.bow', 'fx.smoke', 'fx.light', 'ui.marker']);
 
 describe('release objects (src/art-release/objects)', () => {
-  it('holds exactly the expected 66 sprites (rock, bramble, stump, cactus belong to the terrain producer), every one a real sprite key of the game', () => {
+  it('holds exactly the expected 72 sprites (rock, bramble, stump, cactus belong to the terrain producer), every one a real sprite key of the game', () => {
     const files = readdirSync(DIR).sort();
     expect(files).toEqual(NAMES.map((n) => `${n}.png`).sort());
-    expect(NAMES).toHaveLength(66); // 62 + the star ring (2) + the v1.0 icons (2)
+    expect(NAMES).toHaveLength(72); // 62 + the star ring (2) + the v1.0 icons (2) + the v1.0.1 icons (6)
     const keys = new Set([...placeholderEntries(), ...Object.values(REGION_ENTRIES).flatMap((f) => f())].map((e) => e.key));
-    for (const n of NAMES) expect(keys.has(n), n).toBe(true);
+    for (const n of NAMES.filter((k) => !NOT_YET_KEYS.has(k))) expect(keys.has(n), n).toBe(true);
   });
 
   it('has each sprite at its release size (2x the placeholder; the house 96x112)', () => {

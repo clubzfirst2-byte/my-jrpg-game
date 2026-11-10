@@ -1,4 +1,4 @@
-# 建物・物・アイコン・効果・UI の絵 製品版（64 枚）
+# 建物・物・アイコン・効果・UI の絵 製品版（72 枚）
 
 承認された見本（PR #54 `design/object-samples`）と絵柄のガイド（PR #51 `docs/art-style-guide` 7e0f6bc）の決まりで、**残りの物の絵 45 枚を作り、見本 17 枚を仕上げて**、製品版の大きさで書き出しました。
 
@@ -22,7 +22,7 @@
 - 光の色：**星環の物＝主人公の宝石の青**（記録の石・受信機・祭壇・長老のお守り）、**遺跡の仕掛け＝遺跡の青緑**（踏むスイッチ・光センサー・共鳴石・柱・扉の紋）、火＝ガイドの炎の色
 - 効果も半透明の点なし（薄くするのはプログラム）
 
-## 一覧（64 枚）
+## 一覧（72 枚）
 
 基準点：足＝足元（下の真ん中）、中＝中心。「主な色」は使ったランプ（**新**＝今回新しく作ったランプ、**ガ**＝ガイドのランプを今回この道具に足したもの）。
 
@@ -92,6 +92,12 @@
 | `icon.food` | 料理（素焼きの器にシチュー、緑の葉） | clay stew(新) leaf |
 | `icon.star_shard` | v1.0 で追加。星のかけら（星環・主人公のペンダントにつながるごほうび）。宝石の青の太い四つ星を面で切り、左上が明るい。下の先が欠けている（かけら）。紫の澱の結晶 `icon.shard` と色も形も分ける | gem |
 | `icon.charm` | v1.0 で追加。長老のお守り。棚の上のお守り（`obj.charm_shelf.on`）と同じ、金の輪に青い宝石、上に細いひもの輪 | gold gem string |
+| `icon.spear` | v1.0.1。見張りの槍。斜めの長い木の柄、先に細い木の葉形の鋼の穂、その下に革の巻き、石突き | wood steel leather |
+| `icon.greatsword` | v1.0.1。錆びた大剣。まっすぐ上を向く幅 6 の刃（みぞ・欠け・赤さび）、広いつば、長い両手の握り | iron clay leather |
+| `icon.ember_sword` | v1.0.1。灯火の剣。剣と同じ向きだが、刃の明るい側と芯が炎の色、刃から炎が 2 つ立つ | steel fire leather |
+| `icon.star_sword` | v1.0.1。星鋼の剣。刃が星環の青（宝石の青）で光り、金のつばの真ん中に青い星 | gem steel gold |
+| `icon.cap` | v1.0.1。雷よけの帽子。耳当てのある革の帽子、白い麻の帯、前に雷の結晶の黄色の稲妻 | leather shock linen |
+| `icon.boots` | v1.0.1。岩登りの靴。横向きの革のブーツ、前にひも、鉄の鋲のついた厚い底（底がでこぼこ） | leather iron string |
 
 
 ### 効果・UI
@@ -225,3 +231,39 @@
 
 - 確かめた絵：`/tmp/claude-0/-home-user-my-jrpg-game/b046b55c-c649-5668-ab0a-0dc53b730c1c/scratchpad/team/v1objects/icons_v1.png`（左から 星のかけら・澱の結晶・お守り・料理を、UI・草・赤い砂・雪・暗闇の上に等倍と 4 倍で）。`review_icons.png` にも足した
 - **ゲームにつなぐには**（別の作業。ここではゲームのコードを変えていない）：`src/view/itemView.js` の `ICON_BY_ID` に星のかけら → `icon.star_shard`、長老のお守り → `icon.charm` を足し、`placeholderArt.js` / `placeholderPack.js` に同じ名前の仮の絵を足す。それまではテストでこの 2 つだけ「ゲームの名前にあること」を外している
+
+## v1.0.1 の追加：武器・防具のアイコン 6 枚
+
+ゲームでは、自分のアイコンが無い武器は全部 `icon.sword`、防具は全部 `icon.armor` で出ていました（`src/view/itemView.js` の `ICON_BY_TYPE`）。`data/items.json` と `ICON_BY_ID` を照らし合わせ、形がまるで違う物（槍・大剣・帽子・靴）と、見た目に特徴のある剣 2 本（炎・青く光る）にアイコンを作りました。これまでの 66 枚は 1 ドットも変えていません。作る道具は `tools/object_release/icons_v1_1.py`（`gen_release.py` から呼ぶ）。
+
+| 新しいアイコン | 持ち物の id | 今まで出ていたアイコン |
+|---|---|---|
+| `icon.spear` | `guard_spear`（見張りの槍） | `icon.sword` |
+| `icon.greatsword` | `rusty_greatsword`（錆びた大剣） | `icon.sword` |
+| `icon.ember_sword` | `ember_sword`（灯火の剣） | `icon.sword` |
+| `icon.star_sword` | `star_steel_sword`（星鋼の剣） | `icon.sword` |
+| `icon.cap` | `insulated_cap`（雷よけの帽子） | `icon.armor` |
+| `icon.boots` | `grip_boots`（岩登りの靴） | `icon.armor` |
+
+ほかの借りもの（今回は作っていない。人が決めるなら追加する）：
+- `wood_sword`・`travel_sword` → `icon.sword`：どちらも片手剣なので剣のアイコンのままでよいと考えた
+- `wood_bow`・`hunter_bow` → `icon.bow`、`bark_vest` → `icon.armor`：弓・胴当てそのものなので合っている
+- 料理 8 つ（`grilled_meat` `mushroom_skewer` `berry_jam` `hunter_stew` `ember_soup` `hearty_skewer` `mixed_stew` `dubious_food`）→ `icon.food`：料理全体のアイコンとして使っている。焼き肉・串・ジャムは器の絵と違うので、料理ごとに分けるなら次の作業
+
+決まり：20×20、1 ドットの余白、素材 3 つまで、アルファ 0/255、全部ランプの色（作るときとテストで確認）。`icon.sword` との違い：槍・大剣・帽子・靴は形、灯火の剣・星鋼の剣は剣と同じ向きだが刃の色（炎・青）と炎・つばの星。
+
+背景との明るさの差が 20 以上ある点の割合（確認と同じ測り方）。暗い革・木が多いので、ガイド 6.1 のとおり 3 番を広くとって、UI の上は見本の 42〜63% の中に入れた：
+
+| アイコン | UI `#20242c` | 草 | 道 | 雪 | 赤い砂 | 遺跡の床 | 暗闇 |
+|---|---|---|---|---|---|---|---|
+| `icon.spear` | 46% | 64% | 72% | 93% | 72% | 61% | 46% |
+| `icon.greatsword` | 49% | 66% | 50% | 88% | 50% | 66% | 62% |
+| `icon.ember_sword` | 50% | 61% | 67% | 85% | 67% | 73% | 54% |
+| `icon.star_sword` | 44% | 44% | 58% | 72% | 58% | 58% | 72% |
+| `icon.cap` | 46% | 45% | 59% | 81% | 59% | 43% | 60% |
+| `icon.boots` | 48% | 44% | 43% | 96% | 43% | 39% | 64% |
+| `icon.sword`（くらべる見本） | 42% | 51% | 54% | 88% | 54% | 51% | 69% |
+
+確かめた絵：`/tmp/claude-0/-home-user-my-jrpg-game/b046b55c-c649-5668-ab0a-0dc53b730c1c/scratchpad/team/v1objects/icons_v1_1.png`（左から 剣（くらべる見本）・槍・大剣・灯火の剣・星鋼の剣・鎧（くらべる見本）・帽子・靴。上から UI・草・道・赤い砂・雪・遺跡の床・暗闇。等倍と 4 倍）。`review_icons.png` にも足した。
+
+**ゲームにつなぐには**（別の作業。ここではゲームのコードを変えていない）：`src/view/itemView.js` の `ICON_BY_ID` に上の表の 6 つを足し、仮の絵（`placeholderArt.js` / `placeholderPack.js`）に同じ名前を足す。それまでテストではこの 6 つだけ「ゲームの名前にあること」を外している（`NOT_YET_KEYS`）。

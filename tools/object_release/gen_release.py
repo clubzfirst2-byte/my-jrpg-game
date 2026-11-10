@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from draw import RAMPS, hx  # noqa: E402
 from objects import ANCHOR, SIZES, all_samples  # noqa: E402
 from objects2 import ANCHOR2, SIZES2, all_wave2  # noqa: E402
+from icons_v1_1 import ANCHOR3, SIZES3, all_icons_v1_1  # noqa: E402
 from ramps2 import RAMPS2  # noqa: E402
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "art_proto"))
@@ -22,8 +23,8 @@ from pixel import BASE_RAMPS, png  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
 OUT = os.path.join(ROOT, "src", "art-release", "objects")
-ALL_SIZES = {**SIZES, **SIZES2}
-ALL_ANCHOR = {**ANCHOR, **ANCHOR2}
+ALL_SIZES = {**SIZES, **SIZES2, **SIZES3}
+ALL_ANCHOR = {**ANCHOR, **ANCHOR2, **ANCHOR3}
 ALLOWED = {hx(c) for r in {**BASE_RAMPS, **RAMPS, **RAMPS2}.values() for c in r}
 
 
@@ -47,7 +48,7 @@ def check(name, img):
 
 
 def build():
-    out = {**all_samples(), **all_wave2()}
+    out = {**all_samples(), **all_wave2(), **all_icons_v1_1()}
     assert set(out) == set(ALL_SIZES), sorted(set(out) ^ set(ALL_SIZES))
     for name, img in out.items():
         check(name, img)
