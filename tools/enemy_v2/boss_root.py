@@ -38,8 +38,8 @@ class Pose:
 
 
 # round 3: hand-drawn material clusters (existing tones only)
-FUNGI_LEG = {"a": ("fungus", 3), "b": ("fungus", 2), "c": ("fungus", 1), "g": ("glow", 3), "h": ("glow", 2), "k": ("glow", 1)}
-FUNGI = [["ab", "cc"], [".a.", "abc"], ["gh", "hk"], ["ab", "ck"]]
+FUNGI_LEG = {"a": ("fungus", 3), "b": ("fungus", 2), "c": ("fungus", 1)}
+FUNGI = [[".aaa.", "abbbc", ".ccc."], [".aa.", "abbc", "cccc"], ["aaa.", "bbbc", ".ccc"]]  # round 4: fungus caps, 3 tones, 10+ px each; no glow
 
 def draw(p):
     r = Rig(W, H)
@@ -84,8 +84,8 @@ def draw(p):
     # the body: a broad hunched mass
     body = r.mask_of(r.m_ellipse(cx, by, 30, 17), r.m_ellipse(cx, by + 6, 24, 13))
     r.add(body, "rotwood", soft=4, tex=("bark", "radial", 3, {"centre": (cx, by - 3), "calm": (cx, by - 3, 11)}))
-    # round 3: tiny fungus caps and beads of tainted sap in the bark's seams (hand-drawn clusters)
-    r.pattern(body, (cx, by), (9, 7), FUNGI, FUNGI_LEG, seed=41, gaps=0.3)
+    # round 3: tiny fungus caps in the bark's seams (hand-drawn clusters)
+    r.pattern(body, (cx, by), (13, 9), FUNGI, FUNGI_LEG, seed=41, gaps=0.3)
     # shoulder spikes pointing out
     for s in (-1, 1):
         r.chain([(cx + s * 24, by - 2), (cx + s * 32, by - 7), (cx + s * 40, by - 10)], [4.2, 2.6, 0.8], "rotwood", soft=1)

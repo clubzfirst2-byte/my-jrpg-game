@@ -9,7 +9,7 @@ import math
 
 import numpy as np
 
-from rig import Rig, PAD
+from rig import Rig
 
 W, H = 44, 32
 GROUND = 30  # the row the paws stand on
@@ -63,10 +63,6 @@ def _leg(r, m, k):
     does not sink into dark ground (swamp, cave)."""
     r.add(m, "ashfur", **k)
     if not k.get("dark"):
-        # round 3: two claws at the front of the paw (bone, lit over shadow)
-        ys, xs = np.nonzero(m)
-        fy_, fx_ = ys.max() - PAD, xs.max() - PAD
-        r.stamp(fx_ - 1, fy_ - 1, ["ab", "bc"], {"a": ("bone", 3), "b": ("bone", 2), "c": ("bone", 1)})
         up = np.zeros_like(m)
         up[1:, :] = ~m[:-1, :]
         left = np.zeros_like(m)
@@ -78,9 +74,8 @@ def _leg(r, m, k):
     return m
 
 
-# round 3: hand-drawn material clusters (existing tones only)
-SCAR_LEG = {"a": ("murk", 3), "b": ("murk", 2), "c": ("murk", 1), "g": ("glow", 2), "h": ("glow", 1), "w": ("ashfur", 3)}
-SCARS = [["ab", "bc"], ["gh", "hc"], ["ag", "bc"], ["ab", "gh"]]
+# round 4: the coat's own tones for wedges and the scar
+WEDGE_LEG = {"3": ("ashfur", 3), "1": ("ashfur", 1)}
 
 def draw(p):
     r = Rig(W, H)
@@ -154,8 +149,11 @@ def draw(p):
     r.add(lit2, "ashfur", tone=2.5)
     r.add(dark, "ashfur", tone=1)
     r.add(lit, "ashfur", tone=3)
-    # round 3: hand-drawn scars and murk taint in the coat (2-3 px clusters), anchored to the hip
-    r.pattern(body, (hip[0], by), (5, 3), SCARS, SCAR_LEG, seed=21, gaps=0.1)
+    # round 4: two fur wedges on the shoulder, two on the haunch (lit over a dark tip, lying back),
+    # and one 2-px scar across the haunch -- all from the masses' centres, so they ride the body
+    for (ox, oy), base_ in (((-2, -3), C_), ((1, 0), C_), ((-2, -3), H_), ((1, 1), H_)):
+        r.stamp(int(round(base_[0] + ox)), int(round(base_[1] + oy)), ["..333", "33311", "1111."], WEDGE_LEG)
+    r.stamp(int(round(H_[0])) - 2, int(round(H_[1])) + 1, ["333..", "1111.", "..111"], WEDGE_LEG)
     # mane ruff on the neck and shoulders (paler, tufted)
     rx, ry = sh[0] + 2, sh[1] - 6
     ruff = r.m_poly([(rx - 7, ry), (rx - 5, ry - 2), (rx - 3, ry - 4), (rx - 1, ry - 3), (rx + 2, ry - 5), (rx + 5, ry - 1), (rx + 3, ry + 1),

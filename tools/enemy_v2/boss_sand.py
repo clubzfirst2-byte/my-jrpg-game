@@ -9,7 +9,9 @@ Phase 2: the mask cracks.
 
 import math
 
-from rig import Rig
+import numpy as np
+
+from rig import Rig, _connect4
 from bossparts import cracks, orb
 
 W, H = 80, 96
@@ -56,10 +58,6 @@ def blade_arm(r, sx, sy, hx_, hy, s, **k):
     r.add(r.m_poly([(hx_ + px_ * 3, hy + py_ * 3), (tip[0], tip[1]), (hx_ - px_ * 3, hy - py_ * 3)]), "mask", soft=1, **k)
 
 
-# round 3: hand-drawn material clusters (existing tones only)
-GRIT_LEG = {"a": ("mask", 3), "b": ("mask", 2), "c": ("mask", 1), "g": ("glow", 3), "h": ("glow", 2), "s": ("murksand", 3), "t": ("murksand", 1)}
-GRIT = [["ab", "bc"], ["s.", "tt"], ["gh", ".h"], [".a", "bc"]]
-FOLDS = [["ss.", ".tt"], ["s.", "st", ".t"], ["ab", "bc"], ["gh", "hh"]]
 
 def draw(p):
     r = Rig(W, H)
@@ -81,10 +79,11 @@ def draw(p):
         r.limb(cx + [-1, 0, 1, 0][p.spin % 4], 60 + dy + (n - 1) * 5, cx, G - 0.6, 2, 1.0, "murksand", soft=1)  # the tip
     # body: a draped mass of sand under the hood
     body = r.m_poly([(cx - 16, 28 + dy), (cx + 16, 28 + dy), (cx + 22, 50 + dy), (cx + 14, 62 + dy), (cx, 66 + dy), (cx - 14, 62 + dy), (cx - 22, 50 + dy)])
+    # round 4: the robe's hem is torn -- four ragged tails hang from it over the whirl
+    for tx in (-11, -4, 4, 10):
+        hy_ = 66 + dy - abs(tx) * 4 / 14
+        body |= r.m_poly([(cx + tx - 2.5, hy_ - 2), (cx + tx + 2.5, hy_ - 2), (cx + tx + 2, hy_ + 2), (cx + tx + 1.5, hy_ + 5), (cx + tx - 0.5, hy_ + 5), (cx + tx - 1.5, hy_ + 2)])
     r.add(body, "murksand", soft=4)
-    # round 3: grit and stones caught in the robe, a few murk motes (hand-drawn clusters), anchored
-    # to the robe so they move with it
-    r.pattern(body, (cx, 28 + dy), (6, 5), GRIT, GRIT_LEG, seed=51, gaps=0.1)
     # sand streams on the robe
     for x in (-12, -5, 6, 13):
         r.shade(r.m_line(cx + x, 36 + dy, cx + x * 1.15, 60 + dy), lambda t: max(1, t - 1))
@@ -104,8 +103,15 @@ def draw(p):
     hood = r.m_poly([(cx - 17, hy + 2), (cx - 12, hy - 12), (cx - 2, hy - 23), (cx + 1, hy - 25), (cx + 4, hy - 21), (cx + 13, hy - 11),
                      (cx + 17, hy + 2), (cx + 11, hy + 9), (cx - 11, hy + 9)])
     r.add(hood, "murksand", soft=3)
-    # round 3: wind folds in the hood (a lit crease over a shadow) and grit
-    r.pattern(hood, (cx, hy), (5, 4), FOLDS, GRIT_LEG, seed=52, gaps=0.05)
+    # round 4: wind folds in the hood -- four bands flaring down from the point, each a 2-px
+    # crease one tone lighter than the cloth under it with its shadow (one tone darker) on the
+    # right. Offsets from the hood's point, so the folds belong to the hood and move with it.
+    for fx0, fx1, fx2 in ((-3, -9, -15), (-1, -5, -10), (3, 7, 11), (5, 11, 16)):
+        crease = _connect4(r.m_chain([(cx + fx0 * 1.6, hy - 12), (cx + fx1, hy - 5), (cx + fx2, hy + 6)], [1.2, 1.2, 1.2]) & hood) & hood
+        shadow = np.zeros_like(crease)
+        shadow[:, 1:] = crease[:, :-1]
+        r.shade(_connect4(shadow & ~crease & hood) & ~crease & hood, lambda t: max(1, t - 1), on=True)
+        r.shade(crease, lambda t: min(3, t + 1), on=True)
     r.add(r.m_ellipse(cx, hy + 1, 11, 11), "murksand", tone=0)  # the dark inside of the hood
     # the stone mask (hand-placed details on a shaded oval)
     ms = 1 + p.lean * 0.04

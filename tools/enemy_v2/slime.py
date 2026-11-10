@@ -25,9 +25,11 @@ class Pose:
         self.__dict__.update(k)
 
 
-# round 3: hand-drawn material clusters (existing tones only)
-BUB_LEG = {"a": ("glow", 4), "b": ("glow", 3), "c": ("glow", 2), "d": ("glow", 1), "o": ("glow", 0), "m": ("murk", 3)}
-BUBBLES = [["ab", "cd"], ["bc", "do"], ["m.", "ab"], [".a", "bc"]]
+# round 4: a bubble in the jelly: a round 3x3 (or 2x2) patch of the jelly's own light tone, its
+# lower right one step darker -- a cluster with a form, not a dot
+BUB_LEG = {"3": ("murk", 3), "2": ("murk", 2)}
+BUB3 = [".33", "332", "322"]
+BUB2 = ["33", "32"]
 
 def draw(p):
     r = Rig(W, H)
@@ -52,11 +54,11 @@ def draw(p):
         body &= ~r.m_ellipse(cx + 2, top - 3, rx * 0.9, ry * (0.5 + 0.45 * p.melt))
         body |= r.m_ellipse(cx, base - 1, rx + 2 * p.melt, 2.4)
     r.add(body, "murk", soft=3)
-    # round 3: bubbles in the jelly (glow motes with a dark rim) and a rim light up the left edge,
-    # anchored to the slime's centre so they ride the squash and stretch
-    if p.melt < 2:  # below the eyes only, so a bubble never reads as a third eye
-        low = body & r.m_rect(-50, round(top + ry * 0.45) + 4, W + 50, H + 50)
-        r.pattern(low, (cx, base - ry), (5, 3), BUBBLES, BUB_LEG, seed=31, gaps=0.1)
+    # round 4: three bubbles at fixed places in the dark lower jelly -- they scale with the body
+    # (squash and stretch), they never jump from frame to frame
+    if p.melt < 2:
+        for fx_, fy_, bub in ((0.55, 0.1, BUB3), (-0.55, 0.45, BUB3), (0.62, 0.62, BUB2)):
+            r.stamp(int(round(cx + fx_ * rx)) - 1, int(round(base - ry + fy_ * ry)) - 1, bub, BUB_LEG)
     # the core seen through the jelly: a crystal, hand-shaded so it glows from the inside
     ky = base - ry * 0.55 + (1 if p.melt else 0)
     kx = cx + p.lean * 0.4 + 1
@@ -121,7 +123,7 @@ def frames():
     from anim import loop, once, name
     out = {}
     name(out, "idle", loop(Pose, 4, [
-        (0.0, dict(rx=11.0, ry=9.0)), (0.25, dict(rx=11.5, ry=8.5)), (0.5, dict(rx=11.5, ry=8.5, eyes="wide")), (0.75, dict(rx=11.0, ry=9.0, eyes="shut")),
+        (0.0, dict(rx=11.0, ry=9.0)), (0.25, dict(rx=11.5, ry=8.5)), (0.5, dict(rx=11.5, ry=8.5, lean=2)), (0.75, dict(rx=11.0, ry=9.0, lean=2, eyes="shut")),
     ]), draw)
     # move: squash (gather), stretch up off the ground, the arc leaning forward, the fall, the
     # landing squash, the rebound

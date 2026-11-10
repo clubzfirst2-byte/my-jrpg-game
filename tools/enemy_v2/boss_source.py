@@ -15,7 +15,7 @@ import math
 
 import numpy as np
 
-from rig import Rig
+from rig import Rig, _connect4
 from bossparts import cracks, orb
 
 W, H = 128, 128
@@ -57,8 +57,6 @@ def ring(r, cx, cy, s, p):
         band &= ~r.m_poly([(cx - 4, cy - ro - 2), (cx + 4, cy - ro - 2), (cx + 2, cy - ri + 2), (cx - 2, cy - ri + 2)])
         band &= ~r.m_poly([(cx + ri - 3, cy + 10), (cx + ro + 3, cy + 16), (cx + ro + 3, cy + 24), (cx + ri - 3, cy + 18)])
     r.add(band, "ashring", soft=3)
-    # round 3: chips knocked out of the ring (dark pits with a lit lip) and ash
-    r.pattern(band, (cx, cy), (6, 5), CHIPS, MOTE_LEG, seed=72, gaps=0.3)
     # engraved notches of the star-ring, eight around the band (the pendant's pattern, gone dull)
     for i in range(8):
         a = i * math.pi / 4 + math.pi / 8
@@ -94,22 +92,17 @@ def ring(r, cx, cy, s, p):
 def eye(r, cx, cy, s, p):
     # the murk pooled inside the ring
     orbm = r.ellipse(cx, cy, R_IN * s, R_IN * s, "murk", soft=4)
-    # round 3: the miasma swirls -- four curved bands (2 px wide, murk 2.5 over a murk-1 lip),
-    # each carrying a few glow motes; drawn from the orb's centre so they move with it
-    for k, a0 in enumerate((0.3, 1.9, 3.5, 5.0)):
-        pts = [(cx + math.cos(a0 + t * 0.9) * (27 - t * 9) * s, cy + math.sin(a0 + t * 0.9) * (27 - t * 9) * s) for t in (0, 0.5, 1)]
-        band = r.m_chain(pts, [1.2, 1.1, 0.8]) & orbm
+    # round 4: the miasma swirls round the eye -- three curved bands, 2-3 px wide, each winding in
+    # from the rim toward the eye: the band is one tone off the murk under it (lighter in the
+    # shade, darker in the light) with a darker lip below it. Drawn from the orb's centre, so
+    # they move with it. No dots, no glow colour.
+    for a0 in (0.5, 2.6, 4.7):
+        pts = [(cx + math.cos(a0 + t * 1.7) * (28.5 - t * 8) * s, cy + math.sin(a0 + t * 1.7) * (28.5 - t * 8) * s) for t in (0, 0.25, 0.5, 0.75, 1)]
+        band = _connect4(r.m_chain(pts, [0.9, 1.4, 1.5, 1.3, 0.9]) & orbm) & orbm
         lip = np.zeros_like(band)
-        lip[1:, 1:] = band[:-1, :-1]
-        r.add(lip & ~band & orbm, "murk", tone=1, cast=False)
-        r.add(band, "murk", tone=2.5, cast=False)
-        mx, my = pts[1]
-        r.stamp(round(mx) - 1, round(my) - 1, ["ab", "bc"] if k % 2 else [".a", "bc"], {"a": ("glow", 3), "b": ("glow", 2), "c": ("glow", 1)})
-    r.pattern(orbm, (cx, cy), (6, 6), MOTES, MOTE_LEG, seed=71, gaps=0.3)
-    for a in (0.6, 2.2, 3.9, 5.3):  # slow swirls in the murk
-        x0, y0 = cx + math.cos(a) * 26 * s, cy + math.sin(a) * 26 * s
-        x1, y1 = cx + math.cos(a + 0.7) * 20 * s, cy + math.sin(a + 0.7) * 20 * s
-        r.shade(r.m_line(x0, y0, x1, y1), lambda t: min(3, t + 1))
+        lip[1:, :] = band[:-1, :]
+        r.shade(_connect4(lip & ~band & orbm) & ~band & orbm, lambda t: max(1, t - 1), on=True)
+        r.shade(band, lambda t: 2 if t >= 3 else min(3, t + 1), on=True)
     if p.eye == "gone":
         return
     ry = {"open": 12, "narrow": 5, "wide": 15, "shut": 1.4}[p.eye] * s
@@ -129,10 +122,7 @@ def eye(r, cx, cy, s, p):
     r.px([(round(px_ - 2 * s), round(py_ - 3 * s))], "glow", 4)
 
 
-# round 3: hand-drawn material clusters (existing tones only)
-MOTE_LEG = {"a": ("glow", 3), "b": ("glow", 2), "c": ("glow", 1), "m": ("murk", 3), "n": ("murk", 1), "o": ("murk", 0), "r": ("ashring", 3), "q": ("ashring", 1)}
-MOTES = [["ab", "bc"], ["mn", "ab"], [".a", "bc"], ["mo", "nb"]]
-CHIPS = [["on", "nr"], ["rq", "qo"], ["n.", "or"], ["ab", "bq"]]
+
 
 def draw(p):
     r = Rig(W, H)
@@ -283,9 +273,9 @@ def tendril_frames_v2():
 def frames():
     from anim import loop, once, name, mix
     out = {}
-    I = [dict(spin=0), dict(spin=0, dy=1), dict(spin=0, dy=1, look=(1, 0)), dict(spin=1, look=(1, 0))]
+    I = [dict(spin=0), dict(spin=0, dy=1), dict(spin=1, dy=1, look=(1, 0)), dict(spin=2, look=(1, 0))]  # round 4: 4 outlines
     name(out, "idle", loop(Pose, 4, [(i / 4, k) for i, k in enumerate(I)]), draw)
-    I2 = [dict(k, phase2=True, crack=3, shards=6) for k in (dict(spin=0), dict(spin=0, dy=1), dict(spin=0, dy=1, look=(-1, 0)), dict(spin=1, look=(-1, 0)))]
+    I2 = [dict(k, phase2=True, crack=3, shards=6) for k in (dict(spin=0), dict(spin=0, dy=1), dict(spin=1, dy=1, look=(-1, 0)), dict(spin=2, look=(-1, 0)))]
     name(out, "idle2", loop(Pose, 4, [(i / 4, k) for i, k in enumerate(I2)]), draw)
     # each pattern opens 1 / 2 / 3 / 4 sockets and takes its own tendril pose; the eye narrows
     W = {

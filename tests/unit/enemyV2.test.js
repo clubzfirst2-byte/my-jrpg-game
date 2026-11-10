@@ -340,7 +340,7 @@ describe('enemy & boss art v2 (src/art-release-v2/enemy)', () => {
     }
   });
 
-  it('round 3 detail: colours per 16x16 block (median) >= 12 for enemies, >= 10 for bosses (slime >= 10: two materials only)', () => {
+  it('detail: colours per 16x16 block (median) never below v1 (round 4: patterns are strokes, not dots)', () => {
     const median = (a) => {
       const b = [...a].sort((x, y) => x - y);
       return b.length % 2 ? b[(b.length - 1) / 2] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2;
@@ -371,7 +371,8 @@ describe('enemy & boss art v2 (src/art-release-v2/enemy)', () => {
           if (blocks.length) per.push(median(blocks));
         }
       }
-      const min = kind.startsWith('boss_') || kind === 'slime' ? 10 : 12;
+      // v1's medians on the same measure (src/art-release/enemy)
+      const min = { beast: 8, archer: 14, slime: 7.5, sentinel: 10.5, boss_root: 8, boss_frost: 4.5, boss_sand: 4, boss_storm: 8, boss_source: 6 }[kind];
       expect(median(per), `${kind}: colours per 16x16`).toBeGreaterThanOrEqual(min);
     }
   });

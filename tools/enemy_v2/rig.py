@@ -281,12 +281,13 @@ def _plates(out, t, m, inner, oy, ox, ang, seed, opt, org):
 
 
 class Part:
-    __slots__ = ("mask", "mat", "tone", "tones", "dark", "soft", "cast", "inline", "lit", "tex")
+    __slots__ = ("mask", "mat", "tone", "tones", "dark", "soft", "cast", "inline", "lit", "tex", "on")
 
     def __init__(self, mask, mat, tone=None, tones=None, dark=0, soft=None, cast=True, inline=False, lit=0, tex=None):
         self.mask, self.mat, self.tone, self.tones = mask, mat, tone, tones
         self.dark, self.soft, self.cast, self.inline, self.lit = dark, soft, cast, inline, lit
         self.tex = tex
+        self.on = None  # a re-tone only: the index of the one part it may re-tone (None = whatever shows)
 
 
 class Rig:
@@ -391,10 +392,15 @@ class Rig:
             m |= a
         return m
 
-    def shade(self, mask, tone_map):
+    def shade(self, mask, tone_map, on=None):
         """Re-tone what is already drawn where `mask` is: tone_map(old_tone) -> new tone.
-        Implemented as a part over it that copies the material underneath (adds no pixels)."""
-        self.parts.append(Part(mask, None, tones=tone_map, cast=False))
+        Implemented as a part over it that copies the material underneath (adds no pixels).
+        Round 4: on=True limits it to the part added last (a pattern ON that part: whatever is
+        drawn over the part later -- a face, a core, a crack -- is left alone)."""
+        p = Part(mask, None, tones=tone_map, cast=False)
+        if on:
+            p.on = max(i for i, q in enumerate(self.parts) if q.mat is not None)
+        self.parts.append(p)
 
     def stamp(self, x, y, rows, legend, flip=False, cast=False):
         """A hand-placed pixel map. rows: strings; legend: char -> (material, tone); '.' / ' ' = none.
@@ -522,7 +528,10 @@ class Rig:
         # re-tones
         for i, p in enumerate(self.parts):
             if p.mat is None:
-                for y, x in zip(*np.nonzero(p.mask & (tone >= 0))):
+                sel = p.mask & (tone >= 0)
+                if p.on is not None:
+                    sel = sel & (top == p.on)
+                for y, x in zip(*np.nonzero(sel)):
                     tone[y, x] = p.tones(tone[y, x])
         # cast shadows: a part in front darkens what is just below / right of its edge
         idx = top

@@ -9,7 +9,7 @@ Phase 2: lines of sparks run along the body.
 
 import math
 
-from rig import Rig
+from rig import Rig, PAD
 from bossparts import glow_eyes
 
 W, H = 88, 96
@@ -44,9 +44,9 @@ def zig(r, x, y, s=1):
             {"a": ("spark", 4), "b": ("spark", 2)})
 
 
-# round 3: hand-drawn material clusters (existing tones only)
-FLECK_LEG = {"a": ("spark", 4), "b": ("spark", 3), "c": ("spark", 2), "w": ("lake", 4), "x": ("lake", 3), "y": ("lake", 2)}
-FLECKS = [["ab", "bc"], ["wx", "xy"], [".a", "bc"], ["wx", ".y"]]
+# round 4: a scale: the shaded lower edge of a plate, a 4-px "U" (4-connected, 6 px) one tone
+# darker than the hide under it
+SCALE = ["1..1", "1111"]
 
 def draw(p):
     r = Rig(W, H)
@@ -82,9 +82,23 @@ def draw(p):
         r.poly([(mx - dx / L * 4, my - dy / L * 4), (mx + nx * fl, my + ny * fl - 3), (mx + dx / L * 4, my + dy / L * 4)], "spark", soft=1, dark=1)
     body = r.m_chain(pts, radii) & ~water
     r.add(body, "slate", soft=4)
-    # round 3: spark flecks caught in the scales and lake water beads (hand-drawn clusters),
-    # anchored to the middle of the S
-    r.pattern(body, pts[2], (6, 6), FLECKS, FLECK_LEG, seed=61, gaps=0.35)
+    # round 4: scales -- two rows of 4-px arcs laid along the S (the rows staggered by half a
+    # scale), each the shaded lower edge of a plate, so they follow the body's curve and move
+    # with it; only whole arcs well inside the body are drawn (the outline stays clean)
+    scales = []
+    for i in range(len(pts) - 1):
+        (x0, y0), (x1, y1) = pts[i], pts[i + 1]
+        seg = max(1, int(math.hypot(x1 - x0, y1 - y0) // 5))
+        for k in range(seg):
+            for row, off in enumerate((-5, 0)):
+                t = (k + 0.25 + 0.5 * row) / seg
+                ax, ay = int(round(x0 + (x1 - x0) * t + off)) - 2, int(round(y0 + (y1 - y0) * t)) - 1
+                arc = [(ax + c, ay + rr) for rr, line in enumerate(SCALE) for c, ch in enumerate(line) if ch != "."]
+                room = [(x + dx, y + dy) for x, y in arc for dx in (-1, 0, 1) for dy in (-1, 0, 1)]
+                if all(0 <= x + PAD < body.shape[1] and 0 <= y + PAD < body.shape[0] and body[y + PAD, x + PAD] for x, y in room):
+                    scales += arc
+    if scales:
+        r.shade(r.m_px(scales), lambda t: max(1, t - 1), on=True)
     # pale belly scutes down the front of the S
     for i in range(len(pts) - 1):
         (x0, y0), (x1, y1) = pts[i], pts[i + 1]

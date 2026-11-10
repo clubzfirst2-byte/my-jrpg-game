@@ -52,7 +52,7 @@ TINES = [(1, (6, -22)), (2, (20, -32)), (3, (37, -33)), ((1.5), (25, -27))]
 BEAM_R = [3.2, 2.7, 2.3, 1.8, 1.0]
 
 
-def antler(r, s, x0, y0, k, rot, lev, broken):
+def antler(r, s, x0, y0, k, rot, lev, broken, y_ref=None):
     """One antler: a main beam out and up with tines; s = -1 left, 1 right. k = scale.
     rot turns it about its base (+ = tips out and down), lev flattens it toward the camera."""
     a = math.radians(rot)
@@ -66,8 +66,9 @@ def antler(r, s, x0, y0, k, rot, lev, broken):
     # keep the whole antler (tip radius + outline) 1 px clear of the top edge: when a pose throws
     # the tips higher than the frame allows, the antler is drawn a little smaller instead of cut flat
     top = min(raw(*q)[1] for q in BEAM + [t for _, t in TINES])
-    if y0 + top * k < 4.0 and top < 0:
-        k = (y0 - 4.0) / -top
+    yr = y0 if y_ref is None else y_ref  # idle: sized for the rest pose, so a breath never rescales them
+    if yr + top * k < 4.0 and top < 0:
+        k = (yr - 4.0) / -top
 
     def P(dx, dy):
         x, y = raw(dx, dy)
@@ -105,9 +106,7 @@ def leg(r, top, knee, foot, r_top, r_knee, r_foot, dark, hoof_tone):
     """A leg with a joint: a thick upper leg to the knee, a thin cannon to the fetlock, a fur tuft
     at the fetlock, a dark hoof."""
     (tx, ty), (kx, ky), (fx, fy) = top, knee, foot
-    up = r.limb(tx, ty, kx, ky, r_top, r_knee, "frostfur", dark=dark, soft=2, tex=("fur", 90, 3))
-    if not dark:  # round 3: ice crusts on the near legs too
-        r.pattern(up, (tx, ty), (5, 5), ICE_CRUST, ICE_LEG, seed=15, gaps=0.05)
+    r.limb(tx, ty, kx, ky, r_top, r_knee, "frostfur", dark=dark, soft=2, tex=("fur", 90, 3))
     r.limb(kx, ky, fx, fy - 2, r_knee * 0.8, r_foot, "frostfur", dark=dark, soft=1)
     # the knee: a knob, one tone lighter on its lit side
     r.ellipse(kx - 0.5, ky, r_knee * 0.95, r_knee * 0.8, "frostfur", dark=dark, soft=1)
@@ -118,12 +117,18 @@ def leg(r, top, knee, foot, r_top, r_knee, r_foot, dark, hoof_tone):
     r.ellipse(fx, fy - 0.8, r_foot + 1.4, 1.7, "frostfur", tone=hoof_tone)
 
 
-# round 3: hand-drawn material clusters (existing tones only)
-ICE_LEG = {"a": ("ice", 4), "b": ("ice", 3), "c": ("ice", 2), "d": ("ice", 1), "f": ("frostfur", 1)}
-ICE_CRUST = [["ab", "cd"], ["ab.", ".cd"], [".a", "bc", "d."], ["ac", "bd"]]
-TAINT_LEG = {"a": ("glow", 3), "b": ("glow", 2), "c": ("glow", 1)}
-TAINT = [["ab", "bc"], [".a.", "abc"], ["ab", "cc"]]
-MANE_TIPS = [["b", "c"], ["bc", ".d"], ["c", "d"]]
+# round 4: hand-drawn strokes that follow the form (no dot scatter). Locks of fur hang down the
+# shoulders and the chest in two staggered rows -- each a lit body (tone 3, 3 px wide) with its
+# shadow down the right side and under the tip (tone 1) -- and ice lies only on the tops of the
+# shoulders, as plates. All offsets are from the shoulder line, so they ride with the body.
+FUR = {"3": ("frostfur", 3), "1": ("frostfur", 1)}
+LOCK = ["33.", "331", "331", "331", ".31", ".31", "..1"]
+LOCKS = [(-26, -1), (-20, -5), (-14, -3), (13, -3), (18, -5), (24, -1),  # the upper row, over the humps
+         (-23, 5), (-17, 3), (15, 3), (21, 5),  # the lower row, staggered
+         (-12, 10), (9, 10)]  # the chest's fringe, either side of the mane
+ICE = {"a": ("ice", 4), "b": ("ice", 3), "c": ("ice", 2), "d": ("ice", 1)}
+PLATE = [".bbbb.", "bbbccc", ".cccc."]  # a lit top over its shaded edge
+PLATES = [(-19, -9), (11, -9)]
 
 
 def draw(p):
@@ -142,9 +147,7 @@ def draw(p):
         foot = (CX + s * 14 + p.shift * 0.3, G - 4 - lift + min(rear, 3))  # rearing: the weight goes onto them
         leg(r, (hx0, sy + 6 + rear * 0.6), (hx0 + s * 1, min(sy + 18, G - 13) + rear * 0.3), foot, 4.2, 2.6, 1.8, 1, 0)
     # ---- the back and rump behind the shoulders (seen over them)
-    back = r.add(r.m_ellipse(cx, sy - 3 + rear * 0.5, 24, 8), "frostfur", dark=1, soft=3, tex=("shag", 90, 1))
-    r.pattern(back, (cx, sy), (7, 5), ICE_CRUST, ICE_LEG, seed=13)
-    r.pattern(back, (cx + 4, sy), (12, 6), TAINT, TAINT_LEG, seed=17, gaps=0.2)
+    r.add(r.m_ellipse(cx, sy - 3 + rear * 0.5, 24, 8), "frostfur", dark=1, soft=3, tex=("shag", 90, 1))
     # ---- front legs (near, thick): elbow, knee, cannon, fetlock, hoof
     for i, s in ((0, -1), (3, 1)):
         lift = p.legs[i]
@@ -163,11 +166,11 @@ def draw(p):
                   (cx + 1, sy + 16), (cx - 4, sy + 20), (cx - 9, sy + 15), (cx - 14, sy + 18), (cx - 20, sy + 13)]))
     chest &= r.m_rect(-50, -50, W + 50, G - 1)
     r.add(chest, "frostfur", soft=4, tex=("shag", 90, 2))
-    # round 3: ice crusts frozen into the coat (hand-drawn 2-3 px clusters in the ice ramp),
-    # anchored to the shoulders so they move with the body
-    r.pattern(chest, (cx, sy), (6, 5), ICE_CRUST, ICE_LEG, seed=11, gaps=0.05)
-    # ...and the murk's taint: small magenta sores where the ice has split the hide
-    r.pattern(chest, (cx + 3, sy + 2), (8, 6), TAINT, TAINT_LEG, seed=16, gaps=0.1)
+    # round 4: fur wedges down the shoulders and chest, ice plates on the shoulder tops
+    for ox, oy in LOCKS:
+        r.stamp(int(round(cx + ox)), int(round(sy + oy)), LOCK, FUR)
+    for ox, oy in PLATES:
+        r.stamp(int(round(cx + ox)), int(round(sy + oy)), PLATE, ICE)
     # the crease between the shoulder humps and the chest (a fold, not a line across)
     for s in (-1, 1):
         r.shade(r.m_line(cx + s * 4, sy + 6, cx + s * 9, sy + 13), lambda t: max(1, t - 1))
@@ -181,16 +184,13 @@ def draw(p):
         hy = max(hy, 32 + c * 7)
     hx_ = cx + p.shift * 0.4
     # neck: thick, from the chest up into the head
-    neck = r.add(r.m_limb(cx, sy + 3, hx_, hy + 8, 11, 8), "frostfur", dark=1, soft=3, tex=("shag", 90, 4))
-    r.pattern(neck, (hx_, hy), (7, 6), ICE_CRUST, ICE_LEG, seed=14)
+    r.add(r.m_limb(cx, sy + 3, hx_, hy + 8, 11, 8), "frostfur", dark=1, soft=3, tex=("shag", 90, 4))
     # mane: a dark collar of long hair hanging from the throat over the chest, in long points
     mt = hy + 6 * fo
     mb = max(mt + 16, sy + 14)
     mane = r.m_poly([(hx_ - 8, mt - 2), (hx_ + 8, mt - 2), (hx_ + 13, mt + 4), (hx_ + 18, mb - 6), (hx_ + 12, mb - 3), (hx_ + 9, mb + 3), (hx_ + 4, mb - 1),
                      (hx_ + 1, mb + 5), (hx_ - 3, mb - 1), (hx_ - 8, mb + 3), (hx_ - 12, mb - 3), (hx_ - 18, mb - 6), (hx_ - 13, mt + 4)])
     r.add(mane, "frostfur", dark=1, soft=2, inline="br", tex=("shag", 90, 5))
-    # round 3: frost on the hair tips of the mane
-    r.pattern(mane, (hx_, mt), (6, 5), MANE_TIPS, ICE_LEG, seed=12, gaps=0.3)
     # ears (pointing out sideways, under the antlers)
     for s in (-1, 1):
         r.add(r.m_poly([(hx_ + s * 6, hy - 4), (hx_ + s * 18, hy - 4), (hx_ + s * 16, hy), (hx_ + s * 7, hy + 2)]), "frostfur", soft=1, inline=True)
@@ -208,9 +208,11 @@ def draw(p):
     r.add(r.m_ellipse(hx_, hy + L, 5.5 * hs, 3.4 * hs * max(fo, 0.8)), "frostfur", dark=1, soft=1, inline="br")  # muzzle
     r.px([(round(hx_ - 2), round(hy + L)), (round(hx_ + 1), round(hy + L))], "frostfur", 0)
     glow_eyes(r, hx_, hy + 3 * hs * fo, round(5 * hs), p.eyes, socket="frostfur")
-    # antlers from the brow
+    # antlers from the brow. Round 4: while it only breathes or nods (no turn, no lunge), the antlers
+    # keep the size they have in the rest pose -- they move with the head and never rescale
+    still = p.rot == 0 and p.lev == 0 and not rear and hs == 1 and not c and 0 <= dy + p.head <= 2
     for s in (-1, 1):
-        antler(r, s, hx_ + s * 5 * hs, hy - 6 * hs, hs * 0.8, p.rot + 6, p.lev, p.phase2)
+        antler(r, s, hx_ + s * 5 * hs, hy - 6 * hs, hs * 0.8, p.rot + 6, p.lev, p.phase2, y_ref=26 if still else None)
     # the core crystal on the brow (hand-placed)
     r.stamp(round(hx_) - 3, round(hy - 13 * hs), ["...a...", "..abb..", ".abbcb.", "abbccbd", ".bccbd.", "..bdd..", "...d..."],
             {"a": ("glow", 4), "b": ("glow", 3), "c": ("glow", 2), "d": ("glow", 1)} if c < 3 else {"a": ("glow", 2), "b": ("glow", 1), "c": ("glow", 1), "d": ("glow", 0)})
@@ -288,7 +290,7 @@ def frames():
     from anim import boss
     P2 = dict(phase2=True)
     K = {
-        "idle": [{}, dict(dy=1), dict(dy=1, fore=0.92), dict(fore=0.92, mouth=1)],
+        "idle": [{}, dict(dy=1), dict(dy=1, head=1), dict(head=1, mouth=1)],
         "move": [dict(legs=(4, 0, 3, 0), shift=-2), dict(legs=(1, 1, 1, 1), dy=-1, head=-1, rot=-2),
                  dict(legs=(0, 3, 0, 4), shift=2), dict(legs=(1, 1, 1, 1), dy=-0.5, head=1, rot=2)],
         "windup_slam": (dict(head=7, rot=28, fore=0.85, dy=1), dict(head=14, rot=56, fore=0.68, dy=2)),
@@ -303,7 +305,7 @@ def frames():
                           dict(head=6, lev=0.7, rot=8, hs=1.06, fore=0.85, **P2)),
         "hurt": dict(head=-3, rot=-6, eyes="shut", mouth=2, shift=-2),
         "stagger": (dict(shift=-5, legs=(0, 0, 3, 6), head=3, rot=10, eyes="shut"), dict(shift=4, legs=(5, 2, 0, 0), head=4, rot=14, eyes="shut")),
-        "idle2": [dict(**P2), dict(dy=1, **P2), dict(dy=1, fore=0.92, **P2), dict(fore=0.92, mouth=1, **P2)],
+        "idle2": [dict(**P2), dict(dy=1, **P2), dict(dy=1, head=1, **P2), dict(head=1, mouth=1, **P2)],
         # defeat (round 2): the hit, the buckle, the collapse -- which then melts over two frames
         "defeat": [dict(head=-4, rot=-8, eyes="shut", mouth=3, shift=-3, **P2), dict(head=-3, rot=-6, eyes="shut", mouth=3, legs=(3, 0, 0, 0), **P2),
                    dict(collapse=2, head=8, rot=32, eyes="shut", **P2)],
