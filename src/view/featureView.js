@@ -1,7 +1,8 @@
 // @ts-check
 // Draws the island features (P3.5): chests, checkpoint stones, campfires with smoke, cave openings,
 // and edge markers pointing at discovered landmarks that are off-screen. Reads state only.
-import { Graphics } from 'pixi.js';
+import { Graphics, Sprite as PixiSprite } from 'pixi.js';
+import { objectShadow, placeShadow, SHADOW } from './shadows.js';
 /** @typedef {import('pixi.js').Sprite} Sprite @typedef {import('pixi.js').Container} Container */
 
 const SMOKE_PUFFS = 7;
@@ -10,14 +11,30 @@ const SMOKE_PERIOD_SEC = 3.5;
 const MARKER_MARGIN = 10;
 const FIRE_FPS = 6;
 
+/**
+ * gfx W5: a soft shadow under a feature (chest, record stone), sorted just under it.
+ * @param {import('pixi.js').Texture | undefined} tex @param {Container} actors @param {string} type @param {Sprite} s @param {number} zIndex
+ */
+function castShadow(tex, actors, type, s, zIndex) {
+  const g = tex ? objectShadow(type, s.width, s.height) : null;
+  if (!tex || !g) return;
+  const sh = new PixiSprite(tex);
+  sh.anchor.set(0.5);
+  sh.tint = SHADOW.color;
+  placeShadow(sh, s.x, s.y, g);
+  sh.zIndex = zIndex;
+  actors.addChild(sh);
+}
+
 export class FeatureView {
   /**
    * @param {(key: string) => Sprite} makeSprite
    * @param {Container} actors   Y-sorted layer
    * @param {Container} screen   screen-space layer (markers)
    * @param {import('../game/state.js').GameState} state
+   * @param {import('pixi.js').Texture} [shadowTex] gfx W5: the soft cast-shadow texture (shadows.js)
    */
-  constructor(makeSprite, actors, screen, state) {
+  constructor(makeSprite, actors, screen, state, shadowTex) {
     this.makeSprite = makeSprite;
     const map = state.map;
     const ts = map.tileSize;
@@ -31,6 +48,7 @@ export class FeatureView {
       s.position.set(f.x, f.y - f.z - 1);
       s.zIndex = f.y - 1;
       actors.addChild(s);
+      castShadow(shadowTex, actors, 'chest', s, f.y - 1.01);
       return { id: c.id, sprite: s };
     });
 
@@ -41,6 +59,7 @@ export class FeatureView {
       s.position.set(f.x, f.y - f.z - 3);
       s.zIndex = f.y - 3;
       actors.addChild(s);
+      castShadow(shadowTex, actors, 'checkpoint', s, f.y - 3.01);
       return { id: c.id, sprite: s };
     });
 

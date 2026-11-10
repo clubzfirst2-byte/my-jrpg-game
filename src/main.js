@@ -26,6 +26,7 @@ import { prototypeFrames, releaseFrames, requestedProtoGroups } from './view/ass
 import { TERRAIN_GROUP, releaseTerrainEntries, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
 import { GameView } from './view/gameView.js';
+import { fxVersion } from './view/fxSwitch.js';
 import { Bench } from './view/bench.js';
 import { InputManager } from './platform/inputManager.js';
 import { installLifecycle } from './platform/lifecycle.js';
@@ -196,7 +197,8 @@ async function boot() {
   const mapName = /** @type {keyof typeof MAPS} */ (mapParam ?? 'world');
   const state = createGameState(MAPS[mapName] ?? MAPS.world);
   performance.mark('world');
-  const view = new GameView(app, assets, state);
+  // gfx W5: light, shadow and effects — on, or the look before them with ?fx=v1 / ?v2=0 (fxSwitch.js)
+  const view = new GameView(app, assets, state, { fx: fxVersion(params) });
   performance.mark('view');
   // Test / check helpers: ?time=20 (hour) and ?weather=rain|storm|cloudy|clear.
   const timeParam = Number.parseFloat(params.get('time') ?? '');
@@ -847,6 +849,8 @@ async function boot() {
   // Read-only hook for automated E2E tests.
   const api = {
     summary: () => stats.summary(),
+    /** Starts the frame statistics afresh (measuring one setting after another). */
+    resetStats: () => stats.reset(),
     sprites: () => bench.count,
     setSprites: (/** @type {number} */ n) => bench.setCount(n),
     drawCalls: () => lastDraws,
@@ -914,6 +918,14 @@ async function boot() {
     deathMs: () => state.deathMs,
     /** v1.0: each enemy on screen: frame drawn, size in game px, wind-up overlay strength and colour. */
     enemyView: () => view.enemyDebug(state),
+    /** gfx W5: switch an effect group off / on (measuring its cost): shadows, particles, hitfx, windows, rain. */
+    fx: (/** @type {string} */ name, /** @type {boolean} */ on) => view.setFx(name, on),
+    /** gfx W5: what the effects draw now (version, groups on, sprites showing). */
+    fxInfo: () => view.fxDebug(),
+    /** gfx W5 (capturing a still): hold the hit effects where they are / let them go on. */
+    fxHold: (/** @type {boolean} */ on) => {
+      view.fxHold = on;
+    },
     /** Recent game events (last 64): lets tests observe short actions without racing them. */
     events: () => state.events.map((e) => e.type),
     /** Test helper: set stamina (e.g. to check drowning without waiting). */

@@ -34,6 +34,11 @@ import { openingView } from '../game/story/story.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
 import { SilhouetteCache, placeFlash } from './flashOverlay.js';
 import { EnemySlots } from './enemySlots.js';
+import { shadowTexture, objectShadow, characterShadow, placeShadow, SHADOW } from './shadows.js';
+import { HOUSE_WINDOWS, WINDOW_GLOW, windowGlow, hasWindows } from './houseWindows.js';
+import { AmbientParticles, ambientKinds } from './ambientParticles.js';
+import { HitFx } from './hitFx.js';
+import { isDark, hourOf } from '../game/env/weather.js';
 
 /** Chunk size in tiles (P8). */
 export const CHUNK = 32;
@@ -63,7 +68,8 @@ export function chunkCacheArea(cx, cy, ts) {
  * @typedef {import('../game/world/world.js').RegionInfo} RegionInfo
  * @typedef {{ cx: number, cy: number, base: Container, rows: Map<number, Container>, water: Sprite[],
  *   edges: { sprite: Sprite, key: string }[],
- *   extents: Map<number, { x0: number, x1: number, y0: number, y1: number }[]>, bundles: string[] }} Chunk
+ *   extents: Map<number, { x0: number, x1: number, y0: number, y1: number }[]>, baked: any[], bundles: string[] }} Chunk
+ * @typedef {{ o: any, sprite: Sprite, occluder: Occluder | null, shadow?: Sprite | null, shadowType?: string, shadowGone?: boolean, windows?: Sprite[] | null }} ObjectEntry
  */
 
 const WALK_FPS = 8;
@@ -105,9 +111,12 @@ export class GameView {
    * @param {import('pixi.js').Application} app
    * @param {import('./assets/assetManager.js').AssetManager} assets
    * @param {import('../game/state.js').GameState} state
+   * @param {{ fx?: 'v1' | 'v2' }} [opts] gfx W5: fx 'v1' = the look before the effects (fxSwitch.js)
    */
-  constructor(app, assets, state) {
+  constructor(app, assets, state, opts = {}) {
     this.app = app;
+    /** gfx W5: the light / shadow / effects drawn (fxSwitch.js); false = the look before them (?fx=v1). */
+    this.fxV2 = opts.fx !== 'v1';
     this.assets = assets;
     /** v1.0: the terrain is drawn from its release art (its brightness and variants, terrainArt.js). */
     this.releaseTerrain = usesReleaseTerrain(assets);
@@ -147,7 +156,7 @@ export class GameView {
     // P8: the terrain and objects are built in chunks around the camera and freed behind it.
     /** @type {Map<string, Chunk>} */
     this.chunks = new Map();
-    /** @type {Map<any, { o: any, sprite: Sprite, occluder: Occluder | null }>} object -> its sprite (loaded chunks only) */
+    /** @type {Map<any, ObjectEntry>} object -> its sprite (loaded chunks only) */
     this.objectSprites = new Map();
     /** @type {RegionInfo[]} */
     this.regions = state.regions ?? [];
@@ -182,7 +191,9 @@ export class GameView {
     this.screenLayer = new Container();
     this.screenLayer.label = 'screen';
     app.stage.addChild(this.screenLayer);
-    this.features = new FeatureView((key) => this.makeSprite(key), this.actors, this.screenLayer, state);
+    // gfx W5: the one soft shadow texture every cast shadow uses (shadows.js).
+    this.shadowTex = shadowTexture();
+    this.features = new FeatureView((key) => this.makeSprite(key), this.actors, this.screenLayer, state, this.fxV2 ? this.shadowTex : undefined);
     // Environment (P4): ash / wet ground goes between the cached ground and the actors.
     this.envGround = new Container();
     this.envGround.label = 'env-ground';
@@ -222,6 +233,47 @@ export class GameView {
     this.weather.crystalLight = crystalLightColor(assets.texture('obj.crystal'));
     this.weather.attach(app.stage, app.stage.getChildIndex(this.world) + 1);
     this.weather.indoorAmbient = indoorLight(this.releaseTerrain);
+    // gfx W5 — light, shadow and effects (all pooled or cached; nothing allocated per frame):
+    // cast shadows on the ground, under everything that stands (one cached layer per chunk),
+    this.shadowLayer = new Container();
+    this.shadowLayer.label = 'shadows';
+    this.world.addChildAt(this.shadowLayer, this.world.getChildIndex(this.actors));
+    /** chunk ground caches to redraw (a shadow baked in them changed) @type {Set<Container>} */
+    this.shadeDirty = new Set();
+    /** flat-ground shadows baked into chunk ground caches, by object @type {Map<any, { sprite: Sprite, base: Container }[]>} */
+    this.bakedShadows = new Map();
+    /** effect groups on (setFx, for measuring) */
+    const on = this.fxV2;
+    this.fxOn = { shadows: on, particles: on, hitfx: on, windows: on, rain: on };
+    /** villagers' and enemies' shadows, pooled @type {Sprite[]} */
+    this.charShadows = [];
+    this.charShadowN = 0;
+    this.placeCharShadow = (/** @type {Sprite} */ spr, /** @type {number} */ z) => this.charShadow(spr, z);
+    this.npcShadowFn = (/** @type {Sprite} */ spr) => this.charShadow(spr, spr.zIndex);
+    this.enemyShadowFn = (/** @type {{ owner: any, sprite: Sprite }} */ slot) => {
+      if (!slot.owner.final) this.charShadow(slot.sprite, slot.sprite.zIndex);
+    };
+    // lit windows (houseWindows.js),
+    /** @type {Sprite[]} */
+    this.windowSprites = [];
+    /** world px of each lit window, for the light map (null until the house art is known) @type {{ x: number, y: number }[] | null} */
+    this.windowLights = null;
+    // ambient particles: lit like the world (in it, over the actors) and glowing (over the light map),
+    this.ambientParticles = new AmbientParticles(assets.texture('px'), this.shadowTex);
+    this.world.addChild(this.ambientParticles.under);
+    this.ambientKinds = ambientKinds({ region: null, season: 'summer', dark: false, day: true, weather: 'clear', indoor: true, nearWater: false, snowGround: false });
+    this.ambientCheckAt = -1;
+    this.viewRect = { x: 0, y: 0, w: 0, h: 0 };
+    this.nearWaterFn = (/** @type {number} */ x, /** @type {number} */ y) => this.nearWater(x, y, 2);
+    // and hit effects (hitFx.js). The glowing layers follow the world's camera (applyCamera).
+    this.hitFx = new HitFx(assets.texture('px'));
+    this.glowLayer = new Container();
+    this.glowLayer.label = 'glow';
+    this.glowLayer.addChild(this.ambientParticles.glow, this.hitFx.layer);
+    app.stage.addChildAt(this.glowLayer, app.stage.getChildIndex(this.weather.overlay) + 1);
+    this.setFx('', false); // (the layers as fxOn says)
+    /** capturing a still: the hit effects stop where they are */
+    this.fxHold = false;
     // (v1.0 attack warnings stay in the world, sorted with their enemy, so trees in front hide them;
     // at night the light map lights each winding-up enemy instead: weatherView.js warningLights.)
 
@@ -269,6 +321,14 @@ export class GameView {
     this.bow = this.makeSprite('fx.bow');
     this.bow.visible = false;
     this.actors.addChild(this.slash, this.shield, this.bow);
+    // gfx W5: the slash leaves two fading after-images (the last two frames' places).
+    this.slashTrail = [this.makeSprite('fx.slash'), this.makeSprite('fx.slash')];
+    for (const t of this.slashTrail) {
+      t.visible = false;
+      this.actors.addChild(t);
+    }
+    /** the slash's last two places: x, y, rotation, zIndex, shown (1/0) */
+    this.slashHist = new Float64Array(10);
     this.aimLine = new Graphics();
     this.overlay.addChild(this.aimLine);
     // Screen-space tint for slow motion (perfect dodge / bullet time).
@@ -546,6 +606,26 @@ export class GameView {
         extents.set(ty, list);
       }
     }
+    // gfx W5: the soft shadows of the objects on flat ground are baked into this ground cache — no
+    // extra layer to fill each frame (an overlay layer per chunk cost the software renderer about half
+    // as much again). A neighbour's shadow reaching over the edge is baked here too, so none is cut.
+    /** @type {any[]} */
+    const baked = [];
+    const M = 3;
+    for (const o of map.objects) {
+      if (o.tx < cx * CHUNK - M || o.tx >= x1 + M || o.ty < cy * CHUNK - M || o.ty >= y1 + M) continue;
+      if (o.type === 'crate' || map.elev[o.ty * map.width + o.tx] > 0) continue;
+      const sh = this.bakedShadowSprite(o);
+      if (!sh) continue;
+      base.addChild(sh);
+      baked.push(o);
+      let list = this.bakedShadows.get(o);
+      if (!list) {
+        list = [];
+        this.bakedShadows.set(o, list);
+      }
+      list.push({ sprite: sh, base });
+    }
     base.tint = levelTint(0, this.releaseTerrain);
     this.base.addChild(base);
     // A chunk's flat ground -> one textured quad per frame, cached over the whole chunk (see
@@ -555,13 +635,13 @@ export class GameView {
     base.boundsArea = new Rectangle(area.x, area.y, area.width, area.height);
     base.cacheAsTexture({ scaleMode: 'nearest', antialias: false, resolution: groundCacheResolution(this.releaseTerrain) });
 
-    // Objects standing in this chunk now.
+    // Objects standing in this chunk now (shadows on raised ground go in their terrain row).
     for (const o of map.objects) {
       if (o.tx < cx * CHUNK || o.tx >= x1 || o.ty < cy * CHUNK || o.ty >= y1 || this.objectSprites.has(o)) continue;
-      this.addObjectSprite(o);
+      this.addObjectSprite(o, rowContainer);
     }
     this.chunkStats.built++;
-    return { cx, cy, base, rows, water, edges, extents, bundles: this.chunkBundles(cx, cy) };
+    return { cx, cy, base, rows, water, edges, extents, baked, bundles: this.chunkBundles(cx, cy) };
   }
 
   /** @param {Chunk} c */
@@ -569,12 +649,26 @@ export class GameView {
     const map = this.map;
     c.base.cacheAsTexture(false);
     c.base.destroy({ children: true });
+    // (its baked shadows went with the ground)
+    this.shadeDirty.delete(c.base);
+    for (const o of c.baked) {
+      const list = this.bakedShadows.get(o);
+      if (!list) continue;
+      const left = list.filter((b) => b.base !== c.base);
+      if (left.length) this.bakedShadows.set(o, left);
+      else this.bakedShadows.delete(o);
+    }
     for (const r of c.rows.values()) r.destroy({ children: true });
     const inChunk = (/** @type {number} */ tx, /** @type {number} */ ty) => Math.floor(tx / CHUNK) === c.cx && Math.floor(ty / CHUNK) === c.cy;
     for (const [o, e] of this.objectSprites) {
       const home = this.chunks.get(this.chunkKey(Math.floor(o.tx / CHUNK), Math.floor(o.ty / CHUNK)));
       if (inChunk(o.tx, o.ty) || !home || home === c) {
         e.sprite.destroy();
+        if (e.shadow && !e.shadow.destroyed) e.shadow.destroy();
+        for (const w of e.windows ?? []) {
+          w.destroy();
+          this.windowSprites.splice(this.windowSprites.indexOf(w), 1);
+        }
         this.objectSprites.delete(o);
       }
     }
@@ -780,8 +874,30 @@ export class GameView {
     return `obj.${o.type}`;
   }
 
-  /** @param {any} o */
-  addObjectSprite(o) {
+  /**
+   * A flat-ground object's shadow for a chunk's ground cache (null: none, or its art is not loaded).
+   * @param {any} o
+   */
+  bakedShadowSprite(o) {
+    const key = this.seasonal(this.objectKey(o, 0));
+    if (!this.fxV2 || !this.assets.hasTexture(key)) return null;
+    const tex = this.assets.texture(key);
+    const g = objectShadow(o.type, tex.width, tex.height);
+    if (!g) return null;
+    const ts = this.map.tileSize;
+    const sh = new Sprite(this.shadowTex);
+    sh.anchor.set(0.5);
+    sh.tint = SHADOW.color;
+    placeShadow(sh, o.tx * ts + ts / 2, o.ty * ts + ts, g);
+    sh.visible = !o.gone && this.fxOn.shadows;
+    return sh;
+  }
+
+  /**
+   * @param {any} o
+   * @param {(ty: number) => Container} [rowOf] the chunk's terrain row for raised ground
+   */
+  addObjectSprite(o, rowOf) {
     const map = this.map;
     const ts = map.tileSize;
     const s = this.makeSprite(this.objectKey(o, 0));
@@ -800,7 +916,185 @@ export class GameView {
       const w = s.width / 2;
       occluder = { sprite: s, x0: x - w, x1: x + w, y0: feetY - z - s.height, y1: feetY - z, key: feetY };
     }
-    this.objectSprites.set(o, { o, sprite: s, occluder });
+    // gfx W5: its soft shadow, leaning to the lower right (shadows.js). On flat ground it is baked
+    // into the chunk's ground (bakedShadowSprite); a moving crate's is loose in the shadow layer and
+    // one on raised ground goes in its terrain row.
+    /** @type {Sprite | null} */
+    let shadow = null;
+    const g = this.fxV2 && (o.type === 'crate' || (z > 0 && rowOf)) ? objectShadow(o.type, Math.abs(s.width), s.height) : null;
+    if (g) {
+      shadow = new Sprite(this.shadowTex);
+      shadow.anchor.set(0.5);
+      shadow.tint = SHADOW.color;
+      placeShadow(shadow, x, feetY - z, g);
+      shadow.visible = !o.gone && this.fxOn.shadows;
+      if (o.type === 'crate' || !rowOf) this.shadowLayer.addChild(shadow);
+      else rowOf(o.ty).addChild(shadow);
+    }
+    // gfx W5: a lived-in house lights its windows at night (houseWindows.js).
+    /** @type {Sprite[] | null} */
+    let windows = null;
+    if (this.fxV2 && o.type === 'house' && hasWindows(s.texture)) {
+      windows = HOUSE_WINDOWS.map((w) => {
+        const p = this.makeSprite('px');
+        p.anchor.set(0, 0);
+        p.position.set(x + w.x, feetY - z + w.y);
+        p.width = w.w;
+        p.height = w.h;
+        p.tint = WINDOW_GLOW.color;
+        p.visible = false;
+        p.zIndex = feetY + 0.001;
+        this.actors.addChild(p);
+        this.windowSprites.push(p);
+        return p;
+      });
+    }
+    this.objectSprites.set(o, { o, sprite: s, occluder, shadow, shadowType: o.type, shadowGone: !!o.gone, windows });
+  }
+
+  /** Whether there is water within r tiles of a world point (fireflies). @param {number} x @param {number} y @param {number} r */
+  nearWater(x, y, r) {
+    const map = this.map;
+    const tx = Math.floor(x / map.tileSize);
+    const ty = Math.floor(y / map.tileSize);
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const X = tx + dx;
+        const Y = ty + dy;
+        if (X >= 0 && Y >= 0 && X < map.width && Y < map.height && map.ground[Y * map.width + X] === Ground.WATER) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * gfx W5 (measuring): switches an effect group off / on. Returns what is on.
+   * @param {string} name shadows | particles | hitfx | windows | rain @param {boolean} on
+   */
+  setFx(name, on) {
+    const fx = this.fxOn;
+    if (this.fxV2 && name in fx) fx[/** @type {'shadows'} */ (name)] = on;
+    this.shadowLayer.visible = fx.shadows;
+    for (const c of this.chunks.values()) for (const r of c.rows.values()) for (const ch of r.children) if (/** @type {any} */ (ch).texture === this.shadowTex) ch.visible = fx.shadows;
+    for (const [o, list] of this.bakedShadows) {
+      for (const b of list) {
+        b.sprite.visible = fx.shadows && !o.gone;
+        this.shadeDirty.add(b.base);
+      }
+    }
+    for (const b of this.shadeDirty) if (!b.destroyed) b.updateCacheTexture();
+    this.shadeDirty.clear();
+    this.ambientParticles.under.visible = fx.particles;
+    this.ambientParticles.glow.visible = fx.particles;
+    this.hitFx.layer.visible = fx.hitfx;
+    this.weather.fancyRain = fx.rain;
+    return { ...fx };
+  }
+
+  /** gfx W5 (tests, measuring): the version drawn, the groups on, and what is showing now. */
+  fxDebug() {
+    let baked = 0;
+    for (const list of this.bakedShadows.values()) for (const b of list) if (b.sprite.visible) baked++;
+    let loose = 0;
+    for (const e of this.objectSprites.values()) if (e.shadow?.visible) loose++;
+    return {
+      version: this.fxV2 ? 'v2' : 'v1',
+      on: { ...this.fxOn },
+      shadows: { baked, loose, characters: this.charShadowN },
+      windows: { sprites: this.windowSprites.length, lit: this.windowSprites.filter((w) => w.visible).length, glow: this.weather.windowGlow, lights: this.weather.windowLights.length },
+      particles: { showing: this.fxOn.particles ? this.ambientParticles.visible : 0, kinds: { ...this.ambientKinds }, max: this.ambientParticles.pool.length + this.ambientParticles.glowPool.length + this.ambientParticles.mistPool.length },
+      hit: { active: this.fxOn.hitfx ? this.hitFx.active : 0, pool: this.hitFx.sparks.length + this.hitFx.rings.length, trail: this.slashTrail.filter((t) => t.visible).length },
+      rain: { fancy: this.weather.fancyRain, drops: this.weather.drops.filter((d) => d.s.visible).length, splashes: this.weather.splashes.filter((p) => p.s.visible).length },
+    };
+  }
+
+  /** A pooled shadow under a villager / enemy sprite (feet at its position). @param {Sprite} spr @param {number} zIndex */
+  charShadow(spr, zIndex) {
+    if (!spr.visible || spr.alpha <= 0.05) return;
+    let s = this.charShadows[this.charShadowN];
+    if (!s) {
+      s = new Sprite(this.shadowTex);
+      s.anchor.set(0.5);
+      s.tint = SHADOW.color;
+      this.actors.addChild(s);
+      this.charShadows.push(s);
+    }
+    this.charShadowN++;
+    const g = characterShadow(Math.abs(spr.width));
+    placeShadow(s, spr.x, spr.y, g);
+    s.alpha = g.alpha * spr.alpha;
+    s.zIndex = zIndex - 0.003;
+    s.visible = true;
+  }
+
+  /**
+   * gfx W5, per frame: villagers' and enemies' shadows, lit windows, ambient particles and hit effects.
+   * @param {import('../game/state.js').GameState} state @param {number} timeSec @param {number} dtSec
+   */
+  updateEffects(state, timeSec, dtSec) {
+    if (!this.fxV2) return; // (?fx=v1: none of them)
+    // Shadows under the villagers and the enemies (pooled; the extras hidden).
+    this.charShadowN = 0;
+    if (this.fxOn.shadows) {
+      this.npcs.sprites.forEach(this.npcShadowFn);
+      this.enemySprites.slots.forEach(this.enemyShadowFn);
+    }
+    for (let i = this.charShadowN; i < this.charShadows.length; i++) this.charShadows[i].visible = false;
+
+    // Lit windows: on at dusk, by the ambient light; their light goes into the light map.
+    const amb = this.weather.ambient;
+    const glow = this.boundsArea || !this.fxOn.windows ? 0 : windowGlow(amb);
+    if (this.windowLights === null && this.assets.hasTexture('obj.house')) {
+      const lights = [];
+      if (hasWindows(this.assets.texture('obj.house'))) {
+        const ts = this.map.tileSize;
+        for (const o of this.map.objects) {
+          if (o.type !== 'house') continue;
+          const fy = o.ty * ts + ts - this.map.elev[o.ty * this.map.width + o.tx];
+          for (const w of HOUSE_WINDOWS) lights.push({ x: o.tx * ts + ts / 2 + w.x + w.w / 2, y: fy + w.y + w.h / 2 });
+        }
+      }
+      this.windowLights = lights;
+      this.weather.windowLights = lights;
+    }
+    this.weather.windowGlow = glow;
+    for (let i = 0; i < this.windowSprites.length; i++) {
+      const w = this.windowSprites[i];
+      w.visible = glow > 0.01;
+      w.alpha = glow * WINDOW_GLOW.alpha;
+    }
+
+    // Ambient particles: which kinds, re-decided twice a second (and where the view is, each frame).
+    const o = this.camera.origin();
+    const v = this.viewRect;
+    v.x = o.x;
+    v.y = o.y;
+    v.w = this.app.screen.width / this.camera.zoom;
+    v.h = this.app.screen.height / this.camera.zoom;
+    if (timeSec - this.ambientCheckAt > 0.5 || timeSec < this.ambientCheckAt) {
+      this.ambientCheckAt = timeSec;
+      const ts = this.map.tileSize;
+      const region = regionAt(this.regions, Math.floor(state.player.x / ts), Math.floor(state.player.y / ts))?.id ?? null;
+      const lum = 0.299 * amb.r + 0.587 * amb.g + 0.114 * amb.b;
+      const cx = v.x + v.w / 2;
+      const cy = v.y + v.h / 2;
+      this.ambientKinds = ambientKinds({
+        region,
+        season: this.season ?? 'summer',
+        dark: isDark(amb),
+        hour: hourOf(state.env.now),
+        day: lum > 0.95,
+        weather: this.weather.kind,
+        indoor: !!this.boundsArea,
+        nearWater: this.nearWater(cx, cy, Math.ceil(Math.max(v.w, v.h) / 2 / ts)),
+        snowGround: region === 'mountains',
+      });
+    }
+    this.ambientParticles.update(this.ambientKinds, v, this.nearWaterFn, timeSec, Math.min(0.1, dtSec));
+
+    // Hit effects for this frame's events.
+    this.hitFx.takeEvents(state);
+    this.hitFx.update(this.fxHold ? 0 : Math.min(0.1, dtSec));
   }
 
   /** Objects changed by the environment (burnt, broken, opened, powered). @param {number} timeSec */
@@ -824,6 +1118,32 @@ export class GameView {
         sprite.alpha = 1;
       }
       sprite.texture = this.assets.texture(this.seasonal(this.objectKey(o, timeSec)));
+      // gfx W5: the shadow follows (a crate sliding; a tree burnt to a stump; a jar broken).
+      const sh = e.shadow;
+      if (sh && o.type === 'crate' && o.movedAt !== undefined && now - o.movedAt < 250) placeShadow(sh, sprite.x, sprite.y, /** @type {any} */ (objectShadow('crate', sprite.width, sprite.height)));
+      if (o.type !== e.shadowType || !!o.gone !== e.shadowGone) {
+        e.shadowType = o.type;
+        e.shadowGone = !!o.gone;
+        const g = objectShadow(o.type, Math.abs(sprite.width), sprite.height);
+        const show = !o.gone && !!g && this.fxOn.shadows;
+        if (sh) {
+          sh.visible = show;
+          if (g) placeShadow(sh, sprite.x, sprite.y, g);
+        }
+        // baked into the ground: redraw those chunks' caches
+        const baked = this.bakedShadows.get(o);
+        if (baked) {
+          for (const b of baked) {
+            b.sprite.visible = show;
+            if (g) placeShadow(b.sprite, o.tx * ts + ts / 2, o.ty * ts + ts, g);
+            this.shadeDirty.add(b.base);
+          }
+        }
+      }
+    }
+    if (this.shadeDirty.size) {
+      for (const shade of this.shadeDirty) if (!shade.destroyed) shade.updateCacheTexture();
+      this.shadeDirty.clear();
     }
   }
 
@@ -935,6 +1255,7 @@ export class GameView {
     this.weather.update(state, o, this.camera.zoom, this.boundsArea ? areaAt(state, state.player.x, state.player.y) : null, timeSec, dtSec);
     this.items.update(state, timeSec);
     this.npcs.update(state, alpha, { x, y }, timeSec);
+    this.updateEffects(state, timeSec, dtSec);
     this.puzzles.update(state, timeSec);
     this.features.update(
       state,
@@ -972,6 +1293,8 @@ export class GameView {
     const zoom = this.camera.zoom;
     this.world.scale.set(zoom);
     this.world.position.set(-o.x * zoom, -o.y * zoom);
+    this.glowLayer.scale.set(zoom);
+    this.glowLayer.position.set(-o.x * zoom, -o.y * zoom);
   }
 
   /**
@@ -1150,6 +1473,25 @@ export class GameView {
       this.slash.alpha = p.comboIndex === 2 ? 1 : 0.85;
       this.slash.zIndex = py + 0.01;
     }
+    // gfx W5: two after-images where the slash was the last two frames (fading out after it ends).
+    const hist = this.slashHist;
+    for (let k = 0; k < 2; k++) {
+      const t = this.slashTrail[k];
+      const j = k * 5;
+      t.visible = hist[j + 4] === 1 && this.fxOn.hitfx;
+      if (t.visible) {
+        t.position.set(hist[j], hist[j + 1]);
+        t.rotation = hist[j + 2];
+        t.zIndex = hist[j + 3];
+        t.alpha = k === 0 ? 0.45 : 0.2;
+      }
+    }
+    hist.copyWithin(5, 0, 5);
+    hist[0] = this.slash.x;
+    hist[1] = this.slash.y;
+    hist[2] = this.slash.rotation;
+    hist[3] = this.slash.zIndex - 0.001;
+    hist[4] = this.slash.visible ? 1 : 0;
 
     // Shield in front while guarding; bow and aim line while aiming.
     // The release hero holds his own shield and bow in his guard / bow frames: no second one on top.

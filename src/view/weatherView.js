@@ -17,6 +17,33 @@ import { ENEMY_KINDS } from '../game/entities/enemies.js';
 import { BOSS_KINDS } from '../game/entities/bosses.js';
 import { FINAL_BOSS } from '../game/entities/finalBoss.js';
 import { openingView } from '../game/story/story.js';
+import { WINDOW_GLOW } from './houseWindows.js';
+
+/**
+ * gfx W5 rain: two layers of streaks (far: short, faint, slower; near: long, brighter, faster), small
+ * splashes on the ground, and a darker, cooler sky while it rains outdoors. Pooled; the splashes
+ * are a fixed set of sprites reused in turn.
+ */
+export const RAIN = Object.freeze({
+  /** every `nearEvery`-th drop is a near one */
+  nearEvery: 3,
+  near: { h: 8, alpha: 0.6, speed: 1.3, tint: 0xc8dcff },
+  far: { h: 4, alpha: 0.32, speed: 0.75, tint: 0x9fb8e0 },
+  /** the one layer before W5 (?fx=v1) */
+  v1: { h: 5, alpha: 0.55, speed: 1, tint: 0xb8d0ff },
+  splashes: 28,
+  /** splashes a second per 100×100 screen px at full density */
+  splashRate: 2.2,
+  splashMs: 200,
+  /** the sky while it rains (multiplied into the ambient light) */
+  sky: { r: 0.86, g: 0.9, b: 1 },
+});
+
+/** The look of the i-th rain drop. @param {number} i @param {boolean} fancy false: the one layer before W5 */
+export const rainLayer = (i, fancy) => (!fancy ? RAIN.v1 : i % RAIN.nearEvery === 0 ? RAIN.near : RAIN.far);
+
+/** Scales a 0xRRGGBB colour by k (0..1). @param {number} c @param {number} k */
+const scaleColor = (c, k) => (Math.round(((c >> 16) & 255) * k) << 16) | (Math.round(((c >> 8) & 255) * k) << 8) | Math.round((c & 255) * k);
 
 /**
  * A winding-up enemy's warning light (world px): the colour added to the light map.
@@ -202,8 +229,26 @@ export class WeatherView {
     // Rain (screen space).
     this.rain = new Container();
     this.rain.label = 'rain';
-    /** @type {{ s: Sprite, x: number, y: number }[]} */
+    /** @type {{ s: Sprite, x: number, y: number, k: number }[]} */
     this.drops = [];
+    /** gfx W5: splashes on the ground (made on first rain). @type {{ s: Sprite, age: number }[]} */
+    this.splashes = [];
+    this.nextSplash = 0;
+    this.splashAcc = 0;
+    /** The ambient colour in use (reused: no allocation per frame). */
+    this.ambRain = { r: 1, g: 1, b: 1 };
+    /** gfx W5: lit windows (world px of each pane's centre) and how lit they are (0..1); set by the game view. */
+    /** @type {{ x: number, y: number }[]} */
+    this.windowLights = [];
+    this.windowGlow = 0;
+    /** gfx W5: the rain's splashes and darker sky (off only for measuring) */
+    this.fancyRain = true;
+    /** the style the drops have now (null: restyle) @type {boolean | null} */
+    this.rainStyle = null;
+    /** The ambient light in use last update. @type {{ r: number, g: number, b: number }} */
+    this.ambient = { r: 1, g: 1, b: 1 };
+    /** @type {string} */
+    this.kind = 'clear';
     // Snow (P10.2): slow flakes that sway and drift with the wind.
     this.snow = new Container();
     this.snow.label = 'snow';
@@ -273,6 +318,8 @@ export class WeatherView {
     const indoor = !!area;
     const env = state.env;
     const w = playerWeather(state);
+    /** The weather here (the game view's ambient particles read it). */
+    this.kind = w.kind;
     const sw = this.app.screen.width;
     const sh = this.app.screen.height;
     const nowMs = timeSec * 1000;
@@ -320,7 +367,17 @@ export class WeatherView {
     const t0 = performance.now();
     // Indoors is dim; a dark trial room is nearly black until something gives light (P7).
     // P10.1: a lived-in room is warm and lamp-lit at any hour.
-    const amb = area?.dark ? AMB_DARK_ROOM : area?.home ? AMB_HOME : indoor ? this.indoorAmbient : ambientAt(env.now, w.kind);
+    let amb = area?.dark ? AMB_DARK_ROOM : area?.home ? AMB_HOME : indoor ? this.indoorAmbient : ambientAt(env.now, w.kind);
+    if (!indoor && isRaining(w) && this.fancyRain) {
+      // gfx W5: a darker, cooler sky in the rain
+      const t = this.ambRain;
+      t.r = amb.r * RAIN.sky.r;
+      t.g = amb.g * RAIN.sky.g;
+      t.b = amb.b * RAIN.sky.b;
+      amb = t;
+    }
+    /** The ambient light in use (the game view lights the windows from it). */
+    this.ambient = amb;
     const white = amb.r >= 0.999 && amb.g >= 0.999 && amb.b >= 0.999;
     this.lightOn = this.enabled && !white;
     this.overlay.visible = this.lightOn;
@@ -440,6 +497,11 @@ export class WeatherView {
     }
     if (state.orb) add(state.orb.x, state.orb.y - state.orb.z, 80, 0xfff0c8); // 灯火
     if (env.sparks) for (const i of env.sparks.cells) add((i % map.width) * ts + ts / 2, ((i / map.width) | 0) * ts + ts / 2, 20, 0xfff27a);
+    // gfx W5: lit windows spill a warm light around the houses.
+    if (this.windowGlow > 0.01) {
+      const c = scaleColor(WINDOW_GLOW.light, this.windowGlow);
+      for (const l of this.windowLights) add(l.x, l.y + 4, WINDOW_GLOW.radius, c);
+    }
     // v1.0: enemies winding up light their own spot, so the red warning reads in the dark.
     for (const l of warningLights(state.enemies ?? [])) add(l.x, l.y, l.r, WARNING_LIGHT.color);
     return n;
@@ -451,12 +513,24 @@ export class WeatherView {
     while (this.drops.length < want) {
       const s = this.makeSprite('px');
       s.width = 1;
-      s.height = 5;
-      s.tint = 0xb8d0ff;
-      s.alpha = 0.55;
       this.rain.addChild(s);
-      this.drops.push({ s, x: Math.random() * sw, y: Math.random() * sh });
+      this.drops.push({ s, x: Math.random() * sw, y: Math.random() * sh, k: 1 });
+      this.rainStyle = null; // (style the new drops)
     }
+    if (this.rainStyle !== this.fancyRain) {
+      // gfx W5: two layers — far (short, faint, slow) and near (long, bright, fast); one layer before it
+      this.rainStyle = this.fancyRain;
+      for (let j = 0; j < this.drops.length; j++) {
+        const d = this.drops[j];
+        const L = rainLayer(j, this.fancyRain);
+        d.s.height = L.h;
+        d.s.tint = L.tint;
+        d.s.alpha = L.alpha;
+        d.k = L.speed;
+      }
+    }
+    if (this.fancyRain) this.updateSplashes(sw, sh, dt, density);
+    else for (const p of this.splashes) p.s.visible = false;
     const vx = w.windX * RAIN_WIND;
     const vy = RAIN_SPEED;
     const angle = Math.atan2(vx, vy);
@@ -474,8 +548,8 @@ export class WeatherView {
         continue;
       }
       s.visible = true;
-      d.x += vx * dt;
-      d.y += vy * dt;
+      d.x += vx * d.k * dt;
+      d.y += vy * d.k * dt;
       if (d.y > sh) {
         d.y -= sh + 8;
         d.x = Math.random() * sw;
@@ -483,6 +557,44 @@ export class WeatherView {
       if (d.x < 0) d.x += sw;
       if (d.x > sw) d.x -= sw;
       s.position.set(Math.round(d.x), Math.round(d.y));
+    }
+  }
+
+  /**
+   * gfx W5: small splashes where the rain hits the ground (screen space, pooled, reused in turn).
+   * @param {number} sw @param {number} sh @param {number} dt @param {number} density
+   */
+  updateSplashes(sw, sh, dt, density) {
+    if (this.splashes.length === 0) {
+      for (let i = 0; i < RAIN.splashes; i++) {
+        const s = this.makeSprite('px');
+        s.anchor.set(0.5);
+        s.tint = 0xd8e8ff;
+        s.visible = false;
+        this.rain.addChild(s);
+        this.splashes.push({ s, age: RAIN.splashMs });
+      }
+    }
+    this.splashAcc += ((sw * sh) / 10000) * RAIN.splashRate * density * dt;
+    while (this.splashAcc >= 1) {
+      this.splashAcc -= 1;
+      const p = this.splashes[this.nextSplash];
+      this.nextSplash = (this.nextSplash + 1) % this.splashes.length;
+      p.age = 0;
+      p.s.position.set(Math.round(Math.random() * sw), Math.round(sh * (0.15 + Math.random() * 0.85)));
+    }
+    const ms = dt * 1000;
+    for (let i = 0; i < this.splashes.length; i++) {
+      const p = this.splashes[i];
+      p.age += ms;
+      const k = p.age / RAIN.splashMs;
+      p.s.visible = k < 1;
+      if (k >= 1) continue;
+      // a flat ring opening out: 3 frames (narrow, wide, wider and fading)
+      const f = k < 0.33 ? 0 : k < 0.66 ? 1 : 2;
+      p.s.width = 2 + f * 2;
+      p.s.height = 1;
+      p.s.alpha = f === 2 ? 0.35 : 0.7;
     }
   }
 
