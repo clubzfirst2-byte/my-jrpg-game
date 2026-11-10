@@ -23,10 +23,10 @@ const single = (g, s, n) => (n === 0 ? base(g, s) : `${s}${PREFIX[g]}.${n}`);
 const MACROS = ['macro', ...range(7).map((k) => `macro${k + 2}`)]; // round 4: 8 pictures of 2 x 2 tiles
 const macros = (g, s) => MACROS.flatMap((m) => range(4).map((q) => `${s}${PREFIX[g]}.${m}.${q}`));
 // The look of a set decides its tile count and how a tile is picked (NAMES.md section 1):
-//   A (rounds 4-5) every ground but the ruin, every season set: 16 calm tiles by hash + 8 pictures of 2 x 2;
+//   A (rounds 4-6) every ground but the ruin, every season set: 32 calm tiles (light 0-15, dark 16-31) + 8 pictures of 2 x 2;
 //   C ruin: 66 tiles by row phase R and the column symbols (n = 6R + combo), overlays per R.
 const scheme = (g) => (g === 'ruin' ? 'C' : 'A');
-const COUNT = { A: 16, C: 66 };
+const COUNT = { A: 32, C: 66 };
 const RUIN_COMBOS = [[0, 1], [0, 2], [1, 0], [1, 2], [2, 0], [2, 1]]; // [W, E]
 const tiles = (g, s) => [...range(COUNT[scheme(g)]).map((n) => single(g, s, n)), ...(scheme(g) === 'A' ? macros(g, s) : [])];
 const edgeVariants = (g) => (g === 'ruin' ? range(11) : [0, 1]);

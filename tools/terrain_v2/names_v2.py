@@ -27,16 +27,16 @@ def names_md(files, redrawn, new, copied):
     for g, p in PREFIX.items():
         n = tile_count(g)
         base = f"`{p}`, `{p}.1` – `.{n - 1}`" if g in SINGLE else f"`{p}.0` – `.{n - 1}`"
-        seas = ("autumn (16 calm tiles + 8 pictures), winter (16 calm snow tiles + 8 pictures, with the plant's tips)"
+        seas = ("autumn (32 calm tiles + 8 pictures), winter (32 calm snow tiles + 8 pictures, with the plant's tips)"
                 if g in ("grass", "plains", "lake", "moss") else "—")
-        how = "A: calm tile by hash" if n == 16 else "C: row phase + column symbols"
-        mac = "`.macro.0-3`, `.macro2.0-3` … `.macro8.0-3`" if n == 16 else "—"
+        how = "A: steps 1-6 below" if n == 32 else "C: row phase + column symbols"
+        mac = "`.macro.0-3`, `.macro2.0-3` … `.macro8.0-3`" if n == 32 else "—"
         a(f"| {LABEL[g]} | `{p}` | {base} | {how} | {mac} | {seas} |")
     a("")
     a("`hash(i, j)` = gameView's hash (render_ref.dhash). For tile.sand / tile.path / tile.ruin, n = 0 is the bare v1 key. "
       "`render_ref.py` does all of this.")
     a("")
-    a("**A. Every ground except the ruin floor (round 5; 16 calm tiles + 8 pictures of 2×2 tiles):** island / plains / "
+    a("**A. Every ground except the ruin floor (round 5; 32 calm tiles in a light and a dark group + 8 pictures of 2×2 tiles):** island / plains / "
       "lake grass, moss, path, mountain snow, island sand, desert sand, and the autumn / winter sets of the 4 seasonal "
       "grounds. Integer `hash` values are unsigned 32-bit; `/` below is a float division.")
     a("")
@@ -57,16 +57,30 @@ def names_md(files, redrawn, new, copied):
       "The picture's NW display tile is `(i0, j0) = (3a + ox, 3b + oy)`; with offset 2 it reaches one tile into the "
       "next block. These rules keep pictures from overlapping (they can touch along an edge), and the chances "
       "(1/3, 1/6, 1/2) make every column and row of a block equally often covered (no 96-px period).")
-    a("4. **Which picture** (no two side-by-side blocks share one): raw number `r(a, b) = hash(a + 409, b + 1031) % 8`. "
-      "When `a + b` is even, `m = r(a, b)`. When `a + b` is odd: `free` = the numbers 0-7, in increasing order, that "
-      "are none of `r(a−1, b)`, `r(a+1, b)`, `r(a, b−1)`, `r(a, b+1)`; "
-      "`m = free[floor(hash(a + 409, b + 1031) / 8) % len(free)]`. Name: `macro` for m = 0, else `macro<m+1>` "
-      "(`macro2` … `macro8`).")
+    a("4. **Which picture** (round 6: no block shares its picture with any of its 8 neighbours where it can be helped): "
+      "raw number `r(a, b) = hash(a + 409, b + 1031) % 8`, `k(a, b) = floor(hash(a + 409, b + 1031) / 8)`. The blocks "
+      "are taken in 4 classes by `(a % 2, b % 2)`, each class using the final numbers `m` of earlier classes: "
+      "**A** `(0, 0)`: `m = r(a, b)`. **B** `(1, 0)`: avoid `m(a−1, b)`, `m(a+1, b)`. **C** `(0, 1)`: avoid "
+      "`m(a, b−1)`, `m(a, b+1)`, `m(a−1, b−1)`, `m(a+1, b−1)`, `m(a−1, b+1)`, `m(a+1, b+1)`. **D** `(1, 1)`: avoid "
+      "all 8 neighbours `m(a±1, b)`, `m(a, b±1)`, `m(a±1, b±1)`; if that leaves no number, avoid only the 4 side "
+      "neighbours. `free` = the numbers 0-7 not avoided, in increasing order; `m = free[k(a, b) % len(free)]`. "
+      "Name: `macro` for m = 0, else `macro<m+1>` (`macro2` … `macro8`).")
     a("5. **Draw it** only when it stays on the map (`i0 + 2`, `j0 + 2` inside) and the 9 map cells under its 4 display "
       "tiles (cells `i0 … i0+2`, `j0 … j0+2`) are all one ground of this scheme: `<prefix>.<name>.<q>`, q = 0 NW "
       "`(i0, j0)`, 1 NE, 2 SW, 3 SE.")
-    a("6. **Every other display tile** whose lowest ground is of this scheme: calm tile `n = hash(i + 3, j + 11) % 16`. "
-      "Any calm tile joins any other and any picture (nothing crosses their edges).")
+    a("6. **Every other display tile** whose lowest ground is of this scheme gets a calm tile `<prefix>.<c>`, "
+      "c = 0-31 (round 6): 0-15 the light group (more lit grain, small lit patches), 16-31 the dark group. "
+      "**Group:** `n2 = ` the value noise of step 2 over display tiles with a lattice of 6 tiles and the lattice "
+      "values `(hash(x + 12011, y + 3407) % 1024) / 1023` (`gx = floor(i / 6)`, `fx = (i % 6 + 0.5) / 6`, the same "
+      "for j; smoothstep blend as in step 2); `q = min(1, max(0, 0.8·(n2 − 0.5) + 0.5))`; group `g = 1` when "
+      "`(hash(i + 71, j + 113) % 1024) / 1024 < q`, else 0. **Raw number** `c0(i, j) = 16·g(i, j) + "
+      "hash(i + 3, j + 11) % 16`. **Number** (no calm tile shares its number with any of its 8 neighbours): the "
+      "display tiles in 4 classes by `(i % 2, j % 2)` exactly as the blocks in step 4: **A** `(0, 0)`: `c = c0`. "
+      "**B** `(1, 0)`: avoid `c(i±1, j)`. **C** `(0, 1)`: avoid `c(i, j±1)` and `c(i±1, j±1)`. **D** `(1, 1)`: avoid "
+      "all 8 neighbours. `free` = the 16 numbers of the tile's own group `16·g … 16·g + 15` not avoided, in "
+      "increasing order; `c = free[(hash(i + 3, j + 11) >> 4) % len(free)]`. The neighbours' numbers are computed by "
+      "this rule whatever is drawn there (a picture, another ground). Any calm tile joins any other and any "
+      "picture (nothing crosses their edges).")
     a("")
     a("In winter the 4 seasonal grounds use the same rule with their `winter.` keys (snow with the tips of the ground's "
       "own plant), in autumn with their `autumn.` keys. The pictures carry the large things (grass: thickets, lit "
@@ -86,6 +100,12 @@ def names_md(files, redrawn, new, copied):
     a("- `W = s(i)`, `E = s(i + 1)`, `n = 6·R + 2·W + (E if E < W else E − 1)`")
     a("- the ruin's overlay over water is `tile.ruin.edge.<mask>.<R>` (R = 0-10, the same row phase), so the courses "
       "run on from the overlay into the full tiles beside it. No pictures.")
+    a("")
+    a("**Changes in round 6** (for the engine): 32 calm tiles instead of 16 (`.16-.31` added for every ground and "
+      "season set of A; island grass, plains, lake, moss, path, snow, sand, desert, and the autumn / winter sets), "
+      "chosen by step 6 (light / dark groups by a noise; no calm tile equal to any of its 8 neighbours); the picture "
+      "number of step 4 now avoids the diagonal neighbours too. Island grass: 2 of the 8 pictures (`.macro`, "
+      "`.macro5`) carry a wide clover carpet; desert: 3 (`.macro2`, `.macro5`, `.macro7`) a big dune ridge.")
     a("")
     a("**Changes in round 5** (for the engine): island sand and desert sand move from B (64 tiles by ripple phases) "
       "to A; B is gone. The picture placement of A is new (steps 2-4 above: density noise, offsets 0 / 1 / 2, no two "

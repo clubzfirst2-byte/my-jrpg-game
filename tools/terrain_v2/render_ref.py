@@ -9,7 +9,8 @@ Steps (NAMES.md has the same in words):
   2. the display grid is shifted half a tile: display tile (i, j) has corners on the cells
      (i, j) NW, (i+1, j) NE, (i, j+1) SW, (i+1, j+1) SE and is drawn at ((i + .5) * 32, (j + .5) * 32)
   3. every ground but the ruin (scheme A, round 5): at most one 2x2 picture per 3x3 block (density noise, offsets
-     0 / 1 / 2, no two side-by-side blocks with the same picture), else one of 16 calm tiles by a hash; ruin: row
+     0 / 1 / 2, no block with the picture of any of its 8 neighbours), else one of 32 calm tiles (light / dark group
+     by a noise, never the number of any of its 8 neighbours); ruin: row
      phase + column symbols
   4. per display tile: the lowest terrain among its corners as a full tile (water: shallow, or deep if all
      4 corners are deep), then
@@ -99,28 +100,96 @@ def offsets(a, b):
 
 def density(a, b):
     """0..1, a smooth noise over the blocks: value noise on a lattice of NOISE_CELL blocks, smoothstep-blended."""
-    gx, gy = a // NOISE_CELL, b // NOISE_CELL
-    fx, fy = (a % NOISE_CELL + 0.5) / NOISE_CELL, (b % NOISE_CELL + 0.5) / NOISE_CELL
-    v = lambda x, y: (dhash(x + 5003, y + 7919) % 1024) / 1023
-    sx, sy = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)
-    top = v(gx, gy) + (v(gx + 1, gy) - v(gx, gy)) * sx
-    bot = v(gx, gy + 1) + (v(gx + 1, gy + 1) - v(gx, gy + 1)) * sx
-    return top + (bot - top) * sy
+    return _smooth_noise(a, b, NOISE_CELL, 5003, 7919)
 
 
 def raw_picture(a, b):
     return dhash(a + 409, b + 1031) % N_MACRO
 
 
+_PIC = {}
+
+
 def picture(a, b):
-    """No two side-by-side blocks get the same number: blocks with a + b even take their raw number; blocks with
-    a + b odd take one of the numbers that none of their 4 side neighbours has raw (k-th, k by hash)."""
-    r = raw_picture(a, b)
-    if (a + b) % 2 == 0:
-        return r
-    taken = {raw_picture(a - 1, b), raw_picture(a + 1, b), raw_picture(a, b - 1), raw_picture(a, b + 1)}
-    free = [m for m in range(N_MACRO) if m not in taken]
-    return free[dhash(a + 409, b + 1031) // N_MACRO % len(free)]
+    """Round 6: no block shares its picture with any of its 8 neighbours where it can be helped. The blocks are
+    taken in 4 classes by (a % 2, b % 2): A (0, 0) keeps its raw number; B (1, 0) avoids its A neighbours; C (0, 1)
+    its A and B neighbours; D (1, 1) all 8 neighbours (if that leaves nothing: its 4 side neighbours). The choice is
+    the k-th free number, k = floor(hash(a + 409, b + 1031) / 8) % len(free)."""
+    if (a, b) in _PIC:
+        return _PIC[(a, b)]
+    cls = (a % 2, b % 2)
+    if cls == (0, 0):
+        m = raw_picture(a, b)
+    else:
+        if cls == (1, 0):
+            nb = [(a - 1, b), (a + 1, b)]
+        elif cls == (0, 1):
+            nb = [(a, b - 1), (a, b + 1), (a - 1, b - 1), (a + 1, b - 1), (a - 1, b + 1), (a + 1, b + 1)]
+        else:
+            nb = [(a + da, b + db) for da in (-1, 0, 1) for db in (-1, 0, 1) if (da, db) != (0, 0)]
+        free = [m for m in range(N_MACRO) if m not in {picture(*q) for q in nb}]
+        if not free:  # D only
+            free = [m for m in range(N_MACRO) if m not in {picture(*q) for q in [(a - 1, b), (a + 1, b), (a, b - 1), (a, b + 1)]}]
+        m = free[dhash(a + 409, b + 1031) // N_MACRO % len(free)]
+    _PIC[(a, b)] = m
+    return m
+
+
+def _smooth_noise(x, y, cell, sx_, sy_):
+    """Value noise in [0, 1]: lattice values (hash(gx + sx_, gy + sy_) % 1024) / 1023 every `cell` units,
+    smoothstep-blended (NAMES.md 1 A)."""
+    gx, gy = x // cell, y // cell
+    fx, fy = (x % cell + 0.5) / cell, (y % cell + 0.5) / cell
+    v = lambda p, q: (dhash(p + sx_, q + sy_) % 1024) / 1023
+    sx, sy = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)
+    top = v(gx, gy) + (v(gx + 1, gy) - v(gx, gy)) * sx
+    bot = v(gx, gy + 1) + (v(gx + 1, gy + 1) - v(gx, gy + 1)) * sx
+    return top + (bot - top) * sy
+
+
+MOTTLE_CELL = 6  # display tiles per cell of the light / dark noise
+MOTTLE_SLOPE = 0.8  # how far the mix of the two groups swings (0.5 +- 0.4 at the noise's extremes)
+
+
+def calm_group(i, j):
+    """0 = the light calm tiles (0-15), 1 = the dark ones (16-31), mixed by a large noise (round 6)."""
+    n = _smooth_noise(i, j, MOTTLE_CELL, 12011, 3407)
+    q = min(1.0, max(0.0, MOTTLE_SLOPE * (n - 0.5) + 0.5))
+    return 1 if (dhash(i + 71, j + 113) % 1024) / 1024 < q else 0
+
+
+def calm_raw(i, j):
+    return 16 * calm_group(i, j) + dhash(i + 3, j + 11) % 16
+
+
+_CALMN = {}
+
+
+def calm_number(i, j):
+    """No calm tile shares its number with any of its 8 neighbours: the display tiles are taken in 4 classes by
+    (i % 2, j % 2), as the picture blocks: A (0, 0) keeps its raw number; B (1, 0) avoids its A neighbours
+    (i +- 1, j); C (0, 1) its A neighbours (i, j +- 1) and B neighbours (i +- 1, j +- 1); D (1, 1) all 8. The
+    choice is in the tile's own group: the k-th of the 16 numbers of the group not avoided,
+    k = (hash(i + 3, j + 11) >> 4) % len(free)."""
+    if (i, j) in _CALMN:
+        return _CALMN[(i, j)]
+    r = calm_raw(i, j)
+    cls = (i % 2, j % 2)
+    if cls == (0, 0):
+        n = r
+    else:
+        if cls == (1, 0):
+            nb = [(i - 1, j), (i + 1, j)]
+        elif cls == (0, 1):
+            nb = [(i, j - 1), (i, j + 1), (i - 1, j - 1), (i + 1, j - 1), (i - 1, j + 1), (i + 1, j + 1)]
+        else:
+            nb = [(i + di, j + dj) for di in (-1, 0, 1) for dj in (-1, 0, 1) if (di, dj) != (0, 0)]
+        g = r // 16
+        taken = {calm_number(*q) for q in nb}
+        free = [16 * g + k for k in range(16) if 16 * g + k not in taken]
+        n = free[(dhash(i + 3, j + 11) >> 4) % len(free)]
+    _CALMN[(i, j)] = n
+    return n
 
 
 def p_none(a, b):
@@ -133,7 +202,9 @@ def has_picture(a, b):
 
 
 def macro_blocks(grid):
-    """Display tiles drawn with a 2x2 picture (round 5; NAMES.md 1 A)."""
+    """Display tiles drawn with a 2x2 picture (rounds 5-6; NAMES.md 1 A)."""
+    _PIC.clear()
+    _CALMN.clear()
     H, W = len(grid), len(grid[0])
     out = {}
     for b in range((H + 2) // 3 + 1):
@@ -211,7 +282,7 @@ def render_v2(grid, images, frame=0, season=None):
                         name = str(index_of({1: 0, 4: 0, 2: edge_type(grid, (i, j), (i + 1, j), (2 * i + 2, 2 * j + 1)),
                                              8: edge_type(grid, (i - 1, j), (i, j), (2 * i, 2 * j + 1))}, look))
                     else:  # a calm tile: any of the 16
-                        name = str(dhash(i + 3, j + 11) % 16)
+                        name = str(calm_number(i, j))
                     im.alpha_composite(key(lowest, name), (px, py))
             for t in sorted(set(land), key=PRIORITY.index):
                 if t == lowest:

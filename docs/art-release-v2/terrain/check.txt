@@ -1,33 +1,33 @@
 # ground v2: measured (gen_v2.py writes this)
 
-files: 1882 = 189 v1 keys redrawn + 1507 new keys + 186 v1 keys copied unchanged
+files: 2138 = 189 v1 keys redrawn + 1763 new keys + 186 v1 keys copied unchanged
 seam check: OK
 
 ground tiles: colours per tile / lightness spread (std, 0-100)
-  tile.grass.0                   colours  5  spread  1.7
-  plains.grass.0                 colours  5  spread  1.6
-  lake.grass.0                   colours  3  spread  1.3
-  forest.grass.0                 colours  5  spread  1.0
-  mountains.snow.0               colours  5  spread  2.7
-  tile.sand                      colours  3  spread  1.3
-  desert.sand.0                  colours  8  spread  2.7
-  tile.path                      colours  8  spread  2.3
+  tile.grass.0                   colours  3  spread  1.7
+  plains.grass.0                 colours  5  spread  1.7
+  lake.grass.0                   colours  3  spread  1.4
+  forest.grass.0                 colours  3  spread  1.1
+  mountains.snow.0               colours  4  spread  3.2
+  tile.sand                      colours  3  spread  1.5
+  desert.sand.0                  colours 11  spread  2.8
+  tile.path                      colours  8  spread  2.4
   tile.ruin                      colours  5  spread  6.0
-  autumn.tile.grass.0            colours  7  spread  3.0
-  autumn.plains.grass.0          colours  7  spread  2.8
-  autumn.lake.grass.0            colours  5  spread  1.8
-  autumn.forest.grass.0          colours  9  spread  1.3
-  winter.tile.grass.0            colours  6  spread  3.2
-  winter.plains.grass.0          colours  5  spread  2.3
-  winter.lake.grass.0            colours  5  spread  2.5
-  winter.forest.grass.0          colours  6  spread  2.9
+  autumn.tile.grass.0            colours  4  spread  3.0
+  autumn.plains.grass.0          colours  5  spread  3.0
+  autumn.lake.grass.0            colours  5  spread  2.1
+  autumn.forest.grass.0          colours  3  spread  1.4
+  winter.tile.grass.0            colours  6  spread  3.4
+  winter.plains.grass.0          colours  6  spread  3.4
+  winter.lake.grass.0            colours 10  spread  5.6
+  winter.forest.grass.0          colours  6  spread  3.3
 
 32-px repeat (the inspection's measure: mean |dL| at 32 px / at 24 px on 80x48 fields; target >= 0.8)
-  summer  g:0.95  p:0.95  l:0.95  m:0.96  n:0.96  s:0.95  d:0.95  =:0.95  u:0.89
-  autumn  g:0.95  p:0.95  l:0.95  m:0.95
-  winter  g:0.95  p:0.95  l:0.95  m:0.95
+  summer  g:0.99  p:0.99  l:0.99  m:0.99  n:0.99  s:0.99  d:1.00  =:0.99  u:0.89
+  autumn  g:1.00  p:0.99  l:0.99  m:0.99
+  winter  g:0.99  p:0.99  l:0.99  m:0.99
 
 banding (autocorrelation of the row means / of the column means: at 32 px, then at 64 px; 80x48 fields; target <= 0.3)
-  summer  g:-0.00/-0.04  +0.07/+0.04  p:-0.06/-0.03  +0.04/-0.01  l:+0.01/-0.05  +0.03/+0.03  m:-0.02/-0.08  +0.03/+0.05  n:-0.06/-0.03  +0.04/-0.04  s:-0.06/-0.01  +0.04/-0.00  d:-0.05/+0.04  +0.06/-0.02  =:+0.02/+0.00  -0.02/+0.00  u:-0.12/-0.03  -0.23/+0.27
-  autumn  g:-0.02/-0.02  +0.06/-0.03  p:+0.06/+0.06  +0.12/+0.09  l:-0.01/-0.01  +0.08/+0.01  m:+0.05/+0.04  +0.11/+0.05
-  winter  g:-0.09/+0.20  -0.02/+0.18  p:-0.02/+0.15  +0.05/+0.08  l:+0.03/+0.09  +0.05/+0.07  m:-0.02/+0.19  +0.05/+0.23
+  summer  g:-0.04/+0.07  +0.09/+0.03  p:+0.04/+0.03  +0.02/-0.04  l:+0.11/+0.14  +0.07/+0.03  m:+0.06/+0.04  +0.06/+0.06  n:-0.00/+0.20  -0.02/+0.06  s:-0.10/-0.05  -0.04/-0.01  d:-0.00/+0.03  -0.02/+0.02  =:+0.10/+0.18  +0.09/+0.05  u:-0.12/-0.03  -0.23/+0.27
+  autumn  g:-0.09/+0.26  +0.08/+0.11  p:+0.12/+0.19  +0.14/+0.11  l:+0.06/+0.10  +0.14/+0.01  m:+0.04/+0.07  +0.06/+0.03
+  winter  g:+0.02/+0.21  -0.02/+0.17  p:-0.02/+0.14  -0.01/+0.06  l:+0.01/+0.13  +0.06/+0.13  m:-0.04/+0.17  +0.02/+0.21
