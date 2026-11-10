@@ -69,7 +69,7 @@ export function chunkCacheArea(cx, cy, ts) {
  * @typedef {import('../game/world/world.js').RegionInfo} RegionInfo
  * @typedef {{ cx: number, cy: number, base: Container, rows: Map<number, Container>, water: Sprite[],
  *   edges: { sprite: Sprite, key: string }[],
- *   extents: Map<number, { x0: number, x1: number, y0: number, y1: number }[]>, baked: any[], bundles: string[] }} Chunk
+ *   extents: Map<number, { x0: number, x1: number, y0: number, y1: number }[]>, baked: any[], shade: Container, bundles: string[] }} Chunk
  * @typedef {{ o: any, sprite: Sprite, occluder: Occluder | null, shadow?: Sprite | null, shadowType?: string, shadowGone?: boolean, windows?: Sprite[] | null }} ObjectEntry
  */
 
@@ -250,13 +250,12 @@ export class GameView {
     this.weather.attach(app.stage, app.stage.getChildIndex(this.world) + 1);
     this.weather.indoorAmbient = indoorLight(this.releaseTerrain);
     // gfx W5 — light, shadow and effects (all pooled or cached; nothing allocated per frame):
-    // cast shadows on the ground, under everything that stands (one cached layer per chunk),
+    // cast shadows on the ground, under everything that stands: one layer whose opacity is the
+    // sun's strength (the weather, a lightning flash) — changing it redraws nothing,
     this.shadowLayer = new Container();
     this.shadowLayer.label = 'shadows';
     this.world.addChildAt(this.shadowLayer, this.world.getChildIndex(this.actors));
-    /** chunk ground caches to redraw (a shadow baked in them changed) @type {Set<Container>} */
-    this.shadeDirty = new Set();
-    /** flat-ground shadows baked into chunk ground caches, by object @type {Map<any, { sprite: Sprite, base: Container }[]>} */
+    /** flat-ground shadows (in their chunk's container in the shadow layer), by object @type {Map<any, { sprite: Sprite, base: Container }[]>} */
     this.bakedShadows = new Map();
 
     /** effect groups on (setFx, for measuring) */
@@ -682,26 +681,29 @@ export class GameView {
         extents.set(ty, list);
       }
     }
-    // gfx W5: the soft shadows of the objects on flat ground are baked into this ground cache — no
-    // extra layer to fill each frame (an overlay layer per chunk cost the software renderer about half
-    // as much again). A neighbour's shadow reaching over the edge is baked here too, so none is cut.
+    // gfx W5: the shadows of the objects on flat ground: small pixel sprites in this chunk's own
+    // container in the shadow layer (they batch into one draw with the rest; the layer's opacity is
+    // the weather's, so a lightning flash or a change of weather costs nothing — baking them into the
+    // ground cache meant redrawing every chunk's cache, about a second a time on the software renderer).
     /** @type {any[]} */
     const baked = [];
-    const M = 3;
+    const shade = new Container();
+    shade.label = `shadows-${cx}-${cy}`;
     for (const o of map.objects) {
-      if (o.tx < cx * CHUNK - M || o.tx >= x1 + M || o.ty < cy * CHUNK - M || o.ty >= y1 + M) continue;
+      if (o.tx < cx * CHUNK || o.tx >= x1 || o.ty < cy * CHUNK || o.ty >= y1) continue;
       if (o.type === 'crate' || map.elev[o.ty * map.width + o.tx] > 0) continue;
       const sh = this.bakedShadowSprite(o);
       if (!sh) continue;
-      base.addChild(sh);
+      shade.addChild(sh);
       baked.push(o);
       let list = this.bakedShadows.get(o);
       if (!list) {
         list = [];
         this.bakedShadows.set(o, list);
       }
-      list.push({ sprite: sh, base });
+      list.push({ sprite: sh, base: shade });
     }
+    this.shadowLayer.addChild(shade);
     base.tint = levelTint(0, this.releaseTerrain);
     this.base.addChild(base);
     // A chunk's flat ground -> one textured quad per frame, cached over the whole chunk (see
@@ -717,7 +719,7 @@ export class GameView {
       this.addObjectSprite(o, rowContainer);
     }
     this.chunkStats.built++;
-    return { cx, cy, base, rows, water, edges, extents, baked, bundles: this.chunkBundles(cx, cy) };
+    return { cx, cy, base, rows, water, edges, extents, baked, shade, bundles: this.chunkBundles(cx, cy) };
   }
 
   /** @param {Chunk} c */
@@ -725,12 +727,11 @@ export class GameView {
     const map = this.map;
     c.base.cacheAsTexture(false);
     c.base.destroy({ children: true });
-    // (its baked shadows went with the ground)
-    this.shadeDirty.delete(c.base);
+    c.shade.destroy({ children: true }); // (its flat-ground shadows)
     for (const o of c.baked) {
       const list = this.bakedShadows.get(o);
       if (!list) continue;
-      const left = list.filter((b) => b.base !== c.base);
+      const left = list.filter((b) => b.base !== c.shade);
       if (left.length) this.bakedShadows.set(o, left);
       else this.bakedShadows.delete(o);
     }
@@ -965,7 +966,7 @@ export class GameView {
     if (!g) return null;
     const ts = this.map.tileSize;
     const [dx, dy] = this.decorShift(o); // (W2: under the object where it is drawn)
-    const sh = this.makeShadow(g, o.tx * ts + ts / 2 + dx, o.ty * ts + ts + dy);
+    const sh = this.makeShadow(g, o.tx * ts + ts / 2 + dx, o.ty * ts + ts + dy, 1);
     sh.visible = !o.gone && this.fxOn.shadows;
     return sh;
   }
@@ -974,12 +975,13 @@ export class GameView {
    * A shadow sprite (shadows.js: pixel steps, whole game px) at the strength of the moment; it keeps
    * its geometry so a change of weather can restrengthen it.
    * @param {import('./shadows.js').ShadowGeom} g @param {number} x @param {number} y feet, world px
+   * @param {number} [strength] its own strength (1 for the shadow layer's, whose opacity is the weather's)
    */
-  makeShadow(g, x, y) {
+  makeShadow(g, x, y, strength = this.shadowStrength) {
     const sh = new Sprite();
     sh.tint = SHADOW.color;
     sh.label = 'shadow';
-    placeShadow(sh, x, y, g, this.shadowStrength);
+    placeShadow(sh, x, y, g, strength);
     /** @type {any} */ (sh).shadowG = g;
     return sh;
   }
@@ -1022,9 +1024,11 @@ export class GameView {
     let shadow = null;
     const g = this.fxV2 && (o.type === 'crate' || (z > 0 && rowOf)) ? objectShadow(o.type, Math.abs(s.width), s.height) : null;
     if (g) {
-      shadow = this.looseShadow(g, x, feetY - z);
+      const inLayer = o.type === 'crate' || !rowOf; // (in the shadow layer, whose opacity is the weather's)
+      shadow = this.makeShadow(g, x, feetY - z, inLayer ? 1 : this.shadowStrength);
+      this.looseShadows.add(shadow);
       shadow.visible = !o.gone && this.fxOn.shadows;
-      if (o.type === 'crate' || !rowOf) this.shadowLayer.addChild(shadow);
+      if (inLayer) this.shadowLayer.addChild(shadow);
       else rowOf(o.ty).addChild(shadow);
     }
     // gfx W5: a lived-in house lights its windows at night (houseWindows.js).
@@ -1101,15 +1105,8 @@ export class GameView {
     const fx = this.fxOn;
     if (this.fxV2 && name in fx) fx[/** @type {'shadows'} */ (name)] = on;
     this.shadowLayer.visible = fx.shadows;
-    for (const sh of this.looseShadows) if (sh.parent !== this.shadowLayer) sh.visible = fx.shadows && sh.alpha > 0; // (raised ground: in their terrain rows)
-    for (const [o, list] of this.bakedShadows) {
-      for (const b of list) {
-        b.sprite.visible = fx.shadows && !o.gone;
-        this.shadeDirty.add(b.base);
-      }
-    }
-    for (const b of this.shadeDirty) if (!b.destroyed) b.updateCacheTexture();
-    this.shadeDirty.clear();
+    for (const sh of this.looseShadows) if (sh.parent !== this.shadowLayer) sh.visible = fx.shadows; // (raised ground, chests: outside the layer)
+    for (const [o, list] of this.bakedShadows) for (const b of list) b.sprite.visible = fx.shadows && !o.gone;
     this.ambientParticles.under.visible = fx.particles;
     this.ambientParticles.glow.visible = fx.particles;
     this.hitFx.layer.visible = fx.hitfx;
@@ -1144,34 +1141,28 @@ export class GameView {
   /**
    * Moves / reshapes an object's shadow (keeping its geometry for restrengthening).
    * @param {Sprite} sh @param {number} x @param {number} y @param {import('./shadows.js').ShadowGeom | null} g
+   * @param {number} [strength] (1 in the shadow layer, whose opacity carries the weather's)
    */
-  reshadow(sh, x, y, g) {
+  reshadow(sh, x, y, g, strength = sh.parent === this.shadowLayer ? 1 : this.shadowStrength) {
     if (!g) return;
     /** @type {any} */ (sh).shadowG = g;
-    placeShadow(sh, x, y, g, this.shadowStrength);
+    placeShadow(sh, x, y, g, strength);
   }
 
   /**
    * gfx W5: the sun's shadows at a new strength (the weather turned; a lightning flash came or went).
-   * The baked ones are redrawn into their chunks' ground caches, so this runs only on a change.
+   * The shadow layer's opacity carries it; the few shadows outside it (on raised ground, under the
+   * chests and stones) are restrengthened one by one.
    * @param {number} k 0..1
    */
   setShadowStrength(k) {
     if (k === this.shadowStrength) return;
     this.shadowStrength = k;
-    const restrength = (/** @type {Sprite} */ sh) => {
+    this.shadowLayer.alpha = k;
+    for (const sh of this.looseShadows) {
       const g = /** @type {any} */ (sh).shadowG;
-      if (g) sh.alpha = g.alpha * k;
-    };
-    for (const sh of this.looseShadows) restrength(sh);
-    for (const list of this.bakedShadows.values()) {
-      for (const b of list) {
-        restrength(b.sprite);
-        this.shadeDirty.add(b.base);
-      }
+      if (g && sh.parent !== this.shadowLayer) sh.alpha = g.alpha * k;
     }
-    for (const b of this.shadeDirty) if (!b.destroyed) b.updateCacheTexture();
-    this.shadeDirty.clear();
   }
 
   /** A pooled shadow under a villager / enemy sprite (feet at its position). @param {Sprite} spr @param {number} zIndex */
@@ -1298,21 +1289,16 @@ export class GameView {
           sh.visible = show;
           if (g) this.reshadow(sh, sprite.x, sprite.y, g);
         }
-        // baked into the ground: redraw those chunks' caches
+        // on flat ground (in the shadow layer)
         const baked = this.bakedShadows.get(o);
         if (baked) {
           for (const b of baked) {
             b.sprite.visible = show;
             const [dx, dy] = this.decorShift(o);
-            if (g) this.reshadow(b.sprite, o.tx * ts + ts / 2 + dx, o.ty * ts + ts + dy, g);
-            this.shadeDirty.add(b.base);
+            if (g) this.reshadow(b.sprite, o.tx * ts + ts / 2 + dx, o.ty * ts + ts + dy, g, 1);
           }
         }
       }
-    }
-    if (this.shadeDirty.size) {
-      for (const shade of this.shadeDirty) if (!shade.destroyed) shade.updateCacheTexture();
-      this.shadeDirty.clear();
     }
   }
 

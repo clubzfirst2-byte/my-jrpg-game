@@ -9,10 +9,9 @@
 // its foot). One texture per shape and size, made once and shared.
 //
 // Where they are drawn (gameView.js):
-// - map objects on flat ground: baked into the chunk's cached ground texture, so a forest of
-//   shadows costs nothing per frame (no extra layer to fill); the cache is redrawn only when an
-//   object in the chunk changes (a tree burns down, a jar breaks) or the shadows' strength changes
-//   (the weather turns; a lightning flash);
+// - map objects on flat ground: small sprites in their chunk's container in the shadow layer (one
+//   batched draw); the layer's opacity is the sun's strength, so a change of weather or a lightning
+//   flash costs nothing (baking them into the chunks' ground caches meant redrawing every cache);
 // - crates (they move): loose sprites under the actors;
 // - map objects on raised ground: in their terrain row (over its surface, under what stands on it);
 // - characters (villagers, enemies) and the island's chests / stones: small pooled sprites sorted
