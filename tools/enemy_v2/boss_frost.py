@@ -17,7 +17,7 @@ ice crystals rising around it; charge = antlers levelled forward, a front hoof s
 
 import math
 
-from rig import Rig
+from rig import Rig, PAD
 from bossparts import glow_eyes, cracks
 
 W, H = 96, 88
@@ -122,7 +122,11 @@ def leg(r, top, knee, foot, r_top, r_knee, r_foot, dark, hoof_tone):
 # shadow down the right side and under the tip (tone 1) -- and ice lies only on the tops of the
 # shoulders, as plates. All offsets are from the shoulder line, so they ride with the body.
 FUR = {"3": ("frostfur", 3), "1": ("frostfur", 1)}
-LOCK = ["33.", "331", "331", "331", ".31", ".31", "..1"]
+LOCK = ["33..", "3311", "3311", "3311", ".311", ".311", "..1."]  # round 5: a 2-px shadow, so the lock reads at 2.5x
+# round 5: strands of the mane -- pale hair lying over the dark collar, down its sides and points
+STRAND = ["33", "33", "32", "32", "32", ".2"]
+STRAND_LEG = {"3": ("frostfur", 3), "2": ("frostfur", 2)}
+STRANDS = [(-14, 5), (-10, 9), (12, 5), (8, 9), (-5, 14), (-1, 17), (3, 14)]
 LOCKS = [(-26, -1), (-20, -5), (-14, -3), (13, -3), (18, -5), (24, -1),  # the upper row, over the humps
          (-23, 5), (-17, 3), (15, 3), (21, 5),  # the lower row, staggered
          (-12, 10), (9, 10)]  # the chest's fringe, either side of the mane
@@ -191,6 +195,11 @@ def draw(p):
     mane = r.m_poly([(hx_ - 8, mt - 2), (hx_ + 8, mt - 2), (hx_ + 13, mt + 4), (hx_ + 18, mb - 6), (hx_ + 12, mb - 3), (hx_ + 9, mb + 3), (hx_ + 4, mb - 1),
                      (hx_ + 1, mb + 5), (hx_ - 3, mb - 1), (hx_ - 8, mb + 3), (hx_ - 12, mb - 3), (hx_ - 18, mb - 6), (hx_ - 13, mt + 4)])
     r.add(mane, "frostfur", dark=1, soft=2, inline="br", tex=("shag", 90, 5))
+    for ox, oy in STRANDS:  # only whole strands that lie inside the mane (its outline stays clean)
+        x_, y_ = int(round(hx_ + ox)), int(round(mt + oy))
+        cells = [(x_ + i, y_ + j) for j, row in enumerate(STRAND) for i, ch in enumerate(row) if ch != "."]
+        if all(mane[y + PAD, x + PAD] for x, y in cells):
+            r.stamp(x_, y_, STRAND, STRAND_LEG)
     # ears (pointing out sideways, under the antlers)
     for s in (-1, 1):
         r.add(r.m_poly([(hx_ + s * 6, hy - 4), (hx_ + s * 18, hy - 4), (hx_ + s * 16, hy), (hx_ + s * 7, hy + 2)]), "frostfur", soft=1, inline=True)

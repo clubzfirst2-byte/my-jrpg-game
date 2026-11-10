@@ -340,7 +340,7 @@ describe('enemy & boss art v2 (src/art-release-v2/enemy)', () => {
     }
   });
 
-  it('detail: colours per 16x16 block (median) never below v1 (round 4: patterns are strokes, not dots)', () => {
+  it('detail: colours per 16x16 block (median) never below the round-4 values (set by the inspection, section 11.5)', () => {
     const median = (a) => {
       const b = [...a].sort((x, y) => x - y);
       return b.length % 2 ? b[(b.length - 1) / 2] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2;
@@ -371,9 +371,67 @@ describe('enemy & boss art v2 (src/art-release-v2/enemy)', () => {
           if (blocks.length) per.push(median(blocks));
         }
       }
-      // v1's medians on the same measure (src/art-release/enemy)
-      const min = { beast: 8, archer: 14, slime: 7.5, sentinel: 10.5, boss_root: 8, boss_frost: 4.5, boss_sand: 4, boss_storm: 8, boss_source: 6 }[kind];
+      // the round-4 medians (inspect_enemy_v2.md 11.5). Do not lower these without asking the director.
+      const min = { beast: 8, archer: 14.5, slime: 8, sentinel: 12, boss_root: 9, boss_frost: 6, boss_sand: 6, boss_storm: 9, boss_source: 7.5 }[kind];
       expect(median(per), `${kind}: colours per 16x16`).toBeGreaterThanOrEqual(min);
+    }
+  });
+
+  it('no dot scatter: isolated dots per 1000 px and glow-colour isolated dots stay near the round-4 values', () => {
+    // An isolated dot: a 1-2 px patch of one colour (4-connected) whose every 4-neighbour is
+    // opaque and differs from it by >= 12 in luminance (0-100). Round 3 scattered such dots over
+    // the bodies (many in the glow colour); round 4 replaced them with strokes and clusters.
+    // Caps = the round-4 values + 10% (dots per 1000 px) / + 5% (glow dots, all frames summed).
+    // Do not raise these without asking the director.
+    const CAP = {
+      beast: [78.2, 472], archer: [40.4, 101], slime: [36.1, 339], sentinel: [59.3, 1049], boss_root: [23.2, 1479],
+      boss_frost: [84.2, 1641], boss_sand: [24.0, 1282], boss_storm: [44.6, 507], boss_source: [26.5, 1538],
+    };
+    const GLOW = new Set(RAMP8.glow);
+    const lum = (px, j) => (0.299 * px[j] + 0.587 * px[j + 1] + 0.114 * px[j + 2]) / 2.55;
+    const same = (px, a, b) => px[a] === px[b] && px[a + 1] === px[b + 1] && px[a + 2] === px[b + 2] && px[a + 3] === px[b + 3];
+    const STEP = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (const [kind, k] of Object.entries(MAN.kinds)) {
+      if (kind === 'shot') continue;
+      let dots = 0;
+      let glow = 0;
+      let opaque = 0;
+      for (const [action, a] of Object.entries(k.actions)) {
+        for (let i = 0; i < a.frames; i++) {
+          const { w, h, px } = decode(`enemy.${kind}.${action}.${i}`);
+          const mates = (x, y) => STEP.map(([dx, dy]) => [x + dx, y + dy]).filter(([X, Y]) => X >= 0 && X < w && Y >= 0 && Y < h && same(px, (Y * w + X) * 4, (y * w + x) * 4));
+          for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+              const j = (y * w + x) * 4;
+              if (!px[j + 3]) continue;
+              opaque++;
+              const m = mates(x, y);
+              if (m.length > 1) continue;
+              const comp = [[x, y]];
+              if (m.length === 1) {
+                if (mates(m[0][0], m[0][1]).length > 1) continue; // part of a patch of 3+
+                comp.push(m[0]);
+              }
+              let alone = true;
+              for (const [cx, cy] of comp) {
+                for (const [dx, dy] of STEP) {
+                  const X = cx + dx;
+                  const Y = cy + dy;
+                  if (comp.some(([a2, b2]) => a2 === X && b2 === Y)) continue;
+                  const n = (Y * w + X) * 4;
+                  if (X < 0 || X >= w || Y < 0 || Y >= h || !px[n + 3] || Math.abs(lum(px, n) - lum(px, j)) < 12) alone = false;
+                }
+              }
+              if (alone) {
+                dots++;
+                if (GLOW.has(px4(px, j))) glow++;
+              }
+            }
+          }
+        }
+      }
+      expect((1000 * dots) / opaque, `${kind}: isolated dots per 1000 px`).toBeLessThanOrEqual(CAP[kind][0]);
+      expect(glow, `${kind}: glow-colour isolated dots`).toBeLessThanOrEqual(CAP[kind][1]);
     }
   });
 });

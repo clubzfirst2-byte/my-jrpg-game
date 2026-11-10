@@ -28,7 +28,8 @@ class Pose:
 # round 4: a bubble in the jelly: a round 3x3 (or 2x2) patch of the jelly's own light tone, its
 # lower right one step darker -- a cluster with a form, not a dot
 BUB_LEG = {"3": ("murk", 3), "2": ("murk", 2)}
-BUB3 = [".33", "332", "322"]
+BUB4 = [".33.", "3332", "3322", ".22."]  # round 5: round (corners cut)
+BUB3 = [".3.", "332", ".2."]
 BUB2 = ["33", "32"]
 
 def draw(p):
@@ -57,7 +58,7 @@ def draw(p):
     # round 4: three bubbles at fixed places in the dark lower jelly -- they scale with the body
     # (squash and stretch), they never jump from frame to frame
     if p.melt < 2:
-        for fx_, fy_, bub in ((0.55, 0.1, BUB3), (-0.55, 0.45, BUB3), (0.62, 0.62, BUB2)):
+        for fx_, fy_, bub in ((0.5, 0.05, BUB4), (-0.55, 0.4, BUB3), (0.62, 0.62, BUB2)):
             r.stamp(int(round(cx + fx_ * rx)) - 1, int(round(base - ry + fy_ * ry)) - 1, bub, BUB_LEG)
     # the core seen through the jelly: a crystal, hand-shaded so it glows from the inside
     ky = base - ry * 0.55 + (1 if p.melt else 0)
@@ -130,7 +131,8 @@ def frames():
     name(out, "move", loop(Pose, 8, [
         (0.0, dict(rx=12.5, ry=7.5, lift=0.0, lean=0.0, puddle=1)),
         (0.125, dict(rx=9.0, ry=10.8, lift=1.0, lean=1.0, puddle=0)),
-        (0.375, dict(rx=10.0, ry=9.6, lift=4.0, lean=2.0, puddle=0), "out"),
+        (0.375, dict(rx=9.6, ry=10.0, lift=4.0, lean=2.0, puddle=0), "out"),
+        (0.5, dict(rx=10.8, ry=8.8, lift=3.4, lean=3.0, puddle=0)),  # round 5: over the top -- rounder, tipping forward
         (0.625, dict(rx=10.4, ry=9.6, lift=2.0, lean=1.5, puddle=0), "in"),
         (0.75, dict(rx=13.0, ry=7.0, lift=0.0, lean=0.5, puddle=1), "in"),
         (0.875, dict(rx=11.0, ry=9.2, lift=0.0, lean=0.0, puddle=1)),
