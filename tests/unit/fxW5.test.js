@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { Texture } from 'pixi.js';
-import { objectShadow, characterShadow, SHADOW } from '../../src/view/shadows.js';
-import { HOUSE_WINDOWS, HOUSE_SIZE, windowGlow, hasWindows } from '../../src/view/houseWindows.js';
-import { ambientKinds, AmbientParticles, AMBIENT, MIST_DAWN, MIST_ALPHA } from '../../src/view/ambientParticles.js';
-import { HitFx, fxFor, FX_POOL } from '../../src/view/hitFx.js';
+import { objectShadow, characterShadow, shadowMask, weatherShadow, SHADOW, HOUSE_SHADOW } from '../../src/view/shadows.js';
+import { HOUSE_WINDOWS, HOUSE_SIZE, PANE_AREA, WINDOW_GLOW, windowGlow, hasWindows, glassKind, paneImage, windowLightSpots } from '../../src/view/houseWindows.js';
+import { ambientKinds, AmbientParticles, AMBIENT, MIST_DAWN, MIST_ALPHA, MIST_BANDS, mistBand } from '../../src/view/ambientParticles.js';
+import { HitFx, fxFor, FX_POOL, RING_FRAMES, SPARK_STEPS, ringPixels, sparkStep } from '../../src/view/hitFx.js';
+import { rimAlpha, RIM_FLASH } from '../../src/view/flashOverlay.js';
 import { RAIN, rainLayer } from '../../src/view/weatherView.js';
 import { fxVersion } from '../../src/view/fxSwitch.js';
 import { ambientAt, CLOCK } from '../../src/game/env/weather.js';
@@ -181,7 +182,7 @@ describe('mist', () => {
   it('a few faint patches from a fixed pool (the fill they cost is bounded)', () => {
     expect(AMBIENT.mist).toBeLessThanOrEqual(6);
     expect(MIST_ALPHA).toBeLessThanOrEqual(0.25);
-    const p = new AmbientParticles(Texture.WHITE, Texture.WHITE);
+    const p = new AmbientParticles(Texture.WHITE, [Texture.WHITE]);
     const sprites = p.under.children.length;
     expect(p.mistPool.length).toBe(AMBIENT.mist);
     const kinds = ambientKinds({ ...base, weather: 'rain' });
@@ -218,6 +219,172 @@ describe('drawing only', () => {
     expect(FX_POOL.rings).toBeLessThanOrEqual(8);
     expect(AMBIENT.max + AMBIENT.fireflies + AMBIENT.mist).toBeLessThanOrEqual(64);
     expect(AMBIENT.leaves + AMBIENT.motes + AMBIENT.sparkles).toBeLessThanOrEqual(AMBIENT.max + 4);
-    expect(RAIN.splashes).toBeLessThanOrEqual(32);
+    expect(RAIN.splashes).toBeLessThanOrEqual(48);
+  });
+});
+
+// --- inspection round 1 (pixel art, weather, windows, rings) ---
+
+/** The widths of the runs of equal values along a row (a step narrower than 1 game px cannot exist on a 1-texel-per-px mask, but runs show the steps are flat). */
+const runs = (/** @type {number[]} */ row) => {
+  const out = [];
+  let n = 1;
+  for (let i = 1; i <= row.length; i++) {
+    if (i < row.length && row[i] === row[i - 1]) n++;
+    else {
+      out.push(n);
+      n = 1;
+    }
+  }
+  return out;
+};
+
+describe('shadows as pixel art', () => {
+  it('an oval in at most 3 flat steps, one texel per game px, darker inside', () => {
+    for (const g of [objectShadow('tree', 32, 48), objectShadow('rock', 16, 12), characterShadow(16)]) {
+      const m = shadowMask(g);
+      expect(m.w).toBe(Math.round(g.w));
+      expect(m.h).toBe(Math.round(g.h));
+      expect(Math.max(...m.data)).toBeLessThanOrEqual(3);
+      expect(new Set(m.data).size).toBeLessThanOrEqual(4); // none + 3 steps
+      const mid = [...m.data.slice(Math.floor(m.h / 2) * m.w, Math.floor(m.h / 2) * m.w + m.w)];
+      expect(mid[Math.floor(m.w / 2)]).toBe(3);
+      // from the edge to the centre the steps only go up
+      for (let x = 1; x <= m.w / 2; x++) expect(mid[x]).toBeGreaterThanOrEqual(mid[x - 1]);
+      expect(runs(mid).length).toBeLessThanOrEqual(7);
+    }
+    expect(SHADOW.steps).toHaveLength(4);
+  });
+  it('the house: a band along its right wall under the eave (stepped top) and one along its foot; nothing over its walls', () => {
+    const g = objectShadow('house', HOUSE_SIZE.w, HOUSE_SIZE.h);
+    expect(g.shape).toBe('house');
+    const m = shadowMask(g);
+    const x0 = Math.round(g.dx - g.w / 2);
+    const y0 = Math.round(g.dy - g.h / 2);
+    const at = (/** @type {number} */ gx, /** @type {number} */ gy) => m.data[(gy - y0) * m.w + (gx - x0)];
+    // right of the wall, under the eave: shadow; the eave's corner steps down to the right
+    expect(at(HOUSE_SHADOW.wallRight, -HOUSE_SHADOW.eave)).toBeGreaterThan(0);
+    expect(at(HOUSE_SHADOW.wallRight + 3, -HOUSE_SHADOW.eave)).toBe(0);
+    expect(at(HOUSE_SHADOW.wallRight + 3, -HOUSE_SHADOW.eave + 2)).toBeGreaterThan(0);
+    // along the foot, below the house
+    expect(at(0, 0)).toBe(3);
+    expect(at(0, HOUSE_SHADOW.foot - 1)).toBe(1);
+    // none over the house's own wall (it is drawn there)
+    expect(at(0, -10)).toBe(0);
+    expect(at(HOUSE_SHADOW.wallRight - 1, -10)).toBe(0);
+    // the other house art (a placeholder of another size): an oval
+    expect(objectShadow('house', 16, 16).shape).toBe('oval');
+  });
+  it('softer under clouds, rain and snow; out in a lightning flash', () => {
+    expect(weatherShadow('clear')).toBe(1);
+    expect(weatherShadow('cloudy')).toBeLessThan(1);
+    expect(weatherShadow('rain')).toBeLessThan(weatherShadow('cloudy'));
+    expect(weatherShadow('storm')).toBeLessThanOrEqual(weatherShadow('rain'));
+    expect(weatherShadow('snow')).toBeLessThanOrEqual(weatherShadow('rain'));
+    expect(weatherShadow('clear', true)).toBe(0);
+    expect(weatherShadow('storm', true)).toBe(0);
+  });
+});
+
+describe('lit windows: only the glass', () => {
+  // a fake house (48×56 game px at 2 art px per game px): wall, a glint, a frame and glass in the windows
+  const scale = 2;
+  const W = HOUSE_SIZE.w * scale;
+  const H = HOUSE_SIZE.h * scale;
+  const px = new Uint8ClampedArray(W * H * 4);
+  const put = (/** @type {number} */ x, /** @type {number} */ y, /** @type {number[]} */ c) => px.set([...c, 255], (y * W + x) * 4);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) put(x, y, [0xdd, 0xd0, 0xb4]); // plaster
+  const ox = (HOUSE_SIZE.w / 2 + HOUSE_WINDOWS[0].x) * scale;
+  const oy = (HOUSE_SIZE.h + HOUSE_WINDOWS[0].y) * scale;
+  put(ox, oy, [0x26, 0x42, 0x5e]); // glass
+  put(ox + 1, oy, [0x10, 0x1a, 0x2c]); // dark glass
+  put(ox + 2, oy, [0x78, 0xa8, 0xcc]); // a glint
+  put(ox + 3, oy, [0x6e, 0x44, 0x24]); // the frame
+  it('glass is lit, glints, frames, flowers and walls are not', () => {
+    expect(glassKind(0x26, 0x42, 0x5e, 255)).toBe(1);
+    expect(glassKind(0x10, 0x1a, 0x2c, 255)).toBe(2);
+    expect(glassKind(0x78, 0xa8, 0xcc, 255)).toBe(0);
+    expect(glassKind(0xd6, 0xee, 0xfa, 255)).toBe(0);
+    expect(glassKind(0x6e, 0x44, 0x24, 255)).toBe(0);
+    expect(glassKind(0x3c, 0x8a, 0x3a, 255)).toBe(0); // leaves in the flower box
+    expect(glassKind(0x26, 0x42, 0x5e, 0)).toBe(0);
+  });
+  it('the pane image keeps only those pixels, warm', () => {
+    const img = paneImage(px, W, scale);
+    expect(img.w).toBe(PANE_AREA.w * scale);
+    expect(img.glass).toBe(2);
+    const a = (/** @type {number} */ x) => img.data[x * 4 + 3];
+    expect(a(0)).toBe(255);
+    expect(a(1)).toBe(255);
+    expect(a(2)).toBe(0); // the glint stays as drawn
+    expect(a(3)).toBe(0); // and the frame
+    expect((img.data[0] << 16) | (img.data[1] << 8) | img.data[2]).toBe(WINDOW_GLOW.glass);
+  });
+  it('their light falls on the ground in front, below the house (not on its wall)', () => {
+    const spots = windowLightSpots(100, 200);
+    expect(spots).toHaveLength(HOUSE_WINDOWS.length);
+    for (const s of spots) {
+      expect(s.y).toBeGreaterThan(200);
+      expect(s.y - WINDOW_GLOW.radius).toBeGreaterThan(200 + HOUSE_WINDOWS[0].y + HOUSE_WINDOWS[0].h); // never reaches the windows
+    }
+  });
+});
+
+describe('hit effects as pixel art', () => {
+  it('the ring: a 1-px circle on the grid, 4 frames growing, white to yellow', () => {
+    for (const r of [3, 6, 9, 14]) {
+      const p = ringPixels(r);
+      for (const [x, y] of p) expect(Math.abs(Math.hypot(x, y) - r)).toBeLessThan(1);
+      expect(new Set(p.map(([x, y]) => `${x},${y}`)).size).toBe(p.length);
+      // closed: every pixel has a neighbour on the ring
+      const has = new Set(p.map(([x, y]) => `${x},${y}`));
+      for (const [x, y] of p) {
+        let n = 0;
+        for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if ((dx || dy) && has.has(`${x + dx},${y + dy}`)) n++;
+        expect(n).toBeGreaterThanOrEqual(2);
+      }
+    }
+    expect(RING_FRAMES).toHaveLength(4);
+    for (let i = 1; i < RING_FRAMES.length; i++) expect(RING_FRAMES[i].r).toBeGreaterThan(RING_FRAMES[i - 1].r);
+    expect(RING_FRAMES[0].warm).toBe(0xffffff);
+    expect(RING_FRAMES[3].warm & 0xff).toBeLessThan(0x80); // yellow at the end, not grey
+  });
+  it('sparks stay opaque white → yellow → orange until they go out', () => {
+    expect(sparkStep(0).color).toBe(0xffffff);
+    expect(sparkStep(0.99).color).toBe(SPARK_STEPS[2].color);
+    const fx = new HitFx(Texture.WHITE);
+    fx.takeEvents({ tick: 1, events: [{ type: 'hitEnemy', tick: 1, x: 10, y: 10 }] });
+    for (let i = 0; i < 30; i++) {
+      fx.update(1 / 60);
+      for (const p of fx.sparks) if (p.s.visible) expect(p.s.alpha).toBe(1);
+    }
+  });
+});
+
+describe('mist as drawn bands', () => {
+  it('long low bands in at most 3 flat steps, even sizes (on the pixel grid with a centred anchor)', () => {
+    for (const { w, h } of MIST_BANDS) {
+      expect(w % 2).toBe(0);
+      expect(h % 2).toBe(0);
+      expect(w).toBeGreaterThan(h * 5);
+      const m = mistBand(w, h);
+      expect(Math.max(...m)).toBe(3);
+      expect(new Set(m).size).toBeLessThanOrEqual(4);
+    }
+  });
+});
+
+describe('the wind-up overlay as a rim (gfx W5)', () => {
+  it('strong on a 1-game-px outline, faint inside, nothing outside', () => {
+    const w = 8;
+    const h = 8;
+    const a = new Uint8ClampedArray(w * h);
+    for (let y = 1; y < 7; y++) for (let x = 1; x < 7; x++) a[y * w + x] = 255;
+    const r = rimAlpha(a, w, h, 2);
+    expect(r[0]).toBe(0);
+    expect(r[1 * w + 1]).toBe(Math.round(255 * RIM_FLASH.edge));
+    expect(r[2 * w + 2]).toBe(Math.round(255 * RIM_FLASH.edge)); // (2 art px = 1 game px)
+    expect(r[3 * w + 3]).toBe(Math.round(255 * RIM_FLASH.inside));
+    expect(RIM_FLASH.inside).toBeLessThan(0.5);
   });
 });

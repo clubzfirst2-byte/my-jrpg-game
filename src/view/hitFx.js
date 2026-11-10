@@ -1,8 +1,11 @@
 // @ts-check
 // gfx W5: hit effects drawn in code — a burst of sparks and an expanding ring where a blow lands,
-// over several frames (the game had only the 1–2-frame slash). Pooled: a fixed number of sprites
-// made once, reused; nothing is allocated per frame. Drawn above the light map so the sparks read at
-// night too (they sit on the struck body, so drawing them over a tree in front costs nothing).
+// over several frames (the game had only the 1–2-frame slash). Pixel art like the rest: the ring is
+// a 1-game-px circle drawn on the game's pixel grid, in 4 frames (small → full size), white turning
+// yellow; the sparks are 2×2 then 1×1 game px, white → yellow → orange, fully opaque until they go
+// out (a faded spark over grass read as a flower dot). Pooled: a fixed number of sprites made once,
+// reused; nothing is allocated per frame. Drawn above the light map so the sparks read at night too
+// (they sit on the struck body, so drawing them over a tree in front costs nothing).
 import { Container, Sprite, Texture } from 'pixi.js';
 
 /**
@@ -25,48 +28,101 @@ export const fxFor = (ev) => HIT_FX[ev.type] ?? null;
 /** The boss an event names. @param {{ enemies?: any[] }} state @param {string} id */
 const bossOf = (state, id) => state.enemies?.find((en) => en.bossId === id) ?? null;
 
-/** Pool sizes (the most on screen at once). */
-export const FX_POOL = Object.freeze({ sparks: 48, rings: 8 });
+/**
+ * The ring's frames: its radius as a share of the full radius, and its colour (the white ring of a
+ * blow turns yellow; a coloured one — parry, defeat — keeps its colour) and opacity.
+ */
+export const RING_FRAMES = Object.freeze([
+  Object.freeze({ r: 0.4, warm: 0xffffff, alpha: 1 }),
+  Object.freeze({ r: 0.65, warm: 0xfff6b0, alpha: 1 }),
+  Object.freeze({ r: 0.85, warm: 0xffe070, alpha: 0.9 }),
+  Object.freeze({ r: 1, warm: 0xffc840, alpha: 0.6 }),
+]);
+/** A spark's colour as it burns out (by its age, 0..1): white, yellow, orange — never faded. */
+export const SPARK_STEPS = Object.freeze([
+  Object.freeze({ until: 0.35, color: 0xffffff, size: 1 }),
+  Object.freeze({ until: 0.7, color: 0xfff060, size: 1 }),
+  Object.freeze({ until: 1, color: 0xffa030, size: 0.5 }),
+]);
 
-/** A ring outline texture (white, 1 px line at 32 px), made once. @returns {Texture} */
-function ringTexture() {
+/** The step of a spark at age k (0..1). @param {number} k */
+export const sparkStep = (k) => SPARK_STEPS.find((s) => k < s.until) ?? SPARK_STEPS[SPARK_STEPS.length - 1];
+
+/**
+ * A 1-px circle outline of radius r on a pixel grid (the midpoint circle): the pixels set, as
+ * [x, y] from its centre. Pure.
+ * @param {number} r whole game px
+ * @returns {[number, number][]}
+ */
+export function ringPixels(r) {
+  /** @type {[number, number][]} */
+  const out = [];
+  const seen = new Set();
+  const put = (/** @type {number} */ x, /** @type {number} */ y) => {
+    const k = `${x},${y}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push([x, y]);
+  };
+  let x = r;
+  let y = 0;
+  let d = 1 - r;
+  while (x >= y) {
+    for (const [a, b] of [[x, y], [y, x], [-y, x], [-x, y], [-x, -y], [-y, -x], [y, -x], [x, -y]]) put(a, b);
+    y++;
+    if (d < 0) d += 2 * y + 1;
+    else {
+      x--;
+      d += 2 * (y - x) + 1;
+    }
+  }
+  return out;
+}
+
+/** @type {Map<number, Texture>} */
+const ringTextures = new Map();
+/** A white 1-game-px ring of radius r (texture size 2r+1 game px, nearest-neighbour). @param {number} r */
+function ringTexture(r) {
+  const had = ringTextures.get(r);
+  if (had) return had;
+  if (typeof document === 'undefined') return Texture.WHITE;
+  const n = 2 * r + 1;
   const c = document.createElement('canvas');
-  c.width = c.height = 32;
+  c.width = c.height = n;
   const g = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
-  g.strokeStyle = '#ffffff';
-  g.lineWidth = 2;
-  g.beginPath();
-  g.arc(16, 16, 14, 0, Math.PI * 2);
-  g.stroke();
+  g.fillStyle = '#ffffff';
+  for (const [x, y] of ringPixels(r)) g.fillRect(x + r, y + r, 1, 1);
   const t = Texture.from(c);
-  t.source.scaleMode = 'linear';
+  t.source.scaleMode = 'nearest';
+  ringTextures.set(r, t);
   return t;
 }
+
+/** Pool sizes (the most on screen at once). */
+export const FX_POOL = Object.freeze({ sparks: 48, rings: 8 });
 
 export class HitFx {
   /** @param {Texture} dot a small white square (the 'px' sprite) */
   constructor(dot) {
     this.layer = new Container();
     this.layer.label = 'hit-fx';
-    /** @type {{ s: Sprite, x: number, y: number, vx: number, vy: number, age: number, life: number }[]} */
+    /** @type {{ s: Sprite, x: number, y: number, vx: number, vy: number, age: number, life: number, warm: boolean }[]} */
     this.sparks = [];
     for (let i = 0; i < FX_POOL.sparks; i++) {
       const s = new Sprite(dot);
       s.anchor.set(0.5);
       s.visible = false;
-      s.blendMode = 'add';
       this.layer.addChild(s);
-      this.sparks.push({ s, x: 0, y: 0, vx: 0, vy: 0, age: 0, life: 0 });
+      this.sparks.push({ s, x: 0, y: 0, vx: 0, vy: 0, age: 0, life: 0, warm: false });
     }
-    const ring = typeof document === 'undefined' ? Texture.WHITE : ringTexture();
-    /** @type {{ s: Sprite, r: number, age: number, life: number }[]} */
+    /** @type {{ s: Sprite, r: number, age: number, life: number, color: number, frame: number }[]} */
     this.rings = [];
     for (let i = 0; i < FX_POOL.rings; i++) {
-      const s = new Sprite(ring);
+      const s = new Sprite(Texture.WHITE);
       s.anchor.set(0.5);
       s.visible = false;
       this.layer.addChild(s);
-      this.rings.push({ s, r: 0, age: 0, life: 0 });
+      this.rings.push({ s, r: 0, age: 0, life: 0, color: 0xffffff, frame: -1 });
     }
     this.nextSpark = 0;
     this.nextRing = 0;
@@ -100,24 +156,29 @@ export class HitFx {
       this.nextSpark = (this.nextSpark + 1) % this.sparks.length;
       const a = (k / spec.sparks) * Math.PI * 2 + Math.random() * 0.6;
       const v = spec.speed * (0.6 + Math.random() * 0.6);
-      p.x = x;
-      p.y = y;
+      p.x = Math.round(x);
+      p.y = Math.round(y);
       p.vx = Math.cos(a) * v;
       p.vy = Math.sin(a) * v - 20;
       p.age = 0;
       p.life = spec.life * (0.7 + Math.random() * 0.3);
       p.s.tint = spec.color;
+      p.warm = spec.color === 0xfff2b0;
+      p.s.alpha = 1;
+      p.s.scale.set(1);
       p.s.visible = true;
     }
     if (spec.ring > 0) {
       const r = this.rings[this.nextRing];
       this.nextRing = (this.nextRing + 1) % this.rings.length;
-      r.s.position.set(x, y);
+      r.s.position.set(Math.round(x), Math.round(y));
       r.r = spec.ring;
       r.age = 0;
       r.life = spec.life;
-      r.s.tint = spec.ringColor;
+      r.color = spec.ringColor;
+      r.frame = -1;
       r.s.visible = true;
+      this.ringFrame(r, 0);
     }
   }
 
@@ -139,10 +200,10 @@ export class HitFx {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.s.position.set(Math.round(p.x), Math.round(p.y));
-      // 2×2 → 1×1 game px as they burn out (frame by frame, not a smooth scale)
-      const size = k < 0.5 ? 1 : 0.5;
-      p.s.scale.set(size);
-      p.s.alpha = 1 - k * k;
+      // white → yellow → orange, 2×2 → 1×1 game px, opaque until it goes out (no fade to a dull dot)
+      const st = sparkStep(k);
+      p.s.scale.set(st.size);
+      if (p.warm && k >= SPARK_STEPS[0].until) p.s.tint = st.color; // (coloured sparks keep their colour)
     }
     for (let i = 0; i < this.rings.length; i++) {
       const r = this.rings[i];
@@ -153,11 +214,25 @@ export class HitFx {
         continue;
       }
       active++;
-      const k = r.age / r.life;
-      const size = (r.r * 2 * (0.3 + 0.7 * Math.sqrt(k))) / 32;
-      r.s.scale.set(size);
-      r.s.alpha = 0.9 * (1 - k);
+      this.ringFrame(r, Math.min(RING_FRAMES.length - 1, Math.floor((r.age / r.life) * RING_FRAMES.length)));
     }
     this.active = active;
+  }
+
+  /**
+   * Shows a ring's frame f (RING_FRAMES): a ring of whole game px, on the pixel grid.
+   * @param {{ s: Sprite, r: number, color: number, frame: number }} r @param {number} f
+   */
+  ringFrame(r, f) {
+    if (r.frame === f) return;
+    r.frame = f;
+    const F = RING_FRAMES[f];
+    const rad = Math.max(2, Math.round(r.r * F.r));
+    r.s.texture = ringTexture(rad);
+    r.s.scale.set(1);
+    if (r.s.texture === Texture.WHITE) r.s.scale.set((2 * rad + 1) / Texture.WHITE.width);
+    // a blow's white ring warms to yellow; a coloured one (parry, defeat) keeps its colour
+    r.s.tint = r.color === 0xffffff ? F.warm : r.color;
+    r.s.alpha = F.alpha;
   }
 }

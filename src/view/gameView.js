@@ -33,11 +33,11 @@ import { DECOR_TYPES, decorOffset, macroQuarter, patchVariant, placementEnabled 
 import { faceMaterial, faceVariant, groundCacheResolution, groundVariant, indoorLight, levelBrightness, releaseSeasonKeys, usesReleaseTerrain, waterAround, waterEdgePieces } from './assets/terrainArt.js';
 import { openingView } from '../game/story/story.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
-import { SilhouetteCache, placeFlash } from './flashOverlay.js';
+import { SilhouetteCache, placeFlash, RIM_FLASH } from './flashOverlay.js';
 import { EnemySlots } from './enemySlots.js';
-import { shadowTexture, objectShadow, characterShadow, placeShadow, SHADOW } from './shadows.js';
-import { HOUSE_WINDOWS, WINDOW_GLOW, windowGlow, hasWindows } from './houseWindows.js';
-import { AmbientParticles, ambientKinds } from './ambientParticles.js';
+import { objectShadow, characterShadow, placeShadow, weatherShadow, SHADOW } from './shadows.js';
+import { PANE_AREA, windowGlow, hasWindows, paneImage, windowLightSpots } from './houseWindows.js';
+import { AmbientParticles, ambientKinds, mistTextures } from './ambientParticles.js';
 import { HitFx } from './hitFx.js';
 import { isDark, hourOf } from '../game/env/weather.js';
 
@@ -74,6 +74,8 @@ export function chunkCacheArea(cx, cy, ts) {
  */
 
 const WALK_FPS = 8;
+/** gfx W5: enemies drawn without a cast shadow (the storm lord's art stands in its own puddle). */
+const NO_SHADOW_KINDS = new Set(['boss_storm']);
 const WALK_CYCLE = [1, 0, 2, 0];
 const WATER_FRAME_SEC = 0.6;
 const EDGE_COLOR = 0x1a1c2c;
@@ -202,9 +204,12 @@ export class GameView {
     this.screenLayer = new Container();
     this.screenLayer.label = 'screen';
     app.stage.addChild(this.screenLayer);
-    // gfx W5: the one soft shadow texture every cast shadow uses (shadows.js).
-    this.shadowTex = shadowTexture();
-    this.features = new FeatureView((key) => this.makeSprite(key), this.actors, this.screenLayer, state, this.fxV2 ? this.shadowTex : undefined);
+    /** gfx W5: the sun's shadows' strength now (shadows.weatherShadow: the weather, a lightning flash) */
+    this.shadowStrength = 1;
+    /** every loose object shadow (crates, raised ground, chests, stones) @type {Set<Sprite>} */
+    this.looseShadows = new Set();
+    // gfx W5: the chests' and record stones' shadows (shadows.js)
+    this.features = new FeatureView((key) => this.makeSprite(key), this.actors, this.screenLayer, state, this.fxV2 ? (g, x, y) => this.looseShadow(g, x, y) : undefined);
     // Environment (P4): ash / wet ground goes between the cached ground and the actors.
     this.envGround = new Container();
     this.envGround.label = 'env-ground';
@@ -253,6 +258,7 @@ export class GameView {
     this.shadeDirty = new Set();
     /** flat-ground shadows baked into chunk ground caches, by object @type {Map<any, { sprite: Sprite, base: Container }[]>} */
     this.bakedShadows = new Map();
+
     /** effect groups on (setFx, for measuring) */
     const on = this.fxV2;
     this.fxOn = { shadows: on, particles: on, hitfx: on, windows: on, rain: on };
@@ -262,15 +268,22 @@ export class GameView {
     this.placeCharShadow = (/** @type {Sprite} */ spr, /** @type {number} */ z) => this.charShadow(spr, z);
     this.npcShadowFn = (/** @type {Sprite} */ spr) => this.charShadow(spr, spr.zIndex);
     this.enemyShadowFn = (/** @type {{ owner: any, sprite: Sprite }} */ slot) => {
-      if (!slot.owner.final) this.charShadow(slot.sprite, slot.sprite.zIndex);
+      // (the source has its own arena light; the storm lord stands in a puddle of its own art, and a
+      // shadow on the grass under it would lift the puddle off the ground)
+      if (!slot.owner.final && !NO_SHADOW_KINDS.has(slot.owner.kind)) this.charShadow(slot.sprite, slot.sprite.zIndex);
     };
     // lit windows (houseWindows.js),
     /** @type {Sprite[]} */
     this.windowSprites = [];
-    /** world px of each lit window, for the light map (null until the house art is known) @type {{ x: number, y: number }[] | null} */
+    /** world px of each lit window's pool of light on the ground (null until the house art is known) @type {{ x: number, y: number }[] | null} */
     this.windowLights = null;
+    /** the lit glass per house texture @type {Map<Texture, { tex: Texture, scale: number } | null>} */
+    this.paneTextures = new Map();
+    /** lit glass, above the light map (in the glow layer) */
+    this.windowLayer = new Container();
+    this.windowLayer.label = 'windows';
     // ambient particles: lit like the world (in it, over the actors) and glowing (over the light map),
-    this.ambientParticles = new AmbientParticles(assets.texture('px'), this.shadowTex);
+    this.ambientParticles = new AmbientParticles(assets.texture('px'), mistTextures());
     this.world.addChild(this.ambientParticles.under);
     this.ambientKinds = ambientKinds({ region: null, season: 'summer', dark: false, day: true, weather: 'clear', indoor: true, nearWater: false, snowGround: false });
     this.ambientCheckAt = -1;
@@ -280,7 +293,7 @@ export class GameView {
     this.hitFx = new HitFx(assets.texture('px'));
     this.glowLayer = new Container();
     this.glowLayer.label = 'glow';
-    this.glowLayer.addChild(this.ambientParticles.glow, this.hitFx.layer);
+    this.glowLayer.addChild(this.windowLayer, this.ambientParticles.glow, this.hitFx.layer);
     app.stage.addChildAt(this.glowLayer, app.stage.getChildIndex(this.weather.overlay) + 1);
     this.setFx('', false); // (the layers as fxOn says)
     /** capturing a still: the hit effects stop where they are */
@@ -317,7 +330,7 @@ export class GameView {
     this.enemyKeys = new Map();
     /** @type {Map<number, Sprite>} */
     this.flashSprites = new Map();
-    this.silhouettes = new SilhouetteCache();
+    this.silhouettes = new SilhouetteCache(this.fxV2 ? 'rim' : 'solid'); // gfx W5: a red rim keeps the v2 art's detail
     /** Frame counts and speeds of the enemies' actions (enemyFrames.js), cleared when the loaded art changes. @type {Map<string, { n: number, fps: number }>} */
     this.enemyFrameCounts = new Map();
     this.enemyFrameCountsAt = -1;
@@ -727,7 +740,10 @@ export class GameView {
       const home = this.chunks.get(this.chunkKey(Math.floor(o.tx / CHUNK), Math.floor(o.ty / CHUNK)));
       if (inChunk(o.tx, o.ty) || !home || home === c) {
         e.sprite.destroy();
-        if (e.shadow && !e.shadow.destroyed) e.shadow.destroy();
+        if (e.shadow && !e.shadow.destroyed) {
+          this.looseShadows.delete(e.shadow);
+          e.shadow.destroy();
+        }
         for (const w of e.windows ?? []) {
           w.destroy();
           this.windowSprites.splice(this.windowSprites.indexOf(w), 1);
@@ -948,12 +964,23 @@ export class GameView {
     const g = objectShadow(o.type, tex.width, tex.height);
     if (!g) return null;
     const ts = this.map.tileSize;
-    const sh = new Sprite(this.shadowTex);
-    sh.anchor.set(0.5);
-    sh.tint = SHADOW.color;
     const [dx, dy] = this.decorShift(o); // (W2: under the object where it is drawn)
-    placeShadow(sh, o.tx * ts + ts / 2 + dx, o.ty * ts + ts + dy, g);
+    const sh = this.makeShadow(g, o.tx * ts + ts / 2 + dx, o.ty * ts + ts + dy);
     sh.visible = !o.gone && this.fxOn.shadows;
+    return sh;
+  }
+
+  /**
+   * A shadow sprite (shadows.js: pixel steps, whole game px) at the strength of the moment; it keeps
+   * its geometry so a change of weather can restrengthen it.
+   * @param {import('./shadows.js').ShadowGeom} g @param {number} x @param {number} y feet, world px
+   */
+  makeShadow(g, x, y) {
+    const sh = new Sprite();
+    sh.tint = SHADOW.color;
+    sh.label = 'shadow';
+    placeShadow(sh, x, y, g, this.shadowStrength);
+    /** @type {any} */ (sh).shadowG = g;
     return sh;
   }
 
@@ -995,10 +1022,7 @@ export class GameView {
     let shadow = null;
     const g = this.fxV2 && (o.type === 'crate' || (z > 0 && rowOf)) ? objectShadow(o.type, Math.abs(s.width), s.height) : null;
     if (g) {
-      shadow = new Sprite(this.shadowTex);
-      shadow.anchor.set(0.5);
-      shadow.tint = SHADOW.color;
-      placeShadow(shadow, x, feetY - z, g);
+      shadow = this.looseShadow(g, x, feetY - z);
       shadow.visible = !o.gone && this.fxOn.shadows;
       if (o.type === 'crate' || !rowOf) this.shadowLayer.addChild(shadow);
       else rowOf(o.ty).addChild(shadow);
@@ -1006,22 +1030,63 @@ export class GameView {
     // gfx W5: a lived-in house lights its windows at night (houseWindows.js).
     /** @type {Sprite[] | null} */
     let windows = null;
-    if (this.fxV2 && o.type === 'house' && hasWindows(s.texture)) {
-      windows = HOUSE_WINDOWS.map((w) => {
-        const p = this.makeSprite('px');
-        p.anchor.set(0, 0);
-        p.position.set(x + w.x, feetY - z + w.y);
-        p.width = w.w;
-        p.height = w.h;
-        p.tint = WINDOW_GLOW.color;
-        p.visible = false;
-        p.zIndex = feetY + 0.001;
-        this.actors.addChild(p);
-        this.windowSprites.push(p);
-        return p;
-      });
+    const panes = this.fxV2 && o.type === 'house' && hasWindows(s.texture) ? this.paneTexture(s.texture) : null;
+    if (panes) {
+      // only the glass, recoloured from the house's own pixels, drawn above the light map (it shines)
+      const p = new Sprite(panes.tex);
+      p.scale.set(1 / panes.scale);
+      p.position.set(x + PANE_AREA.x, feetY - z + PANE_AREA.y);
+      p.visible = false;
+      /** @type {any} */ (p).house = s; // (it fades with the house when the player walks behind it)
+      this.windowLayer.addChild(p);
+      this.windowSprites.push(p);
+      windows = [p];
     }
     this.objectSprites.set(o, { o, sprite: s, occluder, shadow, shadowType: o.type, shadowGone: !!o.gone, windows });
+  }
+
+  /**
+   * gfx W5: the lit glass of a house texture (houseWindows.paneImage, from its pixels), made once per
+   * texture; null when it cannot be read or has no glass.
+   * @param {Texture} tex @returns {{ tex: Texture, scale: number } | null}
+   */
+  paneTexture(tex) {
+    const had = this.paneTextures.get(tex);
+    if (had !== undefined) return had;
+    /** @type {{ tex: Texture, scale: number } | null} */
+    let out = null;
+    try {
+      // the frame's pixels from its image (a canvas copy, as flashOverlay.js does: no GPU read-back)
+      const res = tex.source.resolution || 1;
+      const f = tex.frame;
+      const width = Math.round(f.width * res);
+      const height = Math.round(f.height * res);
+      const src = /** @type {any} */ (tex.source.resource);
+      const rc = document.createElement('canvas');
+      rc.width = width;
+      rc.height = height;
+      const rctx = /** @type {CanvasRenderingContext2D} */ (rc.getContext('2d', { willReadFrequently: true }));
+      rctx.drawImage(src, Math.round(f.x * res), Math.round(f.y * res), width, height, 0, 0, width, height);
+      const pixels = rctx.getImageData(0, 0, width, height).data;
+      const scale = width / tex.width;
+      const img = paneImage(pixels, width, scale);
+      if (img.glass > 0) {
+        const c = document.createElement('canvas');
+        c.width = img.w;
+        c.height = img.h;
+        const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
+        const id = ctx.createImageData(img.w, img.h);
+        id.data.set(img.data);
+        ctx.putImageData(id, 0, 0);
+        const t = Texture.from(c);
+        t.source.scaleMode = 'nearest';
+        out = { tex: t, scale };
+      }
+    } catch (err) {
+      console.warn(`gfx: house windows: ${String(err)}`);
+    }
+    this.paneTextures.set(tex, out);
+    return out;
   }
 
   /** Whether there is water within r tiles of a world point (fireflies). @param {number} x @param {number} y @param {number} r */
@@ -1047,7 +1112,7 @@ export class GameView {
     const fx = this.fxOn;
     if (this.fxV2 && name in fx) fx[/** @type {'shadows'} */ (name)] = on;
     this.shadowLayer.visible = fx.shadows;
-    for (const c of this.chunks.values()) for (const r of c.rows.values()) for (const ch of r.children) if (/** @type {any} */ (ch).texture === this.shadowTex) ch.visible = fx.shadows;
+    for (const sh of this.looseShadows) if (sh.parent !== this.shadowLayer) sh.visible = fx.shadows && sh.alpha > 0; // (raised ground: in their terrain rows)
     for (const [o, list] of this.bakedShadows) {
       for (const b of list) {
         b.sprite.visible = fx.shadows && !o.gone;
@@ -1080,21 +1145,60 @@ export class GameView {
     };
   }
 
+  /** A loose shadow (restrengthened with the weather). @param {import('./shadows.js').ShadowGeom} g @param {number} x @param {number} y */
+  looseShadow(g, x, y) {
+    const sh = this.makeShadow(g, x, y);
+    this.looseShadows.add(sh);
+    return sh;
+  }
+
+  /**
+   * Moves / reshapes an object's shadow (keeping its geometry for restrengthening).
+   * @param {Sprite} sh @param {number} x @param {number} y @param {import('./shadows.js').ShadowGeom | null} g
+   */
+  reshadow(sh, x, y, g) {
+    if (!g) return;
+    /** @type {any} */ (sh).shadowG = g;
+    placeShadow(sh, x, y, g, this.shadowStrength);
+  }
+
+  /**
+   * gfx W5: the sun's shadows at a new strength (the weather turned; a lightning flash came or went).
+   * The baked ones are redrawn into their chunks' ground caches, so this runs only on a change.
+   * @param {number} k 0..1
+   */
+  setShadowStrength(k) {
+    if (k === this.shadowStrength) return;
+    this.shadowStrength = k;
+    const restrength = (/** @type {Sprite} */ sh) => {
+      const g = /** @type {any} */ (sh).shadowG;
+      if (g) sh.alpha = g.alpha * k;
+    };
+    for (const sh of this.looseShadows) restrength(sh);
+    for (const list of this.bakedShadows.values()) {
+      for (const b of list) {
+        restrength(b.sprite);
+        this.shadeDirty.add(b.base);
+      }
+    }
+    for (const b of this.shadeDirty) if (!b.destroyed) b.updateCacheTexture();
+    this.shadeDirty.clear();
+  }
+
   /** A pooled shadow under a villager / enemy sprite (feet at its position). @param {Sprite} spr @param {number} zIndex */
   charShadow(spr, zIndex) {
     if (!spr.visible || spr.alpha <= 0.05) return;
+    if (this.shadowStrength <= 0) return; // (a lightning flash)
     let s = this.charShadows[this.charShadowN];
     if (!s) {
-      s = new Sprite(this.shadowTex);
-      s.anchor.set(0.5);
+      s = new Sprite();
       s.tint = SHADOW.color;
       this.actors.addChild(s);
       this.charShadows.push(s);
     }
     this.charShadowN++;
     const g = characterShadow(Math.abs(spr.width));
-    placeShadow(s, spr.x, spr.y, g);
-    s.alpha = g.alpha * spr.alpha;
+    placeShadow(s, spr.x, spr.y, g, this.shadowStrength * spr.alpha);
     s.zIndex = zIndex - 0.003;
     s.visible = true;
   }
@@ -1105,6 +1209,8 @@ export class GameView {
    */
   updateEffects(state, timeSec, dtSec) {
     if (!this.fxV2) return; // (?fx=v1: none of them)
+    // The sun's shadows: softer under clouds, rain and snow, gone in a lightning flash; indoors as they are.
+    this.setShadowStrength(this.boundsArea ? 1 : weatherShadow(this.weather.kind, this.weather.flashing));
     // Shadows under the villagers and the enemies (pooled; the extras hidden).
     this.charShadowN = 0;
     if (this.fxOn.shadows) {
@@ -1123,7 +1229,7 @@ export class GameView {
         for (const o of this.map.objects) {
           if (o.type !== 'house') continue;
           const fy = o.ty * ts + ts - this.map.elev[o.ty * this.map.width + o.tx];
-          for (const w of HOUSE_WINDOWS) lights.push({ x: o.tx * ts + ts / 2 + w.x + w.w / 2, y: fy + w.y + w.h / 2 });
+          lights.push(...windowLightSpots(o.tx * ts + ts / 2, fy));
         }
       }
       this.windowLights = lights;
@@ -1132,8 +1238,9 @@ export class GameView {
     this.weather.windowGlow = glow;
     for (let i = 0; i < this.windowSprites.length; i++) {
       const w = this.windowSprites[i];
-      w.visible = glow > 0.01;
-      w.alpha = glow * WINDOW_GLOW.alpha;
+      const house = /** @type {any} */ (w).house;
+      w.visible = glow > 0.01 && house.visible;
+      w.alpha = glow * house.alpha;
     }
 
     // Ambient particles: which kinds, re-decided twice a second (and where the view is, each frame).
@@ -1192,7 +1299,7 @@ export class GameView {
       sprite.texture = this.assets.texture(this.seasonal(this.objectKey(o, timeSec)));
       // gfx W5: the shadow follows (a crate sliding; a tree burnt to a stump; a jar broken).
       const sh = e.shadow;
-      if (sh && o.type === 'crate' && o.movedAt !== undefined && now - o.movedAt < 250) placeShadow(sh, sprite.x, sprite.y, /** @type {any} */ (objectShadow('crate', sprite.width, sprite.height)));
+      if (sh && o.type === 'crate' && o.movedAt !== undefined && now - o.movedAt < 250) this.reshadow(sh, sprite.x, sprite.y, objectShadow('crate', sprite.width, sprite.height));
       if (o.type !== e.shadowType || !!o.gone !== e.shadowGone) {
         e.shadowType = o.type;
         e.shadowGone = !!o.gone;
@@ -1200,7 +1307,7 @@ export class GameView {
         const show = !o.gone && !!g && this.fxOn.shadows;
         if (sh) {
           sh.visible = show;
-          if (g) placeShadow(sh, sprite.x, sprite.y, g);
+          if (g) this.reshadow(sh, sprite.x, sprite.y, g);
         }
         // baked into the ground: redraw those chunks' caches
         const baked = this.bakedShadows.get(o);
@@ -1208,7 +1315,7 @@ export class GameView {
           for (const b of baked) {
             b.sprite.visible = show;
             const [dx, dy] = this.decorShift(o);
-            if (g) placeShadow(b.sprite, o.tx * ts + ts / 2 + dx, o.ty * ts + ts + dy, g);
+            if (g) this.reshadow(b.sprite, o.tx * ts + ts / 2 + dx, o.ty * ts + ts + dy, g);
             this.shadeDirty.add(b.base);
           }
         }
@@ -1486,7 +1593,8 @@ export class GameView {
       spr.alpha = e.state === 'dead' ? (e.final ? Math.max(0, 1 - e.t / FINAL_BOSS.defeatMs) : defeatAlpha(e.t)) : 1;
       // Telegraph (v1.0, ART_STYLE_GUIDE 5.4 B): the wind-up pulses under a 50% red overlay, faster
       // as the attack nears — laid over the art, so it shows on dark bodies too (flashOverlay.js).
-      const flash = warningFlashAlpha(e, timeSec, windupProgress(e));
+      const pulse = warningFlashAlpha(e, timeSec, windupProgress(e));
+      const flash = pulse > 0 && this.fxV2 ? RIM_FLASH.alpha : pulse; // (gfx W5: the rim overlay)
       const overlay = placeFlash(spr, this.flashSprites.get(e.id) ?? null, flash, this.silhouettes, this.actors);
       if (overlay) this.flashSprites.set(e.id, overlay);
     }

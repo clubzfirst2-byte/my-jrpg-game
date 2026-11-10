@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync } from 'node:fs';
 import { V2_ENABLED, artVersion, resolveArtGroups, parseGroupName, v2Name } from '../../src/view/assets/artV2.js';
-import { onDemandReleaseGroup, precacheFiles, releaseGroupOf } from '../../tools/precache.mjs';
+import { onDemandReleaseGroup, preloadReleaseGroup, precacheFiles, releaseGroupOf } from '../../tools/precache.mjs';
 
 // Graphics v2 infrastructure (src/view/assets/artV2.js): src/art-release-v2/<group> drawn instead of
 // src/art-release/<group> when present and enabled; ?v2=0 and ?<group>=v1|v2 to compare.
@@ -43,8 +43,17 @@ describe('graphics v2 art groups', () => {
     expect(resolveArtGroups(['hero', 'npc', 'enemy', 'terrain', 'objects'], p('enemy=v2&ui=v1'), opts)).toEqual(['hero', 'npc', 'v2/enemy', 'v2/terrain', 'objects']);
     // a v1 group the game does not load now (?terrain=placeholder) does not come back as v2
     expect(resolveArtGroups(['hero', 'npc', 'enemy', 'objects'], p(''), opts)).toEqual(['hero', 'npc', 'enemy', 'objects', 'v2/ui']);
-    // the default today: nothing enabled, so exactly the v1 groups
+    // a group whose v2 art is not enabled: exactly the v1 group
     expect(resolveArtGroups(['hero', 'terrain'], p(''), { available: ['terrain'] })).toEqual(['hero', 'terrain']);
+  });
+
+  it('preload: only what normal play draws — the enabled v2 group, not the v1 group it replaces (kept offline)', () => {
+    expect(preloadReleaseGroup('v2-enemy')).toBe(true);
+    expect(preloadReleaseGroup('enemy')).toBe(false); // (an unused preload is a console warning)
+    expect(onDemandReleaseGroup('enemy')).toBe(false); // still precached: ?v2=0 / ?enemy=v1 work offline
+    for (const g of ['hero', 'npc', 'terrain', 'objects']) expect(preloadReleaseGroup(g)).toBe(!V2_ENABLED.includes(g));
+    expect(preloadReleaseGroup('v2-terrain')).toBe(V2_ENABLED.includes('terrain'));
+    expect(preloadReleaseGroup('npc-revision-b2')).toBe(false);
   });
 
   it('names: "v2/<group>" in the game, release-v2-<group>.png|json when built', () => {

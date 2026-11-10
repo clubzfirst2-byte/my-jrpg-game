@@ -21,6 +21,16 @@ export const PRECACHE_STATIC = ['./', 'index.html', 'manifest.webmanifest', 'ico
  */
 export const onDemandReleaseGroup = (group) => group.startsWith('npc-revision') || (group.startsWith('v2-') && !V2_ENABLED.includes(group.slice(3)));
 
+/**
+ * Whether the page preloads a release art group (vite.config.js, transformIndexHtml): the groups
+ * normal play draws. A v1 group whose v2 group is drawn by default (V2_ENABLED) is NOT preloaded —
+ * normal play never uses it, and an unused preload is a console warning (and a wasted download on
+ * the phone); it is loaded only when switched back (?v2=0, ?<group>=v1), and it stays in the
+ * precache list (onDemandReleaseGroup) so the switch works offline too.
+ * @param {string} group
+ */
+export const preloadReleaseGroup = (group) => !onDemandReleaseGroup(group) && !V2_ENABLED.includes(group);
+
 /** The release art group of an emitted sheet / frame table (release-<group>.png|json), or null. @param {string} name */
 export const releaseGroupOf = (name) => /^release-(.+)\.(png|json)$/.exec(name)?.[1] ?? null;
 

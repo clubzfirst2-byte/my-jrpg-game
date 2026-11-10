@@ -5,7 +5,7 @@
 // mist in the rain and at dawn), positions in world px (the layers
 // follow the world's camera transform). Fireflies glow: they are drawn above the light map; the rest
 // are lit like the world. Which kinds show is pure (unit-tested).
-import { Container, Sprite } from 'pixi.js';
+import { Container, Sprite, Texture } from 'pixi.js';
 
 export const AMBIENT = Object.freeze({
   /** pool size per layer (the most of each layer on screen) */
@@ -51,8 +51,51 @@ export function ambientKinds(c) {
 /**
  * @typedef {{ s: Sprite, kind: number, x: number, y: number, vx: number, vy: number, phase: number, age: number, life: number }} Mote
  */
-/** The mist's strongest opacity (the texture's centre). */
-export const MIST_ALPHA = 0.15;
+/** The mist's strongest opacity (the band's core). */
+export const MIST_ALPHA = 0.16;
+/** The mist bands' sizes (game px): long, low, with stepped ends. */
+export const MIST_BANDS = Object.freeze([Object.freeze({ w: 48, h: 6 }), Object.freeze({ w: 64, h: 6 }), Object.freeze({ w: 80, h: 8 })]);
+/** Each step's opacity, as a share of the core's (1 outermost .. 3 core). */
+const MIST_STEPS = [0, 0.35, 0.65, 1];
+
+/**
+ * A mist band's pixels, one byte per game px: its step (0 none .. 3 core) — a long low oval in flat
+ * steps, so it reads as a drawn band of mist, not an airbrushed smudge. Pure.
+ * @param {number} w @param {number} h @returns {Uint8Array}
+ */
+export function mistBand(w, h) {
+  const out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const nx = (x + 0.5 - w / 2) / (w / 2);
+      const ny = (y + 0.5 - h / 2) / (h / 2);
+      const d = nx * nx * nx * nx + ny * ny; // flat-topped: long and low
+      out[y * w + x] = d < 0.3 ? 3 : d < 0.65 ? 2 : d < 1 ? 1 : 0;
+    }
+  }
+  return out;
+}
+
+/** The mist band textures (white; one texel per game px, nearest-neighbour), made once. @returns {Texture[]} */
+export function mistTextures() {
+  if (typeof document === 'undefined') return [Texture.WHITE];
+  return MIST_BANDS.map(({ w, h }) => {
+    const m = mistBand(w, h);
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const g = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
+    const img = g.createImageData(w, h);
+    for (let i = 0; i < m.length; i++) {
+      img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = 255;
+      img.data[i * 4 + 3] = Math.round(MIST_STEPS[m[i]] * 255);
+    }
+    g.putImageData(img, 0, 0);
+    const t = Texture.from(c);
+    t.source.scaleMode = 'nearest';
+    return t;
+  });
+}
 const LEAF_K = 1;
 const MOTE_K = 2;
 const FLY_K = 3;
@@ -62,9 +105,9 @@ const MIST_K = 5;
 export class AmbientParticles {
   /**
    * @param {import('pixi.js').Texture} dot a small white square ('px', 2×2 game px)
-   * @param {import('pixi.js').Texture} [soft] a soft white oval (the cast shadows' texture) for the mist
+   * @param {Texture[]} [mist] the mist bands (mistTextures)
    */
-  constructor(dot, soft) {
+  constructor(dot, mist) {
     /** lit like the world (under the light map) */
     this.under = new Container();
     this.under.label = 'ambient';
@@ -92,8 +135,10 @@ export class AmbientParticles {
     }
     /** mist: its own few sprites, under the small particles @type {Mote[]} */
     this.mistPool = [];
-    for (let i = 0; soft && i < AMBIENT.mist; i++) {
-      const s = new Sprite(soft);
+    /** @type {Texture[]} */
+    this.mistTex = mist ?? [];
+    for (let i = 0; mist && mist.length && i < AMBIENT.mist; i++) {
+      const s = new Sprite(mist[i % mist.length]);
       s.anchor.set(0.5);
       s.visible = false;
       s.tint = 0xdfe8f2;
@@ -214,8 +259,9 @@ export class AmbientParticles {
       m.vy = 0;
       m.life = 7000 + r() * 6000;
       m.age = r() * 2000; // (not all in step)
-      m.s.width = 96 + Math.round(r() * 48);
-      m.s.height = 26 + Math.round(r() * 12);
+      // a drawn band of mist, one texel per game px (on the pixel grid: positions are rounded)
+      m.s.texture = this.mistTex[Math.floor(r() * this.mistTex.length)];
+      m.s.scale.set(1);
     } else {
       m.s.tint = 0xffffff;
       m.vx = 0;

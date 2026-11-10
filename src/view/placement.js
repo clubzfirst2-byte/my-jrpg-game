@@ -118,7 +118,13 @@ export function macroQuarter(tx, ty) {
   return (tx - bx * 2) + (ty - by * 2) * 2;
 }
 
-/** Whether the placement layer is on (?placement=0 turns it off, to compare). */
+/**
+ * Whether the placement layer is on. ?placement=0 turns it off, to compare; ?v2=0 (every graphics v2
+ * change back to the approved look) turns it off too, unless ?placement=1 asks for it.
+ */
 export function placementEnabled(search = globalThis.location?.search ?? '') {
-  return new URLSearchParams(search).get('placement') !== '0';
+  const q = new URLSearchParams(search);
+  const p = q.get('placement');
+  if (p === '0' || p === '1') return p === '1';
+  return q.get('v2') !== '0';
 }

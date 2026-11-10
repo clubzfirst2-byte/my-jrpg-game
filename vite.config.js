@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { packGroup, releaseGroups } from './tools/release-art-pack.mjs';
-import { precacheFiles, onDemandReleaseGroup, releaseGroupOf } from './tools/precache.mjs';
+import { precacheFiles, preloadReleaseGroup, releaseGroupOf } from './tools/precache.mjs';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
@@ -76,7 +76,7 @@ function releaseArt() {
         return Object.values(ctx.bundle).flatMap((out) => {
           if (out.type !== 'asset') return [];
           const group = (out.names ?? []).map(releaseGroupOf).find((g) => g !== null);
-          if (!group || onDemandReleaseGroup(group)) return [];
+          if (!group || !preloadReleaseGroup(group)) return []; // (only what normal play draws: precache.mjs)
           const href = `./${out.fileName}`;
           const attrs = out.fileName.endsWith('.png') ? { rel: 'preload', as: 'image', href } : { rel: 'preload', as: 'fetch', type: 'application/json', crossorigin: 'anonymous', href };
           return [{ tag: 'link', attrs, injectTo: /** @type {const} */ ('head') }];

@@ -98,5 +98,9 @@ describe('placement layer (W2)', () => {
     expect(placementEnabled('')).toBe(true);
     expect(placementEnabled('?placement=0')).toBe(false);
     expect(placementEnabled('?map=world&placement=1')).toBe(true);
+    // ?v2=0: the approved look, placement included; ?placement=1 wins
+    expect(placementEnabled('?map=world&v2=0')).toBe(false);
+    expect(placementEnabled('?v2=0&placement=1')).toBe(true);
+    expect(placementEnabled('?fx=v1')).toBe(true);
   });
 });

@@ -1,9 +1,10 @@
 // @ts-check
 // Draws the island features (P3.5): chests, checkpoint stones, campfires with smoke, cave openings,
 // and edge markers pointing at discovered landmarks that are off-screen. Reads state only.
-import { Graphics, Sprite as PixiSprite } from 'pixi.js';
-import { objectShadow, placeShadow, SHADOW } from './shadows.js';
+import { Graphics } from 'pixi.js';
+import { objectShadow } from './shadows.js';
 /** @typedef {import('pixi.js').Sprite} Sprite @typedef {import('pixi.js').Container} Container */
+/** @typedef {(g: import('./shadows.js').ShadowGeom, x: number, y: number) => Sprite} ShadowMaker */
 
 const SMOKE_PUFFS = 7;
 const SMOKE_RISE_PX = 40;
@@ -12,16 +13,13 @@ const MARKER_MARGIN = 10;
 const FIRE_FPS = 6;
 
 /**
- * gfx W5: a soft shadow under a feature (chest, record stone), sorted just under it.
- * @param {import('pixi.js').Texture | undefined} tex @param {Container} actors @param {string} type @param {Sprite} s @param {number} zIndex
+ * gfx W5: a shadow under a feature (chest, record stone), sorted just under it.
+ * @param {ShadowMaker | undefined} make @param {Container} actors @param {string} type @param {Sprite} s @param {number} zIndex
  */
-function castShadow(tex, actors, type, s, zIndex) {
-  const g = tex ? objectShadow(type, s.width, s.height) : null;
-  if (!tex || !g) return;
-  const sh = new PixiSprite(tex);
-  sh.anchor.set(0.5);
-  sh.tint = SHADOW.color;
-  placeShadow(sh, s.x, s.y, g);
+function castShadow(make, actors, type, s, zIndex) {
+  const g = make ? objectShadow(type, s.width, s.height) : null;
+  if (!make || !g) return;
+  const sh = make(g, s.x, s.y);
   sh.zIndex = zIndex;
   actors.addChild(sh);
 }
@@ -32,9 +30,9 @@ export class FeatureView {
    * @param {Container} actors   Y-sorted layer
    * @param {Container} screen   screen-space layer (markers)
    * @param {import('../game/state.js').GameState} state
-   * @param {import('pixi.js').Texture} [shadowTex] gfx W5: the soft cast-shadow texture (shadows.js)
+   * @param {ShadowMaker} [makeShadow] gfx W5: makes a cast shadow (shadows.js; none with ?fx=v1)
    */
-  constructor(makeSprite, actors, screen, state, shadowTex) {
+  constructor(makeSprite, actors, screen, state, makeShadow) {
     this.makeSprite = makeSprite;
     const map = state.map;
     const ts = map.tileSize;
@@ -48,7 +46,7 @@ export class FeatureView {
       s.position.set(f.x, f.y - f.z - 1);
       s.zIndex = f.y - 1;
       actors.addChild(s);
-      castShadow(shadowTex, actors, 'chest', s, f.y - 1.01);
+      castShadow(makeShadow, actors, 'chest', s, f.y - 1.01);
       return { id: c.id, sprite: s };
     });
 
@@ -59,7 +57,7 @@ export class FeatureView {
       s.position.set(f.x, f.y - f.z - 3);
       s.zIndex = f.y - 3;
       actors.addChild(s);
-      castShadow(shadowTex, actors, 'checkpoint', s, f.y - 3.01);
+      castShadow(makeShadow, actors, 'checkpoint', s, f.y - 3.01);
       return { id: c.id, sprite: s };
     });
 
