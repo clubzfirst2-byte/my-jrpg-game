@@ -192,6 +192,17 @@ def calm_number(i, j):
     return n
 
 
+def dune(a, b):
+    """Desert blocks (round 8): one dune per cell of 4 x 3 blocks, on a hashed block of the cell; its shape 1-6
+    from the cell's place in a 3 x 2 pattern of cells, turned by a hash per pattern (so the 6 shapes are spread
+    out and none comes twice close together). 0 = no dune (NAMES.md 1 A, step 4b)."""
+    sa, sb = a // 4, b // 3
+    hs = dhash(sa + 77, sb + 31)
+    if (a, b) != (4 * sa + hs % 4, 3 * sb + (hs >> 2) % 3):
+        return 0
+    return 1 + (sa % 3 + 3 * (sb % 2) + dhash(sa // 3 + 13, sb // 2 + 29)) % 6
+
+
 def p_none(a, b):
     """The chance that block (a, b) has no picture: 0 where the noise is under 0.3 (thick), 1 over 0.8 (bare)."""
     return min(1.0, max(0.0, 2 * (density(a, b) - 0.3)))
@@ -209,8 +220,6 @@ def macro_blocks(grid):
     out = {}
     for b in range((H + 2) // 3 + 1):
         for a in range((W + 2) // 3 + 1):
-            if not has_picture(a, b):
-                continue
             ox, oy = offsets(a, b)
             i, j = 3 * a + ox, 3 * b + oy
             if i + 2 >= W or j + 2 >= H:
@@ -218,7 +227,13 @@ def macro_blocks(grid):
             ts = {terr(grid, i + dx, j + dy) for dx in range(3) for dy in range(3)}
             if len(ts) != 1 or next(iter(ts)) not in BUSY_MACRO:
                 continue
-            name = MACRO_NAMES[picture(a, b)]
+            k = dune(a, b) if ts == {"dsand"} else 0
+            if k:
+                name = f"dune{k}"
+            elif not has_picture(a, b):
+                continue
+            else:
+                name = MACRO_NAMES[picture(a, b)]
             for q in range(4):
                 assert (i + q % 2, j + q // 2) not in out, "pictures overlap"
                 out[(i + q % 2, j + q // 2)] = (name, q, (i, j, 2))
@@ -234,6 +249,39 @@ def edge_type(grid, a, b, edge_id):
     if lowest_land(grid, *a) != lowest_land(grid, *b):
         return 0
     return (dhash(*edge_id) >> 8) % 8
+
+
+def mask_of(grid, t, i, j):
+    """The overlay mask of terrain t on display tile (i, j): its corners whose priority is >= t's."""
+    ts = [terr(grid, *c) for c in [(i, j), (i + 1, j), (i, j + 1), (i + 1, j + 1)]]
+    return sum(b for b, tt in zip((1, 2, 4, 8), ts) if tt in PRIORITY and PRIORITY.index(tt) >= PRIORITY.index(t))
+
+
+SIDE_GEOM = {  # side: (edge hash args, its two end cells, the display tile across it)
+    "N": (lambda i, j: (2 * i + 1, 2 * j), lambda i, j: [(i, j), (i + 1, j)], lambda i, j: (i, j - 1)),
+    "E": (lambda i, j: (2 * i + 2, 2 * j + 1), lambda i, j: [(i + 1, j), (i + 1, j + 1)], lambda i, j: (i + 1, j)),
+    "S": (lambda i, j: (2 * i + 1, 2 * j + 2), lambda i, j: [(i, j + 1), (i + 1, j + 1)], lambda i, j: (i, j + 1)),
+    "W": (lambda i, j: (2 * i, 2 * j + 1), lambda i, j: [(i, j), (i, j + 1)], lambda i, j: (i - 1, j)),
+}
+
+
+def side_state(grid, t, i, j, sd):
+    """Round 7 (NAMES.md 2): 0 or 1 for a side of display tile (i, j) that terrain t's border crosses."""
+    hargs, ends, across = SIDE_GEOM[sd]
+    if any(terr(grid, *c) == "water" for c in ends(i, j)):
+        return 0  # shores: the foam's curve
+    if mask_of(grid, t, *across(i, j)) in (6, 9) or mask_of(grid, t, i, j) in (6, 9):
+        return 0
+    return (dhash(*hargs(i, j)) >> 4) & 1
+
+
+def edge_variant(grid, t, m, i, j):
+    """The overlay variant of terrain t (mask m) on display tile (i, j)."""
+    if m in (6, 9):
+        return dhash(i + 7, j) % 2
+    from transitions import crossing_sides
+    a, b = crossing_sides(m)
+    return side_state(grid, t, i, j, a) + 2 * side_state(grid, t, i, j, b)
 
 
 def render_v2(grid, images, frame=0, season=None):
@@ -291,7 +339,7 @@ def render_v2(grid, images, frame=0, season=None):
                 if m == 15:
                     im.alpha_composite(key(t, "0"), (px, py))
                 else:
-                    v = ruin_row(j) if t == "ruin" else dhash(i + 7, j) % 2
+                    v = ruin_row(j) if t == "ruin" else edge_variant(grid, t, m, i, j)
                     im.alpha_composite(key(t, f"e{m}.{v}"), (px, py))
     for y in range(H):  # other grounds: their v1 tile, on the cell grid
         for x in range(W):
