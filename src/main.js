@@ -20,7 +20,7 @@ import { EndingScreen } from './ui/ending.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
-import { createNpcs } from './game/npc/npcs.js';
+import { createNpcs, NPC_BODY } from './game/npc/npcs.js';
 import { prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
 import { TERRAIN_GROUP, releaseTerrainEntries, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
@@ -960,7 +960,7 @@ async function boot() {
       if (!n) return;
       const p = state.player;
       p.x = p.prevX = n.x;
-      p.y = p.prevY = n.y + 14;
+      p.y = p.prevY = n.y + NPC_BODY.depth + NPC_BODY.front; // right against its body, below
       p.z = p.prevZ = p.groundZ = n.z;
       p.facing = 'up';
       p.aimX = 0;

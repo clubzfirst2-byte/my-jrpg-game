@@ -16,14 +16,14 @@ const world = () => {
   s.enemySpawns = [];
   return s;
 };
-/** The elder, held at home; the player one tile below, facing up. */
+/** The elder, held at home; the player two tiles below (clear of its 18 px front), facing up. */
 function atElder() {
   const s = world();
   const elder = s.npcs.find((n) => n.id === 'elder');
   elder.homeX = elder.tx = elder.x;
   elder.homeY = elder.ty = elder.y;
   const p = s.player;
-  const f = tileFeet(s.map, Math.floor(elder.x / 16), Math.floor(elder.y / 16) + 1);
+  const f = tileFeet(s.map, Math.floor(elder.x / 16), Math.floor(elder.y / 16) + 2);
   Object.assign(p, { x: f.x, y: f.y, z: elder.z, facing: 'up', aimX: 0, aimY: -1 });
   return { s, elder, p };
 }
@@ -35,10 +35,10 @@ describe('villagers have a solid body', () => {
       stepGame(s, { ...none, moveY: -1 });
       expect(npcOverlap(p.x, p.y, p, elder)).toBe(0);
     }
-    // right against it, below: final QA L-5, 14 px (its front) so the hero no longer hides it
+    // right against it, below: final QA L-5 / QA4 L-7, 18 px (its front) so the hero no longer hides it
     expect(p.y - elder.y).toBeGreaterThanOrEqual(6 + NPC_BODY.front - 0.01);
     expect(p.y - elder.y).toBeLessThan(6 + NPC_BODY.front + 2);
-    expect(NPC_BODY.front).toBe(8);
+    expect(NPC_BODY.front).toBe(12);
     expect(Math.abs(p.x - elder.x)).toBeLessThan(1);
     expect(npcInReach(s)?.id).toBe('elder');
     stepGame(s, { ...none, attack: true });

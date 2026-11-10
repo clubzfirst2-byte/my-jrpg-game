@@ -59,7 +59,9 @@ test('cooking at the camp fire: a recipe is discovered', async ({ page }, testIn
   await page.click('#inv-add-beast_meat');
   await page.click('#inv-add-ember_pepper');
   await page.click('#inv-cook');
-  await expect.poll(async () => (await api(page, 'toasts')).join('|')).toContain('火照りのスープができた！（新しいレシピ）');
+  // v1.0 QA4: the できた row says it (a toast used to cover the pot and this row)
+  await expect(page.locator('#inv-cooked')).toContainText('できた：火照りのスープ（新しいレシピ）');
+  expect((await api(page, 'toasts')).join('|')).not.toContain('ができた');
   const inv = await api(page, 'inventory');
   expect(inv.items.ember_soup).toBe(1);
   expect(inv.recipes).toEqual(['ember_soup']);

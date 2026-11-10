@@ -29,8 +29,12 @@ import { conditionHolds, coresPurified } from './talk.js';
  *   stops 14 px below them instead of 6 and the villager's head and shoulders stay in view (both
  *   are 28 px tall). Only the player keeps this distance: where a villager may stand (walls,
  *   doorways, corridors) still uses the box at its feet.
+ * - v1.0 QA4 (L-7, "the hero's head still covers the villager's lower body"): `front` 8 → 12, so the
+ *   player stops 18 px below: the hero's head now reaches only the villager's legs. (Sorting the
+ *   villager in front instead would draw it over a hero who stands nearer the camera.) Still well
+ *   inside the talk reach (NPC.talkRange 28).
  */
-export const NPC_BODY = Object.freeze({ halfWidth: 5, depth: 6, front: 8, zReach: 12, yieldMs: 900, asideStep: 14 });
+export const NPC_BODY = Object.freeze({ halfWidth: 5, depth: 6, front: 12, zReach: 12, yieldMs: 900, asideStep: 14 });
 
 /** Whether a villager has a solid body. @param {{ ghost?: boolean }} n */
 export const npcSolid = (n) => !n.ghost;
