@@ -10,7 +10,7 @@ east. These overlays replace the lines and the strip:
                              the rim: lit (tones 5 / 4) on the north and west sides, which face the light, in
                              shade (tone 2) on the east side.
   <prefix>.step.shade.<v>    on the LOW cell east of a higher cell, over its ground (the cell's own position):
-                             the shadow the step casts, 2-8 px wide with a wavy edge (round 8: the lightest tone 15+ darker
+                             the shadow the step casts, 2-8 px wide (4-9 px on moss, autumn moss, path, ruin) with a wavy edge (round 8: the lightest tone 15+ darker
                              than the core; its foot in the outline's tone).
 
 The depth of the outline / rim / shadow along a side is a 32-periodic function of the position along it (so
@@ -82,7 +82,7 @@ def shade_overlay(mat, variant):
     wide = 1.5 if _lum(mat, t_sh) - _lum(mat, 3) > -20 else 0.0  # round 9: moss / autumn moss / ruin shadows a column wider
     for y in range(32):
         for x in range(32):
-            w = _depth(y, "S", variant, 5.0 + wide, 3.0)  # 2-8 px from the west side (+1.5 on the darkest grounds)
+            w = _depth(y, "S", variant, 5.0 + wide, 3.0)  # 2-8 px from the west side (+1.5 where the shadow tone is lighter: 4-9 px)
             if x < w:
                 c.put(x, y, mat, t_out if x < 1 else t_sh)
     return c

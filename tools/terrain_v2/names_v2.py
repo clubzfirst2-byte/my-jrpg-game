@@ -190,7 +190,7 @@ def names_md(files, redrawn, new, copied):
       "side. The south side keeps its cliff face (section 4).")
     a("- **Shadow:** on the lower cell east of it (`tx + 1`), instead of the translucent strip, draw "
       "`<prefix>.step.shade.<v>` with the LOWER cell's prefix at that cell's position on its own ground "
-      "(`((tx+1)·16, ty·16 − h_east)`), `v = hash(tx + 6, ty + 9) % 2`: a 2-8 px shadow from its west side with a wavy "
+      "(`((tx+1)·16, ty·16 − h_east)`), `v = hash(tx + 6, ty + 9) % 2`: a shadow from its west side, 2-8 px wide (4-9 px on moss, autumn moss, path and ruin, whose shadow tone is lighter) with a wavy "
       "edge.")
     a("- **Inner corners** (round 8): on a high cell whose north and east neighbours are not lower but whose NE "
       "neighbour is lower, also draw `<prefix>.step.inner.ne` over its surface; north and west not lower, NW lower: "
