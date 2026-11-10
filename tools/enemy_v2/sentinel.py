@@ -197,7 +197,7 @@ def frames():
     out = {}
     st = dict(fist=F("low"), nf=(22.0, G), ff=(14.0, G))
     name(out, "idle", loop(Pose, 4, [
-        (0.0, dict(st)), (0.25, dict(st, dy=1)), (0.5, dict(st, dy=1, tilt=1)), (0.75, dict(st, tilt=1)),
+        (0.0, dict(st)), (0.25, dict(st, dy=1)), (0.5, dict(st, dy=1, tilt=1)), (0.75, dict(st, tilt=1, fist=(3, 9, 5, 17))),
     ]), draw)
     name(out, "move", loop(Pose, 8, [
         (0.0, dict(st, nf=(25.0, G), ff=(11.0, G), dy=1.0, fist=(3.0, 8.0, 4.0, 16.0))),

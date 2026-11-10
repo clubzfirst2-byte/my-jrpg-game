@@ -37,6 +37,10 @@ class Pose:
         self.__dict__.update(k)
 
 
+# round 3: hand-drawn material clusters (existing tones only)
+FUNGI_LEG = {"a": ("fungus", 3), "b": ("fungus", 2), "c": ("fungus", 1), "g": ("glow", 3), "h": ("glow", 2), "k": ("glow", 1)}
+FUNGI = [["ab", "cc"], [".a.", "abc"], ["gh", "hk"], ["ab", "ck"]]
+
 def draw(p):
     r = Rig(W, H)
     c = p.collapse
@@ -80,6 +84,8 @@ def draw(p):
     # the body: a broad hunched mass
     body = r.mask_of(r.m_ellipse(cx, by, 30, 17), r.m_ellipse(cx, by + 6, 24, 13))
     r.add(body, "rotwood", soft=4, tex=("bark", "radial", 3, {"centre": (cx, by - 3), "calm": (cx, by - 3, 11)}))
+    # round 3: tiny fungus caps and beads of tainted sap in the bark's seams (hand-drawn clusters)
+    r.pattern(body, (cx, by), (9, 7), FUNGI, FUNGI_LEG, seed=41, gaps=0.3)
     # shoulder spikes pointing out
     for s in (-1, 1):
         r.chain([(cx + s * 24, by - 2), (cx + s * 32, by - 7), (cx + s * 40, by - 10)], [4.2, 2.6, 0.8], "rotwood", soft=1)
@@ -195,7 +201,7 @@ def frames():
     from anim import boss
     P2 = dict(phase2=True)
     K = {
-        "idle": [{}, dict(dy=1), dict(dy=1, jaw=1), dict(jaw=1)],
+        "idle": [{}, dict(dy=1), dict(dy=1, head=1), dict(head=1, jaw=1)],
         "move": [dict(legs=(5, 0), shift=-2), dict(legs=(2, 2), dy=-1, head=-1), dict(legs=(0, 5), shift=2), dict(legs=(1, 1), dy=-0.5, head=1)],
         "windup_charge": (dict(lift=-5, head=10, hs=1.04, spikes=4, fan=5, spread=5), dict(lift=-6, head=12, hs=1.1, spikes=5, fan=6, spread=6, jaw=1)),
         "attack_charge": (dict(lift=-4, head=12, hs=1.2, spread=6, jaw=3, legs=(3, 3), fan=4, spikes=3), dict(lift=-1, head=5, hs=1.1, spread=2, jaw=1, fan=1),
@@ -209,7 +215,7 @@ def frames():
                           dict(jaw=4, head=-5, spread=9, fan=7, spikes=4, lift=-3, dy=-2, hs=1.08, **P2)),
         "hurt": dict(head=-4, eyes="shut", dy=-1, jaw=1, shift=-2),
         "stagger": (dict(shift=-5, legs=(0, 6), head=2, eyes="shut", jaw=1), dict(shift=4, legs=(4, 0), head=3, eyes="shut")),
-        "idle2": [dict(spikes=1, **P2), dict(dy=1, spikes=1, **P2), dict(dy=1, spikes=1, jaw=1, **P2), dict(spikes=1, jaw=1, **P2)],
+        "idle2": [dict(spikes=1, **P2), dict(dy=1, spikes=1, **P2), dict(dy=1, head=1, spikes=1, **P2), dict(head=1, jaw=1, spikes=1, **P2)],
         # defeat (round 2): the hit, the buckle, the collapse -- which then melts over two frames
         "defeat": [dict(head=-6, eyes="shut", jaw=3, shift=-3, **P2), dict(head=-5, eyes="shut", jaw=2, **P2),
                    dict(collapse=2, head=5, eyes="shut", spread=4, **P2)],

@@ -412,6 +412,39 @@ class Rig:
         for (mat, tone), pts in groups.items():
             self.add(self.m_px(pts), mat, tone=tone, cast=cast)
 
+    def pattern(self, mask, anchor, step, stamps, legend, seed=0, gaps=0.15):
+        """Round 3: a hand-drawn material pattern (fur wedges, ice crusts, grains, bubbles...).
+        `stamps` are small hand-drawn maps (2-4 px clusters, in the ramp's existing tones); they
+        are laid on a staggered grid of `step` (sx, sy) ANCHORED TO THE PART (anchor = a point
+        that moves with it, in whole pixels), so the pattern moves with the part and never
+        boils. A stamp is drawn only when it fits wholly one pixel inside `mask` (the outline
+        stays clean); a hash picks the stamp and leaves a few gaps."""
+        ax, ay = int(round(anchor[0])), int(round(anchor[1]))
+        sx, sy = step
+        inner = mask.copy()
+        inner[1:, :] &= mask[:-1, :]
+        inner[:-1, :] &= mask[1:, :]
+        inner[:, 1:] &= mask[:, :-1]
+        inner[:, :-1] &= mask[:, 1:]
+        ys, xs = np.nonzero(mask)
+        if not len(ys):
+            return
+        y0, y1 = ys.min() - PAD, ys.max() - PAD
+        x0, x1 = xs.min() - PAD, xs.max() - PAD
+        for j in range((y0 - ay) // sy - 1, (y1 - ay) // sy + 2):
+            for i in range((x0 - ax) // sx - 1, (x1 - ax) // sx + 2):
+                hv = _hash(np.array([i]), np.array([j]), seed)[0]
+                if hv < gaps:
+                    continue
+                rows = stamps[int(hv * 9973) % len(stamps)]
+                h2 = _hash(np.array([i]), np.array([j]), seed + 101)[0]
+                h3 = _hash(np.array([i]), np.array([j]), seed + 202)[0]
+                X0 = ax + i * sx + (j % 2) * (sx // 2) + int((h2 - 0.5) * sx * 0.66)
+                Y0 = ay + j * sy + int((h3 - 0.5) * sy * 0.66)
+                pts = [(X0 + ci, Y0 + cj) for cj, row in enumerate(rows) for ci, ch in enumerate(row) if ch in legend]
+                if pts and all(0 <= x + PAD < self.W and 0 <= y + PAD < self.H and inner[y + PAD, x + PAD] for x, y in pts):
+                    self.stamp(X0, Y0, rows, legend)
+
     # -------------------------------------------------------------- rendering
     def _tones(self):
         H, W = self.H, self.W

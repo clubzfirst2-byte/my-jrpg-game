@@ -13,6 +13,8 @@ rims; a closed socket is a stone plug) and by the pose of the tendrils.
 
 import math
 
+import numpy as np
+
 from rig import Rig
 from bossparts import cracks, orb
 
@@ -33,6 +35,7 @@ class Pose:
         self.phase2 = False
         self.crack = 0  # transform / defeat crack stage 0..3
         self.tendrils = "hang"  # hang / lift / slam / limp / gone
+        self.tback = 0.0  # round 3: 0..1, how far the tendrils have eased back to "hang" (recovery)
         self.shards = 4  # orbiting shards
         self.orbit = 0  # shard radius change (+ out)
         self.spin = 0  # shards' angle step
@@ -54,6 +57,8 @@ def ring(r, cx, cy, s, p):
         band &= ~r.m_poly([(cx - 4, cy - ro - 2), (cx + 4, cy - ro - 2), (cx + 2, cy - ri + 2), (cx - 2, cy - ri + 2)])
         band &= ~r.m_poly([(cx + ri - 3, cy + 10), (cx + ro + 3, cy + 16), (cx + ro + 3, cy + 24), (cx + ri - 3, cy + 18)])
     r.add(band, "ashring", soft=3)
+    # round 3: chips knocked out of the ring (dark pits with a lit lip) and ash
+    r.pattern(band, (cx, cy), (6, 5), CHIPS, MOTE_LEG, seed=72, gaps=0.3)
     # engraved notches of the star-ring, eight around the band (the pendant's pattern, gone dull)
     for i in range(8):
         a = i * math.pi / 4 + math.pi / 8
@@ -88,7 +93,19 @@ def ring(r, cx, cy, s, p):
 
 def eye(r, cx, cy, s, p):
     # the murk pooled inside the ring
-    r.ellipse(cx, cy, R_IN * s, R_IN * s, "murk", soft=4)
+    orbm = r.ellipse(cx, cy, R_IN * s, R_IN * s, "murk", soft=4)
+    # round 3: the miasma swirls -- four curved bands (2 px wide, murk 2.5 over a murk-1 lip),
+    # each carrying a few glow motes; drawn from the orb's centre so they move with it
+    for k, a0 in enumerate((0.3, 1.9, 3.5, 5.0)):
+        pts = [(cx + math.cos(a0 + t * 0.9) * (27 - t * 9) * s, cy + math.sin(a0 + t * 0.9) * (27 - t * 9) * s) for t in (0, 0.5, 1)]
+        band = r.m_chain(pts, [1.2, 1.1, 0.8]) & orbm
+        lip = np.zeros_like(band)
+        lip[1:, 1:] = band[:-1, :-1]
+        r.add(lip & ~band & orbm, "murk", tone=1, cast=False)
+        r.add(band, "murk", tone=2.5, cast=False)
+        mx, my = pts[1]
+        r.stamp(round(mx) - 1, round(my) - 1, ["ab", "bc"] if k % 2 else [".a", "bc"], {"a": ("glow", 3), "b": ("glow", 2), "c": ("glow", 1)})
+    r.pattern(orbm, (cx, cy), (6, 6), MOTES, MOTE_LEG, seed=71, gaps=0.3)
     for a in (0.6, 2.2, 3.9, 5.3):  # slow swirls in the murk
         x0, y0 = cx + math.cos(a) * 26 * s, cy + math.sin(a) * 26 * s
         x1, y1 = cx + math.cos(a + 0.7) * 20 * s, cy + math.sin(a + 0.7) * 20 * s
@@ -111,6 +128,11 @@ def eye(r, cx, cy, s, p):
     r.stamp(gx, gy, ["ab", "b."], {"a": ("glow", 4), "b": ("glow", 3)})
     r.px([(round(px_ - 2 * s), round(py_ - 3 * s))], "glow", 4)
 
+
+# round 3: hand-drawn material clusters (existing tones only)
+MOTE_LEG = {"a": ("glow", 3), "b": ("glow", 2), "c": ("glow", 1), "m": ("murk", 3), "n": ("murk", 1), "o": ("murk", 0), "r": ("ashring", 3), "q": ("ashring", 1)}
+MOTES = [["ab", "bc"], ["mn", "ab"], [".a", "bc"], ["mo", "nb"]]
+CHIPS = [["on", "nr"], ["rq", "qo"], ["n.", "or"], ["ab", "bq"]]
 
 def draw(p):
     r = Rig(W, H)
@@ -140,6 +162,10 @@ def draw(p):
             x1, y1, b = cx + dx * 1.2 + sgn * 2, G - 1, sgn * 1
         else:
             continue
+        if p.tback and p.tendrils != "hang":  # easing back to hanging, over the recovery frames
+            hx1, hy1, hb = cx + dx * 1.7 + sgn * 6, G - 1, sgn * (3 + (p.spin + i) % 2 * 2)
+            f = p.tback
+            x1, y1, b = x1 + (hx1 - x1) * f, y1 + (hy1 - y1) * f, b + (hb - b) * f
         x1 = max(8, min(W - 9, x1))
         tendril(r, x0, y0, x1, min(y1, G - 2), b, 4.6 * s, dark=1 if abs(dx) < 15 else 0)
     if p.tendrils == "slam":  # murk splashes where the tendrils strike
@@ -257,9 +283,9 @@ def tendril_frames_v2():
 def frames():
     from anim import loop, once, name, mix
     out = {}
-    I = [dict(spin=0), dict(spin=0, dy=1), dict(spin=1, dy=1, look=(1, 0)), dict(spin=1, look=(1, 0))]
+    I = [dict(spin=0), dict(spin=0, dy=1), dict(spin=0, dy=1, look=(1, 0)), dict(spin=1, look=(1, 0))]
     name(out, "idle", loop(Pose, 4, [(i / 4, k) for i, k in enumerate(I)]), draw)
-    I2 = [dict(k, phase2=True, crack=3, shards=6) for k in (dict(spin=0), dict(spin=0, dy=1), dict(spin=1, dy=1, look=(-1, 0)), dict(spin=1, look=(-1, 0)))]
+    I2 = [dict(k, phase2=True, crack=3, shards=6) for k in (dict(spin=0), dict(spin=0, dy=1), dict(spin=0, dy=1, look=(-1, 0)), dict(spin=1, look=(-1, 0)))]
     name(out, "idle2", loop(Pose, 4, [(i / 4, k) for i, k in enumerate(I2)]), draw)
     # each pattern opens 1 / 2 / 3 / 4 sockets and takes its own tendril pose; the eye narrows
     W = {
@@ -292,8 +318,11 @@ def frames():
         name(out, f"windup_{p}", once(Pose, 4, [(0.0, dict(w0, dy=w0.get("dy", 0) * 0.6, spin=3)), (0.34, w0), (1.0, w1)]), draw)
         # round 2: frame 1 is the strike -- an overshoot past the release (the ring lunges, the eye
         # bulges, the tendrils whip further), then it recovers
-        name(out, f"attack_{p}", once(Pose, 5, [(0.0, a0), (0.25, S.get(p, dict(mix(Pose, I[0], a0, 1.5), eye="wide")), "in"), (0.5, a1), (0.75, dict(a1, spin=(a1.get("spin", 0) + 1) % 4, dy=a1.get("dy", 0) * 0.6)),
-                                                (1.0, dict(mix(Pose, a1, I[0], 0.7), tendrils=a1.get("tendrils", "hang")))]), draw)
+        name(out, f"attack_{p}", once(Pose, 5, [(0.0, a0), (0.25, S.get(p, dict(mix(Pose, I[0], a0, 1.5), eye="wide")), "in"), (0.5, mix(Pose, S.get(p, a0), a1, 0.45)),
+                                                (0.75, dict(mix(Pose, S.get(p, a0), I[0], 0.6), spin=(a1.get("spin", 0) + 1) % 4,
+                                                            tendrils=S.get(p, a0).get("tendrils", "hang"), tback=0.45)),
+                                                (1.0, dict(mix(Pose, S.get(p, a0), I[0], 0.9), tendrils=S.get(p, a0).get("tendrils", "hang"),
+                                                           tback=0.85))]), draw)
     for suf, ex in (("", {}), ("2", dict(phase2=True, crack=3, shards=6))):  # hurt2: the cracks stay in phase 2
         name(out, "hurt" + suf, once(Pose, 3, [(0.0, dict(eye="shut", dy=-2, spin=1, tendrils="limp", **ex)),
                                                (0.5, dict(eye="shut", dy=-1, spin=2, tendrils="limp", **ex)),
@@ -317,4 +346,4 @@ def frames():
 PATTERNS = ("volley", "ring", "slam", "charge")
 ACTIONS = (("idle", 4), ("idle2", 4)) + tuple(x for p in PATTERNS for x in ((f"windup_{p}", 4), (f"attack_{p}", 5))) + \
     (("hurt", 3), ("hurt2", 3), ("transform", 6), ("defeat", 6), ("tendril", 4))
-SMOOTH = {"scale"}  # shape fields that stay smooth (the rest snap to whole pixels)
+SMOOTH = {"scale", "tback"}  # shape fields that stay smooth (the rest snap to whole pixels)

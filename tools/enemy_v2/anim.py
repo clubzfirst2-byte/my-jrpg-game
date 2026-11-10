@@ -177,8 +177,10 @@ def boss(Pose, draw, K, patterns, out=None, phase2=()):
         name(out, f"windup_{p}", once(Pose, 4, [(0.0, f0), (0.34, w0), (1.0, w1)]), draw)
         # the strike: a hand-set impact pose when given, else an overshoot past the release
         strike = K[f"attack_{p}"][2] if len(K[f"attack_{p}"]) > 2 else mix(Pose, rest, a0, 1.45)
-        name(out, f"attack_{p}", once(Pose, 5, [(0.0, a0), (0.25, strike, "in"), (0.5, a1),
-                                                (0.75, mix(Pose, a1, rest, 0.5)), (1.0, mix(Pose, a1, rest, 0.85))]), draw)
+        # round 3: the recovery is spread over the last three frames (strike -> follow-through ->
+        # settling -> nearly at rest), no pop back to idle right after the strike
+        name(out, f"attack_{p}", once(Pose, 5, [(0.0, a0), (0.25, strike, "in"), (0.5, mix(Pose, strike, a1, 0.45)),
+                                                (0.75, mix(Pose, strike, rest, 0.7)), (1.0, mix(Pose, strike, rest, 0.9))]), draw)
     for suffix, base in (("", idle), ("2", idle2)):
         extra = {"phase2": True} if suffix else {}
         h = dict(K["hurt"], **extra)

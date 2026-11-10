@@ -56,6 +56,11 @@ def blade_arm(r, sx, sy, hx_, hy, s, **k):
     r.add(r.m_poly([(hx_ + px_ * 3, hy + py_ * 3), (tip[0], tip[1]), (hx_ - px_ * 3, hy - py_ * 3)]), "mask", soft=1, **k)
 
 
+# round 3: hand-drawn material clusters (existing tones only)
+GRIT_LEG = {"a": ("mask", 3), "b": ("mask", 2), "c": ("mask", 1), "g": ("glow", 3), "h": ("glow", 2), "s": ("murksand", 3), "t": ("murksand", 1)}
+GRIT = [["ab", "bc"], ["s.", "tt"], ["gh", ".h"], [".a", "bc"]]
+FOLDS = [["ss.", ".tt"], ["s.", "st", ".t"], ["ab", "bc"], ["gh", "hh"]]
+
 def draw(p):
     r = Rig(W, H)
     c = p.collapse
@@ -77,6 +82,9 @@ def draw(p):
     # body: a draped mass of sand under the hood
     body = r.m_poly([(cx - 16, 28 + dy), (cx + 16, 28 + dy), (cx + 22, 50 + dy), (cx + 14, 62 + dy), (cx, 66 + dy), (cx - 14, 62 + dy), (cx - 22, 50 + dy)])
     r.add(body, "murksand", soft=4)
+    # round 3: grit and stones caught in the robe, a few murk motes (hand-drawn clusters), anchored
+    # to the robe so they move with it
+    r.pattern(body, (cx, 28 + dy), (6, 5), GRIT, GRIT_LEG, seed=51, gaps=0.1)
     # sand streams on the robe
     for x in (-12, -5, 6, 13):
         r.shade(r.m_line(cx + x, 36 + dy, cx + x * 1.15, 60 + dy), lambda t: max(1, t - 1))
@@ -96,6 +104,8 @@ def draw(p):
     hood = r.m_poly([(cx - 17, hy + 2), (cx - 12, hy - 12), (cx - 2, hy - 23), (cx + 1, hy - 25), (cx + 4, hy - 21), (cx + 13, hy - 11),
                      (cx + 17, hy + 2), (cx + 11, hy + 9), (cx - 11, hy + 9)])
     r.add(hood, "murksand", soft=3)
+    # round 3: wind folds in the hood (a lit crease over a shadow) and grit
+    r.pattern(hood, (cx, hy), (5, 4), FOLDS, GRIT_LEG, seed=52, gaps=0.05)
     r.add(r.m_ellipse(cx, hy + 1, 11, 11), "murksand", tone=0)  # the dark inside of the hood
     # the stone mask (hand-placed details on a shaded oval)
     ms = 1 + p.lean * 0.04
@@ -200,7 +210,7 @@ def frames():
     from anim import boss
     P2 = dict(phase2=True)
     K = {
-        "idle": [dict(spin=0, arms=A("rest")), dict(spin=0, dy=1, arms=A("rest")), dict(spin=0, dy=1, arms=(-25, 53, 25, 53)), dict(spin=0, arms=(-25, 53, 25, 53))],
+        "idle": [dict(spin=0, arms=A("rest")), dict(spin=0, dy=1, arms=A("rest")), dict(spin=0, dy=1, arms=(-25, 53, 25, 53)), dict(spin=0, arms=(-25, 53, 25, 53), lean=1)],
         "move": [dict(spin=0, shift=-3, arms=(-26.0, 50.0, 23.0, 54.0)), dict(spin=1, shift=0, dy=1, arms=A("rest")),
                  dict(spin=2, shift=3, arms=(-23.0, 54.0, 26.0, 50.0)), dict(spin=3, shift=0, dy=-1, arms=A("rest"))],
         "windup_volley": (dict(arms=A("up"), grains=3, spin=0, dy=-3), dict(arms=(-25.0, 15.0, 25.0, 15.0), grains=5, spin=1, dy=-3)),
@@ -212,8 +222,7 @@ def frames():
         "attack_ring": (dict(arms=A("fling"), pebbles=9, orbit=4, spin=1, dy=-2, **P2), dict(arms=A("wide"), pebbles=5, orbit=6, spin=3, **P2)),
         "hurt": dict(arms=A("limp"), eyes="shut", dy=-2, lean=-1, spin=1),
         "stagger": (dict(arms=A("limp"), shift=-5, eyes="shut", spin=2, dy=2), dict(arms=A("limp"), shift=4, eyes="shut", spin=0, dy=3)),
-        "idle2": [dict(spin=0, pebbles=6, arms=A("rest"), **P2), dict(spin=0, dy=1, pebbles=6, arms=A("rest"), **P2),
-                  dict(spin=0, dy=1, pebbles=6, arms=(-25, 53, 25, 53), **P2), dict(spin=0, pebbles=6, arms=(-25, 53, 25, 53), **P2)],
+        "idle2": [dict(spin=0, pebbles=6, arms=A("rest"), **P2), dict(spin=0, dy=1, pebbles=6, arms=A("rest"), **P2), dict(spin=0, dy=1, pebbles=6, arms=(-25, 53, 25, 53), **P2), dict(spin=0, pebbles=6, arms=(-25, 53, 25, 53), lean=1, **P2)],
         # defeat (round 2): the hit, the buckle, the collapse -- which then melts over two frames
         "defeat": [dict(arms=A("limp"), eyes="shut", dy=-1, spin=0, pebbles=4, **P2), dict(arms=A("fling"), eyes="shut", dy=-2, spin=1, pebbles=2, **P2),
                    dict(collapse=2, arms=A("limp"), eyes="shut", spin=3, pebbles=0, **P2)],

@@ -178,7 +178,8 @@ def frames():
     hold = dict(staff=S("hold"), nf=(19.0, G), ff=(13.0, G))
     # idle: the hunched breath, the hood point and cloak hem lag behind, the orb pulses
     name(out := {}, "idle", loop(Pose, 4, [
-        (0.0, dict(hold, orb=2.2)), (0.25, dict(hold, dy=1, orb=2.2)), (0.5, dict(hold, dy=1, orb=2.7)), (0.75, dict(hold, orb=2.7)),
+        (0.0, dict(hold, orb=2.2)), (0.25, dict(hold, dy=1, orb=2.2)), (0.5, dict(hold, dy=1, orb=2.6, cloak=1)),
+        (0.75, dict(hold, orb=2.9, cloak=1, mouth=1)),
     ]), draw)
     # move: a shuffling, hunched walk, the body bobs on the passing steps, the hem trails
     name(out, "move", loop(Pose, 8, [

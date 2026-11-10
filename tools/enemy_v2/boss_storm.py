@@ -44,6 +44,10 @@ def zig(r, x, y, s=1):
             {"a": ("spark", 4), "b": ("spark", 2)})
 
 
+# round 3: hand-drawn material clusters (existing tones only)
+FLECK_LEG = {"a": ("spark", 4), "b": ("spark", 3), "c": ("spark", 2), "w": ("lake", 4), "x": ("lake", 3), "y": ("lake", 2)}
+FLECKS = [["ab", "bc"], ["wx", "xy"], [".a", "bc"], ["wx", ".y"]]
+
 def draw(p):
     r = Rig(W, H)
     c = p.collapse
@@ -78,6 +82,9 @@ def draw(p):
         r.poly([(mx - dx / L * 4, my - dy / L * 4), (mx + nx * fl, my + ny * fl - 3), (mx + dx / L * 4, my + dy / L * 4)], "spark", soft=1, dark=1)
     body = r.m_chain(pts, radii) & ~water
     r.add(body, "slate", soft=4)
+    # round 3: spark flecks caught in the scales and lake water beads (hand-drawn clusters),
+    # anchored to the middle of the S
+    r.pattern(body, pts[2], (6, 6), FLECKS, FLECK_LEG, seed=61, gaps=0.35)
     # pale belly scutes down the front of the S
     for i in range(len(pts) - 1):
         (x0, y0), (x1, y1) = pts[i], pts[i + 1]
@@ -204,7 +211,7 @@ def frames():
     P2 = dict(phase2=True)
     K = {
         # the S sways and rises with each breath; the crest flickers
-        "idle": [dict(crest=0), dict(crest=1), dict(crest=1, drop=1), dict(crest=0, drop=1)],
+        "idle": [dict(crest=0), dict(raise_=1, crest=0), dict(raise_=1, crest=1, jaw=1), dict(crest=1, jaw=1)],
         "move": [dict(sway=-3, crest=1), dict(sway=0, raise_=1.5, crest=0), dict(sway=3, raise_=1, crest=1), dict(sway=0, raise_=0, drop=1, crest=0)],
         "windup_ring": (dict(sparks=4, crest=1, coil=7, crest_up=1.5, fin=19, jaw=1), dict(sparks=8, coil=11, crest_up=1.8, fin=22, jaw=1, sway=-2)),
         "attack_ring": (dict(sparks=8, fly=6, raise_=4, jaw=3, crest=0, crest_up=1.5, fin=22, sway=3, pull=-3), dict(sparks=4, fly=12, raise_=2),
@@ -216,7 +223,7 @@ def frames():
         "attack_slam": (dict(drop=16, raise_=-6, hs=1.08, splash=True, jaw=2, **P2), dict(drop=10, raise_=-3, jaw=1, **P2)),
         "hurt": dict(sway=-2, drop=-3, eyes="shut", jaw=2),
         "stagger": (dict(sway=-5, drop=4, eyes="shut", jaw=1), dict(sway=4, drop=6, eyes="shut")),
-        "idle2": [dict(crest=0, **P2), dict(crest=1, **P2), dict(crest=1, drop=1, **P2), dict(crest=0, drop=1, **P2)],
+        "idle2": [dict(crest=0, **P2), dict(raise_=1, crest=0, **P2), dict(raise_=1, crest=1, jaw=1, **P2), dict(crest=1, jaw=1, **P2)],
         # defeat (round 2): the hit, the buckle, the collapse -- which then melts over two frames
         "defeat": [dict(raise_=2, eyes="shut", jaw=3, sway=-2, **P2), dict(raise_=4, eyes="shut", jaw=3, **P2),
                    dict(collapse=2, drop=7, eyes="shut", sway=-2, **P2)],

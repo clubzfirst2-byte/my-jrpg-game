@@ -9,7 +9,7 @@ import math
 
 import numpy as np
 
-from rig import Rig
+from rig import Rig, PAD
 
 W, H = 44, 32
 GROUND = 30  # the row the paws stand on
@@ -63,6 +63,10 @@ def _leg(r, m, k):
     does not sink into dark ground (swamp, cave)."""
     r.add(m, "ashfur", **k)
     if not k.get("dark"):
+        # round 3: two claws at the front of the paw (bone, lit over shadow)
+        ys, xs = np.nonzero(m)
+        fy_, fx_ = ys.max() - PAD, xs.max() - PAD
+        r.stamp(fx_ - 1, fy_ - 1, ["ab", "bc"], {"a": ("bone", 3), "b": ("bone", 2), "c": ("bone", 1)})
         up = np.zeros_like(m)
         up[1:, :] = ~m[:-1, :]
         left = np.zeros_like(m)
@@ -73,6 +77,10 @@ def _leg(r, m, k):
         r.add(edge, "ashfur", tone=3, cast=False)
     return m
 
+
+# round 3: hand-drawn material clusters (existing tones only)
+SCAR_LEG = {"a": ("murk", 3), "b": ("murk", 2), "c": ("murk", 1), "g": ("glow", 2), "h": ("glow", 1), "w": ("ashfur", 3)}
+SCARS = [["ab", "bc"], ["gh", "hc"], ["ag", "bc"], ["ab", "gh"]]
 
 def draw(p):
     r = Rig(W, H)
@@ -146,6 +154,8 @@ def draw(p):
     r.add(lit2, "ashfur", tone=2.5)
     r.add(dark, "ashfur", tone=1)
     r.add(lit, "ashfur", tone=3)
+    # round 3: hand-drawn scars and murk taint in the coat (2-3 px clusters), anchored to the hip
+    r.pattern(body, (hip[0], by), (5, 3), SCARS, SCAR_LEG, seed=21, gaps=0.1)
     # mane ruff on the neck and shoulders (paler, tufted)
     rx, ry = sh[0] + 2, sh[1] - 6
     ruff = r.m_poly([(rx - 7, ry), (rx - 5, ry - 2), (rx - 3, ry - 4), (rx - 1, ry - 3), (rx + 2, ry - 5), (rx + 5, ry - 1), (rx + 3, ry + 1),
@@ -320,7 +330,7 @@ def frames():
     stand = dict(nf=(27.0, G), ff=(29.0, G), nh=(13.0, G), fh=(11.0, G))
     # idle: breathing -- the chest rises and falls, the head bobs after it, the tail sways
     name(out, "idle", loop(Pose, 4, [
-        (0.0, dict(stand)), (0.25, dict(stand, dy=1)), (0.5, dict(stand, dy=1, tail=1.5)), (0.75, dict(stand, tail=1.5)),
+        (0.0, dict(stand)), (0.25, dict(stand, dy=1)), (0.5, dict(stand, dy=1, tail=2.5)), (0.75, dict(stand, tail=2.5, jaw=1)),
     ]), draw)
     # move: a 4-beat lope (contact, gathered, contact, extended) with the passing poses between;
     # the body rises on the gathered beat and stretches on the extended one

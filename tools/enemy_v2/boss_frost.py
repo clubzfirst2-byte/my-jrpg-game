@@ -105,7 +105,9 @@ def leg(r, top, knee, foot, r_top, r_knee, r_foot, dark, hoof_tone):
     """A leg with a joint: a thick upper leg to the knee, a thin cannon to the fetlock, a fur tuft
     at the fetlock, a dark hoof."""
     (tx, ty), (kx, ky), (fx, fy) = top, knee, foot
-    r.limb(tx, ty, kx, ky, r_top, r_knee, "frostfur", dark=dark, soft=2, tex=("fur", 90, 3))
+    up = r.limb(tx, ty, kx, ky, r_top, r_knee, "frostfur", dark=dark, soft=2, tex=("fur", 90, 3))
+    if not dark:  # round 3: ice crusts on the near legs too
+        r.pattern(up, (tx, ty), (5, 5), ICE_CRUST, ICE_LEG, seed=15, gaps=0.05)
     r.limb(kx, ky, fx, fy - 2, r_knee * 0.8, r_foot, "frostfur", dark=dark, soft=1)
     # the knee: a knob, one tone lighter on its lit side
     r.ellipse(kx - 0.5, ky, r_knee * 0.95, r_knee * 0.8, "frostfur", dark=dark, soft=1)
@@ -114,6 +116,14 @@ def leg(r, top, knee, foot, r_top, r_knee, r_foot, dark, hoof_tone):
     r.poly([(fx_ - r_foot - 1.5, fy_ - 2), (fx_ + r_foot + 1.5, fy_ - 2), (fx_ + r_foot + 1, fy_ + 1), (fx_ + 1, fy_ + 2.5),
             (fx_ - 0.5, fy_ + 1), (fx_ - 2, fy_ + 2.5), (fx_ - r_foot - 1, fy_ + 1)], "frostfur", dark=dark, soft=1)
     r.ellipse(fx, fy - 0.8, r_foot + 1.4, 1.7, "frostfur", tone=hoof_tone)
+
+
+# round 3: hand-drawn material clusters (existing tones only)
+ICE_LEG = {"a": ("ice", 4), "b": ("ice", 3), "c": ("ice", 2), "d": ("ice", 1), "f": ("frostfur", 1)}
+ICE_CRUST = [["ab", "cd"], ["ab.", ".cd"], [".a", "bc", "d."], ["ac", "bd"]]
+TAINT_LEG = {"a": ("glow", 3), "b": ("glow", 2), "c": ("glow", 1)}
+TAINT = [["ab", "bc"], [".a.", "abc"], ["ab", "cc"]]
+MANE_TIPS = [["b", "c"], ["bc", ".d"], ["c", "d"]]
 
 
 def draw(p):
@@ -132,7 +142,9 @@ def draw(p):
         foot = (CX + s * 14 + p.shift * 0.3, G - 4 - lift + min(rear, 3))  # rearing: the weight goes onto them
         leg(r, (hx0, sy + 6 + rear * 0.6), (hx0 + s * 1, min(sy + 18, G - 13) + rear * 0.3), foot, 4.2, 2.6, 1.8, 1, 0)
     # ---- the back and rump behind the shoulders (seen over them)
-    r.add(r.m_ellipse(cx, sy - 3 + rear * 0.5, 24, 8), "frostfur", dark=1, soft=3, tex=("shag", 90, 1))
+    back = r.add(r.m_ellipse(cx, sy - 3 + rear * 0.5, 24, 8), "frostfur", dark=1, soft=3, tex=("shag", 90, 1))
+    r.pattern(back, (cx, sy), (7, 5), ICE_CRUST, ICE_LEG, seed=13)
+    r.pattern(back, (cx + 4, sy), (12, 6), TAINT, TAINT_LEG, seed=17, gaps=0.2)
     # ---- front legs (near, thick): elbow, knee, cannon, fetlock, hoof
     for i, s in ((0, -1), (3, 1)):
         lift = p.legs[i]
@@ -151,6 +163,11 @@ def draw(p):
                   (cx + 1, sy + 16), (cx - 4, sy + 20), (cx - 9, sy + 15), (cx - 14, sy + 18), (cx - 20, sy + 13)]))
     chest &= r.m_rect(-50, -50, W + 50, G - 1)
     r.add(chest, "frostfur", soft=4, tex=("shag", 90, 2))
+    # round 3: ice crusts frozen into the coat (hand-drawn 2-3 px clusters in the ice ramp),
+    # anchored to the shoulders so they move with the body
+    r.pattern(chest, (cx, sy), (6, 5), ICE_CRUST, ICE_LEG, seed=11, gaps=0.05)
+    # ...and the murk's taint: small magenta sores where the ice has split the hide
+    r.pattern(chest, (cx + 3, sy + 2), (8, 6), TAINT, TAINT_LEG, seed=16, gaps=0.1)
     # the crease between the shoulder humps and the chest (a fold, not a line across)
     for s in (-1, 1):
         r.shade(r.m_line(cx + s * 4, sy + 6, cx + s * 9, sy + 13), lambda t: max(1, t - 1))
@@ -164,13 +181,16 @@ def draw(p):
         hy = max(hy, 32 + c * 7)
     hx_ = cx + p.shift * 0.4
     # neck: thick, from the chest up into the head
-    r.add(r.m_limb(cx, sy + 3, hx_, hy + 8, 11, 8), "frostfur", dark=1, soft=3, tex=("shag", 90, 4))
+    neck = r.add(r.m_limb(cx, sy + 3, hx_, hy + 8, 11, 8), "frostfur", dark=1, soft=3, tex=("shag", 90, 4))
+    r.pattern(neck, (hx_, hy), (7, 6), ICE_CRUST, ICE_LEG, seed=14)
     # mane: a dark collar of long hair hanging from the throat over the chest, in long points
     mt = hy + 6 * fo
     mb = max(mt + 16, sy + 14)
     mane = r.m_poly([(hx_ - 8, mt - 2), (hx_ + 8, mt - 2), (hx_ + 13, mt + 4), (hx_ + 18, mb - 6), (hx_ + 12, mb - 3), (hx_ + 9, mb + 3), (hx_ + 4, mb - 1),
                      (hx_ + 1, mb + 5), (hx_ - 3, mb - 1), (hx_ - 8, mb + 3), (hx_ - 12, mb - 3), (hx_ - 18, mb - 6), (hx_ - 13, mt + 4)])
     r.add(mane, "frostfur", dark=1, soft=2, inline="br", tex=("shag", 90, 5))
+    # round 3: frost on the hair tips of the mane
+    r.pattern(mane, (hx_, mt), (6, 5), MANE_TIPS, ICE_LEG, seed=12, gaps=0.3)
     # ears (pointing out sideways, under the antlers)
     for s in (-1, 1):
         r.add(r.m_poly([(hx_ + s * 6, hy - 4), (hx_ + s * 18, hy - 4), (hx_ + s * 16, hy), (hx_ + s * 7, hy + 2)]), "frostfur", soft=1, inline=True)
@@ -268,7 +288,7 @@ def frames():
     from anim import boss
     P2 = dict(phase2=True)
     K = {
-        "idle": [{}, dict(dy=1), dict(dy=1, mouth=1), dict(mouth=1)],
+        "idle": [{}, dict(dy=1), dict(dy=1, fore=0.92), dict(fore=0.92, mouth=1)],
         "move": [dict(legs=(4, 0, 3, 0), shift=-2), dict(legs=(1, 1, 1, 1), dy=-1, head=-1, rot=-2),
                  dict(legs=(0, 3, 0, 4), shift=2), dict(legs=(1, 1, 1, 1), dy=-0.5, head=1, rot=2)],
         "windup_slam": (dict(head=7, rot=28, fore=0.85, dy=1), dict(head=14, rot=56, fore=0.68, dy=2)),
@@ -283,7 +303,7 @@ def frames():
                           dict(head=6, lev=0.7, rot=8, hs=1.06, fore=0.85, **P2)),
         "hurt": dict(head=-3, rot=-6, eyes="shut", mouth=2, shift=-2),
         "stagger": (dict(shift=-5, legs=(0, 0, 3, 6), head=3, rot=10, eyes="shut"), dict(shift=4, legs=(5, 2, 0, 0), head=4, rot=14, eyes="shut")),
-        "idle2": [dict(**P2), dict(dy=1, **P2), dict(dy=1, mouth=1, **P2), dict(mouth=1, **P2)],
+        "idle2": [dict(**P2), dict(dy=1, **P2), dict(dy=1, fore=0.92, **P2), dict(fore=0.92, mouth=1, **P2)],
         # defeat (round 2): the hit, the buckle, the collapse -- which then melts over two frames
         "defeat": [dict(head=-4, rot=-8, eyes="shut", mouth=3, shift=-3, **P2), dict(head=-3, rot=-6, eyes="shut", mouth=3, legs=(3, 0, 0, 0), **P2),
                    dict(collapse=2, head=8, rot=32, eyes="shut", **P2)],

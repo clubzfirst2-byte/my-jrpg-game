@@ -339,4 +339,40 @@ describe('enemy & boss art v2 (src/art-release-v2/enemy)', () => {
       }
     }
   });
+
+  it('round 3 detail: colours per 16x16 block (median) >= 12 for enemies, >= 10 for bosses (slime >= 10: two materials only)', () => {
+    const median = (a) => {
+      const b = [...a].sort((x, y) => x - y);
+      return b.length % 2 ? b[(b.length - 1) / 2] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2;
+    };
+    for (const [kind, k] of Object.entries(MAN.kinds)) {
+      if (kind === 'shot') continue;
+      const per = [];
+      for (const [action, a] of Object.entries(k.actions)) {
+        for (let i = 0; i < a.frames; i++) {
+          const { w, h, px } = decode(`enemy.${kind}.${action}.${i}`);
+          const blocks = [];
+          for (let by = 0; by + 16 <= h; by += 16) {
+            for (let bx = 0; bx + 16 <= w; bx += 16) {
+              const set = new Set();
+              let n = 0;
+              for (let y = by; y < by + 16; y++) {
+                for (let x = bx; x < bx + 16; x++) {
+                  const j = (y * w + x) * 4;
+                  if (px[j + 3]) {
+                    n++;
+                    set.add(px4(px, j));
+                  }
+                }
+              }
+              if (n > 128) blocks.push(set.size);
+            }
+          }
+          if (blocks.length) per.push(median(blocks));
+        }
+      }
+      const min = kind.startsWith('boss_') || kind === 'slime' ? 10 : 12;
+      expect(median(per), `${kind}: colours per 16x16`).toBeGreaterThanOrEqual(min);
+    }
+  });
 });

@@ -25,6 +25,10 @@ class Pose:
         self.__dict__.update(k)
 
 
+# round 3: hand-drawn material clusters (existing tones only)
+BUB_LEG = {"a": ("glow", 4), "b": ("glow", 3), "c": ("glow", 2), "d": ("glow", 1), "o": ("glow", 0), "m": ("murk", 3)}
+BUBBLES = [["ab", "cd"], ["bc", "do"], ["m.", "ab"], [".a", "bc"]]
+
 def draw(p):
     r = Rig(W, H)
     cx = 16 + p.x
@@ -48,6 +52,11 @@ def draw(p):
         body &= ~r.m_ellipse(cx + 2, top - 3, rx * 0.9, ry * (0.5 + 0.45 * p.melt))
         body |= r.m_ellipse(cx, base - 1, rx + 2 * p.melt, 2.4)
     r.add(body, "murk", soft=3)
+    # round 3: bubbles in the jelly (glow motes with a dark rim) and a rim light up the left edge,
+    # anchored to the slime's centre so they ride the squash and stretch
+    if p.melt < 2:  # below the eyes only, so a bubble never reads as a third eye
+        low = body & r.m_rect(-50, round(top + ry * 0.45) + 4, W + 50, H + 50)
+        r.pattern(low, (cx, base - ry), (5, 3), BUBBLES, BUB_LEG, seed=31, gaps=0.1)
     # the core seen through the jelly: a crystal, hand-shaded so it glows from the inside
     ky = base - ry * 0.55 + (1 if p.melt else 0)
     kx = cx + p.lean * 0.4 + 1
@@ -112,7 +121,7 @@ def frames():
     from anim import loop, once, name
     out = {}
     name(out, "idle", loop(Pose, 4, [
-        (0.0, dict(rx=11.0, ry=9.0)), (0.25, dict(rx=11.5, ry=9.0)), (0.5, dict(rx=11.5, ry=8.5)), (0.75, dict(rx=11.0, ry=8.5)),
+        (0.0, dict(rx=11.0, ry=9.0)), (0.25, dict(rx=11.5, ry=8.5)), (0.5, dict(rx=11.5, ry=8.5, eyes="wide")), (0.75, dict(rx=11.0, ry=9.0, eyes="shut")),
     ]), draw)
     # move: squash (gather), stretch up off the ground, the arc leaning forward, the fall, the
     # landing squash, the rebound
