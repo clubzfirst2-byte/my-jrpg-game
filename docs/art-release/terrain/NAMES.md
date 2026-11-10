@@ -238,7 +238,7 @@ Pick per tile (e.g. `hash(tx, ty) % 3`: 0 = the existing key without suffix, 1 =
 
 ## Autumn: forest and mountains (22)
 
-`<season>.<key>` keys for the autumn season bundle (add them to its key set, like `autumn.tile.grass.0`). `autumn.mountains.snow.N` is the mountains' ground in autumn (partial snow: bare patches of warm rock and dry grass).
+`<season>.<key>` keys for the autumn season bundle (add them to its key set, like `autumn.tile.grass.0`). `autumn.mountains.snow.N` is the mountains' ground in autumn (mostly snow: .0 plain, .1-.3 one small melted patch of warm rock and dry grass).
 
 | key | size | anchor | frames |
 |---|---|---|---|
