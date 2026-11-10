@@ -70,8 +70,10 @@ def names_md(files, redrawn, new, copied):
       "3·sb + (hs >> 2) % 3)`. If block (a, b) is it and its 9 map cells (step 5) are all desert sand, it shows "
       "`desert.sand.dune<k>.<q>` with `k = 1 + (sa % 3 + 3·(sb % 2) + hash(floor(sa / 3) + 13, floor(sb / 2) + 29)) "
       "% 6`, at the offsets of step 3, whether or not step 2 gave it a picture and instead of the picture of "
-      "step 4. One dune per 12 blocks (about 4-5 on a screen); the 6 shapes sit in a 3×2 pattern of cells, so the "
-      "same shape is at least 3 cells apart across and 2 down.")
+      "step 4. One dune per 12 blocks (about 4-5 on a screen). Inside a group of 3×2 cells (12×6 blocks: the "
+      "same `floor(sa / 3)`, `floor(sb / 2)`) the 6 dunes all have different shapes. The hash term changes from "
+      "group to group, so across a group border two dunes of the same shape can come close (measured: about 1 "
+      "dune in 8 has one of its own shape within 8 tiles; side by side about 1 in 80).")
     a("5. **Draw it** only when it stays on the map (`i0 + 2`, `j0 + 2` inside) and the 9 map cells under its 4 display "
       "tiles (cells `i0 … i0+2`, `j0 … j0+2`) are all one ground of this scheme **and one height** (round 8: a "
       "picture never straddles a step): `<prefix>.<name>.<q>`, q = 0 NW "

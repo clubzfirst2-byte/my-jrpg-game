@@ -100,6 +100,7 @@ def inner7(mask, x, y, variant):
     """Round 7: an inner wobble on every variant (two phase sets by the variant's parity), zero on the edges."""
     u, v = (x + 0.5) / 32, (y + 0.5) / 32
     w = math.sin(math.pi * u) * math.sin(math.pi * v)  # 0 on the tile's edges
+    w *= min(1.0, min(x + 0.5, 31.5 - x, y + 0.5, 31.5 - y) / 3)  # round 9: gone 3 px from the edge (joins within 1 px)
     ph = 3.1 * (variant % 2) + 4.7 * (variant // 2) + 0.9 * mask  # round 8: the 4 variants far apart (mask 10 repeated)
     amp = INNER_AMP.get(mask, 1.0)
     return amp * w * (0.05 * math.sin(TAU * (1.5 * u + 1.2 * v) + 0.4 + ph) + 0.035 * math.sin(TAU * (2.5 * v - 0.7 * u) + 1.1 - ph))

@@ -39,7 +39,7 @@ ground tiles: colours per tile / lightness spread (std, 0-100)
   forest.grass.step.5.0          colours  3  spread  9.7
   forest.grass.step.6.0          colours  4  spread  8.0
   forest.grass.step.7.0          colours  4  spread  8.8
-  forest.grass.step.shade.0      colours  2  spread  2.9
+  forest.grass.step.shade.0      colours  2  spread  2.7
   mountains.snow.0               colours  4  spread  3.2
   mountains.snow.step.1.0        colours  3  spread 16.0
   mountains.snow.step.2.0        colours  2  spread  5.8
@@ -81,7 +81,7 @@ ground tiles: colours per tile / lightness spread (std, 0-100)
   tile.path.step.5.0             colours  3  spread 10.3
   tile.path.step.6.0             colours  4  spread  8.8
   tile.path.step.7.0             colours  4  spread  9.5
-  tile.path.step.shade.0         colours  2  spread  1.7
+  tile.path.step.shade.0         colours  2  spread  1.5
   tile.ruin                      colours  5  spread  6.0
   tile.ruin.step.1.0             colours  3  spread 11.4
   tile.ruin.step.2.0             colours  2  spread  3.0
@@ -90,7 +90,7 @@ ground tiles: colours per tile / lightness spread (std, 0-100)
   tile.ruin.step.5.0             colours  3  spread 11.4
   tile.ruin.step.6.0             colours  4  spread  9.6
   tile.ruin.step.7.0             colours  4  spread 10.4
-  tile.ruin.step.shade.0         colours  2  spread  2.3
+  tile.ruin.step.shade.0         colours  2  spread  2.1
   autumn.tile.grass.0            colours  4  spread  3.0
   autumn.tile.grass.step.1.0     colours  3  spread 11.5
   autumn.tile.grass.step.2.0     colours  2  spread  2.2
@@ -126,7 +126,7 @@ ground tiles: colours per tile / lightness spread (std, 0-100)
   autumn.forest.grass.step.5.0   colours  3  spread 10.4
   autumn.forest.grass.step.6.0   colours  4  spread  8.6
   autumn.forest.grass.step.7.0   colours  4  spread  9.4
-  autumn.forest.grass.step.shade.0 colours  2  spread  3.2
+  autumn.forest.grass.step.shade.0 colours  2  spread  2.9
   winter.tile.grass.0            colours  6  spread  3.4
   winter.tile.grass.step.1.0     colours  3  spread 16.0
   winter.tile.grass.step.2.0     colours  2  spread  5.8
