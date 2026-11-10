@@ -22,13 +22,33 @@ const base = (g, s) => `${s}${PREFIX[g]}${SINGLE.includes(g) ? '' : '.0'}`;
 const single = (g, s, n) => (n === 0 ? base(g, s) : `${s}${PREFIX[g]}.${n}`);
 const MACROS = { macro: 2, macro2: 2, macro3: 3 };
 const macros = (g, s) => Object.entries(MACROS).flatMap(([m, k]) => range(k * k).map((q) => `${s}${PREFIX[g]}.${m}.${q}`));
-const tiles = (g, s) => [...range(16).map((n) => single(g, s, n)), ...macros(g, s)];
-const edges = (g, s) => MASKS.flatMap((m) => [0, 1].map((v) => `${s}${PREFIX[g]}.edge.${m}.${v}`));
+// Round 3: the look of a set decides its tile count and how a tile is picked (NAMES.md section 1):
+//   A 16 tiles by 4 edge types (+ macro pieces); B sand / desert / snow / every winter set: 64 tiles by the W / E
+//   phases (n = E + 8W); C ruin: 66 tiles by row phase R and the column symbols (n = 6R + combo), overlays per R.
+const look = (g, s) => (s === 'winter.' ? 'snow' : g);
+const scheme = (g, s) => (['snow', 'sand', 'dsand'].includes(look(g, s)) ? 'B' : g === 'ruin' ? 'C' : 'A');
+const COUNT = { A: 16, B: 64, C: 66 };
+const RUIN_COMBOS = [[0, 1], [0, 2], [1, 0], [1, 2], [2, 0], [2, 1]]; // [W, E]
+const tiles = (g, s) => [...range(COUNT[scheme(g, s)]).map((n) => single(g, s, n)), ...(scheme(g, s) === 'A' ? macros(g, s) : [])];
+const edgeVariants = (g) => (g === 'ruin' ? range(11) : [0, 1]);
+const edges = (g, s) => MASKS.flatMap((m) => edgeVariants(g).map((v) => `${s}${PREFIX[g]}.edge.${m}.${v}`));
+// Cliff faces redrawn in round 3 under their v1 keys (32 x 16 for .8, 32 x 8 for .4).
+const FACE_KEYS = ['earth', 'stone', 'sand', 'desert', 'path'].flatMap((mat) =>
+  ['top', 'mid', 'mid-base', 'top-base'].flatMap((kind) =>
+    [4, 8].flatMap((seg) =>
+      (['earth', 'stone'].includes(mat) ? ['', '.v1', '.v2'] : ['', '.v1']).flatMap((v) => {
+        const seasons = !kind.startsWith('top') ? [''] : mat === 'earth' ? ['', 'autumn.', 'winter.'] : mat === 'stone' ? ['', 'autumn.'] : [''];
+        return seasons.map((s) => `${s}face.${mat}.${kind}.${seg}${v}`);
+      }),
+    ),
+  ),
+);
 const GROUND_KEYS = SETS.flatMap(([g, s]) => tiles(g, s));
 const OVERLAY_KEYS = SETS.flatMap(([g, s]) => edges(g, s));
 const WATER_TILES = ['tile.water', 'tile.water.v1', 'tile.water.deep', 'tile.water.deep.v1'].flatMap((p) => range(4).map((f) => `${p}.${f}`));
 const WATER_OVERLAYS = ['tile.water.deep.edge', 'tile.water.foam'].flatMap((p) => MASKS.flatMap((m) => range(4).map((f) => `${p}.${m}.${f}`)));
-const DRAWN = [...GROUND_KEYS, ...OVERLAY_KEYS, ...WATER_TILES, ...WATER_OVERLAYS];
+const TILES32 = [...GROUND_KEYS, ...OVERLAY_KEYS, ...WATER_TILES, ...WATER_OVERLAYS];
+const DRAWN = [...TILES32, ...FACE_KEYS];
 const v1Keys = readdirSync(V1).filter((f) => f.endsWith('.png')).map((f) => f.slice(0, -4));
 
 /** Decodes an 8-bit RGBA, non-interlaced PNG (what Pillow writes). */
@@ -77,7 +97,7 @@ const png = (n) => {
 };
 const hex = ([r, g, b]) => `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 
-describe('ground v2 art', { timeout: 60000 }, () => {  // ~800 PNGs decoded: slow when the whole suite runs in parallel
+describe('ground v2 art', { timeout: 180000 }, () => {  // ~800 PNGs decoded: slow when the whole suite runs in parallel
   const files = readdirSync(DIR).filter((f) => f.endsWith('.png')).map((f) => f.slice(0, -4));
 
   it('holds every v1 terrain key (v2 replaces the v1 group), plus exactly the drawn keys of the scheme', () => {
@@ -92,15 +112,16 @@ describe('ground v2 art', { timeout: 60000 }, () => {  // ~800 PNGs decoded: slo
     for (const k of MANIFEST.copied_from_v1) expect(readFileSync(new URL(`${k}.png`, DIR)).equals(readFileSync(new URL(`${k}.png`, V1))), k).toBe(true);
   });
 
-  it('every drawn PNG is 32×32 RGBA, alpha 0 / 255 only, colours only from the registered ramps', () => {
+  it('every drawn PNG is 32×32 (faces: 32×16 / 32×8, as v1) RGBA, alpha 0 / 255 only, colours only from the registered ramps', () => {
     const allowed = new Set(Object.values(RAMPS.ramps).flat());
     for (const n of DRAWN) {
       const { w, h, depth, type, interlace, px } = png(n);
-      expect([w, h, depth, type, interlace], n).toEqual([32, 32, 8, 6, 0]);
-      for (let y = 0; y < 32; y++) {
+      const H = !n.includes('face.') ? 32 : /\.8(\.v\d)?$/.test(n) ? 16 : 8;
+      expect([w, h, depth, type, interlace], n).toEqual([32, H, 8, 6, 0]);
+      for (let y = 0; y < H; y++) {
         for (let x = 0; x < 32; x++) {
-          const p = px(x, y);
-          expect([0, 255], `${n} ${x},${y}`).toContain(p[3]);
+          const p = px(x, y); // (no expect() per pixel: 1,800 files)
+          if (p[3] !== 0 && p[3] !== 255) expect(p[3], `${n} ${x},${y}`).toBe('alpha 0 or 255');
           if (p[3] === 255 && !allowed.has(hex(p))) expect(hex(p), `${n} ${x},${y}`).toBe('a ramp colour');
         }
       }
@@ -116,29 +137,52 @@ describe('ground v2 art', { timeout: 60000 }, () => {  // ~800 PNGs decoded: slo
     }
   });
 
-  it('edge-matched tiles: every tile with the same edge type on a side shows the same 2-px band there; macros show type 0 outside', () => {
+  it('cliff faces: the v1 keys, the v1 sizes, fully opaque; variants join (same outermost columns)', () => {
+    for (const n of FACE_KEYS) {
+      expect(v1Keys, n).toContain(n);
+      const a = png(n);
+      const b = (() => {
+        const buf = readFileSync(new URL(`${n}.png`, V1));
+        return [buf.readUInt32BE(16), buf.readUInt32BE(20)];
+      })();
+      expect([a.w, a.h], n).toEqual(b);
+      let holes = 0;
+      for (let y = 0; y < a.h; y++) for (let x = 0; x < 32; x++) if (a.px(x, y)[3] !== 255) holes++;
+      expect(holes, n).toBe(0);
+      const m = n.match(/^(.*)\.v\d$/);
+      if (m) {
+        const base = png(m[1]);
+        for (const x of [0, 31]) for (let y = 0; y < a.h; y++) expect(a.px(x, y).join(), `${n} ${x},${y}`).toBe(base.px(x, y).join());
+      }
+    }
+  });
+
+  it('edge-matched tiles: every tile with the same edge type on a side shows the same outermost row / column there; macros show type 0 outside', () => {
     const band = (t, side) => {
       const pts = [];
-      for (let k = 0; k < 32; k++) {
-        for (const d of [0, 1]) {
-          if (side === 'top') pts.push(t.px(k, d).join());
-          if (side === 'bottom') pts.push(t.px(k, 31 - d).join());
-          if (side === 'left') pts.push(t.px(d, k).join());
-          if (side === 'right') pts.push(t.px(31 - d, k).join());
-        }
+      for (let k = 1; k < 31; k++) {
+        if (side === 'top') pts.push(t.px(k, 0).join());
+        if (side === 'bottom') pts.push(t.px(k, 31).join());
+        if (side === 'left') pts.push(t.px(0, k).join());
+        if (side === 'right') pts.push(t.px(31, k).join());
       }
       return pts.join('|');
     };
-    const SIDE = { top: 1, right: 2, bottom: 4, left: 8 }; // tile index n = N + 2E + 4S + 8W
+    const SIDE = { top: 1, right: 2, bottom: 4, left: 8 }; // A: tile index n = N + 2E + 4S + 8W
     for (const [g, s] of SETS) {
+      const sc = scheme(g, s);
       for (const [side, bit] of Object.entries(SIDE)) {
+        if (sc !== 'A' && (side === 'top' || side === 'bottom')) continue; // B, C: nothing is typed on the N / S edges
         const ref = {};
-        for (const n of range(16)) {
-          const t = n & bit ? 1 : 0;
+        for (const n of range(COUNT[sc])) {
+          let t = n & bit ? 1 : 0;
+          if (sc === 'B') t = side === 'right' ? n % 8 : Math.floor(n / 8);
+          if (sc === 'C') t = `${Math.floor(n / 6)}:${RUIN_COMBOS[n % 6][side === 'right' ? 1 : 0]}`;
           const b = band(png(single(g, s, n)), side);
           if (t in ref) expect(b, `${single(g, s, n)} ${side} type ${t}`).toBe(ref[t]);
           else ref[t] = b;
         }
+        if (sc !== 'A') continue;
         for (const [m, k] of Object.entries(MACROS)) {
           for (const q of range(k * k)) {
             const [a, r] = [q % k, Math.floor(q / k)];
@@ -150,9 +194,28 @@ describe('ground v2 art', { timeout: 60000 }, () => {  // ~800 PNGs decoded: slo
     }
   });
 
+  it('ruin courses (round 3): the stones of a tile continue in the tile under it (row phase R -> (R + 32) mod 11, same columns)', () => {
+    const joint = hex(RAMPS.ramps.ruin[1].match(/\w\w/g).map((v) => parseInt(v, 16)));
+    for (const R of range(11)) {
+      for (const c of range(6)) {
+        const up = png(single('ruin', '', 6 * R + c));
+        const down = png(single('ruin', '', 6 * ((R + 32) % 11) + c));
+        // a vertical joint that reaches the tile's bottom row goes on in the top row of the tile below, and back
+        // (not where one of the two rows is itself a horizontal joint)
+        const isJointRow = (t, y) => range(32).filter((x) => hex(t.px(x, y)) === joint).length > 20;
+        if (isJointRow(up, 31) || isJointRow(down, 0)) continue;
+        for (let x = 1; x < 31; x++) {
+          const a = hex(up.px(x, 31)) === joint && hex(up.px(x - 1, 31)) !== joint && hex(up.px(x + 1, 31)) !== joint;
+          const b = hex(down.px(x, 0)) === joint && hex(down.px(x - 1, 0)) !== joint && hex(down.px(x + 1, 0)) !== joint;
+          expect(a, `tile.ruin ${6 * R + c} x ${x}`).toBe(b);
+        }
+      }
+    }
+  });
+
   it('transition overlays: every mask 1-14 in both variants for every set; corners follow the mask', () => {
     const corner = { 1: [1, 1], 2: [30, 1], 4: [1, 30], 8: [30, 30] };
-    const sets = [...SETS.map(([g, s]) => [`${s}${PREFIX[g]}.edge`, [0, 1]]), ['tile.water.deep.edge', range(4)], ['tile.water.foam', range(4)]];
+    const sets = [...SETS.map(([g, s]) => [`${s}${PREFIX[g]}.edge`, edgeVariants(g)]), ['tile.water.deep.edge', range(4)], ['tile.water.foam', range(4)]];
     for (const [p, vs] of sets) {
       for (const m of MASKS) {
         for (const v of vs) {

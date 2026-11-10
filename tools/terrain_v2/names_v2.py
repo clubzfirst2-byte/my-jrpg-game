@@ -2,7 +2,7 @@
 
 from keys_v2 import PREFIX, SINGLE
 from transitions import PRIORITY
-from wang import P_TYPE1
+from wang import P_TYPE1, tile_count
 
 LABEL = {"grass": "island grass", "plains": "plains grass", "lake": "lake shore grass", "moss": "forest floor (moss)",
          "snow": "mountain snow", "sand": "island sand", "dsand": "desert sand", "path": "path", "ruin": "ruin floor"}
@@ -14,52 +14,61 @@ def names_md(files, redrawn, new, copied):
     a("# Ground v2 — key scheme (for wiring)")
     a("")
     a(f"Folder `src/art-release-v2/terrain/`: **{len(files) + len(copied)} PNGs** = {len(redrawn)} v1 keys redrawn + "
-      f"{len(new)} new keys + {len(copied)} v1 keys copied unchanged (not redrawn this round: cliff faces, v1.1 shores, "
+      f"{len(new)} new keys + {len(copied)} v1 keys copied unchanged (not redrawn: ruin / wall faces, v1.1 shores, "
       "trees, rocks, floors…). The group **contains every key of the v1 terrain group**, so it can replace it as a whole "
-      "(`manifest.json` lists the three groups; the test checks v2 ⊇ v1). All new / redrawn tiles are 32×32 art px "
+      "(`manifest.json` lists the three groups; the test checks v2 ⊇ v1). All new / redrawn ground tiles are 32×32 art px "
       "(= one 16 px map cell), anchor **top-left**, alpha 0 / 255. Generator: `tools/terrain_v2/gen_v2.py`; "
       "`tools/terrain_v2/render_ref.py` is a reference renderer of everything below (the review images use it).")
     a("")
     a("## 1. Grounds")
     a("")
-    a("| ground | prefix (= the v1 key) | tiles | macro pieces | P(type 1) | seasons |")
+    a("| ground | prefix (= the v1 key) | tiles | picked by | macro pieces | seasons |")
     a("|---|---|---|---|---|---|")
     for g, p in PREFIX.items():
-        base = f"`{p}`, `{p}.1` – `.15`" if g in SINGLE else f"`{p}.0` – `.15`"
-        seas = "autumn, winter" if g in ("grass", "plains", "lake", "moss") else "—"
-        a(f"| {LABEL[g]} | `{p}` | {base} | `.macro.0-3`, `.macro2.0-3`, `.macro3.0-8` | {P_TYPE1[g]} % | {seas} |")
+        n = tile_count(g)
+        base = f"`{p}`, `{p}.1` – `.{n - 1}`" if g in SINGLE else f"`{p}.0` – `.{n - 1}`"
+        seas = "autumn (16 tiles + macros), winter (64 tiles, as snow)" if g in ("grass", "plains", "lake", "moss") else "—"
+        how = "A: 4 edge types" if n == 16 else "B: W / E phases" if n == 64 else "C: row phase + column symbols"
+        mac = "`.macro.0-3`, `.macro2.0-3`, `.macro3.0-8`" if n == 16 else "—"
+        a(f"| {LABEL[g]} | `{p}` | {base} | {how}" + (f", P = {P_TYPE1[g]} %" if n == 16 else "") + f" | {mac} | {seas} |")
     a("")
-    a("**Round 2 (after the inspection): the tiles are edge-matched (Wang tiles), so the ground does not repeat every "
-      "32 px.** Every edge between two display tiles has a type, 0 or 1. A ground tile is picked by its 4 edge types:")
+    a("The tiles are edge-matched, so no ground repeats every 32 px. `hash` = gameView's hash. Display tile (i, j) "
+      "(section 2) has the vertical edge `hash(2i, 2j+1)` on its left and the horizontal edge `hash(2i+1, 2j)` above it. "
+      "For tile.sand / tile.path / tile.ruin, n = 0 is the bare v1 key. `render_ref.py` does all of this.")
     a("")
-    a("    n = N + 2·E + 4·S + 8·W      (N = type of its top edge, E right, S bottom, W left)  ->  `<prefix>.<n>`")
+    a("**A. Grass-likes, moss, path (16 tiles):** every edge has a type 0 / 1; `n = N + 2·E + 4·S + 8·W` (N = the type of "
+      "the top edge, E right, S bottom, W left). Type 1 when `id % 100 < P`; type 0 when the two tiles' lowest grounds "
+      "differ, or the edge is on the outside of a macro block. What crosses a type-1 edge (a swale, a clump, a moss bed, a "
+      "worn stretch) continues in the next tile. An engine noise patch may raise or lower P. Island grass (round 3): "
+      "P = 22 %, and its own feature, clover carpets in white bloom.")
     a("")
-    a("(for tile.sand / tile.path / tile.ruin, n = 0 is the bare v1 key.) Two tiles that share an edge agree on its "
-      "type, so whatever crosses that edge (a swale, a clump, a moss bed, a worn stretch, a sand ripple, a snow ridge, a "
-      "paving joint) continues into the next tile; the generator and the test check that every tile with the same type "
-      "on a side has the same 2-px band there.")
+    a("**B. Sand, desert sand, snow, and the winter of the 4 seasonal grounds (64 tiles; round 3):** only the W / E edges "
+      "carry anything: the ripples / wind ridges cross them at one of 8 phases. `n = E + 8·W`, E / W = `(id >> 8) % 8` of "
+      "that vertical edge; 0 when the two tiles' lowest grounds differ. Nothing crosses the N / S edges. No macro pieces. "
+      "(Every row of a tile is a ripple crest in exactly one phase, so the rows' brightness has no 32-px period.)")
     a("")
-    a("**Edge type** (`render_ref.edge_type`):")
-    a("- the vertical edge left of display tile (i, j) has id `hash(2i, 2j+1)`, the horizontal edge above it `hash(2i+1, 2j)` "
-      "(`hash` = gameView's hash); type 1 when `id % 100 < P`, P per ground in the table (the season's look: winter "
-      "grass-like grounds use the snow P)")
-    a("- type 0 when the two tiles' lowest grounds differ, or the edge is on the outside of a macro block")
-    a("- with P = 10 %, `.0` (all 4 edges type 0, the calm base) covers about two thirds of a grass / path ground "
-      "(0.9⁴ = 66 %); an engine noise patch may raise P (busier ground) or lower it. Sand, snow and ruin are all "
-      "texture (ripples / ridges / paving that every tile continues): P = 50 % there.")
+    a("**C. Ruin floor (66 tiles; round 3):** rectangular stones in straight courses 11 art px high that run across the "
+      "whole map, their joints staggered course by course.")
+    a("- row phase `R = (32·j) mod 11` = `(10·j) mod 11` (0-10), the same for a whole row of display tiles (j ≥ 0)")
+    a("- column symbol `s(i)` (0-2) of the vertical line of edges at the west of column i (i ≥ 0), never the same on two "
+      "neighbouring lines: `k = floor(i / 2)`, `e0 = hash(k, 7) % 3`, `e1 = hash(k + 1, 7) % 3`; `s = e0` when i is even; "
+      "when i is odd, `s = 3 − e0 − e1` if `e0 ≠ e1`, else `(e0 + 1 + hash(k, 11) % 2) % 3`")
+    a("- `W = s(i)`, `E = s(i + 1)`, `n = 6·R + 2·W + (E if E < W else E − 1)`")
+    a("- the ruin's overlay over water is `tile.ruin.edge.<mask>.<R>` (R = 0-10, the same row phase), so the courses "
+      "run on from the overlay into the full tiles beside it. No macro pieces.")
     a("")
-    a("**Macro pieces** (all with type-0 outer edges, so force the edges around a placed block to type 0):")
+    a("**Macro pieces** (A only; all with type-0 outer edges, so force the edges around a placed block to type 0):")
     a("- `<prefix>.macro3.<q>` 3×3 (q = 0-8 in reading order), `<prefix>.macro.<q>` and `<prefix>.macro2.<q>` 2×2 (q = 0 NW, "
       "1 NE, 2 SW, 3 SE)")
-    a("- render_ref: 3×3 blocks at i, j multiples of 3 whose 16 corner cells are one land ground, `hash(i, j) % 6 == 0` "
-      "(sand / snow / ruin: `% 12`); then 2×2 blocks at even i, j (9 corner cells one ground, not overlapping): "
-      "`hash(i+1, j) % 4` (sand / snow / ruin `% 8`): 0 → `.macro`, 1 → `.macro2`")
+    a("- render_ref: 3×3 blocks at i, j multiples of 3 whose 16 corner cells are one land ground, `hash(i, j) % 6 == 0`; "
+      "then 2×2 blocks at even i, j (9 corner cells one ground, not overlapping): `hash(i+1, j) % 4`: 0 → `.macro`, "
+      "1 → `.macro2`. Not in winter (the winter grounds are snow: B).")
     a("- **Seasons:** `autumn.<key>` / `winter.<key>` for every key of the 4 seasonal grounds (the existing season-key "
-      "scheme). `autumn.mountains.snow.*` stays the v1.1 art (copied).")
-    a("- The repeat measure of the inspection (mean |ΔL| at 32 px ÷ at 24 px, 40×24 fields) is in `check.txt`: all ≥ 0.8.")
+      "scheme); winter has the 64 snow tiles (with a few buried tips) and no macros. `autumn.mountains.snow.*` stays the "
+      "v1.1 art (copied).")
+    a("- Measured (`check.txt`): the repeat measure of the first inspection (mean |ΔL| at 32 px ÷ at 24 px, 40×24 "
+      "fields) and the banding measure of the second (autocorrelation at 32 px of the row means and of the column means).")
     a("")
-
-
     a("## 2. Transitions — dual grid, 4 corners, layered overlays")
     a("")
     a("**Scheme.** Draw the ground on a grid shifted by half a cell (+8, +8 game px). Display tile `(i, j)` covers the "
@@ -70,11 +79,11 @@ def names_md(files, redrawn, new, copied):
     a("2. For each **higher** terrain present, low to high, draw `<prefix>.edge.<mask>.<v>` with **mask = sum of the "
       "corners whose terrain priority is >= this terrain's: NW 1, NE 2, SW 4, SE 8** (1-14). If a higher terrain has all "
       "4 corners, draw its base tile instead.")
-    a("3. `<v>` = 0 or 1, any per-tile hash (they join each other).")
+    a("3. `<v>` = 0 or 1, any per-tile hash (they join each other). The ruin floor: `<v>` = its row phase R, 0-10 (section 1 C).")
     a("")
     a("**Priority**, low → high: water (section 3) < " + " < ".join(f"`{PREFIX[p]}`" for p in PRIORITY) + ".")
     a("Grass-like edges lie over path / sand / ruin, sand drifts over path and ruin, snow over path and ruin, every land "
-      "over water. One set of 14 masks × 2 variants per terrain covers every pair it can meet (world map cell edges: "
+      "over water. One set of 14 masks × 2 variants (ruin: × 11 row phases) per terrain covers every pair it can meet (world map cell edges: "
       "lake|sand 1720, grass|ruin 884, moss|path 880, plains|path 780, grass|sand 672, dsand|grass 427, ruin|snow 396, "
       "grass|path 369, path|snow 287, lake|path 214, …).")
     a("")
@@ -108,7 +117,15 @@ def names_md(files, redrawn, new, copied):
     a("- This replaces the v1.1 water edges (`tile.shore.*`, `tile.shore-desert.*`, `tile.bank.*`, still in the folder, "
       "copied): a shore is now foam overlay + the land's own overlay.")
     a("")
-    a("## 4. New keys by group")
+    a("## 4. Cliff faces (round 3: redrawn under the v1 keys)")
+    a("")
+    a("`face.<earth|stone|sand|desert|path>.<top|mid|mid-base|top-base>.<4|8>` with the variants `.v1` / `.v2` (sand, "
+      "desert, path: `.v1` only), and the season lips `autumn.face.earth.*`, `winter.face.earth.*`, `autumn.face.stone.*` "
+      "(top / top-base): **the same keys, sizes (32×16 for `.8`, 32×8 for `.4`), stacking and variant rule as v1** "
+      "(gameView.addFace, terrainArt.faceVariant), so nothing changes in the engine. Variants join each other (same "
+      "outermost columns). `face.ruin.*` and `face.wall.*` (masonry, house walls) are the v1 files, copied.")
+    a("")
+    a("## 5. New keys by group")
     a("")
     groups = {}
     for k in sorted(new):

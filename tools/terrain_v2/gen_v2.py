@@ -34,8 +34,8 @@ def ground_tiles(ground, season=None):
 
         def single(n):
             c = WG.wang_tile("snow", n)
-            if n and n % 3 == 1:
-                M.draw_clump(c, tip, 14 + (n % 5), 19, "S", light=False)
+            if n % 4 == 1:  # a few buried tips, anywhere in the tile (16 of the 64 tiles)
+                M.draw_clump(c, tip, 3 + (n * 11) % 26, 4 + (n * 23) % 27, "S", light=False)
             return c
 
         def big(name):
@@ -46,11 +46,13 @@ def ground_tiles(ground, season=None):
 
         def big(name):
             return WG.macro_canvas(ground, name, season=season)
-    for n in range(16):
+    look = "snow" if season == "winter" else ground
+    for n in range(WG.tile_count(look)):
         out[str(n)] = single(n)
-    for name, k in WG.MACROS.items():
-        for q, piece in enumerate(WG.cut(big(name), k)):
-            out[f"{name}.{q}"] = piece
+    if look not in WG.TEX4:  # macro pieces: the grass-likes, moss and path only (round 3)
+        for name, k in WG.MACROS.items():
+            for q, piece in enumerate(WG.cut(big(name), k)):
+                out[f"{name}.{q}"] = piece
     if season == "autumn":
         for c in out.values():
             c.remap({ground: G.AUTUMN_RAMP[ground]})
@@ -58,6 +60,14 @@ def ground_tiles(ground, season=None):
 
 
 def overlay_tiles(ground, tex, season=None):
+    if ground == "ruin":  # one overlay per row phase R (v = R), so the courses run on into the full tiles beside it
+        import wang as WG
+        out = {}
+        for R in range(11):
+            c = WG.Canvas(32, 32, ("ruin", 3), wrap=False)
+            WG.draw_ruin(c, "ruin", 0, 0, R, 3, 3)
+            out.update({f"e{m}.{R}": T.overlay(c, "ruin", m, R % 2, "ruin") for m in MASKS})
+        return out
     if season == "winter":
         mat, style = "snow", "snow"
     elif season == "autumn":
@@ -90,32 +100,50 @@ def build():
     return out
 
 
+def build_faces():
+    """The cliff faces redrawn in round 3, under their v1 keys (faces_v2.py)."""
+    import faces_v2 as FA
+
+    cv = FA.build()
+    errs = FA.check_joins(cv)
+    if errs:
+        raise SystemExit("face variants do not join: " + ", ".join(errs[:20]))
+    return cv
+
+
 def check_seams(cv):
     """Edge matching: for every ground (and season), every tile whose edge on a side has type t must show the
-    same 2-px band on that side (so any two tiles that agree on a shared edge's type join); macro pieces
-    show the type-0 band on their outer edges."""
+    same outermost row / column on that side (so any two tiles that agree on a shared edge's type join); macro
+    pieces show the type-0 band on their outer edges. Sand / snow: the W / E columns only (nothing crosses
+    their N / S edges). Ruin: the W column by (row phase, west symbol), the E column by (row phase, east symbol)."""
     import wang as WG
 
     errors = []
-    bands = {WG.N: lambda c: [c.px[y][x] for y in (0, 1) for x in range(32)],
-             WG.S: lambda c: [c.px[y][x] for y in (30, 31) for x in range(32)],
-             WG.W: lambda c: [c.px[y][x] for y in range(32) for x in (0, 1)],
-             WG.E: lambda c: [c.px[y][x] for y in range(32) for x in (30, 31)]}
+    bands = {WG.N: lambda c: [c.px[0][x] for x in range(1, 31)],
+             WG.S: lambda c: [c.px[31][x] for x in range(1, 31)],
+             WG.W: lambda c: [c.px[y][0] for y in range(32)],
+             WG.E: lambda c: [c.px[y][31] for y in range(32)]}
     sets = sorted({k.rsplit(".", 1)[0] for k in cv if k.endswith(".15") and ".e" not in k and "water" not in k})
     for p in sets:
+        look = "snow" if p.startswith("winter.") else p.rsplit(".", 1)[1]
         for side, band in bands.items():
+            if look in WG.TEX4 and side in (WG.N, WG.S):
+                continue
             ref = {}
-            for n in range(16):
-                t = WG.types_of(n)[side]
+            for n in range(WG.tile_count(look)):
+                ty = WG.types_of(n, look)
+                t = (ty.get("R"), ty[side])
                 b = band(cv[f"{p}.{n}"])
                 if t in ref and ref[t] != b:
                     errors.append(f"{p}.{n} side {side} type {t}")
                 ref.setdefault(t, b)
+            if look in WG.TEX4:
+                continue
             for name, k in WG.MACROS.items():
                 for q in range(k * k):
                     a, r = q % k, q // k
                     outer = {WG.N: r == 0, WG.S: r == k - 1, WG.W: a == 0, WG.E: a == k - 1}[side]
-                    if outer and band(cv[f"{p}.{name}.{q}"]) != ref[0]:
+                    if outer and band(cv[f"{p}.{name}.{q}"]) != ref[(None, 0)]:
                         errors.append(f"{p}.{name}.{q} side {side}")
     return errors
 
@@ -154,6 +182,9 @@ def main():
     images = {k: c.image() for k, c in cv.items()}  # internal names (render_ref / review use these)
     files = {final_name(k): im for k, im in images.items()}
     assert len(files) == len(images), "two internal names map to one file"
+    faces = build_faces()
+    cv.update(faces)  # (for the ramps used)
+    files.update({k: c.image() for k, c in faces.items()})
     v1_keys = sorted(f[:-4] for f in os.listdir(V1) if f.endswith(".png"))
     copied = [k for k in v1_keys if k not in files]  # not redrawn this round: the v1 file, unchanged
     redrawn = [k for k in v1_keys if k in files]
@@ -187,15 +218,19 @@ def main():
     imgs = dict(images)
     for k in ("tile.metal", "tile.walltop", "tile.wood", "tile.dark", "tile.pit"):
         imgs["v1:" + k] = Image.open(os.path.join(V1, k + ".png")).convert("RGBA")
+    bands = []
     lines += ["", "32-px repeat (the inspection's measure: mean |dL| at 32 px / at 24 px on 40x24 fields; target >= 0.8)"]
     for season in (None, "autumn", "winter"):
         res = measure(imgs, season, "gplmnsd=u" if season is None else "gplm")
         lines.append(f"  {season or 'summer':<7} " + "  ".join(f"{k}:{r[2]:.2f}" for k, r in res.items()))
+        bands.append(f"  {season or 'summer':<7} " + "  ".join(f"{k}:{r[3]:+.2f}/{r[4]:+.2f}" for k, r in res.items()))
+    lines += ["", "32-px banding (round 3: autocorrelation at 32 px of the row means / of the column means, 40x24 fields; "
+              "target <= 0.3 on snow, sand, desert, ruin and the winter grounds)"] + bands
     with open(os.path.join(DOCS, "check.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     write_names(files, redrawn, new, copied, os.path.join(DOCS, "NAMES.md"))
     from review_v2 import reviews
-    reviews(images, os.path.join(DOCS, "review"))
+    reviews(images, os.path.join(DOCS, "review"), faces={k: c.image() for k, c in faces.items()})
     print("\n".join(lines))
     print("wrote", len(keep), "files to", os.path.relpath(OUT, ROOT))
 

@@ -5,6 +5,7 @@
   map_plains_path_<season>.png   the plains excerpt in autumn and winter (after only), 1x
   transitions_<group>.png        every overlay (14 masks x 2 variants) over a lower ground, 3x
   water.gif                      the lake shore excerpt, 4 frames (shallow / deep / foam), 1x -> 2x
+  faces.png                      the cliff faces redrawn in round 3, before (v1) | after (v2), 2x
 """
 
 import os
@@ -14,7 +15,7 @@ from PIL import Image, ImageDraw
 
 sys.path.insert(0, os.path.dirname(__file__))
 from excerpts import EXCERPTS  # noqa: E402
-from render_ref import render_v1, render_v2  # noqa: E402
+from render_ref import render_v1, render_v2, dhash  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 V1 = os.path.join(ROOT, "src", "art-release", "terrain")
@@ -64,9 +65,42 @@ def scale(im, k):
     return im.resize((round(im.width * k), round(im.height * k)), Image.NEAREST)
 
 
-def reviews(images, out_dir):
+def cliff_scene(ground, get, mat, levels, w, season=""):
+    """A strip of ground, a cliff of `levels` x 16 game px under it (faces stacked as gameView.addFace does), ground."""
+    nvar = 3 if mat in ("earth", "stone", "ruin") else 2
+    segs = (["top"] + ["mid"] * (2 * levels - 2) + ["mid-base"]) if levels else ["top-base"]
+    im = Image.new("RGBA", (32 * w, 32 + 16 * len(segs) + 24), BG)
+    for x in range(w):
+        im.paste(ground, (32 * x, 0))
+        im.paste(ground, (32 * x, 32 + 16 * len(segs)))
+        v = ["", ".v1", ".v2"][dhash(x, levels) % nvar]
+        for i, s in enumerate(segs):
+            pre = season if s.startswith("top") and mat in ("earth", "stone") else ""
+            im.alpha_composite(get(f"{pre}face.{mat}.{s}.8{v}"), (32 * x, 32 + 16 * i))
+    return im
+
+
+def cliffs(images, faces, v1, out_dir):
+    """faces.png: every redrawn cliff, before (v1) | after (v2), 2 levels / 1 level / the short top-base, 2x."""
+    rows = []
+    sets = [("earth", "g2.grass.0", "tile.grass.0", ""), ("stone", "g2.snow.0", "mountains.snow.0", ""), ("sand", "g2.sand.0", "tile.sand", ""),
+            ("desert", "g2.dsand.0", "desert.sand.0", ""), ("path", "g2.path.0", "tile.path", ""),
+            ("earth", "autumn.g2.grass.0", "autumn.tile.grass.0", "autumn."), ("earth", "winter.g2.grass.0", "winter.tile.grass.0", "winter."),
+            ("stone", "g2.snow.0", "mountains.snow.0", "autumn.")]
+    for mat, gk, gk1, season in sets:
+        for levels in (2, 1, 0):
+            before = cliff_scene(v1[gk1], lambda k: v1[k], mat, levels, 7, season)
+            after = cliff_scene(images[gk], lambda k: faces[k], mat, levels, 7, season)
+            rows.append(label(side(before, after), f"{season}face.{mat}: {levels or 'top-base'}  before (v1) | after (v2)"))
+    half = (len(rows) + 1) // 2
+    scale(side(stack(rows[:half]), stack(rows[half:])), 2).save(os.path.join(out_dir, "faces.png"))
+
+
+def reviews(images, out_dir, faces=None):
     os.makedirs(out_dir, exist_ok=True)
     v1 = load_v1()
+    if faces:
+        cliffs(images, faces, v1, out_dir)
     imgs = dict(images)
     for k in ("tile.metal", "tile.walltop", "tile.wood", "tile.dark", "tile.pit"):
         imgs["v1:" + k] = v1[k]

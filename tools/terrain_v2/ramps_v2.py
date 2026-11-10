@@ -75,6 +75,7 @@ BASE5 = {
     "shell": RELEASE["shell"],
     "dstone": RELEASE["desert.stone"],
     "rock": RELEASE["mount.rock"],
+    "earth": RELEASE["earth.face"],  # cliff faces (round 3)
 }
 EXT = {k: extend(v) for k, v in BASE5.items()}
 NEW_RAMPS = {"deep"}  # registered as new in PRODUCTION.md (everything else extends a registered ramp)

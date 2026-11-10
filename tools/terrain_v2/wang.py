@@ -26,11 +26,58 @@ import marks as M  # noqa: E402
 N, E, S, W = 1, 2, 4, 8
 AY, AX = 13, 19  # where a type-1 feature crosses a vertical / a horizontal edge (off-centre on purpose)
 # Probability (%) that an edge is type 1, per ground look (NAMES.md). Grass-like grounds are mostly calm.
-P_TYPE1 = {"grass": 10, "plains": 10, "lake": 10, "moss": 12, "path": 10, "snow": 50, "sand": 50, "dsand": 50, "ruin": 50}
+P_TYPE1 = {"grass": 22, "plains": 10, "lake": 10, "moss": 12, "path": 10, "snow": 50, "sand": 50, "dsand": 50, "ruin": 25}
 
 
-def types_of(n):
+# Round 3: edge-type alphabets per ground.
+#   grass, plains, lake, moss, path:  N, E, S, W in {0, 1}         n = N + 2E + 4S + 8W        (16 tiles)
+#   sand, desert, snow (and the winter of the grass-likes, which is snow): only the W / E edges carry anything
+#   (the ripples / ridges crossing them), at 8 phases:  E, W in 0-7   n = E + 8W   (64 tiles)
+#   ruin: straight stone courses 11 px high across the whole map. A tile is picked by its ROW phase
+#   R = (32 * j) mod 11 (0-10: where the courses' joints are in that row of tiles) and by the symbols (0-2) of
+#   its west and east edges, which are a function of the COLUMN only and always differ:
+#   n = 6R + 2W + (E if E < W else E - 1)   (66 tiles)
+# With 8 phases (11 for the ruin) every row of a tile is equally likely to carry a ripple / ridge / joint, so
+# the rows' mean brightness has no 32-px period.
+LINE_GROUNDS = {"sand", "dsand", "snow"}
+TEX4 = LINE_GROUNDS | {"ruin"}  # the all-texture grounds: no macro pieces, their own edge alphabets
+RUIN_COMBOS = [(w, e) for w in range(3) for e in range(3) if w != e]  # index 2w + (e if e < w else e - 1)
+
+
+def tile_count(ground):
+    return 64 if ground in LINE_GROUNDS else 66 if ground == "ruin" else 16
+
+
+def types_of(n, ground=None):
+    if ground in LINE_GROUNDS:
+        return {N: 0, E: n % 8, S: 0, W: n // 8}
+    if ground == "ruin":
+        w, e = RUIN_COMBOS[n % 6]
+        return {N: 0, E: e, S: 0, W: w, "R": n // 6}
     return {N: n & 1, E: (n >> 1) & 1, S: (n >> 2) & 1, W: (n >> 3) & 1}
+
+
+def index_of(t, ground=None):
+    if ground in LINE_GROUNDS:
+        return t[E] + 8 * t[W]
+    if ground == "ruin":
+        return 6 * t["R"] + RUIN_COMBOS.index((t[W], t[E]))
+    return t[N] + 2 * t[E] + 4 * t[S] + 8 * t[W]
+
+
+def ruin_row(j):
+    """The ruin row phase of display-tile row j: (32 j) mod 11."""
+    return (10 * j) % 11
+
+
+def ruin_symbol(i, hash2):
+    """The symbol (0-2) of the vertical line of tile edges at the west of display-tile column i; neighbouring
+    lines never have the same symbol. hash2 = gameView's hash(a, b)."""
+    k = i // 2
+    e0, e1 = hash2(k, 7) % 3, hash2(k + 1, 7) % 3
+    if i % 2 == 0:
+        return e0
+    return 3 - e0 - e1 if e0 != e1 else (e0 + 1 + hash2(k, 11) % 2) % 3
 
 
 def edge_origin(side, ox=0, oy=0):
@@ -73,115 +120,165 @@ def path_edge(c, mat, ex, ey, vertical, ground):
         c.stamp(ex + 3, ey - 1, M.PEBBLE_S, "pebble")
 
 
-def band_edge(c, mat, ex, ey, vertical, ground):
-    """sand / snow: a horizontal (N / S) type-1 edge carries a long soft lit band; vertical edges carry lines."""
-    if not vertical:
-        patch(c, mat, ex, ey, 10, 3, 4, seed=331, rot=0.05, wobble=0.35)
+EDGE = {"grass": grass_edge, "plains": grass_edge, "lake": grass_edge, "moss": moss_edge, "path": path_edge}
 
-
-EDGE = {"grass": grass_edge, "plains": grass_edge, "lake": grass_edge, "moss": moss_edge, "path": path_edge,
-        "snow": band_edge, "sand": band_edge, "dsand": band_edge}
-
-# Lines that cross the W / E edges at these heights (sand ripples, snow ridges), per edge type.
-LINES = {"sand": {0: [3, 9, 18, 24], 1: [6, 14, 20, 27]}, "dsand": {0: [3, 9, 18, 24], 1: [6, 14, 20, 27]},  # uneven spacing
-         "snow": {0: [9, 24], 1: [15, 26]}}
-# Ruin paving: a horizontal joint crosses W / E edges at RUIN_H[type]; a vertical joint crosses N / S at RUIN_V[type].
-RUIN_H = {0: 9, 1: 22}
-RUIN_V = {0: 12, 1: 25}
-
-
-SWELL = [-4, 3, 0, 4, -3, 5, -2, 2, -5, 1, 4, -4, 3, -1, 5, -3]  # px, per tile index (hand-set, mixed)
+# Sand ripples / snow ridges cross the W / E edges at these rows, per edge type (8 phases). Sand: an 8-px
+# spacing, so every row 0-31 is a crest in exactly one phase; snow: the same rows, but each ridge is drawn in
+# dashes (7 px on, 9 off, placed by its edge row), so the snow stays mostly open.
+LINES = {"sand": {p: [p, p + 8, p + 16, p + 24] for p in range(8)}, "dsand": {p: [p, p + 8, p + 16, p + 24] for p in range(8)},
+         "snow": {p: [p, p + 8, p + 16, p + 24] for p in range(8)}}
 
 
 def _smooth(t):
     return t * t * (3 - 2 * t)
 
 
+def _pair(left, right):
+    """Join each line on the W edge to the nearest one on the E edge (all shifted the same way, so they never
+    cross). A line without a partner heads for where the next line would be, outside the tile (it runs out
+    through the top / bottom edge and stops there)."""
+    gap = left[1] - left[0]
+    s = min((-1, 0, 1), key=lambda k: abs(left[0] - (right[0] + k * gap)))
+    out = []
+    for k in range(-2, len(left) + 2):
+        out.append((left[0] + k * gap, right[0] + (k + s) * gap))
+    return out
+
+
+SWELL = [-5, 3, 0, 5, -3, 4, -2, 2]  # px: how far a tile's bundle of lines swells up / down, by (E phase - W phase) mod 8
+
+
 def draw_lines(c, ground, mat, ox, oy, tw, te, idx):
-    """Ripples / ridges from the W edge heights to the E edge heights, gently waving inside (the wave is 0 at
-    both ends, so it continues the next tile's line)."""
-    left, right = LINES[ground][tw], LINES[ground][te]
-    # the bundle of lines swells up or down inside the tile by an amount that depends on the tile index
-    # (all lines together, so they never cross), plus a small wave of its own per line
-    swell = SWELL[idx % 16] * (1.25 if ground == "snow" else 1.0)
-    amp = 0.9
-    for k, (yl, yr) in enumerate(zip(left, right)):
-        prev = None
+    """Ripples / ridges from the W edge rows to the E edge rows. All lines of a tile swell and wave together (so
+    they never cross), by a shape that depends only on the difference of its two edge phases and is 0 at both
+    ends, and every pixel's tone is a function of the line's own edge row (or the pixel's row) and its x: so a
+    tile's edge columns depend only on its edge types, and over the tile set every row and every column carries
+    the same amount of crest and trough (no 32-px bands)."""
+    d = (te - tw) % 8
+    snow = ground == "snow"
+    for yl, yr in _pair(LINES[ground][tw], LINES[ground][te]):
         for x in range(32):
             t = x / 31
-            tw = min(1.0, max(0.0, (x - 2) / 27))  # the wave is 0 on the 3 px at each end: every tile's band agrees
-            bump = math.sin(math.pi * tw)
-            y = yl + (yr - yl) * _smooth(t) + swell * bump + amp * math.sin(2 * math.pi * tw) * math.sin(1.7 * k + 0.9 * idx + 0.6)
-            y = max(3, min(28, round(y)))  # never into the 2-px edge bands (those belong to the edge types)
-            if ground == "snow":  # a low ridge: lit crest (4; 5 at its top), lee shade below (2) on the high part only
-                top = abs(t - 0.5) < 0.12 and (k + idx) % 2 == 0
-                c.put(ox + x, oy + y, mat, 5 if top else 4)
-                if bump > 0.3:
-                    c.put(ox + x, oy + y + 1, mat, 2)
-            else:  # a ripple: crest (4; 5 on its highest run), trough (2; 1 on its lowest run)
-                hi = prev is not None and y < prev
-                c.put(ox + x, oy + y, mat, 5 if (hi and 6 < x < 26) else 4)
-                c.put(ox + x, oy + y + 1, mat, 1 if (k == 1 and 12 < x < 16) else 2)
-            if prev is not None and abs(y - prev) > 1:  # keep the line joined on a steep step
-                step = 1 if y > prev else -1
-                for yy in range(prev + step, y, step):
-                    c.put(ox + x, oy + yy, mat, 4)
-            prev = y
+            wv = min(1.0, max(0.0, (x - 2) / 27))
+            wave = SWELL[d] * math.sin(math.pi * wv) * (0.4 if snow else 1.0) + 0.8 * math.sin(2 * math.pi * wv) * math.cos(2.3 * d + 0.4)
+            y = round(yl + (yr - yl) * _smooth(t) + wave)
+            if not -3 <= y <= 31:
+                continue
+            h = yl if x < 16 else yr  # runs keyed to the line's own edge row on that side
+            if snow:  # wind ridges in dashes (14 px in every 32, placed by the row): lit crest, lee shade under its middle
+                k = (x + 11 * y) % 32
+                if k < 14:
+                    c.put(ox + x, oy + y, mat, 5 if 4 <= k <= 7 else 4)
+                    if 2 <= k <= 10:
+                        c.put(ox + x, oy + y + 1, mat, 2)
+            else:  # a ripple: crest 4 (5 on a 2-px run every 16 px), trough 2 (1 on a run elsewhere)
+                c.put(ox + x, oy + y, mat, 5 if (x + 3 * h) % 16 < 2 else 4)
+                c.put(ox + x, oy + y + 1, mat, 1 if (x + 5 * h + 6) % 16 < 2 else 2)
+                if h % 4 == 1 and (x + 7 * h) % 16 < 8:  # a lit flank over one ripple in four, in 8-px stretches
+                    c.put(ox + x, oy + y - 1, mat, 4)
+                    if 1 <= (x + 7 * h) % 16 < 7:
+                        c.put(ox + x, oy + y - 2, mat, 4)
 
 
-INSETS = [None, (15, 13, 7, 6), (5, 15, 6, 5), (17, 3, 8, 5), (6, 23, 7, 5), (19, 16, 6, 7), None, (8, 3, 7, 5),
-          (14, 22, 8, 6), (4, 11, 6, 6), (20, 9, 7, 5), None, (10, 17, 6, 5), (16, 4, 6, 6), (5, 20, 8, 5), (18, 18, 7, 6)]
+# ------------------------------------------------------------------------------------------------------
+# Ruin paving (round 3): rectangular stones in straight COURSES 11 px high (1 joint row + 10 stone rows) that
+# run across the whole map; the joints of a course are staggered against the course above.
+#   - 11 does not divide 32, so a row of tiles has one of 11 phases R = (32 j) mod 11, and every row of a
+#     tile is a joint in exactly one of them (no 32-px bands);
+#   - there are 32 different courses G (352 px = 11 tiles = 32 courses); ruin_layout.py holds, per course and
+#     edge symbol, where the stone that crosses a tile edge has its joints, searched so that the vertical
+#     joints fall evenly on all 32 columns for every (west, east) pair of symbols.
+# Joints are tone 1 (never 0); every stone is lit on its top row and left column (4, the corner 5) and shaded
+# on its bottom row and right column (2). Some stones are worn (lit specks), pitted, cracked or mossy, by a
+# hash of the stone, so a stone cut by a tile edge is the same stone in both tiles.
+# ------------------------------------------------------------------------------------------------------
+def _h(*vals):
+    h = 2166136261
+    for v in vals:
+        h = ((h ^ (v & 0xFFFF)) * 16777619) & 0xFFFFFFFF
+    h = ((h ^ (h >> 13)) * 1274126177) & 0xFFFFFFFF
+    return h ^ (h >> 16)
 
 
-def draw_ruin_joints(c, mat, ox, oy, t, idx=0):
-    """Paving joints that cross the tile's edges away from its corners and wander inside: each joint leaves
-    its edge, steps to a middle height / column that depends on the tile index, and steps again to the far
-    edge's crossing. Flagstones of changing size, never on the tile grid. Lit (4) below / right of a joint,
-    shade (2) above / left; 0 where joints meet."""
-    yw, ye = RUIN_H[t[W]], RUIN_H[t[E]]
-    xn, xs = RUIN_V[t[N]], RUIN_V[t[S]]
-    ymid = (yw + ye) // 2 + (-5, -2, 3, 5, 0, 4, -4, 2)[idx % 8]
-    xmid = (xn + xs) // 2 + (4, -4, 0, 5, -3, 2, -5, 3)[(idx * 3) % 8]
-    jx1, jx2 = 5 + idx % 4, 22 + (idx // 4) % 4  # where the horizontal joint steps (in, then out)
-    jy1, jy2 = 5 + (idx // 2) % 4, 23 + idx % 3
-    pts = set()
+def ruin_joints(G, w, e):
+    """The columns of the vertical joints of course G in a tile with symbols (w, e), from -A (in the tile on
+    the left) to 32 + B (in the tile on the right), and the id of the stone right of each joint."""
+    from ruin_layout import A, B, D
 
-    def hseg(x0, x1, y):
-        for x in range(x0, x1 + 1):
-            pts.add((x, y))
+    l, r = B[G][w], 32 - A[G][e]
+    xs = [(-A[G][w], ("x", G, w)), (l, ("m", G, w, e, 0))]
+    if r - l >= 21:
+        xs.append((l + (r - l) // 2 + D[G], ("m", G, w, e, 1)))
+    xs += [(r, ("x", G, e)), (32 + B[G][e], None)]
+    return xs
 
-    def vseg(y0, y1, x):
-        for y in range(min(y0, y1), max(y0, y1) + 1):
-            pts.add((x, y))
 
-    hseg(0, jx1, yw)
-    vseg(yw, ymid, jx1)
-    hseg(jx1, jx2, ymid)
-    vseg(ymid, ye, jx2)
-    hseg(jx2, 31, ye)
-    vseg(0, jy1, xn)
-    hseg(min(xn, xmid), max(xn, xmid), jy1)
-    vseg(jy1, jy2, xmid)
-    hseg(min(xmid, xs), max(xmid, xs), jy2)
-    vseg(jy2, 31, xs)
-    inset = INSETS[idx % len(INSETS)]
-    if inset:  # a smaller stone set into the paving (its joints stay 3 px away from the tile's edges)
-        x0, y0, w, h = inset
-        for x in range(x0, x0 + w + 1):
-            pts.add((x, y0))
-            pts.add((x, y0 + h))
-        for y in range(y0, y0 + h + 1):
-            pts.add((x0, y))
-            pts.add((x0 + w, y))
-    for x, y in pts:
-        for dx, dy, tone in ((0, 1, 4), (1, 0, 4), (0, -1, 2), (-1, 0, 2)):
-            if (x + dx, y + dy) not in pts and 0 <= x + dx < 32 and 0 <= y + dy < 32:
-                c.put(ox + x + dx, oy + y + dy, mat, tone)
-    for x, y in pts:
-        c.put(ox + x, oy + y, mat, 1)
-    for x, y in pts:  # where joints cross: the deepest point
-        if sum((x + dx, y + dy) in pts for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))) >= 3:
-            c.put(ox + x, oy + y, mat, 0)
+def draw_ruin(c, mat, ox, oy, R, w, e):
+    top = 32 * ((10 * R) % 11)  # the y of this tile's top in the 352-px cycle of courses
+
+    def course(y):
+        return ((top + y) // 11) % 32, (top + y) % 11
+
+    cols = {}
+
+    def joint(x, y):
+        G, k = course(y)
+        if k == 0:
+            return True
+        if G not in cols:
+            cols[G] = {x for x, _ in ruin_joints(G, w, e)}
+        return x in cols[G]
+
+    for y in range(32):
+        for x in range(32):
+            if joint(x, y):
+                c.put(ox + x, oy + y, mat, 1)
+            elif joint(x, y - 1) and joint(x - 1, y):
+                c.put(ox + x, oy + y, mat, 5)
+            elif joint(x, y - 1) or joint(x - 1, y):
+                c.put(ox + x, oy + y, mat, 4)
+            elif joint(x, y + 1) or joint(x + 1, y):
+                c.put(ox + x, oy + y, mat, 2)
+    seen = set()
+    for y in range(32):
+        G, k = course(y)
+        if G in seen:
+            continue
+        seen.add(G)
+        y0 = y - k  # the course's joint row (may be above the tile)
+        xs = ruin_joints(G, w, e)
+        for (x0, sid), (x1, _) in zip(xs, xs[1:]):
+            draw_stone(c, mat, ox, oy, x0, y0, x1 - x0, _h(*[v if isinstance(v, int) else ord(v) for v in sid], 77))
+
+
+def draw_stone(c, mat, ox, oy, x0, y0, wd, h):
+    """The face of one stone (joint column x0, joint row y0; its face is x0+1 .. x0+wd-1, y0+1 .. y0+10)."""
+    def put(dx, dy, tone, m=None):
+        x, y = x0 + dx, y0 + dy
+        if 0 <= x < 32 and 0 <= y < 32 and (m or (2 <= dx <= wd - 2 and 2 <= dy <= 9)):
+            c.put(ox + x, oy + y, m or mat, tone)
+
+    style = h % 16
+    r = h >> 4
+    if style in (4, 5, 6):  # worn: a few lit specks
+        for k in range(2 + style % 2):
+            dx, dy = 3 + (r >> (5 * k)) % max(1, wd - 6), 3 + (r >> (5 * k + 3)) % 6
+            put(dx, dy, 4)
+            put(dx + 1, dy, 4)
+    elif style in (7, 8):  # pitted: small dark pits
+        for k in range(2 + style % 2):
+            dx, dy = 3 + (r >> (5 * k)) % max(1, wd - 6), 3 + (r >> (5 * k + 2)) % 6
+            put(dx, dy, 2)
+            if k == 0:
+                put(dx + 1, dy + 1, 2)
+    elif style == 9 and wd >= 12:  # a hairline crack from the top edge
+        dx = 4 + r % (wd - 8)
+        for k, (ddx, ddy) in enumerate([(0, 1), (0, 2), (1, 3), (1, 4), (2, 5), (3, 5), (3, 6)][:4 + r % 4]):
+            put(dx + ddx, ddy, 2, mat)
+    elif style == 10:  # moss in the joint at the foot of the stone
+        dx = 1 + r % max(1, wd - 6)
+        for ddx, ddy, tn in [(1, 9, 4), (2, 9, 5), (0, 10, 3), (1, 10, 4), (2, 10, 4), (3, 10, 3), (4, 10, 2), (1, 11, 2), (2, 11, 2)]:
+            put(dx + ddx, ddy, tn, "moss")
 
 
 # ------------------------------------------------------------------------------------------------------
@@ -211,10 +308,13 @@ PATH_POOL = [
     [("patch", 16, 16, 6, 3, 2), ("pebble", 20, 12, "S")],
 ]
 SAND_POOL = [[("shell", 15, 15)], [("pebble", 12, 18)], [("twig", 16, 11)], [], [("pebble", 19, 14), ("shell", 11, 20)], []]
-SNOW_POOL = [[("rock", 15, 15)], [("twig", 12, 18)], [], [("drift", 9, 19, 14)], [("rock", 19, 11), ("twig", 10, 20)], []]
+SNOW_POOL = [[("rock", 15, 15)], [("twig", 12, 18)], [], [], [("rock", 19, 11), ("twig", 10, 20)], []]
 RUIN_POOL = [[("crack", 14, 15, "A")], [("moss", 16, 16)], [("chip", 18, 14)], [], [("crack", 10, 18, "B"), ("chip", 20, 9)],
              [("wear", 16, 16)], []]
-POOL = {"grass": GRASS_POOL, "plains": GRASS_POOL, "lake": GRASS_POOL, "moss": MOSS_POOL, "path": PATH_POOL,
+# The island's own grass (round 3): clover carpets with white blossoms in two of its six mark sets.
+ISLAND_POOL = [GRASS_POOL[0], [("clump", 11, 14, "M"), ("carpet", 19, 19), ("clover", 13, 8)], GRASS_POOL[2],
+               [("carpet", 14, 14), ("clump", 23, 21, "S")], GRASS_POOL[4], [("carpet", 16, 17), ("clump", 9, 22, "S"), ("clover", 22, 9)]]
+POOL = {"grass": ISLAND_POOL, "plains": GRASS_POOL, "lake": GRASS_POOL, "moss": MOSS_POOL, "path": PATH_POOL,
         "sand": SAND_POOL, "dsand": SAND_POOL, "snow": SNOW_POOL, "ruin": RUIN_POOL}
 SPECIAL = {"plains": "flowers", "lake": "reeds", "grass": "clover"}
 FLOWER_COLOURS = ["flower.white", "flower.yellow", "flower.pink"]
@@ -234,6 +334,15 @@ def draw_marks(c, ground, mat, marks, ox, oy, season, k=0):
             M.draw_clump(c, mat, x, y, ("W" if ground == "plains" and m[3] == "L" else m[3]))
         elif kind == "clover" and season != "winter":
             c.stamp(x, y, M.CLOVER, mat)
+            if ground == "grass" and season is None:  # the island's clover is in bloom
+                c.put(x + 2, y, "flower.white", 6)
+        elif kind == "carpet" and season != "winter":  # a clover carpet: a low lit bed, clover leaves, a few white blossoms
+            patch(c, mat, x, y, 6, 4, 4, seed=360 + k, wobble=0.6)
+            for j, (dx, dy) in enumerate([(-6, -2), (-1, -3), (2, 0), (-4, 1)]):
+                c.stamp(x + dx, y + dy, M.CLOVER, mat)
+                if season is None and (j + k) % 2 == 0:
+                    c.put(x + dx + 2, y + dy, "flower.white", 6)
+                    c.put(x + dx + 2, y + dy + 1, "flower.white", 4)
         elif kind == "pebbles":
             c.stamp(x, y, M.PEBBLE_M, "pebble")
             c.stamp(x + 5, y + 3, M.PEBBLE_S, "pebble")
@@ -245,7 +354,7 @@ def draw_marks(c, ground, mat, marks, ox, oy, season, k=0):
             elif sp == "reeds":
                 c.stamp(x, y, M.REED, "reed")
             elif sp == "clover" and season != "winter":
-                c.stamp(x, y, M.CLOVER, mat)
+                draw_marks(c, ground, mat, [("carpet", m[1] + 2, m[2] + 2)], ox, oy, season, k)
         elif kind == "needles":
             c.stamp(x, y, M.NEEDLES, "pine")
         elif kind == "fern":
@@ -271,8 +380,12 @@ def draw_marks(c, ground, mat, marks, ox, oy, season, k=0):
             else:
                 M.crack(c, mat, x - 3, y - 3, M.CRACK_B)
         elif kind == "rock":
-            c.stamp(x, y, [".44.", "4332", "3221"], "rock")
-            c.stamp(x, y + 3, [".55."], mat)
+            if ground == "snow" and k >= 0:  # a stone under the snow: a snow cap, a little rock showing on its lee side
+                c.stamp(x, y, [".55.", "5443", ".22."], mat)
+                c.stamp(x + 2, y + 2, ["32"], "rock")
+            else:
+                c.stamp(x, y, [".44.", "4332", "3221"], "rock")
+                c.stamp(x, y + 3, [".55."], mat)
         elif kind == "drift":
             M.drift(c, mat, x, y, m[3], height=1)
         elif kind == "moss":
@@ -300,19 +413,27 @@ def draw_grain(c, ground, mat, ox, oy):
 
 
 def draw_tile(c, ground, mat, ox, oy, t, idx, season=None, interior=True):
-    """One tile's content at (ox, oy): grain, edge crossings for its 4 edge types, lines / joints, interior marks."""
+    """One tile's content at (ox, oy): grain, edge crossings for its 4 edge types, lines / paving, interior marks."""
+    if ground == "ruin":
+        draw_ruin(c, mat, ox, oy, t["R"], t[W], t[E])
+        return
     draw_grain(c, ground, mat, ox, oy)
     if ground in LINES:
         draw_lines(c, ground, mat, ox, oy, t[W], t[E], idx)
-    if ground == "ruin":
-        draw_ruin_joints(c, mat, ox, oy, t, idx)
     for side in (N, E, S, W):
         if t[side] and ground in EDGE:
             ex, ey = edge_origin(side, ox, oy)
             EDGE[ground](c, mat, ex, ey, side in (W, E), ground)
     if interior and idx:
         pool = POOL[ground]
-        draw_marks(c, ground, mat, pool[(idx * 5 + 3) % len(pool)], ox, oy, season, idx)
+        marks = pool[(idx * 5 + 3) % len(pool)]
+        if ground in LINE_GROUNDS:  # all-texture grounds: a mark on about one tile in five, anywhere in the tile (by index)
+            if idx % 3 == 1:
+                marks = [(m[0], 1 + (idx * 7 + j * 11) % 25, 1 + (idx * 13 + j * 5) % 27) + tuple(m[3:]) for j, m in enumerate(marks)]
+                draw_marks(c, ground, mat, marks, ox, oy, season, idx)
+        else:
+            dx, dy = (idx * 3) % 7 - 3, (idx * 5 + 2) % 7 - 3  # the marks move with the tile index (no fixed spot)
+            draw_marks(c, ground, mat, marks, ox + dx, oy + dy, season, idx)
     if season == "autumn" and idx:
         for k in range(1 + idx % 3):
             x, y = LEAVES[(idx + 2 * k) % len(LEAVES)]
@@ -322,7 +443,7 @@ def draw_tile(c, ground, mat, ox, oy, t, idx, season=None, interior=True):
 def wang_tile(ground, n, mat=None, season=None):
     mat = mat or ground
     c = Canvas(32, 32, (mat, 3), wrap=False)
-    draw_tile(c, ground, mat, 0, 0, types_of(n), n, season)
+    draw_tile(c, ground, mat, 0, 0, types_of(n, ground), n, season)
     return c
 
 
