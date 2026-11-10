@@ -11,6 +11,12 @@ from PIL import Image
 
 from mock_scene import tile_hash
 
+
+def release_variant(h, n):
+    """terrainArt.groundVariant for the release art: variant 0 on about half the ground, the others an equal share."""
+    k = h % (2 * n)
+    return 0 if k <= n else k - n
+
 # The demo map: ~ water, L land. A lake with a bay, an islet, a peninsula and a channel.
 MAP = [
     "LLLLLLLLLLLLLLLL",
@@ -90,7 +96,7 @@ def autumn(images):
         x0 = k * (8 * 32 + 16)
         for y in range(6):
             for x in range(8):
-                out.paste(images[f"{ground}.{tile_hash(x, y) % 4}"], (x0 + x * 32, y * 32))
+                out.paste(images[f"{ground}.{release_variant(tile_hash(x, y), 4)}"], (x0 + x * 32, y * 32))
         for i, (px, py) in enumerate(((1, 3), (4, 2), (6, 5))):
             im = images[pine]
             out.alpha_composite(im, (x0 + px * 32, py * 32 + 32 - im.height))
@@ -129,7 +135,7 @@ GROUPS = [  # (title, how the engine uses it, test on the name)
      "`.v1` (other pebble / clod positions): pick per tile (e.g. `hash % 2`: 0 = no suffix, 1 = `.v1`).",
      lambda n: n.startswith(("face.sand.", "face.desert.", "face.path."))),
     ("Autumn: forest and mountains", "`<season>.<key>` keys for the autumn season bundle (add them to its key set, like "
-     "`autumn.tile.grass.0`). `autumn.mountains.snow.N` is the mountains' ground in autumn (partial snow: bare patches of warm rock and dry grass).",
+     "`autumn.tile.grass.0`). `autumn.mountains.snow.N` is the mountains' ground in autumn (mostly snow: .0 plain, .1-.3 one small melted patch of warm rock and dry grass).",
      lambda n: n.startswith(("autumn.forest.", "autumn.mountains.", "autumn.face.stone."))),
 ]
 

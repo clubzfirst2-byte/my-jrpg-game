@@ -22,7 +22,7 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 import gen_samples as S  # noqa: E402
 import release_faces as F  # noqa: E402
-from release_ground import new_tile, tones, set_ramp, desert_sand, forest_grass, mountains_snow  # noqa: E402
+from release_ground import new_tile, tones, set_ramp, desert_sand, forest_grass, SNOW  # noqa: E402
 from release_nature import pine  # noqa: E402
 from gen_samples import TUFT_S, TUFT_M, SPRIG  # noqa: E402
 
@@ -317,59 +317,70 @@ def autumn_forest_grass(v):
     return t
 
 
-# Autumn in the mountains (director's decision after the v1.1 inspection): PARTIAL snow. The summer snow
-# ground with bare patches (about 20-30 % of the tile) of warm rock (desert.stone) and dry ochre grass
-# (autumn.grass), at different places per variant. The patches wrap like everything on a ground tile.
-BARE = {  # the bare patches per variant: each a few overlapping ellipses (cx, cy, rx, ry), hand-placed and
-    # kept 1 px inside the tile (a patch cut by the tile's edge would not continue on a neighbour of another variant)
-    0: [[(8, 9, 6, 3.5), (12, 11, 5, 3), (4, 11, 3, 2)], [(23, 23, 5, 3), (19, 25, 4, 2.5), (26, 26, 3, 2.5)]],
-    1: [[(21, 7, 6, 3.5), (25, 9.5, 4.5, 3), (16, 9, 3, 2)], [(8, 22, 6, 3.5), (5, 25, 4, 2.5), (12, 24, 3, 2)]],
-    2: [[(15, 15, 7, 4), (20, 18.5, 5, 3), (10, 18.5, 3.5, 2.5)], [(26, 5, 3.5, 2.5), (28.5, 7, 2, 1.5)]],
-    3: [[(24, 12, 5, 3.5), (20.5, 15.5, 4, 2.5), (27, 15, 2.5, 2)], [(9, 26, 6, 3), (14, 24, 4, 2.5), (4, 27, 2.5, 2)]],
+# Autumn in the mountains (director's decision after the v1.1 inspection): mostly snow. Variant 0 is
+# plain snow (the most common, like every ground); variants 1-3 have ONE melted patch each, of their
+# own size and shape (8-12 % of the tile), kept 1 px inside the tile. Light colours only (warm rock
+# desert.stone 3 / 2, dry ochre grass autumn.grass 4 / 3 / 2) and no rim around the patch, so the snow
+# stays as quiet as the mountain snow (roughness <= 6).
+BARE = {  # (cx, cy, rx, ry) ellipses whose union is the patch, hand-placed
+    1: [(9, 22, 5.5, 2.5), (13.5, 20, 3.5, 2), (6, 24, 2.5, 1.5)],  # a long low strip, lower left
+    2: [(21, 9, 4, 3.5), (24, 12, 3, 2.5), (18.5, 11.5, 2, 1.5)],  # a round patch, upper right
+    3: [(15, 15, 3, 2), (18, 17, 4, 2.5), (12, 18, 2.5, 2), (21, 19.5, 2, 1.5)],  # a crooked patch, middle
 }
-BARE_GRASS = {  # dry grass tufts, drawn only on the bare rock
-    0: [(5, 8, TUFT_S), (21, 23, SPRIG), (11, 10, SPRIG)],
-    1: [(20, 5, TUFT_M), (5, 21, TUFT_S), (10, 23, SPRIG)],
-    2: [(12, 14, TUFT_M), (19, 17, SPRIG), (25, 4, SPRIG)],
-    3: [(22, 11, TUFT_S), (7, 24, TUFT_M)],
+BARE_MARKS = {  # (x, y, pattern): '#' dry grass blade pairs (autumn.grass), 's' a stone (desert.stone 2)
+    1: [(6, 21, "g.g"), (12, 19, "gg"), (15, 21, "s")],
+    2: [(19, 8, "g.g"), (23, 11, "s"), (21, 13, "gg")],
+    3: [(14, 14, "gg"), (19, 17, "g.g"), (12, 18, "s")],
 }
-BARE_STONES = {0: [(13, 8), (25, 24)], 1: [(24, 8), (9, 21)], 2: [(17, 17)], 3: [(25, 13), (12, 25)]}
+
+
+def _bare(v):
+    bare = set()
+    for cx, cy, rx, ry in BARE.get(v, []):
+        k = {1: 1.3, 2: 1.24, 3: 1.4}[v]  # each patch its own size (8-12 % of the tile)
+        rx, ry = rx * k, ry * k
+        for y in range(int(cy - ry) - 1, int(cy + ry) + 2):
+            for x in range(int(cx - rx) - 1, int(cx + rx) + 2):
+                if ((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 <= 1 and 1 <= x <= 30 and 1 <= y <= 30:
+                    bare.add((x, y))
+    return bare
 
 
 def autumn_mountains_ground(v):
-    t = mountains_snow(v)
+    t = new_tile(32, 32, base=("mount.snow", 2))  # the drifts of mountains.snow.N, without its rock / ice / shrub
+    for x, y, p in SNOW[v]:
+        t.stamp(x, y, p, tones("mount.snow"))
     for m in ("desert.stone", "autumn.grass"):
         set_ramp(t, m, m)
-    bare = set()
-    for patch in BARE[v]:
-        for cx, cy, rx, ry in patch:
-            rx, ry = rx * 1.2, ry * 1.2  # about 20-30 % of the ground bare (director, v1.1 inspection)
-            for y in range(int(cy - ry) - 1, int(cy + ry) + 2):
-                for x in range(int(cx - rx) - 1, int(cx + rx) + 2):
-                    if ((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 <= 1 and 1 <= x <= 30 and 1 <= y <= 30:
-                        bare.add((x, y))
+    bare = _bare(v)
     for x, y in bare:
-        up, down = ((x, (y - 1) % 32) in bare), ((x, (y + 1) % 32) in bare)
-        left, right = (((x - 1) % 32, y) in bare), (((x + 1) % 32, y) in bare)
-        tone = 2
-        if not up:
-            tone = 1  # the snow bank above casts a shadow on the rock
-        elif not down or not right:
-            tone = 3 if left else 2  # the lower right rim catches the light from the top left
-        t.put(x, y, "desert.stone", tone)
-    for x, y in bare:  # the snow's edge around the patch: a lit rim on top, a shaded rim below
-        for dx, dy, tone in ((0, -1, 3), (0, 1, 1), (1, 0, 2), (-1, 0, 3)):
-            q = ((x + dx) % 32, (y + dy) % 32)
-            if q not in bare and t.px[q[1]][q[0]] and t.px[q[1]][q[0]][0] == "mount.snow":
-                t.put(q[0], q[1], "mount.snow", tone)
-    for x, y, p in BARE_GRASS[v]:
-        t.stamp(x, y, p, tones("autumn.grass"), only_on="desert.stone")
-    for x, y in BARE_STONES[v]:
-        t.stamp(x, y, ["43", "32"], tones("desert.stone"), only_on="desert.stone")
+        edge = any((x + dx, y + dy) not in bare for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0)))
+        # the patch's fringe is dry grass (lighter than rock, so it blends into the snow), the inside rock
+        if edge:
+            t.put(x, y, "autumn.grass", 4 if (x + y) % 3 else 3)
+        else:
+            t.put(x, y, "desert.stone", 3)
+    for x0, y, pat in BARE_MARKS.get(v, []):
+        for k, ch in enumerate(pat):
+            x = x0 + k
+            if (x, y) not in bare:
+                continue
+            if ch == "g":
+                t.put(x, y, "autumn.grass", 2)
+            elif ch == "s":
+                t.put(x, y, "desert.stone", 2)
+                if (x + 1, y) in bare:
+                    t.put(x + 1, y, "desert.stone", 2)
     return t
 
 
-LIP_BARE = [(5, 12), (20, 26)]  # x ranges where the autumn lip shows dry grass instead of snow
+# x ranges where the autumn lip shows dry grass instead of snow: irregular lengths and places per
+# variant and part (the ends of a stretch show grass only in the top row, so it fades into the snow)
+LIP_BARE = {
+    (0, "top"): [(3, 9), (24, 26)], (0, "top-base"): [(13, 21)],
+    (1, "top"): [(10, 12), (17, 27)], (1, "top-base"): [(1, 4), (20, 23)],
+    (2, "top"): [(6, 15)], (2, "top-base"): [(8, 10), (26, 30)],
+}
 
 
 def autumn_stone_lip(kind, seg, var=0):
@@ -378,12 +389,13 @@ def autumn_stone_lip(kind, seg, var=0):
     with ctx:
         t = F.stone_face(kind, seg)
     set_ramp(t, "autumn.grass", "autumn.grass")
-    shift = 7 * var
-    for y in range(t.h):
-        for x in range(t.w):
-            v = t.px[y][x]
-            if v and v[0] == "mount.snow" and any(a <= (x - shift) % 32 <= b for a, b in LIP_BARE):
-                t.px[y][x] = ("autumn.grass", min(3, v[1]))
+    for a, b in LIP_BARE[(var, kind)]:
+        for x in range(a, b + 1):
+            end = x in (a, b) and b - a >= 2
+            for y in range(t.h):
+                v = t.px[y][x]
+                if v and v[0] == "mount.snow" and (not end or y == 0):
+                    t.px[y][x] = ("autumn.grass", min(3, v[1]))
     return t
 
 
