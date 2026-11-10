@@ -6,7 +6,7 @@
   icon.dish.hunter_stew      hunter_stew      狩人の煮込み    iron (pot), stew, bone
   icon.dish.ember_soup       ember_soup       火照りのスープ  glaze (teal bowl), pepper, fire
   icon.dish.hearty_skewer    hearty_skewer    がっつり串      wood (stick), stew (meat), leaf
-  icon.dish.mixed_stew       mixed_stew       ごった煮        wood (bowl), leaf, berry
+  icon.dish.mixed_stew       mixed_stew       ごった煮        wood (bowl), stew (broth), leaf
   icon.dish.dubious_food     dubious_food     あやしい料理    linen (plate), ash (a charred lump), smoke
 
 Same rules as the other icons: 20x20, drawn inside 2..17 (the selective outline keeps a 1 px clear margin),
@@ -170,7 +170,10 @@ def hearty_skewer():
     return to_rgba(c)
 
 def mixed_stew():
-    """A wooden bowl heaped with a bit of everything: greens (leaf) with red bits (berry) in the heap."""
+    """ごった煮: a wooden bowl of brown stew broth (stew ramp) with a bit of everything floating in it:
+    green leaves and dark chunks, bubbles catching the light. Wood, stew, leaf (3 materials: the inspection
+    asked for berries too, but a fourth material would break the icon rule, so the bits are greens and
+    meat). A stew, not a salad: the broth is flat and brown, nothing is heaped."""
     c = cv(20, 20)
     for y in range(11, 18):
         hw = 7.6 - max(0, y - 13) * 1.2
@@ -181,16 +184,19 @@ def mixed_stew():
     hline(c, 3, 16, 11, "wood", 4)
     for x in (6, 10, 14):  # the bowl's staves
         vline(c, x, 13, 16, "wood", 1)
-    for x, y in ring_px(9.5, 10.5, 0, 6.2, 0.75):  # the heap
-        if y <= 10:
-            c.put(x, y, "leaf")
-    round_shade(c, "leaf", 8.0, 9.0, 7.0, 4.5, cuts=(0.8, 0.3, -0.6))
-    for x, y, t in ((6, 8, 3), (7, 8, 2), (11, 7, 3), (12, 7, 2), (9, 9, 3), (13, 9, 2), (5, 10, 2)):
-        c.put(x, y, "berry", t)  # red bits in the heap
-    c.put(6, 7, "berry", 4)
-    c.put(11, 6, "berry", 4)
+    c.ellipse(9.5, 9.6, 6.6, 2.0, "stew", 3)  # the broth, a flat surface
+    for y in range(7, 12):
+        for x in range(20):
+            if c.m(x, y) == "stew":
+                c.tone[y][x] = 4 if (y <= 8 and x < 10) else 3 if x < 13 else 2
+    for x, y, t in ((5, 9, 4), (6, 8, 3), (12, 9, 3), (13, 8, 4), (9, 10, 3), (10, 10, 4)):
+        c.put(x, y, "leaf", t)  # greens floating
+    for x, y in ((8, 9), (11, 8), (14, 10)):  # dark chunks
+        c.put(x, y, "stew", 1)
+    c.put(7, 10, "stew", 4)  # a bubble
+    c.put(15, 9, "stew", 4)
+    hline(c, 3, 16, 11, "wood", 4)  # the rim in front of the broth
     return to_rgba(c)
-
 
 def dubious_food():
     """Something went wrong: a charred black lump, lopsided, on a pale plate, a cartoon curl of smoke above

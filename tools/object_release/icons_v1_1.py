@@ -66,13 +66,14 @@ def icon_greatsword():
     vline(c, 9, 5, 11, I, 3)
     for x, y in ((12, 6), (12, 9)):  # chips out of the edge
         c.mat[y][x] = None
-    for x, y, t in ((11, 4, 2), (12, 7, 1), (11, 8, 2), (8, 10, 2), (11, 11, 1), (7, 9, 3)):  # rust
-        c.put(x, y, "clay", t)
+    for x, y, t in ((11, 4, 2), (11, 5, 1), (11, 8, 2), (12, 8, 1), (7, 9, 3), (7, 10, 2)):
+        c.put(x, y, "clay", t)  # rust in 2-px patches (inspection: no lone dots)
     c.rect(3, 12, 16, 13, I, 2)  # the crossguard
     hline(c, 3, 16, 12, I, 4)
     hline(c, 4, 16, 13, I, 2)
     c.put(16, 13, I, 1)
     c.put(3, 13, I, 3)
+    c.put(14, 12, "clay", 3)
     c.put(15, 12, "clay", 2)
     for y in range(14, 17):  # the long grip, wound leather
         c.put(9, y, "leather", 3 if y % 2 == 0 else 2)
@@ -136,13 +137,15 @@ def icon_star_sword():
     c.put(4, 9, "gold", 3)
     for x, y, t in ((7, 12, 4), (7, 11, 4), (6, 12, 4), (8, 12, 3), (7, 13, 3)):  # the star in the guard
         c.put(x, y, "gem", t)
-    for k in range(1, 4):  # the grip: wound steel wire
+    for k in range(1, 3):  # the grip: wound steel wire (one step shorter: the star pommel takes the end)
         x, y = 7 - k, 13 + k
         c.put(x, y, "steel", 3 if k % 2 else 2)
         c.put(x + 1, y, "steel", 1)
-    c.rect(2, 16, 3, 17, "gold", 2)
-    c.put(2, 16, "gold", 3)
-    c.put(3, 17, "gold", 1)
+    # the pommel: a gold four-pointed star (inspection: a shape cue, not only colour, against icon.sword's
+    # square pommel)
+    for x, y, t in ((3, 14, 4), (3, 15, 3), (2, 16, 3), (4, 16, 2), (3, 17, 1)):
+        c.put(x, y, "gold", t)
+    c.put(3, 16, "gem", 4)  # a blue heart in the star
     return to_rgba(c)
 
 
