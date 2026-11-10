@@ -20,7 +20,7 @@ import { EndingScreen } from './ui/ending.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
-import { createNpcs, NPC_BODY } from './game/npc/npcs.js';
+import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
 import { prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
 import { TERRAIN_GROUP, releaseTerrainEntries, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
@@ -814,6 +814,7 @@ async function boot() {
     if (bossKey !== shownBoss) {
       shownBoss = bossKey;
       bossBar.hidden = !boss;
+      uiRoot.classList.toggle('boss-fight', !!boss); // toasts move to the bottom (styles.css)
       if (boss) {
         bossName.textContent = boss.name;
         bossFill.style.width = `${(100 * boss.hp) / boss.maxHp}%`;
@@ -960,7 +961,10 @@ async function boot() {
       if (!n) return;
       const p = state.player;
       p.x = p.prevX = n.x;
-      p.y = p.prevY = n.y + NPC_BODY.depth + NPC_BODY.front; // right against its body, below
+      // Right against its body, below; a ghost has no body (and some have a short reach, 18): the
+      // old 14 px, always inside the talk reach.
+      const gap = npcSolid(n) ? NPC_BODY.depth + NPC_BODY.front : 14;
+      p.y = p.prevY = n.y + Math.min(gap, n.reach - 4);
       p.z = p.prevZ = p.groundZ = n.z;
       p.facing = 'up';
       p.aimX = 0;
