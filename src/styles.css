@@ -638,6 +638,10 @@ body {
   /* v1.0 QA2 (C-6 again): a message longer than the box wraps into even lines, never leaving its
      last character alone on a line (Toast.balance() does the same where this is unsupported) */
   text-wrap: balance;
+  /* final QA L-6 rest: break between phrases only (Toast puts a <wbr> between them), never inside a
+     word ("目を開け／た。"); a phrase longer than the line still wraps */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
   pointer-events: none;
   z-index: 7; /* above the inventory menu */
 }

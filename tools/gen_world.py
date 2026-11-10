@@ -680,6 +680,65 @@ S.features['npcs'].append({'id': 'princess_end', 'name': '星環の姫', 'dialog
 assert P.free(88, 51, 0) and P.g[51][88] == '.', 'traveller spot'
 P.features['npcs'].append({'id': 'traveller', 'name': '旅人', 'dialogue': 'traveller', 'look': 8, 'tx': 88, 'ty': 51})
 
+# v1.0 (terrain inspection, final QA): a rock right north of a tree stood under the tree's crown (the
+# pine is 30 px tall and covers most of the tile behind it). Done last, so nothing placed before
+# moves. Trees stay where they are (saves name a burnt tree by its place); rocks never change, so
+# they never enter a save (src/game/world/worldDiff.js) and can move. Each goes to the nearest grass
+# tile where it closes no path (the open tiles beside it still reach each other round it) and stands
+# under no crown, away from everything the regions place, the boss arenas and the road.
+def move_rocks_under_crowns(R):
+    def feature_near(x, y):
+        for lst in R.features.values():
+            for o in lst:
+                if not isinstance(o, dict): continue
+                if 'tx' in o and 'tw' not in o and max(abs(o['tx'] - x), abs(o['ty'] - y)) <= 2: return True
+                a = o.get('arena') or (o if 'tw' in o else None)
+                if a and a['tx'] - 1 <= x < a['tx'] + a['tw'] + 1 and a['ty'] - 1 <= y < a['ty'] + a['th'] + 1: return True
+                if o.get('type') == 'house' and abs(x - o['tx']) <= 2 and -1 <= o['ty'] - y <= 3: return True
+        return False
+    WALK = '.s='
+    def joined_without(x, y, sides):
+        """Whether the open sides of (x, y) still reach each other (on land, level by level) with a rock
+        there: then no path that crossed the tile is cut (it can go round). Searched within 12 tiles."""
+        start, goals = sides[0], set(sides[1:])
+        seen, todo = {start}, [start]
+        while todo and goals:
+            cx, cy = todo.pop()
+            goals.discard((cx, cy))
+            for (dx, dy) in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                nx, ny = cx + dx, cy + dy
+                if (nx, ny) in seen or (nx, ny) == (x, y) or max(abs(nx - x), abs(ny - y)) > 12: continue
+                if not (0 <= nx < RW and 0 <= ny < RH) or R.g[ny][nx] not in WALK or R.h[ny][nx] != R.h[cy][cx]: continue
+                seen.add((nx, ny)); todo.append((nx, ny))
+        return not goals
+    def open_spot(x, y):
+        if not (1 <= x < RW - 1 and 1 <= y < RH - 1) or R.g[y][x] != '.': return False
+        if R.g[y + 1][x] == 'T': return False  # (under another crown)
+        if feature_near(x, y): return False
+        lvl = R.h[y][x]
+        sides = [(x + dx, y + dy) for (dx, dy) in ((0, -1), (1, 0), (0, 1), (-1, 0)) if R.g[y + dy][x + dx] in WALK and R.h[y + dy][x + dx] == lvl]
+        if len(sides) < 2: return True  # a dead end (or closed in): nothing passes through
+        return joined_without(x, y, sides)
+    moved = []
+    for y in range(RH - 1):
+        for x in range(RW):
+            if R.g[y][x] != '#' or R.g[y + 1][x] != 'T': continue
+            spot = None
+            for d in range(1, 9):
+                ring = [(x + dx, y + dy) for dy in range(-d, d + 1) for dx in range(-d, d + 1) if max(abs(dx), abs(dy)) == d]
+                ring.sort(key=lambda p: (abs(p[0] - x) + abs(p[1] - y), p[1], p[0]))
+                spot = next((p for p in ring if open_spot(*p)), None)
+                if spot: break
+            assert spot, ('no place for the rock', R.id, x, y)
+            R.g[y][x] = '.'
+            R.g[spot[1]][spot[0]] = '#'
+            moved.append(((x, y), spot))
+    return moved
+for R in (P, S, M, F, L):
+    _moved = move_rocks_under_crowns(R)
+    if _moved: print('rocks moved from under crowns:', R.id, len(_moved))
+    assert not any(R.g[y][x] == '#' and R.g[y + 1][x] == 'T' for y in range(RH - 1) for x in range(RW)), ('rock under a crown', R.id)
+
 regions = [P.out(), S.out(), M.out(), F.out(), L.out()]
 for r in regions:
     assert len(r['ground']) == RH and all(len(row) == RW + EW for row in r['ground'])

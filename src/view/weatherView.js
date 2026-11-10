@@ -70,16 +70,28 @@ const RAIN_SPEED = 320; // px/s on screen
 const RAIN_WIND = 120;
 const FLASH_MS = 260;
 
-/** A soft white disc (radial falloff) for lights. */
+/**
+ * A light's strength at `t` (0 at its centre, 1 at its edge): (1 - t²)², a smooth bell.
+ *
+ * v1.0 (final QA L-1, "the lights in rooms look like blotchy patches"): the disc used to be a
+ * straight cone (stops 1, 0.55 at 45%, 0: that is 1 - t), with a sharp peak in the middle and a
+ * hard crease where it stops at the edge. Over flat stone the eye reads such creases as edges (Mach
+ * bands), and two or three overlapping lights in a room made a patchwork of them. This curve is
+ * flat at the centre and meets 0 with a flat slope, and gives the same total light as the cone
+ * (both 1/3 of a full disc), so nights and the dark trials keep their light.
+ * @param {number} t
+ */
+export const lightFalloff = (t) => (t >= 1 ? 0 : (1 - t * t) ** 2);
+
+/** A soft white disc (radial falloff, lightFalloff) for lights. */
 function lightTexture() {
-  const size = 64;
+  const size = 128;
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const g = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
   const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.45, 'rgba(255,255,255,0.55)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  const steps = 24; // the canvas interpolates linearly between stops: 24 follow the curve within 1%
+  for (let k = 0; k <= steps; k++) grad.addColorStop(k / steps, `rgba(255,255,255,${lightFalloff(k / steps).toFixed(4)})`);
   g.fillStyle = grad;
   g.fillRect(0, 0, size, size);
   return Texture.from(c);
