@@ -12,7 +12,7 @@ async function open(page, query = '') {
   page.on('console', (m) => {
     if (m.type() === 'warning' || m.type() === 'error' || m.text().startsWith('art:')) problems.push(`${m.type()}: ${m.text()}`);
   });
-  await page.goto(`/?map=world&time=10&season=summer&weather=clear${query}`);
+  await page.goto(`/?map=world&time=10&weather=clear${query.includes('season=') ? '' : '&season=summer'}${query}`);
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
   await api(page, 'clearEnemies');
   return problems;
@@ -48,10 +48,16 @@ test('?terrain=v2: shore foam and deep water on the beach, 4 water frames, the g
   const s = await api(page, 'stream');
   expect(s.bundleNames).not.toContain('common:ground');
   expect((await api(page, 'textureList')).filter((t) => t.endsWith(':2048x1024')).length).toBe(1);
-  for (const [x, y] of [[50, 104], [48, 190], [162, 232], [150, 160], [175, 70]]) {
+  // plains, desert, lake, forest, mountains, the cliff, a ruin (trial of light), the village: every key the view asks for is in the loaded art
+  for (const [x, y] of [[50, 104], [48, 190], [162, 232], [150, 160], [175, 70], [51, 51], [104, 29], [24, 91]]) {
     await visit(page, x, y);
-    expect((await api(page, 'terrainEdges')).fallbacks).toBe(0);
+    const t = await api(page, 'terrainEdges');
+    expect(t.fallbacks).toBe(0);
+    expect(t.missing, `at ${x},${y}`).toEqual([]);
   }
+  // the ruin floor's 66 tiles are in the base atlas too (round 3): still one 2048×1024 atlas
+  await visit(page, 104, 29);
+  expect((await api(page, 'textureList')).filter((t) => t.endsWith(':2048x1024')).length).toBe(1);
   // (with the URL switch the page's preload of the v1 terrain sheet goes unused: a browser note, not the game's)
   expect(problems.filter((p) => !p.includes('was preloaded using link preload'))).toEqual([]);
 });
@@ -77,6 +83,19 @@ test('?terrain=v1 and the default keep the v1.1 ground; v2 costs no more than 1 
   expect(mb.v2 - mb.v1, JSON.stringify(mb)).toBeLessThanOrEqual(1);
   await other.context().close();
 });
+
+for (const season of ['autumn', 'winter']) {
+  test(`?terrain=v2 in ${season}: every ground key is in the loaded art (the season's calm tiles and pictures)`, async ({ page }) => {
+    const problems = await open(page, `&terrain=v2&season=${season}`);
+    for (const [x, y] of [[49, 69], [24, 91], [150, 160], [162, 232], [104, 29]]) {
+      await visit(page, x, y);
+      await expect.poll(async () => (await api(page, 'season')).view, { timeout: 10_000 }).toBe(season);
+      await visit(page, x, y);
+      expect((await api(page, 'terrainEdges')).missing, `at ${x},${y}`).toEqual([]);
+    }
+    expect(problems.filter((p) => !p.includes('was preloaded using link preload'))).toEqual([]);
+  });
+}
 
 test('?terrain=v2 does not touch the save: the same save data as v1 after the same steps', async ({ page }) => {
   const snap = {};

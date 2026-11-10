@@ -23,7 +23,7 @@ import { testHeroFrames } from './debug/testHero.js';
 import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
 import { availableV1Groups, availableV2Groups, prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
 import { resolveArtGroups } from './view/assets/artV2.js';
-import { TERRAIN_GROUP, releaseTerrainEntries, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
+import { GROUND_RUIN_BUNDLE, TERRAIN_GROUP, releaseTerrainEntries, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
 import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
@@ -191,6 +191,9 @@ async function boot() {
   // P8: each region's art is its own bundle, loaded by the view near the region.
   for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name, artOverrides));
   // v1.0: the final boss's art (loaded by the view only near its arena).
+  // gfx W1 round 3: the ruin floor's edges over water, loaded with the chunks where the ruin floor meets water
+  const ruinV2Entries = releaseTerrainEntries(GROUND_RUIN_BUNDLE, artOverrides);
+  if (ruinV2Entries.length) assets.register(GROUND_RUIN_BUNDLE, () => buildPlaceholderPack(ruinV2Entries, artOverrides));
   assets.register(SOURCE_BUNDLE, () => buildPlaceholderPack(sourceEntries(), artOverrides));
   await assets.load('placeholder');
   performance.mark('art');

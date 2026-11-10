@@ -60,7 +60,7 @@ export function groundClass(ground, region) {
 }
 
 /**
- * The key of a land tile: name "0" (the calm base), "1".."7" (variants), "macro.<q>", "edge.<mask>.<v>".
+ * The key of a land tile: name "0" (the calm base), "1".. (its other tiles), "macro.<q>", "edge.<mask>.<v>".
  * @param {string} cls @param {string} name
  */
 export function landKey(cls, name) {
@@ -126,9 +126,10 @@ export function deepMap(width, height, isWater) {
 
 /**
  * The layers of one display tile (bottom first).
- * @param {{ cls: string[], deep: boolean[], waterVariant: number, edgeVariant: number,
+ * @param {{ cls: string[], deep: boolean[], waterVariant: number, edgeVariant: (cls: string) => number,
  *   pick: (cls: string) => string, macro: () => string | null }} t
  *   cls / deep: the 4 corners (NW, NE, SW, SE); pick = the base name for a full land tile (a variant);
+ *   edgeVariant = the variant of a land's edge overlay (0 / 1; the ruin floor: its row phase);
  *   macro = a macro piece name ("macro.<q>") when the 4 corners are one land and the block is chosen
  * @returns {Layer[]}
  */
@@ -154,7 +155,7 @@ export function displayLayers({ cls, deep, waterVariant, edgeVariant, pick, macr
   for (const t of [...new Set(land)].sort((a, b) => rank(a) - rank(b))) {
     if (t === lowest) continue;
     const mask = cls.reduce((m, c, k) => (c !== 'water' && rank(c) >= rank(t) ? m | CORNERS[k][2] : m), 0);
-    out.push({ key: mask === 15 ? landKey(t, '0') : landKey(t, `edge.${mask}.${edgeVariant}`), anim: false });
+    out.push({ key: mask === 15 ? landKey(t, '0') : landKey(t, `edge.${mask}.${edgeVariant(t)}`), anim: false });
   }
   return out;
 }
@@ -167,65 +168,152 @@ export function displayLayers({ cls, deep, waterVariant, edgeVariant, pick, macr
  */
 export const quarterOfCorner = (k) => /** @type {const} */ (['se', 'sw', 'ne', 'nw'])[k];
 
-// --- Round 2 (NAMES.md section 1): edge-matched (Wang) ground tiles and macro blocks ---
+// --- Rounds 2-5 (NAMES.md section 1): the tile of a display tile, picked in one of 2 ways ---
+//   A  (round 5) every ground but the ruin floor (island / plains / lake grass, moss, path, mountain snow,
+//      island sand, desert sand; and the autumn / winter sets of the 4 seasonal grounds, their season's
+//      keys): 8 pictures of 2×2 tiles, at most one per block of 3×3 display tiles (macroPlacement), and
+//      elsewhere one of 16 calm tiles by hash (calmTile); nothing crosses their edges
+//   C  ruin floor: 66 tiles, stone courses 11 art px high across the whole map: the row phase R of the
+//      tile's row and the symbols (0-2) of its column's two edges, n = 6R + 2W + (E if E < W else E - 1);
+//      its overlay over water is edge.<mask>.<R>; no pictures
 
-/** P(edge type 1) per ground look, in % (render_ref / wang.P_TYPE1); winter grass-like grounds use the snow's. */
-export const P_TYPE1 = Object.freeze({ grass: 10, plains: 10, lake: 10, moss: 12, path: 10, snow: 50, sand: 50, dsand: 50, ruin: 50 });
+/** The grounds with pictures (A; render_ref.BUSY_MACRO). */
+export const MACRO_GROUNDS = Object.freeze(['grass', 'plains', 'lake', 'moss', 'path', 'snow', 'sand', 'dsand']);
 
-/** Grounds that use macro blocks twice as often (lines / paving grounds: half as often). */
-export const BUSY_MACRO = Object.freeze(['grass', 'plains', 'lake', 'moss', 'path']);
+/** The names of the 8 pictures: picture m is "macro" (m = 0) or "macro<m+1>". */
+export const MACRO_NAMES = Object.freeze(['macro', 'macro2', 'macro3', 'macro4', 'macro5', 'macro6', 'macro7', 'macro8']);
+
+/** How a ground's tiles are picked (the same in every season). @param {string} cls @returns {'A' | 'C'} */
+export const tileScheme = (cls) => (cls === 'ruin' ? 'C' : 'A');
+
+/** How many tiles a ground has (names "0" .. count - 1). @param {string} cls */
+export const tileCount = (cls) => (tileScheme(cls) === 'C' ? 66 : 16);
+
+/** A: the calm tile of display tile (i, j): hash(i + 3, j + 11) % 16. @param {number} i @param {number} j @param {(a: number, b: number) => number} hash */
+export const calmTile = (i, j, hash) => hash(i + 3, j + 11) % 16;
+
+/** C: the row phase of display-tile row j: (32·j) mod 11. @param {number} j */
+export const ruinRow = (j) => (((10 * j) % 11) + 11) % 11;
 
 /**
- * The ids of the 4 edges of display tile (i, j) and the neighbour across each: N, E, S, W (render_ref).
- * @param {number} i @param {number} j
- * @returns {[number, number, number, number][]} [edgeIdX, edgeIdY, neighbourI, neighbourJ]
+ * C: the symbol (0-2) of the vertical line of tile edges at the west of display-tile column i;
+ * neighbouring lines never have the same symbol (wang.ruin_symbol).
+ * @param {number} i @param {(a: number, b: number) => number} hash gameView's hash
  */
-export function edgesOf(i, j) {
-  return [
-    [2 * i + 1, 2 * j, i, j - 1],
-    [2 * i + 2, 2 * j + 1, i + 1, j],
-    [2 * i + 1, 2 * j + 2, i, j + 1],
-    [2 * i, 2 * j + 1, i - 1, j],
-  ];
+export function ruinSymbol(i, hash) {
+  const k = Math.floor(i / 2);
+  const e0 = hash(k, 7) % 3;
+  if (i - 2 * k === 0) return e0;
+  const e1 = hash(k + 1, 7) % 3;
+  return e0 !== e1 ? 3 - e0 - e1 : (e0 + 1 + (hash(k, 11) % 2)) % 3;
 }
 
-/**
- * Edge types per ground look, data-driven so more types are a data change: for the horizontal edges
- * (a tile's top / bottom: N, S) and the vertical ones (left / right: E, W), the weight in % of each
- * type (type 0 first). Round 2: 2 types everywhere, type 1 with P_TYPE1.
- * @type {Readonly<Record<string, { ns: readonly number[], ew: readonly number[] }>>}
- */
-export const EDGE_TYPES = Object.freeze(
-  Object.fromEntries(Object.entries(P_TYPE1).map(([g, p]) => [g, Object.freeze({ ns: Object.freeze([100 - p, p]), ew: Object.freeze([100 - p, p]) })])),
-);
+/** C: n = 6R + 2W + (E if E < W else E - 1) for row phase R and the column's symbols W ≠ E. @param {number} r @param {number} w @param {number} e */
+export const ruinIndex = (r, w, e) => 6 * r + 2 * w + (e < w ? e : e - 1);
+
+/** C: the ruin tile of display tile (i, j). @param {number} i @param {number} j @param {(a: number, b: number) => number} hash */
+export const ruinTile = (i, j, hash) => ruinIndex(ruinRow(j), ruinSymbol(i, hash), ruinSymbol(i + 1, hash));
 
 /**
- * The type of an edge from its hash, as render_ref.edge_type: hash % 100 falls in type 1's share
- * first (type 1 when hash % 100 < P), then type 2's, ...; the rest is type 0.
- * @param {string} look @param {'ns' | 'ew'} axis @param {number} h the edge's hash
+ * C on the cell grid (raised ruin floor, and quarters of cells that cannot blend): the cell's tile is
+ * half a tile up and left of the display grid, so its row phase is (32·y − 16) mod 11: the courses of a
+ * cell's tile continue into the display tiles around it.
+ * @param {number} x @param {number} y @param {(a: number, b: number) => number} hash
  */
-export function edgeTypeOf(look, axis, h) {
-  const w = EDGE_TYPES[look]?.[axis] ?? [100];
-  let r = h % 100;
-  for (let t = 1; t < w.length; t++) {
-    if (r < w[t]) return t;
-    r -= w[t];
+export const ruinCellTile = (x, y, hash) => ruinIndex((((10 * y + 6) % 11) + 11) % 11, ruinSymbol(x, hash), ruinSymbol(x + 1, hash));
+
+/** The variant of a land's edge overlay on display tile (i, j): the ruin's row phase, else 0 / 1. @param {string} cls @param {number} i @param {number} j @param {(a: number, b: number) => number} hash */
+export const edgeVariantOf = (cls, i, j, hash) => (cls === 'ruin' ? ruinRow(j) : hash(i + 7, j) % 2);
+
+// --- A: picture placement (NAMES.md section 1 A, steps 1-5; render_ref.macro_blocks) ---
+// The one place the rule lives: macroPlacement and the helpers below it. hash values are unsigned 32-bit.
+
+/** A step 3: the offsets 0 / 1 / 2 of a picture in its block, by hash % 6 (chances 1/3, 1/6, 1/2). */
+const OFF = Object.freeze([0, 0, 1, 2, 2, 2]);
+/** A step 2: blocks per cell of the density noise. */
+const NOISE_CELL = 4;
+
+/** @typedef {(a: number, b: number) => number} Hash */
+
+/** A step 3: the raw offsets of block (a, b). @param {number} a @param {number} b @param {Hash} hash @returns {[number, number]} */
+export function rawOffsets(a, b, hash) {
+  const h = hash(a, b);
+  return [OFF[h % 6], OFF[(h >>> 8) % 6]];
+}
+
+/** A step 3: the offsets of block (a, b), an offset 2 taken back to 1 where it would meet the next block's picture. @param {number} a @param {number} b @param {Hash} hash @returns {[number, number]} */
+export function blockOffsets(a, b, hash) {
+  let [ox, oy] = rawOffsets(a, b, hash);
+  if (ox === 2 && rawOffsets(a + 1, b, hash)[0] === 0) ox = 1;
+  if (oy === 2 && rawOffsets(a, b + 1, hash)[1] === 0) oy = 1;
+  if (ox === 2 && oy === 2) {
+    const [rx, ry] = rawOffsets(a + 1, b + 1, hash);
+    if (rx === 0 && ry === 0) oy = 1;
   }
-  return 0;
+  if (ox === 2 && oy === 0) {
+    const [rx, ry] = rawOffsets(a + 1, b - 1, hash);
+    if (rx === 0 && ry === 2) ox = 1;
+  }
+  return [ox, oy];
+}
+
+/** A step 2: the density noise of block (a, b), 0..1 (value noise on a lattice of 4 blocks, smoothstep-blended). @param {number} a @param {number} b @param {Hash} hash */
+export function blockDensity(a, b, hash) {
+  const gx = Math.floor(a / NOISE_CELL);
+  const gy = Math.floor(b / NOISE_CELL);
+  const fx = ((((a % NOISE_CELL) + NOISE_CELL) % NOISE_CELL) + 0.5) / NOISE_CELL;
+  const fy = ((((b % NOISE_CELL) + NOISE_CELL) % NOISE_CELL) + 0.5) / NOISE_CELL;
+  const v = (/** @type {number} */ x, /** @type {number} */ y) => (hash(x + 5003, y + 7919) % 1024) / 1023;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const top = v(gx, gy) + (v(gx + 1, gy) - v(gx, gy)) * sx;
+  const bot = v(gx, gy + 1) + (v(gx + 1, gy + 1) - v(gx, gy + 1)) * sx;
+  return top + (bot - top) * sy;
+}
+
+/** A step 2: whether block (a, b) has a picture: ((h >> 16) % 1024) / 1024 >= pNone. @param {number} a @param {number} b @param {Hash} hash */
+export function blockHasPicture(a, b, hash) {
+  const pNone = Math.min(1, Math.max(0, 2 * (blockDensity(a, b, hash) - 0.3)));
+  return ((hash(a, b) >>> 16) % 1024) / 1024 >= pNone;
+}
+
+/** A step 4: the raw picture number of block (a, b). @param {number} a @param {number} b @param {Hash} hash */
+const rawPicture = (a, b, hash) => hash(a + 409, b + 1031) % 8;
+
+/** A step 4: the picture number (0-7) of block (a, b); no two side-by-side blocks share one. @param {number} a @param {number} b @param {Hash} hash */
+export function blockPicture(a, b, hash) {
+  const r = rawPicture(a, b, hash);
+  if ((((a + b) % 2) + 2) % 2 === 0) return r;
+  const taken = new Set([rawPicture(a - 1, b, hash), rawPicture(a + 1, b, hash), rawPicture(a, b - 1, hash), rawPicture(a, b + 1, hash)]);
+  const free = [0, 1, 2, 3, 4, 5, 6, 7].filter((m) => !taken.has(m));
+  return free[Math.floor(hash(a + 409, b + 1031) / 8) % free.length];
 }
 
 /**
- * The tile index of 4 edge types, mixed radix over the types' counts (N, E, S, W):
- * n = N + kN·(E + kE·(S + kS·W)); with 2 types each, n = N + 2E + 4S + 8W.
- * @param {number[]} types @param {number[]} [counts] types per edge (N, E, S, W)
+ * A: the picture piece of display tile (i, j), or null (NAMES.md section 1 A). A picture of block
+ * (a, b ≥ 0) has its NW tile at (3a + ox, 3b + oy), ox / oy 0-2 (blockOffsets), so tile (i, j) can hold
+ * the picture of its own block or of the block left of / above / left-above it (offset 2); pictures
+ * never overlap. Drawn when the block has one (blockHasPicture), it stays on the map (i0 + 2 < width,
+ * j0 + 2 < height) and the 9 map cells under it (i0 … i0+2, j0 … j0+2) are one flat ground with
+ * pictures (MACRO_GROUNDS). Its 4 display tiles are "<name>.<q>", q = 0 NW, 1 NE, 2 SW, 3 SE.
+ * @param {number} i @param {number} j
+ * @param {{ uniformBlock: (i: number, j: number, k: number) => string | null, hash: Hash, width: number, height: number }} ctx
+ *   uniformBlock(i, j, k): the one flat land ground of the (k+1)×(k+1) cells from (i, j), or null; width / height: the map's, in cells
+ * @returns {{ name: string, block: string } | null} name: "<picture>.<q>"; block: the picture's NW tile "i0,j0"
  */
-export const wangIndex = (/** @type {number[]} */ types, /** @type {number[]} */ counts = [2, 2, 2, 2]) => types[0] + counts[0] * (types[1] + counts[1] * (types[2] + counts[2] * types[3]));
-
-/** The type counts of a ground look's 4 edges (N, E, S, W). @param {string} look */
-export const edgeCounts = (look) => {
-  const t = EDGE_TYPES[look] ?? { ns: [100], ew: [100] };
-  return [t.ns.length, t.ew.length, t.ns.length, t.ew.length];
-};
-
-/** The look whose P decides a ground's edges (winter grass-like grounds look like snow). @param {string} cls @param {string | null} season */
-export const edgeLook = (cls, season) => (season === 'winter' && SEASONAL.includes(cls) ? 'snow' : cls);
+export function macroPlacement(i, j, { uniformBlock, hash, width, height }) {
+  const A = Math.floor(i / 3);
+  const B = Math.floor(j / 3);
+  for (const [a, b] of [[A, B], [A - 1, B], [A, B - 1], [A - 1, B - 1]]) {
+    if (a < 0 || b < 0) continue;
+    const [ox, oy] = blockOffsets(a, b, hash);
+    const i0 = 3 * a + ox;
+    const j0 = 3 * b + oy;
+    if (i < i0 || i > i0 + 1 || j < j0 || j > j0 + 1) continue;
+    if (!blockHasPicture(a, b, hash) || i0 + 2 >= width || j0 + 2 >= height) continue;
+    const g = uniformBlock(i0, j0, 2);
+    if (g === null || !MACRO_GROUNDS.includes(g)) continue;
+    return { name: `${MACRO_NAMES[blockPicture(a, b, hash)]}.${i - i0 + (j - j0) * 2}`, block: `${i0},${j0}` };
+  }
+  return null;
+}
