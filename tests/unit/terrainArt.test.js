@@ -7,7 +7,8 @@ import { decodePng } from '../../tools/release-art-pack.mjs';
 // that every art file is used by the bundle its production record puts it in, and that it fits.
 vi.mock('pixi.js', () => ({ Rectangle: class {}, Texture: class {} }));
 const { REGION_ENTRIES, placeholderEntries, releaseHeroEntries, releaseNpcEntries, releaseEnemyEntries, atlasSizeFor, ART_SCALE, mustKeepSize } = await import('../../src/view/assets/placeholderPack.js');
-const { isTerrainKey, wantsTerrainArt, TERRAIN_GROUP, TERRAIN_OBJECTS, groundVariant, levelBrightness, indoorLight, groundCacheResolution } = await import('../../src/view/assets/terrainArt.js');
+const { isTerrainKey, wantsTerrainArt, TERRAIN_GROUP, TERRAIN_OBJECTS, groundVariant, levelBrightness, indoorLight, groundCacheResolution, releaseTerrainEntries, releaseSeasonKeys, v11Bundle, faceVariant, faceMaterial, waterAround, waterEdgePieces } =
+  await import('../../src/view/assets/terrainArt.js');
 
 const ROOT = new URL('../../src/art-release/', import.meta.url);
 /** name -> { w, h } of every PNG in a release folder (from the IHDR). */
@@ -22,8 +23,11 @@ const sizes = (group) =>
   );
 const ART = sizes(TERRAIN_GROUP);
 
-/** Bundle name -> its entries, as the game registers them (main.js): 'base' and REGION_ENTRIES. */
-const BUNDLES = new Map([['base', placeholderEntries()], ...Object.entries(REGION_ENTRIES).map(([n, make]) => [n, make()])]);
+/** Bundle name -> its entries, as the game registers them (main.js): 'base' and REGION_ENTRIES, with the v1.1 terrain entries for the art given. */
+const BUNDLES = new Map([
+  ['base', [...placeholderEntries(), ...releaseTerrainEntries('placeholder', ART)]],
+  ...Object.entries(REGION_ENTRIES).map(([n, make]) => [n, [...make(), ...releaseTerrainEntries(n, ART)]]),
+]);
 /** key -> bundle names holding it */
 const holders = new Map();
 for (const [name, entries] of BUNDLES) for (const e of entries) holders.set(e.key, [...(holders.get(e.key) ?? []), name]);
@@ -35,6 +39,13 @@ for (const m of readFileSync(new URL('../../docs/art-release/terrain/PRODUCTION.
   for (const n of m[2].matchAll(/`([^`]+)`/g)) RECORD.set(n[1], bundle);
 }
 
+/** The v1.1 keys of docs/art-release/terrain/NAMES.md ("<0|1>" = the 2 water frames). */
+const V11 = new Set(
+  [...readFileSync(new URL('../../docs/art-release/terrain/NAMES.md', import.meta.url), 'utf8').matchAll(/^\| `([^`]+)` \|/gm)].flatMap((m) =>
+    m[1].endsWith('.<0|1>') ? [0, 1].map((f) => m[1].replace('<0|1>', String(f))) : [m[1]],
+  ),
+);
+
 /**
  * Terrain keys the game draws with no terrain art, and why (none today: every terrain key has art).
  * @type {Record<string, string>}
@@ -42,28 +53,107 @@ for (const m of readFileSync(new URL('../../docs/art-release/terrain/PRODUCTION.
 const FALLBACKS = {};
 
 describe('terrain release art → game sprite keys', () => {
-  it('has the 111 files of the production record (+ the v1.1 files of NAMES.md, not wired yet), every one a terrain key', () => {
-    // v1.1 (art/terrain-v1-1): new keys listed in docs/art-release/terrain/NAMES.md ("<0|1>" = the 2 water frames)
-    const v11 = new Set(
-      [...readFileSync(new URL('../../docs/art-release/terrain/NAMES.md', import.meta.url), 'utf8').matchAll(/^\| `([^`]+)` \|/gm)].flatMap((m) =>
-        m[1].endsWith('.<0|1>') ? [0, 1].map((f) => m[1].replace('<0|1>', String(f))) : [m[1]],
-      ),
-    );
-    expect(v11.size).toBe(240);
-    expect(ART.size).toBe(111 + v11.size);
-    expect([...RECORD.keys()].sort()).toEqual([...ART.keys()].filter((k) => !v11.has(k)).sort());
+  it('has the 111 files of the production record and the 240 of NAMES.md (v1.1), every one a terrain key', () => {
+    expect(V11.size).toBe(240);
+    expect(ART.size).toBe(111 + V11.size);
+    expect([...RECORD.keys()].sort()).toEqual([...ART.keys()].filter((k) => !V11.has(k)).sort());
     for (const name of ART.keys()) expect(isTerrainKey(name), name).toBe(true);
+    // the v1.1 keys are exactly the keys with a v1.1 bundle
+    expect([...ART.keys()].filter((k) => v11Bundle(k) !== null).sort()).toEqual([...V11].sort());
   });
 
   it('every terrain key the game draws has its art (or a deliberate fallback)', () => {
     const terrainKeys = [...holders.keys()].filter(isTerrainKey);
-    expect(terrainKeys.length).toBe(111);
+    expect(terrainKeys.length).toBe(351);
     const missing = terrainKeys.filter((k) => !ART.has(k) && !(k in FALLBACKS));
     expect(missing).toEqual([]);
   });
 
   it('no art is left unused: each file is held by the bundle its record names (base, its region, its season)', () => {
     for (const [name, bundle] of RECORD) expect(holders.get(name), name).toEqual([bundle]);
+    // v1.1: base (island shore, banks, earth / ruin / wall variants, sand and path plateaus), the
+    // desert (its shore and plateau), the mountains (stone variants), autumn and winter (lips, forest, mountains)
+    const where = (k) => holders.get(k);
+    for (const k of V11) expect(where(k)?.length, k).toBe(1);
+    expect(where('tile.shore.5.0')).toEqual(['base']);
+    expect(where('tile.bank.inner.ne.1')).toEqual(['base']);
+    expect(where('tile.shore-desert.15.1')).toEqual(['region:desert']);
+    expect(where('face.desert.top.8')).toEqual(['region:desert']);
+    expect(where('face.stone.mid.4.v2')).toEqual(['region:mountains']);
+    expect(where('face.sand.mid-base.8')).toEqual(['base']);
+    expect(where('autumn.mountains.pine')).toEqual(['season:autumn']);
+    expect(where('winter.face.earth.top.8.v1')).toEqual(['season:winter']);
+    const unused = [...ART.keys()].filter((k) => !holders.has(k));
+    expect(unused).toEqual([]);
+  });
+
+  it('v1.1 water edges: the 4-neighbour mask (N 1, E 2, S 4, W 8) and the corners no side piece covers', () => {
+    const at = (cells) => (dx, dy) => cells.includes(`${dx},${dy}`);
+    expect(waterAround(at([]))).toEqual({ mask: 0, corners: [] });
+    expect(waterAround(at(['0,-1']))).toEqual({ mask: 1, corners: [] });
+    expect(waterAround(at(['1,0', '0,1']))).toEqual({ mask: 6, corners: [] });
+    expect(waterAround(at(['0,-1', '1,0', '0,1', '-1,0']))).toEqual({ mask: 15, corners: [] });
+    // a diagonal next to a water side is drawn by the side piece
+    expect(waterAround(at(['0,-1', '1,-1', '-1,-1']))).toEqual({ mask: 1, corners: [] });
+    // only a diagonal: an inner corner; a side and the opposite diagonal: both
+    expect(waterAround(at(['1,1']))).toEqual({ mask: 0, corners: ['se'] });
+    expect(waterAround(at(['0,-1', '1,1']))).toEqual({ mask: 1, corners: ['se'] });
+    expect(waterAround(at(['1,-1', '-1,1']))).toEqual({ mask: 0, corners: ['ne', 'sw'] });
+  });
+
+  it('v1.1 water-edge pieces: shore tiles replace the sand (one piece), bank overlays stack on grass', () => {
+    expect(waterEdgePieces('shore', { mask: 5, corners: [] })).toEqual({ base: 'tile.shore.5', overlays: [], fallback: false });
+    expect(waterEdgePieces('shore-desert', { mask: 0, corners: ['nw'] })).toEqual({ base: 'tile.shore-desert.inner.nw', overlays: [], fallback: false });
+    // a side and the opposite diagonal: the side piece, the corner stays plain (listed)
+    expect(waterEdgePieces('shore', { mask: 1, corners: ['se'] })).toEqual({ base: 'tile.shore.1', overlays: [], fallback: true });
+    expect(waterEdgePieces('shore', { mask: 0, corners: ['ne', 'sw'] })).toEqual({ base: null, overlays: [], fallback: true });
+    expect(waterEdgePieces('bank', { mask: 1, corners: ['se'] })).toEqual({ base: null, overlays: ['tile.bank.1', 'tile.bank.inner.se'], fallback: false });
+    expect(waterEdgePieces('bank', { mask: 0, corners: ['ne', 'sw'] })).toEqual({ base: null, overlays: ['tile.bank.inner.ne', 'tile.bank.inner.sw'], fallback: false });
+    // every piece the selection can name has its 2 frames
+    for (const kind of ['shore', 'shore-desert', 'bank']) {
+      for (let mask = 0; mask < 16; mask++) {
+        for (const corners of [[], ['ne'], ['se'], ['sw'], ['nw']]) {
+          const p = waterEdgePieces(kind, { mask, corners });
+          for (const k of [p.base, ...p.overlays].filter(Boolean)) for (const f of [0, 1]) expect(ART.has(`${k}.${f}`), `${k}.${f}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('v1.1 cliff band variants: a third each per tile, release only (a plateau .v1, when drawn, is picked up too)', () => {
+    const counts = { '': 0, '.v1': 0, '.v2': 0 };
+    for (let h = 0; h < 3000; h++) counts[faceVariant(h, 'earth', true)]++;
+    expect(counts).toEqual({ '': 1000, '.v1': 1000, '.v2': 1000 });
+    for (const mat of ['earth', 'ruin', 'wall', 'stone']) {
+      for (const v of ['.v1', '.v2']) for (const part of ['top', 'mid', 'mid-base', 'top-base']) for (const h of [4, 8]) expect(ART.has(`face.${mat}.${part}.${h}${v}`)).toBe(true);
+    }
+    // the plateau faces have no variant art (yet): the view keeps their plain key (addFace checks the art)
+    for (const mat of ['sand', 'desert', 'path']) expect(ART.has(`face.${mat}.top.8.v1`) || v11Bundle(`face.${mat}.top.8.v1`) !== null).toBe(true);
+    for (let h = 0; h < 9; h++) expect(faceVariant(h, 'earth', false)).toBe('');
+  });
+
+  it('v1.1 plateau faces: raised sand, desert sand and paths get their own face (release only)', () => {
+    expect(faceMaterial('sand', 'island', true)).toBe('sand');
+    expect(faceMaterial('sand', 'desert', true)).toBe('desert');
+    expect(faceMaterial('path', 'plains', true)).toBe('path');
+    expect(faceMaterial('other', 'mountains', true)).toBe('stone');
+    expect(faceMaterial('ruin', 'mountains', true)).toBe('ruin');
+    expect(faceMaterial('wall', undefined, true)).toBe('wall');
+    expect(faceMaterial('sand', 'desert', false)).toBe('earth');
+    expect(faceMaterial('path', 'mountains', false)).toBe('stone');
+    for (const mat of ['sand', 'desert', 'path']) for (const part of ['top', 'mid', 'mid-base', 'top-base']) for (const h of [4, 8]) expect(ART.has(`face.${mat}.${part}.${h}`)).toBe(true);
+  });
+
+  it('v1.1 autumn: the forest and the mountains change (ground, pines, stone lips), and the lips of the cliff variants follow autumn and winter', () => {
+    const autumn = releaseSeasonKeys('autumn');
+    for (const k of ['forest.grass.0', 'forest.grass.3', 'mountains.snow.2', 'forest.pine', 'mountains.pine', 'face.stone.top.8', 'face.stone.top-base.4.v2', 'face.earth.top.8.v1']) expect(autumn).toContain(k);
+    for (const k of autumn) expect(holders.get(`autumn.${k}`), k).toEqual(['season:autumn']);
+    for (const k of releaseSeasonKeys('winter')) expect(holders.get(`winter.${k}`), k).toEqual(['season:winter']);
+    expect(releaseSeasonKeys('spring')).toEqual([]);
+    expect(releaseSeasonKeys('summer')).toEqual([]);
+    // every v1.1 season art file is a key some season uses
+    const used = new Set([...autumn.map((k) => `autumn.${k}`), ...releaseSeasonKeys('winter').map((k) => `winter.${k}`)]);
+    for (const k of V11) if (/^(autumn|winter)\./.test(k)) expect(used.has(k), k).toBe(true);
   });
 
   it('nothing outside the terrain is a terrain key (objects, puzzle parts, icons, effects, characters keep their own art)', () => {
@@ -95,12 +185,12 @@ describe('terrain release art → game sprite keys', () => {
     expect(ART.get('tile.water.0')).toEqual(ART.get('tile.water.1'));
   });
 
-  it('with the release hero, villagers and enemies the base atlas of the release art stays within 2048 × 1024', () => {
-    const release = new Map([...sizes('hero'), ...sizes('npc'), ...sizes('enemy'), ...ART]);
+  it('with the release hero, villagers, enemies, objects and the v1.1 terrain the base atlas of the release art stays within 2048 × 1024', () => {
+    const release = new Map([...sizes('hero'), ...sizes('npc'), ...sizes('enemy'), ...sizes('objects'), ...ART]);
     const keys = new Set(release.keys());
-    const base = [...placeholderEntries(), ...releaseHeroEntries(keys), ...releaseNpcEntries(keys), ...releaseEnemyEntries(keys)];
+    const base = [...placeholderEntries(), ...releaseHeroEntries(keys), ...releaseNpcEntries(keys), ...releaseEnemyEntries(keys), ...releaseTerrainEntries('placeholder', keys)];
     const real = base.filter((e) => release.has(e.key)).map((e) => ({ ...e, image: { width: release.get(e.key).w, height: release.get(e.key).h } }));
-    expect(real.filter((e) => ART.has(e.key)).length).toBe(43);
+    expect(real.filter((e) => ART.has(e.key)).length).toBe(43 + 76 + 48 + 16);
     const size = atlasSizeFor(real);
     expect(size.width).toBeLessThanOrEqual(2048);
     expect(size.height).toBeLessThanOrEqual(1024);

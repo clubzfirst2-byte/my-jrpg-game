@@ -91,6 +91,7 @@ import {
 } from './placeholderArt.js';
 import { sourceFrames, starRingSprite } from './sourceArt.js';
 import { ICON_ANCHORS } from './iconAnchors.js';
+import { releaseTerrainEntries } from './terrainArt.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
 const TOP_LEFT = /** @type {[number, number]} */ ([0, 0]);
@@ -285,7 +286,7 @@ export function sourceEntries() {
 
 /** @param {string} name @param {Map<string, ArtSource>} [overrides] */
 export function buildRegionPack(name, overrides) {
-  return buildPlaceholderPack([...REGION_ENTRIES[name](), ...releaseBossEntries(name, overrides)], overrides);
+  return buildPlaceholderPack([...REGION_ENTRIES[name](), ...releaseBossEntries(name, overrides), ...releaseTerrainEntries(name, overrides)], overrides);
 }
 
 /** Enemy release frames: enemy.<kind>.<action>.<n> (docs/art-release/enemy/frames.json on the art branch). */

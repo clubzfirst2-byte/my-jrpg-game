@@ -112,6 +112,6 @@ test('P12 round 1 prototypes (?proto=all): elder, watchman, beast and goblin dra
   const page2 = await page.context().newPage();
   await open(page2, '&enemy=proto');
   // the enemy prototypes only (4 frames) next to the adopted release hero (248 frames, 16×28) and,
-  // with it, the terrain release art (111 frames, v1.0)
-  expect(await api(page2, 'art')).toMatchObject({ overrides: 4 + 248 + 111, hero: { h: 28 } });
+  // with it, the terrain release art (351 frames: 111 of v1.0, 240 of v1.1)
+  expect(await api(page2, 'art')).toMatchObject({ overrides: 4 + 248 + 351, hero: { h: 28 } });
 });

@@ -29,7 +29,7 @@ import { regionAt, outdoorAt } from '../game/world/world.js';
 import { seasonAt } from '../game/env/weather.js';
 import { SEASON_ENTRIES, seasonKeys, SOURCE_BUNDLE, SOURCE_REGIONS } from './assets/placeholderPack.js';
 import { HeroAnimator } from './heroAnim.js';
-import { groundCacheResolution, groundVariant, indoorLight, levelBrightness, usesReleaseTerrain } from './assets/terrainArt.js';
+import { faceMaterial, faceVariant, groundCacheResolution, groundVariant, indoorLight, levelBrightness, releaseSeasonKeys, usesReleaseTerrain, waterAround, waterEdgePieces } from './assets/terrainArt.js';
 import { openingView } from '../game/story/story.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
 import { SilhouetteCache, placeFlash } from './flashOverlay.js';
@@ -62,6 +62,7 @@ export function chunkCacheArea(cx, cy, ts) {
 /**
  * @typedef {import('../game/world/world.js').RegionInfo} RegionInfo
  * @typedef {{ cx: number, cy: number, base: Container, rows: Map<number, Container>, water: Sprite[],
+ *   edges: { sprite: Sprite, key: string }[],
  *   extents: Map<number, { x0: number, x1: number, y0: number, y1: number }[]>, bundles: string[] }} Chunk
  */
 
@@ -159,6 +160,8 @@ export class GameView {
     this.chunkStats = { built: 0, freed: 0, pending: 0, updates: 0 };
     /** Chunks were freed since the last update: their cache textures sit idle in the TexturePool. */
     this.chunkCachesFreed = false;
+    /** v1.1: shore tiles whose corner water has no piece (left plain sand), counted as chunks are built. */
+    this.edgeStats = { fallbacks: 0 };
     this.hasBraziers = this.map.objects.some((o) => o.type === 'brazier');
     // Screen-space layer above the world (landmark markers).
     this.screenLayer = new Container();
@@ -315,6 +318,9 @@ export class GameView {
     this.seasonLoaded = null;
     this.season = want;
     this.seasonKeySet = seasonKeys(want);
+    // v1.1: the release terrain's own season keys (autumn forest and mountains, the lips of the cliff
+    // variants), where the season's bundle has them.
+    if (this.releaseTerrain) for (const k of releaseSeasonKeys(want)) if (this.assets.hasTexture(`${want}.${k}`)) this.seasonKeySet.add(k);
     this.envVersion = -1;
   }
 
@@ -350,6 +356,34 @@ export class GameView {
     return groundVariant(hash(tx, ty), n, this.releaseTerrain);
   }
 
+  /**
+   * v1.1: the water-edge pieces of a flat tile next to water (release terrain): a shore tile in place
+   * of the island's or the desert's sand, bank overlays on grass-like ground (terrainArt.waterEdgePieces).
+   * Only water at the same height counts. Counts the corners left plain (edgeStats.fallbacks).
+   * @param {number} tx @param {number} ty @returns {{ base: string | null, overlays: string[] } | null}
+   */
+  waterEdge(tx, ty) {
+    const map = this.map;
+    const i = ty * map.width + tx;
+    const g = map.ground[i];
+    if (g !== Ground.SAND && g !== Ground.GRASS) return null;
+    const water = (/** @type {number} */ dx, /** @type {number} */ dy) => {
+      const nx = tx + dx;
+      const ny = ty + dy;
+      if (!inBounds(map, nx, ny)) return false;
+      const j = ny * map.width + nx;
+      return map.ground[j] === Ground.WATER && map.elev[j] === map.elev[i];
+    };
+    const around = waterAround(water);
+    if (!around.mask && !around.corners.length) return null;
+    const kind = g === Ground.GRASS ? 'bank' : regionAt(this.regions, tx, ty)?.id === 'desert' ? 'shore-desert' : 'shore';
+    const pieces = waterEdgePieces(kind, around);
+    if (pieces.fallback) this.edgeStats.fallbacks++;
+    // Art missing (should not happen with the release terrain): the plain ground.
+    const ok = (/** @type {string} */ k) => this.assets.hasTexture(`${k}.0`);
+    return { base: pieces.base && ok(pieces.base) ? pieces.base : null, overlays: pieces.overlays.filter(ok) };
+  }
+
   /** @param {number} cx @param {number} cy */
   chunkKey(cx, cy) {
     return `${cx},${cy}`;
@@ -379,6 +413,8 @@ export class GameView {
     base.label = `chunk-${cx},${cy}`;
     /** @type {Sprite[]} */
     const water = [];
+    /** v1.1: water-edge pieces (shore tiles, bank overlays), animated with the water. @type {{ sprite: Sprite, key: string }[]} */
+    const edges = [];
     /** @type {Map<number, Container>} */
     const rows = new Map();
     /** @type {Map<number, { x0: number, x1: number, y0: number, y1: number }[]>} */
@@ -406,9 +442,19 @@ export class GameView {
         const x = tx * ts;
 
         if (h === 0 && !isRamp) {
-          const s = this.makeSprite(this.surfaceKey(tx, ty));
+          // v1.1: next to water, the release terrain's sand becomes a shore tile and grass gets a bank.
+          const edge = this.releaseTerrain ? this.waterEdge(tx, ty) : null;
+          const frame = Math.max(0, this.waterFrame);
+          const s = edge?.base ? new Sprite(this.assets.texture(`${edge.base}.${frame}`)) : this.makeSprite(this.surfaceKey(tx, ty));
           s.position.set(x, ty * ts);
           base.addChild(s);
+          if (edge?.base) edges.push({ sprite: s, key: edge.base });
+          for (const key of edge?.overlays ?? []) {
+            const o = new Sprite(this.assets.texture(`${key}.${frame}`));
+            o.position.set(x, ty * ts);
+            base.addChild(o);
+            edges.push({ sprite: o, key });
+          }
           if (map.ground[i] === Ground.WATER) {
             if (this.waterFrame >= 0) s.texture = this.assets.texture(`tile.water.${this.waterFrame}`);
             water.push(s);
@@ -471,7 +517,7 @@ export class GameView {
       this.addObjectSprite(o);
     }
     this.chunkStats.built++;
-    return { cx, cy, base, rows, water, extents, bundles: this.chunkBundles(cx, cy) };
+    return { cx, cy, base, rows, water, edges, extents, bundles: this.chunkBundles(cx, cy) };
   }
 
   /** @param {Chunk} c */
@@ -644,14 +690,17 @@ export class GameView {
     let remaining = faceBottom - faceTop;
     if (remaining <= 0) return;
     const g = this.map.ground[ty * this.map.width + tx];
-    const mountains = regionAt(this.regions, tx, ty)?.id === 'mountains';
-    const mat = g === Ground.RUIN ? 'ruin' : g === Ground.WALL ? 'wall' : mountains ? 'stone' : 'earth';
+    const kind = g === Ground.RUIN ? 'ruin' : g === Ground.WALL ? 'wall' : g === Ground.SAND ? 'sand' : g === Ground.PATH ? 'path' : 'other';
+    // v1.1 (release terrain): plateau faces for sand and paths, and a band variant per tile.
+    const mat = faceMaterial(kind, regionAt(this.regions, tx, ty)?.id, this.releaseTerrain);
+    const variant = faceVariant(hash(tx, ty), mat, this.releaseTerrain);
     let y = faceTop;
     let first = true;
     while (remaining > 0) {
       const seg = remaining >= 8 ? 8 : 4;
       const last = remaining - seg <= 0;
-      const s = this.makeSprite(`face.${mat}.${first ? 'top' : 'mid'}${last ? '-base' : ''}.${seg}`);
+      const key = `face.${mat}.${first ? 'top' : 'mid'}${last ? '-base' : ''}.${seg}`;
+      const s = this.makeSprite(variant && this.assets.hasTexture(this.seasonal(key + variant)) ? key + variant : key);
       s.position.set(x, y);
       row.addChild(s);
       y += seg;
@@ -1106,8 +1155,10 @@ export class GameView {
     this.waterFrame = frame;
     const tex = this.assets.texture(`tile.water.${frame}`);
     for (const c of this.chunks.values()) {
-      if (c.water.length === 0) continue;
+      // (a chunk can have edge pieces of water in the next chunk, and no water of its own)
+      if (c.water.length === 0 && c.edges.length === 0) continue;
       for (const s of c.water) s.texture = tex;
+      for (const e of c.edges) e.sprite.texture = this.assets.texture(`${e.key}.${frame}`);
       c.base.updateCacheTexture();
     }
   }

@@ -22,7 +22,7 @@ import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
 import { createNpcs } from './game/npc/npcs.js';
 import { prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
-import { TERRAIN_GROUP, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
+import { TERRAIN_GROUP, releaseTerrainEntries, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
 import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
@@ -177,7 +177,7 @@ async function boot() {
 
   // --- assets / logic / view ---
   const assets = new AssetManager();
-  assets.register('placeholder', () => buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides), ...releaseEnemyEntries(artOverrides)], artOverrides));
+  assets.register('placeholder', () => buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides), ...releaseEnemyEntries(artOverrides), ...releaseTerrainEntries('placeholder', artOverrides)], artOverrides));
   // P8: each region's art is its own bundle, loaded by the view near the region.
   for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name, artOverrides));
   // v1.0: the final boss's art (loaded by the view only near its arena).
@@ -1061,7 +1061,7 @@ async function boot() {
   };
   Object.assign(api, finalBossDebugApi(state, api.teleport)); // v1.0: the source (flags, arena, seats)
   Object.assign(api, storyDebugApi(state)); // v1.0: the opening and the ending
-  Object.assign(api, terrainDebugApi(assets)); // v1.0: which terrain is drawn from the release art
+  Object.assign(api, terrainDebugApi(assets, view)); // v1.0: which terrain is drawn from the release art (v1.1: water edges)
   Object.assign(api, objectsDebugApi(state, view, assets)); // v1.0: the objects' art
   /** @type {any} */ (window).__debugApi = api;
   // ?tour=60 starts the auto tour right away (with ?map=..., which skips the title).
