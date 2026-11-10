@@ -39,12 +39,13 @@ export function objectShadow(type, w, h) {
 }
 
 /**
- * A character's shadow (villager, enemy): close under the feet, a little to the lower right.
+ * A character's shadow (villager, enemy): close under the feet, a little to the lower right. Its
+ * centre sits a pixel below the feet, so a squat body (a slime) does not hide it.
  * @param {number} w drawn width in game px (absolute)
  */
 export function characterShadow(w) {
   const sw = Math.max(8, Math.round(w * 0.8));
-  return { dx: Math.round(sw * 0.1), dy: -1, w: sw, h: Math.max(3, Math.round(sw * 0.36)), alpha: SHADOW.character };
+  return { dx: Math.round(sw * 0.1), dy: 1, w: sw, h: Math.max(3, Math.round(sw * 0.36)), alpha: SHADOW.character };
 }
 
 /** @type {Texture | null} */

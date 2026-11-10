@@ -29,6 +29,7 @@ describe('cast shadows (light from the upper left)', () => {
     expect(c.w).toBe(8);
     expect(characterShadow(32).w).toBeLessThan(32);
     expect(characterShadow(32).dx).toBeGreaterThan(0);
+    expect(characterShadow(16).dy).toBeGreaterThan(0); // (below the feet: a slime's squat body does not hide it)
   });
 });
 
