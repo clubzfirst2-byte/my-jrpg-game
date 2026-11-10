@@ -7,6 +7,8 @@ Wind-up shows by SHAPE: crouched low, head down, jaw open, crystals 2 px taller.
 
 import math
 
+import numpy as np
+
 from rig import Rig
 
 W, H = 44, 32
@@ -41,8 +43,9 @@ def front_leg(r, sx, sy, px, py, **k):
     ex, ey = sx - 1.5 + (px - sx) * 0.3, sy + (py - sy) * 0.45
     wx, wy = px - 0.5, py - 2
     m = r.mask_of(r.m_limb(sx, sy, ex, ey, 2.6, 1.6), r.m_ellipse(ex, ey, 1.7, 1.5), r.m_limb(ex, ey, wx, wy, 1.3, 1.0),
-                  r.m_ellipse(wx - 0.3, wy, 1.3, 1.1), r.m_ellipse(px + 0.6, py - 0.6, 2.0, 1.2))
-    return r.add(m, "ashfur", **k)
+                  r.m_ellipse(wx - 0.3, wy, 1.3, 1.1), r.m_ellipse(px + 0.6, py - 0.6, 2.0, 1.2),
+                  r.m_poly([(ex, ey - 1.4), (ex - 2.6, ey + 0.6), (ex + 0.4, ey + 1.2)]))  # the elbow corner
+    return _leg(r, m, k)
 
 
 def hind_leg(r, hx_, hy, px, py, **k):
@@ -50,8 +53,25 @@ def hind_leg(r, hx_, hy, px, py, **k):
     kx, ky = hx_ + 2.5 + (px - hx_) * 0.4, hy + (py - hy) * 0.38
     hkx, hky = px - 2.2, py - 4.5
     m = r.mask_of(r.m_limb(hx_, hy, kx, ky, 3.4, 2.0), r.m_limb(kx, ky, hkx, hky, 1.8, 1.3),
-                  r.m_limb(hkx, hky, px, py - 1, 1.2, 1.0), r.m_ellipse(hkx - 0.4, hky, 1.4, 1.3), r.m_ellipse(px + 0.6, py - 0.6, 2.0, 1.2))
-    return r.add(m, "ashfur", **k)
+                  r.m_limb(hkx, hky, px, py - 1, 1.2, 1.0), r.m_ellipse(hkx - 0.4, hky, 1.4, 1.3), r.m_ellipse(px + 0.6, py - 0.6, 2.0, 1.2),
+                  r.m_poly([(hkx - 0.2, hky - 1.6), (hkx - 2.8, hky + 0.2), (hkx + 0.2, hky + 1.2)]))  # the heel (hock) corner
+    return _leg(r, m, k)
+
+
+def _leg(r, m, k):
+    """Draw a leg; a NEAR leg (not darkened) also gets a 1-px tone-3 edge on its top-left, so it
+    does not sink into dark ground (swamp, cave)."""
+    r.add(m, "ashfur", **k)
+    if not k.get("dark"):
+        up = np.zeros_like(m)
+        up[1:, :] = ~m[:-1, :]
+        left = np.zeros_like(m)
+        left[:, 1:] = ~m[:, :-1]
+        right = np.zeros_like(m)
+        right[:, :-1] = ~m[:, 1:]
+        edge = m & (left | (up & ~right))
+        r.add(edge, "ashfur", tone=3, cast=False)
+    return m
 
 
 def draw(p):
@@ -129,13 +149,12 @@ def draw(p):
     # 2-px lit band over a dark 1-px underside, spaced by the core tone -- a clear light / dark
     # rhythm at 1x; two locks on the ruff
     leg_ = {"3": ("ashfur", 3), "1": ("ashfur", 1), "2": ("ashfur", 2)}
-    LOCK = ["...333", ".33311", "311...", "1....."]
-    for i, ox in enumerate((2, 8, 14)):
+    LOCK = [".33333", "311111"]
+    for i, (ox, oy) in enumerate(((0, -1), (8, 2), (15, -2))):  # staggered: no continuous stripe
         lx = round(hip[0] + ox - 2 + p.stretch * (ox / 18))
-        ly = round(by - 3 + p.pitch * (ox / 16))
+        ly = round(by - 3 + oy + p.pitch * (ox / 16))
         r.stamp(lx, ly, LOCK, leg_)
-    r.stamp(round(rx) - 6, round(ry), ["..33..", "33311.", "11...."], leg_)
-    r.stamp(round(rx) - 2, round(ry) + 3, [".33", "311", "1.."], leg_)
+    r.stamp(round(rx) - 6, round(ry) + 1, [".3333", "31111"], leg_)
     # murk melting on the flank: a patch on the haunch with drips
     fx, fy = hip[0] + 3, hip[1] - 1
     r.ellipse(fx, fy, 5.0, 2.6, "murk", soft=1)
@@ -200,11 +219,24 @@ def lying(r, p):
     # legs sticking out forward (toward the viewer: down-right)
     for i, (x0, x1) in enumerate(((12, 16), (15, 19), (27, 30), (30, 33))):
         r.limb(x0, gy - 5, x1, gy - 1.5, 1.8, 1.3, "ashfur", dark=1 if i % 2 == 0 else 0)
-    body = r.mask_of(r.m_ellipse(20, gy - 6, 12, 4.6), r.m_ellipse(10, gy - 6.5, 5, 4.4))
-    r.add(body, "ashfur")
-    # fur locks on the fallen body too (beast finish), the same hand-drawn lock as standing
-    for lx in (11, 18, 25):
-        r.stamp(lx, gy - 10, ["...333", ".33311", "311..."], {"3": ("ashfur", 3), "1": ("ashfur", 1)})
+    B_, R_ = (20, gy - 6, 12, 4.6), (10, gy - 6.5, 5, 4.4)
+    body = r.mask_of(r.m_ellipse(*B_), r.m_ellipse(*R_))
+    # fur tufts on the outline: the back (top edge) and the rump
+    for tx in (14, 20, 26):
+        body |= r.m_poly([(tx - 1.8, gy - 10.2), (tx + 1.6, gy - 10.2), (tx - 1.2, gy - 12.6)])
+    body |= r.m_poly([(6, gy - 9), (3.4, gy - 10.4), (5, gy - 6.5)])
+
+    def crescent(e, d):
+        return r.m_ellipse(*e) & ~r.m_ellipse(e[0] + d, e[1] + d, e[2], e[3])
+
+    lit = (crescent(B_, 1.3) | crescent(R_, 1.3)) & body
+    dark = (crescent(B_, -1.3) | crescent(R_, -1.3)) & body & ~lit
+    r.add(body & ~lit & ~dark, "ashfur", tone=2)
+    r.add(dark, "ashfur", tone=1)
+    r.add(lit, "ashfur", tone=3)
+    # the same wedge locks as standing
+    for lx in (12, 19):
+        r.stamp(lx, gy - 8, [".33333", "311111"], {"3": ("ashfur", 3), "1": ("ashfur", 1)})
     # head lying flat, snout forward, jaw slack
     hx_, hy = 33, gy - 5
     r.add(r.mask_of(r.m_ellipse(hx_, hy, 4.2, 3.4), r.m_poly([(hx_ + 1, hy - 2), (hx_ + 8, hy + 0.5), (hx_ + 7.5, hy + 2), (hx_ + 1, hy + 2.2)])), "ashfur")
