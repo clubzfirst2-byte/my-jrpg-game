@@ -53,8 +53,8 @@ const V11 = new Set(
 const FALLBACKS = {};
 
 describe('terrain release art → game sprite keys', () => {
-  it('has the 111 files of the production record and the 240 of NAMES.md (v1.1), every one a terrain key', () => {
-    expect(V11.size).toBe(240);
+  it('has the 111 files of the production record and the 264 of NAMES.md (v1.1), every one a terrain key', () => {
+    expect(V11.size).toBe(264);
     expect(ART.size).toBe(111 + V11.size);
     expect([...RECORD.keys()].sort()).toEqual([...ART.keys()].filter((k) => !V11.has(k)).sort());
     for (const name of ART.keys()) expect(isTerrainKey(name), name).toBe(true);
@@ -64,7 +64,7 @@ describe('terrain release art → game sprite keys', () => {
 
   it('every terrain key the game draws has its art (or a deliberate fallback)', () => {
     const terrainKeys = [...holders.keys()].filter(isTerrainKey);
-    expect(terrainKeys.length).toBe(351);
+    expect(terrainKeys.length).toBe(375);
     const missing = terrainKeys.filter((k) => !ART.has(k) && !(k in FALLBACKS));
     expect(missing).toEqual([]);
   });
@@ -120,15 +120,23 @@ describe('terrain release art → game sprite keys', () => {
     }
   });
 
-  it('v1.1 cliff band variants: a third each per tile, release only (a plateau .v1, when drawn, is picked up too)', () => {
+  it('v1.1 cliff band variants: a third each per tile (plateaus: a half, .v1 only), release only', () => {
     const counts = { '': 0, '.v1': 0, '.v2': 0 };
     for (let h = 0; h < 3000; h++) counts[faceVariant(h, 'earth', true)]++;
     expect(counts).toEqual({ '': 1000, '.v1': 1000, '.v2': 1000 });
     for (const mat of ['earth', 'ruin', 'wall', 'stone']) {
       for (const v of ['.v1', '.v2']) for (const part of ['top', 'mid', 'mid-base', 'top-base']) for (const h of [4, 8]) expect(ART.has(`face.${mat}.${part}.${h}${v}`)).toBe(true);
     }
-    // the plateau faces have no variant art (yet): the view keeps their plain key (addFace checks the art)
-    for (const mat of ['sand', 'desert', 'path']) expect(ART.has(`face.${mat}.top.8.v1`) || v11Bundle(`face.${mat}.top.8.v1`) !== null).toBe(true);
+    // the plateau faces have a .v1 only: half each (hash % 2), no .v2
+    const plateau = { '': 0, '.v1': 0 };
+    for (let h = 0; h < 3000; h++) plateau[faceVariant(h, 'desert', true)]++;
+    expect(plateau).toEqual({ '': 1500, '.v1': 1500 });
+    for (const mat of ['sand', 'desert', 'path']) {
+      for (const part of ['top', 'mid', 'mid-base', 'top-base']) for (const h of [4, 8]) expect(ART.has(`face.${mat}.${part}.${h}.v1`)).toBe(true);
+      expect(ART.has(`face.${mat}.top.8.v2`)).toBe(false);
+    }
+    expect(holders.get('face.desert.mid.8.v1')).toEqual(['region:desert']);
+    expect(holders.get('face.path.top-base.4.v1')).toEqual(['base']);
     for (let h = 0; h < 9; h++) expect(faceVariant(h, 'earth', false)).toBe('');
   });
 
@@ -190,7 +198,7 @@ describe('terrain release art → game sprite keys', () => {
     const keys = new Set(release.keys());
     const base = [...placeholderEntries(), ...releaseHeroEntries(keys), ...releaseNpcEntries(keys), ...releaseEnemyEntries(keys), ...releaseTerrainEntries('placeholder', keys)];
     const real = base.filter((e) => release.has(e.key)).map((e) => ({ ...e, image: { width: release.get(e.key).w, height: release.get(e.key).h } }));
-    expect(real.filter((e) => ART.has(e.key)).length).toBe(43 + 76 + 48 + 16);
+    expect(real.filter((e) => ART.has(e.key)).length).toBe(43 + 76 + 48 + 16 + 16);
     const size = atlasSizeFor(real);
     expect(size.width).toBeLessThanOrEqual(2048);
     expect(size.height).toBeLessThanOrEqual(1024);

@@ -6,8 +6,8 @@ import { waitTicks } from './ticks.js';
 // placeholder; walking, turning to talk, the shop and the draw order work as before.
 // The art overrides count the hero's 248 frames and the villagers' 360 (batches 1–3: 9 villagers ×
 // 40; batch 3 adds the princess and the traveller, who are not placed in the village yet), and with
-// the release hero the terrain's 351 (111 of v1.0 + 240 of v1.1, src/view/assets/terrainArt.js).
-const TERRAIN = 351;
+// the release hero the terrain's 375 (111 of v1.0 + 264 of v1.1, src/view/assets/terrainArt.js).
+const TERRAIN = 375;
 
 const api = (page, fn, ...args) => page.evaluate(([f, a]) => window.__debugApi[f](...a), [fn, args]);
 

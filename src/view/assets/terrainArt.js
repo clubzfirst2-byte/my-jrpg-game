@@ -133,8 +133,8 @@ const V11_KEYS = /** @type {[RegExp, string][]} */ ([
   [new RegExp(`^tile\\.shore-desert\\.${EDGE}$`), 'region:desert'],
   [new RegExp(`^face\\.(?:earth|ruin|wall)\\.${PART}\\.v[12]$`), 'placeholder'],
   [new RegExp(`^face\\.stone\\.${PART}\\.v[12]$`), 'region:mountains'],
-  [new RegExp(`^face\\.(?:sand|path)\\.${PART}(?:\\.v[12])?$`), 'placeholder'],
-  [new RegExp(`^face\\.desert\\.${PART}(?:\\.v[12])?$`), 'region:desert'],
+  [new RegExp(`^face\\.(?:sand|path)\\.${PART}(?:\\.v1)?$`), 'placeholder'],
+  [new RegExp(`^face\\.desert\\.${PART}(?:\\.v1)?$`), 'region:desert'],
   [new RegExp(`^winter\\.face\\.earth\\.${LIP}\\.v[12]$`), 'season:winter'],
   [new RegExp(`^autumn\\.face\\.earth\\.${LIP}\\.v[12]$`), 'season:autumn'],
   [new RegExp(`^autumn\\.face\\.stone\\.${LIP}(?:\\.v[12])?$`), 'season:autumn'],
@@ -189,14 +189,18 @@ export function releaseSeasonKeys(season) {
 /**
  * The cliff band variant of a tile's face (every segment of it): 0 = the plain key, 1 = ".v1",
  * 2 = ".v2", from the tile's hash, so long cliffs do not repeat every 32 px (release terrain only).
- * The view draws a variant only where its art is loaded (gameView.addFace), so a material with
- * fewer variants (the plateau faces may get a ".v1" later) falls back to its plain key.
+ * The plateau faces (sand, desert, path) have a ".v1" only: hash % 2. The view draws a variant only
+ * where its art is loaded (gameView.addFace), else the plain key.
  * @param {number} hash @param {string} mat @param {boolean} release
  */
 export function faceVariant(hash, mat, release) {
   if (!release || !mat) return '';
+  if (PLATEAU_FACES.includes(mat)) return ['', '.v1'][hash % 2];
   return ['', '.v1', '.v2'][hash % 3];
 }
+
+/** The plateau face materials (v1.1), with one band variant (.v1). */
+const PLATEAU_FACES = ['sand', 'desert', 'path'];
 
 /**
  * The face material under a raised tile. The placeholders: ruin, wall, the mountains' stone, else

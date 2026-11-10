@@ -45,7 +45,7 @@ test('normal play draws the terrain from its release art: base, every region, no
   const problems = await open(page, '&season=summer');
   const t = await api(page, 'terrainArt');
   expect(t.placeholder).toEqual([]);
-  for (const key of ['tile.grass.0', 'tile.path', 'tile.sand', 'tile.water.0', 'tile.water.1', 'tile.ruin', 'tile.wood', 'tile.walltop', 'tile.dark', 'tile.pit', 'tile.vine', 'tile.ramp', 'face.earth.top.8', 'face.ruin.mid-base.4', 'face.wall.top.8', 'obj.tree', 'obj.rock', 'obj.bramble', 'obj.stump', 'tile.shore.5.0', 'tile.bank.inner.ne.1', 'face.earth.mid.8.v2', 'face.sand.top.8', 'face.path.mid-base.4']) {
+  for (const key of ['tile.grass.0', 'tile.path', 'tile.sand', 'tile.water.0', 'tile.water.1', 'tile.ruin', 'tile.wood', 'tile.walltop', 'tile.dark', 'tile.pit', 'tile.vine', 'tile.ramp', 'face.earth.top.8', 'face.ruin.mid-base.4', 'face.wall.top.8', 'obj.tree', 'obj.rock', 'obj.bramble', 'obj.stump', 'tile.shore.5.0', 'tile.bank.inner.ne.1', 'face.earth.mid.8.v2', 'face.sand.top.8', 'face.path.mid-base.4', 'face.path.top.8.v1']) {
     expect(t.release, key).toContain(key);
   }
   expect(await api(page, 'artUrl', 'tile.grass.0')).not.toBeNull();
@@ -98,7 +98,7 @@ test('?terrain=placeholder keeps the placeholder terrain beside the release hero
   await open(p, '&season=summer&terrain=placeholder');
   const art = await api(p, 'art');
   expect(art).toMatchObject({ density: 2, hero: { w: 16, h: 28 } });
-  expect(art.overrides).toBe(withArt - 351);
+  expect(art.overrides).toBe(withArt - 375);
   const t = await api(p, 'terrainArt');
   expect(t.release).toEqual([]);
   expect(t.placeholder).toContain('tile.grass.0');
