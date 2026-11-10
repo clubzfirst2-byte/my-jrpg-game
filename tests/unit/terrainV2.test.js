@@ -20,16 +20,16 @@ const MASKS = range(14).map((i) => i + 1);
 const SETS = [...Object.keys(PREFIX).map((g) => [g, '']), ...['autumn.', 'winter.'].flatMap((s) => SEASONAL.map((g) => [g, s]))];
 const base = (g, s) => `${s}${PREFIX[g]}${SINGLE.includes(g) ? '' : '.0'}`;
 const single = (g, s, n) => (n === 0 ? base(g, s) : `${s}${PREFIX[g]}.${n}`);
-const MACROS = { macro: 2, macro2: 2, macro3: 3 };
-const macros = (g, s) => Object.entries(MACROS).flatMap(([m, k]) => range(k * k).map((q) => `${s}${PREFIX[g]}.${m}.${q}`));
-// Round 3: the look of a set decides its tile count and how a tile is picked (NAMES.md section 1):
-//   A 16 tiles by 4 edge types (+ macro pieces); B sand / desert / snow / every winter set: 64 tiles by the W / E
-//   phases (n = E + 8W); C ruin: 66 tiles by row phase R and the column symbols (n = 6R + combo), overlays per R.
-const look = (g, s) => (s === 'winter.' ? 'snow' : g);
-const scheme = (g, s) => (['snow', 'sand', 'dsand'].includes(look(g, s)) ? 'B' : g === 'ruin' ? 'C' : 'A');
+const MACROS = ['macro', ...range(7).map((k) => `macro${k + 2}`)]; // round 4: 8 pictures of 2 x 2 tiles
+const macros = (g, s) => MACROS.flatMap((m) => range(4).map((q) => `${s}${PREFIX[g]}.${m}.${q}`));
+// The look of a set decides its tile count and how a tile is picked (NAMES.md section 1):
+//   A (round 4) grass-likes, moss, path, snow, every winter set: 16 calm tiles by hash + 8 pictures of 2 x 2;
+//   B sand / desert: 64 tiles by the W / E phases (n = E + 8W); C ruin: 66 tiles by row phase R and the column
+//   symbols (n = 6R + combo), overlays per R.
+const scheme = (g) => (['sand', 'dsand'].includes(g) ? 'B' : g === 'ruin' ? 'C' : 'A');
 const COUNT = { A: 16, B: 64, C: 66 };
 const RUIN_COMBOS = [[0, 1], [0, 2], [1, 0], [1, 2], [2, 0], [2, 1]]; // [W, E]
-const tiles = (g, s) => [...range(COUNT[scheme(g, s)]).map((n) => single(g, s, n)), ...(scheme(g, s) === 'A' ? macros(g, s) : [])];
+const tiles = (g, s) => [...range(COUNT[scheme(g)]).map((n) => single(g, s, n)), ...(scheme(g) === 'A' ? macros(g, s) : [])];
 const edgeVariants = (g) => (g === 'ruin' ? range(11) : [0, 1]);
 const edges = (g, s) => MASKS.flatMap((m) => edgeVariants(g).map((v) => `${s}${PREFIX[g]}.edge.${m}.${v}`));
 // Cliff faces redrawn in round 3 under their v1 keys (32 x 16 for .8, 32 x 8 for .4).
@@ -157,7 +157,7 @@ describe('ground v2 art', { timeout: 180000 }, () => {  // ~800 PNGs decoded: sl
     }
   });
 
-  it('edge-matched tiles: every tile with the same edge type on a side shows the same outermost row / column there; macros show type 0 outside', () => {
+  it('edge-matched tiles (B, C): every tile with the same edge type on a side shows the same outermost row / column there', () => {
     const band = (t, side) => {
       const pts = [];
       for (let k = 1; k < 31; k++) {
@@ -170,9 +170,10 @@ describe('ground v2 art', { timeout: 180000 }, () => {  // ~800 PNGs decoded: sl
     };
     const SIDE = { top: 1, right: 2, bottom: 4, left: 8 }; // A: tile index n = N + 2E + 4S + 8W
     for (const [g, s] of SETS) {
-      const sc = scheme(g, s);
+      const sc = scheme(g);
+      if (sc === 'A') continue; // A (round 4): any calm tile / picture joins any, nothing crosses their edges
       for (const [side, bit] of Object.entries(SIDE)) {
-        if (sc !== 'A' && (side === 'top' || side === 'bottom')) continue; // B, C: nothing is typed on the N / S edges
+        if (side === 'top' || side === 'bottom') continue; // B, C: nothing is typed on the N / S edges
         const ref = {};
         for (const n of range(COUNT[sc])) {
           let t = n & bit ? 1 : 0;
@@ -181,14 +182,6 @@ describe('ground v2 art', { timeout: 180000 }, () => {  // ~800 PNGs decoded: sl
           const b = band(png(single(g, s, n)), side);
           if (t in ref) expect(b, `${single(g, s, n)} ${side} type ${t}`).toBe(ref[t]);
           else ref[t] = b;
-        }
-        if (sc !== 'A') continue;
-        for (const [m, k] of Object.entries(MACROS)) {
-          for (const q of range(k * k)) {
-            const [a, r] = [q % k, Math.floor(q / k)];
-            const outer = { top: r === 0, bottom: r === k - 1, left: a === 0, right: a === k - 1 }[side];
-            if (outer) expect(band(png(`${s}${PREFIX[g]}.${m}.${q}`), side), `${s}${PREFIX[g]}.${m}.${q} ${side}`).toBe(ref[0]);
-          }
         }
       }
     }

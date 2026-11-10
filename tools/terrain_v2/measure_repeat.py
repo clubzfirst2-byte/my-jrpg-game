@@ -2,7 +2,7 @@
 drawn by render_ref (40 x 24 cells): mean |L(x) - L(x + s)| over both axes, for s = 24 and 32. A ground
 that repeats every 32 px has a much smaller difference at 32 than at 24; the target is ratio 32/24 >= 0.8.
 Round 3 adds the banding measure: the autocorrelation at 32 px of the row means and of the column means
-(horizontal / vertical stripes every tile); target <= 0.3.
+(horizontal / vertical stripes every tile), and the same at 64 px (round 4: 80 x 48 fields); target <= 0.3.
 
 Run: python3 tools/terrain_v2/measure_repeat.py   (after gen_v2.py; also called by gen_v2.py for check.txt)
 """
@@ -52,8 +52,8 @@ def measure(images, season=None, grounds="gplmnsd=u", cells=(40, 24)):
         grid = [ch * cells[0] for _ in range(cells[1])]
         L = lum(render_v2(grid, images, season=season))
         d24, d32 = diff(L, 24), diff(L, 32)
-        rc = row_col(L)
-        out[ch] = (d24, d32, d32 / d24 if d24 else 1.0, rc[0], rc[1])
+        rc, rc64 = row_col(L), row_col(L, 64)
+        out[ch] = (d24, d32, d32 / d24 if d24 else 1.0, rc[0], rc[1], rc64[0], rc64[1])
     return out
 
 
@@ -66,5 +66,5 @@ if __name__ == "__main__":
     for k in ("tile.metal", "tile.walltop", "tile.wood", "tile.dark", "tile.pit"):
         imgs["v1:" + k] = Image.open(os.path.join(v1, k + ".png")).convert("RGBA")
     for season in (None, "autumn", "winter"):
-        res = measure(imgs, season, "gplmnsd=u" if season is None else "gplm")
-        print(season or "summer", " ".join(f"{k}:{r[2]:.2f}/{r[3]:.2f}/{r[4]:.2f}" for k, r in res.items()))
+        res = measure(imgs, season, "gplmnsd=u" if season is None else "gplm", cells=(80, 48))
+        print(season or "summer", " ".join(f"{k}:{r[2]:.2f} {r[3]:+.2f}/{r[4]:+.2f} {r[5]:+.2f}/{r[6]:+.2f}" for k, r in res.items()))

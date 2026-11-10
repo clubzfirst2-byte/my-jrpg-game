@@ -39,7 +39,7 @@ P_TYPE1 = {"grass": 22, "plains": 10, "lake": 10, "moss": 12, "path": 10, "snow"
 #   n = 6R + 2W + (E if E < W else E - 1)   (66 tiles)
 # With 8 phases (11 for the ruin) every row of a tile is equally likely to carry a ripple / ridge / joint, so
 # the rows' mean brightness has no 32-px period.
-LINE_GROUNDS = {"sand", "dsand", "snow"}
+LINE_GROUNDS = {"sand", "dsand"}  # (round 4: snow is drawn like the grass-likes, macro_a.py)
 TEX4 = LINE_GROUNDS | {"ruin"}  # the all-texture grounds: no macro pieces, their own edge alphabets
 RUIN_COMBOS = [(w, e) for w in range(3) for e in range(3) if w != e]  # index 2w + (e if e < w else e - 1)
 
@@ -146,38 +146,57 @@ def _pair(left, right):
 
 
 SWELL = [-5, 3, 0, 5, -3, 4, -2, 2]  # px: how far a tile's bundle of lines swells up / down, by (E phase - W phase) mod 8
+BEND = [16, 9, 22, 13, 19, 8, 23, 11]  # the column around which the lines go from their W rows to their E rows, by the same
+PEAK = [1.0, 0.6, 1.5, 0.8, 1.3, 0.55, 1.7, 0.7]  # where the swell peaks (exponent on the 0-1 run across the tile)
+
+# Round 4. What a ridge / ripple carries besides its crest, by the parity (snow) or the residue mod 4 (sand) of
+# its edge row h, as (dy, first k, last k, tone) with k = (x + 11 h) mod 16 along the line. All spans have even
+# lengths (snow) / lengths 4 or 8 (sand), so over the edge rows of a class every column gets the same amount;
+# the snow classes are balanced so that even and odd rows get the same brightness.
+SNOW_PARTS = {
+    0: [(0, 0, 7, 4), (1, 1, 6, 2), (0, 2, 5, 5), (-1, 0, 7, 4), (-1, 3, 4, 5), (-2, 2, 5, 4)],  # a drift: a bright face over the ridge
+    1: [(0, 0, 7, 4), (1, 1, 6, 2), (2, 3, 6, 2), (2, 4, 5, 1), (3, 3, 6, 2)],  # a blue hollow under the ridge, a deep core
+}
+SAND_PARTS = {
+    0: [(0, 0, 15, 4), (1, 0, 15, 2)],
+    1: [(0, 0, 15, 4), (1, 0, 15, 2), (-1, 0, 7, 4), (-2, 1, 6, 4)],  # the lit windward face of a low dune (as in round 3)
+    2: [(0, 0, 15, 4), (1, 0, 15, 2)],
+    3: [(0, 0, 15, 4), (1, 0, 15, 2)],
+}
 
 
 def draw_lines(c, ground, mat, ox, oy, tw, te, idx):
-    """Ripples / ridges from the W edge rows to the E edge rows. All lines of a tile swell and wave together (so
-    they never cross), by a shape that depends only on the difference of its two edge phases and is 0 at both
-    ends, and every pixel's tone is a function of the line's own edge row (or the pixel's row) and its x: so a
-    tile's edge columns depend only on its edge types, and over the tile set every row and every column carries
-    the same amount of crest and trough (no 32-px bands)."""
+    """Ripples / ridges from the W edge rows to the E edge rows. All lines of a tile bend, swell and wave together
+    (so they never cross), by a shape that depends only on the difference of its two edge phases and is 0 at
+    both ends, and every pixel's tone is a function of the line's own edge row and its x: so a tile's edge
+    columns depend only on its edge types, and over the tile set every row and every column carries the same
+    amount of everything (no 32-px bands)."""
     d = (te - tw) % 8
     snow = ground == "snow"
+    parts = SNOW_PARTS if snow else SAND_PARTS
+    todo = []
     for yl, yr in _pair(LINES[ground][tw], LINES[ground][te]):
         for x in range(32):
-            t = x / 31
             wv = min(1.0, max(0.0, (x - 2) / 27))
-            wave = SWELL[d] * math.sin(math.pi * wv) * (0.4 if snow else 1.0) + 0.8 * math.sin(2 * math.pi * wv) * math.cos(2.3 * d + 0.4)
+            wave = (SWELL[d] * math.sin(math.pi * wv ** PEAK[d]) * (0.4 if snow else 1.0)
+                    + 0.8 * math.sin(2 * math.pi * wv) * math.cos(2.3 * d + 0.4))
+            t = min(1.0, max(0.0, (x - (BEND[d] - 8)) / 16))
             y = round(yl + (yr - yl) * _smooth(t) + wave)
-            if not -3 <= y <= 31:
-                continue
-            h = yl if x < 16 else yr  # runs keyed to the line's own edge row on that side
-            if snow:  # wind ridges in dashes (14 px in every 32, placed by the row): lit crest, lee shade under its middle
-                k = (x + 11 * y) % 32
-                if k < 14:
-                    c.put(ox + x, oy + y, mat, 5 if 4 <= k <= 7 else 4)
-                    if 2 <= k <= 10:
-                        c.put(ox + x, oy + y + 1, mat, 2)
-            else:  # a ripple: crest 4 (5 on a 2-px run every 16 px), trough 2 (1 on a run elsewhere)
-                c.put(ox + x, oy + y, mat, 5 if (x + 3 * h) % 16 < 2 else 4)
-                c.put(ox + x, oy + y + 1, mat, 1 if (x + 5 * h + 6) % 16 < 2 else 2)
-                if h % 4 == 1 and (x + 7 * h) % 16 < 8:  # a lit flank over one ripple in four, in 8-px stretches
-                    c.put(ox + x, oy + y - 1, mat, 4)
-                    if 1 <= (x + 7 * h) % 16 < 7:
-                        c.put(ox + x, oy + y - 2, mat, 4)
+            h = yl if x < 16 else yr  # keyed to the line's own edge row on that side
+            k = (x + (11 if snow else 7) * h) % 16
+            for dy, k0, k1, tone in parts[h % (2 if snow else 4)]:
+                if k0 <= k <= k1:
+                    todo.append((5 if dy in (0, 1) else 1, x, y + dy, tone))
+            if snow and h % 8 == 2 and k in (3, 4):
+                todo.append((9, x, y - 1, 6))  # a sparkle on some drifts
+            if not snow:
+                if (x + 3 * h) % 16 < 2:
+                    todo.append((8, x, y, 5))  # a brighter run on the crest
+                if (x + 5 * h + 6) % 16 < 2:
+                    todo.append((8, x, y + 1, 1))  # a deeper run in the trough
+    for _, x, y, tone in sorted(todo, key=lambda v: v[0]):  # faces and hollows first, then crests, then the runs
+        if 0 <= y <= 31:
+            c.put(ox + x, oy + y, mat, tone)
 
 
 # ------------------------------------------------------------------------------------------------------
@@ -442,6 +461,10 @@ def draw_tile(c, ground, mat, ox, oy, t, idx, season=None, interior=True):
 
 def wang_tile(ground, n, mat=None, season=None):
     mat = mat or ground
+    if ground not in TEX4:  # round 4: the grass-likes, moss and path have 16 calm tiles (macro_a.py)
+        import macro_a
+
+        return macro_a.calm_tile(ground, n, mat)
     c = Canvas(32, 32, (mat, 3), wrap=False)
     draw_tile(c, ground, mat, 0, 0, types_of(n, ground), n, season)
     return c

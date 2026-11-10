@@ -8,8 +8,8 @@ Steps (NAMES.md has the same in words):
      cells; else SHALLOW
   2. the display grid is shifted half a tile: display tile (i, j) has corners on the cells
      (i, j) NW, (i+1, j) NE, (i, j+1) SW, (i+1, j+1) SE and is drawn at ((i + .5) * 32, (j + .5) * 32)
-  3. macro blocks (3x3 then 2x2) on uniform ground; every other land tile is picked by its 4 edge types
-     (n = N + 2E + 4S + 8W; sand / desert / snow: n = E + 8W, E / W 0-7; ruin: n = N + 2E + 16S + 32W, E / W 0-7)
+  3. grass-likes, moss, path: a 2x2 macro picture per 3x3 block at a hashed offset, else one of 16 calm tiles by a
+     hash; sand / desert / snow: n = E + 8W (the phases 0-7 of its W / E edges); ruin: row phase + column symbols
   4. per display tile: the lowest terrain among its corners as a full tile (water: shallow, or deep if all
      4 corners are deep), then
        water: the deep overlay (mask = deep corners) if mixed; the foam overlay (mask = land corners)
@@ -66,58 +66,44 @@ def lowest_land(grid, i, j):
     return min(ts, key=PRIORITY.index)
 
 
-BUSY_MACRO = {"grass", "plains", "lake", "moss", "path"}  # macros are placed on these only (on sand / snow / ruin they would force type-0 edges and band the texture)
-
-
+BUSY_MACRO = {"grass", "plains", "lake", "moss", "path", "snow"}  # the grounds with macro pictures
+N_MACRO = 8
+MACRO_NAMES = ["macro"] + [f"macro{k}" for k in range(2, N_MACRO + 1)]
 _SEASON = None
 
 
 def macro_blocks(grid):
-    """Display-tile blocks drawn with macro pieces. 3x3 blocks first (i, j multiples of 3, all 16 corner cells
-    one land ground, hash % 6 == 0 -> macro3), then 2x2 blocks (even i, j, all 9 corner cells one ground, not
-    overlapping a 3x3 one, hash % 4: 0 -> macro, 1 -> macro2)."""
+    """Display tiles drawn with a 2x2 macro picture (round 4). The display grid is cut into blocks of 3 x 3
+    tiles; block (a, b) = (i // 3, j // 3) holds at most one picture, at tile (3a + ox, 3b + oy) with
+    h = hash(a, b), ox = h % 2, oy = (h >> 1) % 2 (so pictures are NOT on a fixed 64-px grid and never touch),
+    picture number (h >> 2) % 8, none when (h >> 5) % 8 == 0 or when its 9 corner cells are not one land ground
+    of the 6 grounds that have pictures."""
     H, W = len(grid), len(grid[0])
     out = {}
-
-    def uniform(i, j, k):
-        ts = {terr(grid, i + dx, j + dy) for dx in range(k + 1) for dy in range(k + 1)}
-        return len(ts) == 1 and next(iter(ts)) not in ("water", "other")
-
-    for j in range(0, H - 3, 3):
-        for i in range(0, W - 3, 3):
-            g = terr(grid, i, j)
-            if g in BUSY_MACRO and _SEASON != "winter" and uniform(i, j, 3) and dhash(i, j) % 6 == 0:
-                for q in range(9):
-                    out[(i + q % 3, j + q // 3)] = ("macro3", q, (i, j, 3))
-    for j in range(0, H - 2, 2):
-        for i in range(0, W - 2, 2):
-            cells = [(i, j), (i + 1, j), (i, j + 1), (i + 1, j + 1)]
-            if any(c in out for c in cells) or not uniform(i, j, 2) or terr(grid, i, j) not in BUSY_MACRO or _SEASON == "winter":
+    for b in range((H + 2) // 3):
+        for a in range((W + 2) // 3):
+            h = dhash(a, b)
+            i, j = 3 * a + h % 2, 3 * b + (h >> 1) % 2
+            if (h >> 5) % 8 == 0 or i + 2 >= W or j + 2 >= H:
                 continue
-            h = dhash(i + 1, j) % 4
-            if h < 2:
-                for q, c in enumerate(cells):
-                    out[c] = ("macro" if h == 0 else "macro2", q, (i, j, 2))
+            ts = {terr(grid, i + dx, j + dy) for dx in range(3) for dy in range(3)}
+            if len(ts) != 1 or next(iter(ts)) not in BUSY_MACRO:
+                continue
+            name = MACRO_NAMES[(h >> 2) % N_MACRO]
+            for q in range(4):
+                out[(i + q % 2, j + q // 2)] = (name, q, (i, j, 2))
     return out
 
 
-from wang import P_TYPE1 as P_LOOK, TEX4, LINE_GROUNDS, index_of, ruin_row, ruin_symbol  # noqa: E402
+from wang import TEX4, LINE_GROUNDS, index_of, ruin_row, ruin_symbol  # noqa: E402
 
 
-def edge_type(grid, macro, a, b, edge_id, look, vertical=False):
-    """The type of the edge between display tiles a and b (NAMES.md).
-    Sand / desert / snow: a vertical edge has a phase 0-7 = (hash >> 8) % 8, 0 when the two tiles' lowest grounds
-    differ; nothing crosses their horizontal edges (0).
-    Grass-likes, moss, path: 0 when the two tiles' lowest grounds differ or the edge is on the outside of a macro
-    block; else 1 with probability P_LOOK[look] % (hash % 100)."""
+def edge_type(grid, a, b, edge_id):
+    """Sand / desert / snow: the phase 0-7 of a vertical edge between display tiles a and b = (hash >> 8) % 8,
+    0 when the two tiles' lowest grounds differ (NAMES.md)."""
     if lowest_land(grid, *a) != lowest_land(grid, *b):
         return 0
-    ma, mb = macro.get(a), macro.get(b)
-    if (ma or mb) and (ma is None or mb is None or ma[2] != mb[2]):
-        return 0
-    if look in LINE_GROUNDS:
-        return (dhash(*edge_id) >> 8) % 8 if vertical else 0
-    return 1 if dhash(*edge_id) % 100 < P_LOOK[look] else 0
+    return (dhash(*edge_id) >> 8) % 8
 
 
 def render_v2(grid, images, frame=0, season=None):
@@ -162,12 +148,11 @@ def render_v2(grid, images, frame=0, season=None):
                         name = f"{mk[0]}.{mk[1]}"
                     elif look == "ruin":  # row phase + the symbols of the column's two edges
                         name = str(index_of({"R": ruin_row(j), 8: ruin_symbol(i, dhash), 2: ruin_symbol(i + 1, dhash)}, look))
-                    else:
-                        t = {1: edge_type(grid, macro, (i, j - 1), (i, j), (2 * i + 1, 2 * j), look),
-                             2: edge_type(grid, macro, (i, j), (i + 1, j), (2 * i + 2, 2 * j + 1), look, True),
-                             4: edge_type(grid, macro, (i, j), (i, j + 1), (2 * i + 1, 2 * j + 2), look),
-                             8: edge_type(grid, macro, (i - 1, j), (i, j), (2 * i, 2 * j + 1), look, True)}
-                        name = str(index_of(t, look))
+                    elif look in LINE_GROUNDS:  # the phases of its W and E edges
+                        name = str(index_of({1: 0, 4: 0, 2: edge_type(grid, (i, j), (i + 1, j), (2 * i + 2, 2 * j + 1)),
+                                             8: edge_type(grid, (i - 1, j), (i, j), (2 * i, 2 * j + 1))}, look))
+                    else:  # a calm tile: any of the 16
+                        name = str(dhash(i + 3, j + 11) % 16)
                     im.alpha_composite(key(lowest, name), (px, py))
             for t in sorted(set(land), key=PRIORITY.index):
                 if t == lowest:
