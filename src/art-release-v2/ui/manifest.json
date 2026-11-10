@@ -1,0 +1,720 @@
+{
+ "density": {
+  "default": "1 art px = 1 CSS px",
+  "title": "1 art px = 2 CSS px"
+ },
+ "hud": {
+  "attack-button": {
+   "ring": "gold",
+   "icon": "attack",
+   "sizes": {
+    "small": 66,
+    "medium": 78,
+    "large": 90
+   },
+   "iconSize": {
+    "small": 26,
+    "medium": 34,
+    "large": 34
+   }
+  },
+  "jump-button": {
+   "ring": "std",
+   "icon": "jump",
+   "sizes": {
+    "small": 51,
+    "medium": 60,
+    "large": 69
+   },
+   "iconSize": {
+    "small": 20,
+    "medium": 26,
+    "large": 26
+   }
+  },
+  "dodge-button": {
+   "ring": "std",
+   "icon": "dodge",
+   "sizes": {
+    "small": 49,
+    "medium": 58,
+    "large": 67
+   },
+   "iconSize": {
+    "small": 20,
+    "medium": 26,
+    "large": 26
+   }
+  },
+  "bow-button": {
+   "ring": "std",
+   "icon": "bow",
+   "sizes": {
+    "small": 44,
+    "medium": 52,
+    "large": 60
+   },
+   "iconSize": {
+    "small": 20,
+    "medium": 26,
+    "large": 26
+   }
+  },
+  "guard-button": {
+   "ring": "std",
+   "icon": "guard",
+   "sizes": {
+    "small": 44,
+    "medium": 52,
+    "large": 60
+   },
+   "iconSize": {
+    "small": 20,
+    "medium": 26,
+    "large": 26
+   }
+  },
+  "dash-button": {
+   "ring": "std",
+   "icon": "dash",
+   "sizes": {
+    "small": 44,
+    "medium": 48,
+    "large": 55
+   },
+   "iconSize": {
+    "small": 20,
+    "medium": 20,
+    "large": 26
+   }
+  },
+  "ability-button": {
+   "ring": "teal",
+   "icon": "ability",
+   "sizes": {
+    "small": 44,
+    "medium": 52,
+    "large": 60
+   },
+   "iconSize": {
+    "small": 20,
+    "medium": 26,
+    "large": 26
+   }
+  },
+  "ability-next": {
+   "ring": "std",
+   "icon": "swap",
+   "sizes": {
+    "small": 44,
+    "medium": 44,
+    "large": 44
+   },
+   "iconSize": {
+    "small": 20,
+    "medium": 20,
+    "large": 20
+   }
+  }
+ },
+ "sprites": {
+  "bossbar.fill.1": {
+   "w": 4,
+   "h": 4,
+   "cssScale": 1,
+   "repeat": "x"
+  },
+  "bossbar.fill.2": {
+   "w": 4,
+   "h": 4,
+   "cssScale": 1,
+   "repeat": "x"
+  },
+  "bossbar.frame": {
+   "w": 24,
+   "h": 12,
+   "cssScale": 1,
+   "slice": [
+    7,
+    4,
+    7,
+    4
+   ]
+  },
+  "btn.ring.gold.66.idle": {
+   "w": 66,
+   "h": 66,
+   "cssScale": 1
+  },
+  "btn.ring.gold.66.pressed": {
+   "w": 66,
+   "h": 66,
+   "cssScale": 1
+  },
+  "btn.ring.gold.78.idle": {
+   "w": 78,
+   "h": 78,
+   "cssScale": 1
+  },
+  "btn.ring.gold.78.pressed": {
+   "w": 78,
+   "h": 78,
+   "cssScale": 1
+  },
+  "btn.ring.gold.90.idle": {
+   "w": 90,
+   "h": 90,
+   "cssScale": 1
+  },
+  "btn.ring.gold.90.pressed": {
+   "w": 90,
+   "h": 90,
+   "cssScale": 1
+  },
+  "btn.ring.std.44.idle": {
+   "w": 44,
+   "h": 44,
+   "cssScale": 1
+  },
+  "btn.ring.std.44.pressed": {
+   "w": 44,
+   "h": 44,
+   "cssScale": 1
+  },
+  "btn.ring.std.48.idle": {
+   "w": 48,
+   "h": 48,
+   "cssScale": 1
+  },
+  "btn.ring.std.48.pressed": {
+   "w": 48,
+   "h": 48,
+   "cssScale": 1
+  },
+  "btn.ring.std.49.idle": {
+   "w": 49,
+   "h": 49,
+   "cssScale": 1
+  },
+  "btn.ring.std.49.pressed": {
+   "w": 49,
+   "h": 49,
+   "cssScale": 1
+  },
+  "btn.ring.std.51.idle": {
+   "w": 51,
+   "h": 51,
+   "cssScale": 1
+  },
+  "btn.ring.std.51.pressed": {
+   "w": 51,
+   "h": 51,
+   "cssScale": 1
+  },
+  "btn.ring.std.52.idle": {
+   "w": 52,
+   "h": 52,
+   "cssScale": 1
+  },
+  "btn.ring.std.52.pressed": {
+   "w": 52,
+   "h": 52,
+   "cssScale": 1
+  },
+  "btn.ring.std.55.idle": {
+   "w": 55,
+   "h": 55,
+   "cssScale": 1
+  },
+  "btn.ring.std.55.pressed": {
+   "w": 55,
+   "h": 55,
+   "cssScale": 1
+  },
+  "btn.ring.std.58.idle": {
+   "w": 58,
+   "h": 58,
+   "cssScale": 1
+  },
+  "btn.ring.std.58.pressed": {
+   "w": 58,
+   "h": 58,
+   "cssScale": 1
+  },
+  "btn.ring.std.60.idle": {
+   "w": 60,
+   "h": 60,
+   "cssScale": 1
+  },
+  "btn.ring.std.60.pressed": {
+   "w": 60,
+   "h": 60,
+   "cssScale": 1
+  },
+  "btn.ring.std.67.idle": {
+   "w": 67,
+   "h": 67,
+   "cssScale": 1
+  },
+  "btn.ring.std.67.pressed": {
+   "w": 67,
+   "h": 67,
+   "cssScale": 1
+  },
+  "btn.ring.std.69.idle": {
+   "w": 69,
+   "h": 69,
+   "cssScale": 1
+  },
+  "btn.ring.std.69.pressed": {
+   "w": 69,
+   "h": 69,
+   "cssScale": 1
+  },
+  "btn.ring.teal.44.idle": {
+   "w": 44,
+   "h": 44,
+   "cssScale": 1
+  },
+  "btn.ring.teal.44.pressed": {
+   "w": 44,
+   "h": 44,
+   "cssScale": 1
+  },
+  "btn.ring.teal.52.idle": {
+   "w": 52,
+   "h": 52,
+   "cssScale": 1
+  },
+  "btn.ring.teal.52.pressed": {
+   "w": 52,
+   "h": 52,
+   "cssScale": 1
+  },
+  "btn.ring.teal.60.idle": {
+   "w": 60,
+   "h": 60,
+   "cssScale": 1
+  },
+  "btn.ring.teal.60.pressed": {
+   "w": 60,
+   "h": 60,
+   "cssScale": 1
+  },
+  "btn.text.disabled": {
+   "w": 24,
+   "h": 24,
+   "cssScale": 1,
+   "slice": [
+    8,
+    8,
+    8,
+    8
+   ]
+  },
+  "btn.text.idle": {
+   "w": 24,
+   "h": 24,
+   "cssScale": 1,
+   "slice": [
+    8,
+    8,
+    8,
+    8
+   ]
+  },
+  "btn.text.pressed": {
+   "w": 24,
+   "h": 24,
+   "cssScale": 1,
+   "slice": [
+    8,
+    8,
+    8,
+    8
+   ]
+  },
+  "btn.text.selected": {
+   "w": 24,
+   "h": 24,
+   "cssScale": 1,
+   "slice": [
+    8,
+    8,
+    8,
+    8
+   ]
+  },
+  "cue.more.0": {
+   "w": 11,
+   "h": 9,
+   "cssScale": 1
+  },
+  "cue.more.1": {
+   "w": 11,
+   "h": 9,
+   "cssScale": 1
+  },
+  "heart.0": {
+   "w": 22,
+   "h": 20,
+   "cssScale": 1
+  },
+  "heart.1": {
+   "w": 22,
+   "h": 20,
+   "cssScale": 1
+  },
+  "heart.2": {
+   "w": 22,
+   "h": 20,
+   "cssScale": 1
+  },
+  "heart.3": {
+   "w": 22,
+   "h": 20,
+   "cssScale": 1
+  },
+  "heart.4": {
+   "w": 22,
+   "h": 20,
+   "cssScale": 1
+  },
+  "icon.ui.ability.20": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1
+  },
+  "icon.ui.ability.26": {
+   "w": 26,
+   "h": 26,
+   "cssScale": 1
+  },
+  "icon.ui.ability.34": {
+   "w": 34,
+   "h": 34,
+   "cssScale": 1
+  },
+  "icon.ui.attack.20": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1
+  },
+  "icon.ui.attack.26": {
+   "w": 26,
+   "h": 26,
+   "cssScale": 1
+  },
+  "icon.ui.attack.34": {
+   "w": 34,
+   "h": 34,
+   "cssScale": 1
+  },
+  "icon.ui.bag.20": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1
+  },
+  "icon.ui.bag.26": {
+   "w": 26,
+   "h": 26,
+   "cssScale": 1
+  },
+  "icon.ui.bag.34": {
+   "w": 34,
+   "h": 34,
+   "cssScale": 1
+  },
+  "icon.ui.bow.20": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1
+  },
+  "icon.ui.bow.26": {
+   "w": 26,
+   "h": 26,
+   "cssScale": 1
+  },
+  "icon.ui.bow.34": {
+   "w": 34,
+   "h": 34,
+   "cssScale": 1
+  },
+  "icon.ui.close.20": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1
+  },
+  "icon.ui.close.26": {
+   "w": 26,
+   "h": 26,
+   "cssScale": 1
+  },
+  "icon.ui.close.34": {
+   "w": 34,
+   "h": 34,
+   "cssScale": 1
+  },
+  "icon.ui.dash.20": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1
+  },
+  "icon.ui.dash.26": {
+   "w": 26,
+   "h": 26,
+   "cssScale": 1
+  },
+  "icon.ui.dash.34": {
+   "w": 34,
+   "h": 34,
+   "cssScale": 1
+  },
+  "icon.ui.dodge.20": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1
+  },
+  "icon.ui.dodge.26": {
+   "w": 26,
+   "h": 26,
+   "cssScale": 1
+  },
+  "icon.ui.dodge.34": {
+   "w": 34,
+   "h": 34,
+   "cssScale": 1
+  },
+  "icon.ui.guard.20": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1
+  },
+  "icon.ui.guard.26": {
+   "w": 26,
+   "h": 26,
+   "cssScale": 1
+  },
+  "icon.ui.guard.34": {
+   "w": 34,
+   "h": 34,
+   "cssScale": 1
+  },
+  "icon.ui.jump.20": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1
+  },
+  "icon.ui.jump.26": {
+   "w": 26,
+   "h": 26,
+   "cssScale": 1
+  },
+  "icon.ui.jump.34": {
+   "w": 34,
+   "h": 34,
+   "cssScale": 1
+  },
+  "icon.ui.pause.20": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1
+  },
+  "icon.ui.pause.26": {
+   "w": 26,
+   "h": 26,
+   "cssScale": 1
+  },
+  "icon.ui.pause.34": {
+   "w": 34,
+   "h": 34,
+   "cssScale": 1
+  },
+  "icon.ui.swap.20": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1
+  },
+  "icon.ui.swap.26": {
+   "w": 26,
+   "h": 26,
+   "cssScale": 1
+  },
+  "icon.ui.swap.34": {
+   "w": 34,
+   "h": 34,
+   "cssScale": 1
+  },
+  "panel.crest": {
+   "w": 31,
+   "h": 17,
+   "cssScale": 1
+  },
+  "panel.dialogue": {
+   "w": 32,
+   "h": 32,
+   "cssScale": 1,
+   "slice": [
+    10,
+    10,
+    10,
+    10
+   ]
+  },
+  "panel.ending": {
+   "w": 48,
+   "h": 48,
+   "cssScale": 1,
+   "slice": [
+    16,
+    16,
+    16,
+    16
+   ]
+  },
+  "panel.menu": {
+   "w": 32,
+   "h": 32,
+   "cssScale": 1,
+   "slice": [
+    10,
+    10,
+    10,
+    10
+   ]
+  },
+  "panel.nameplate": {
+   "w": 16,
+   "h": 16,
+   "cssScale": 1,
+   "slice": [
+    5,
+    5,
+    5,
+    5
+   ]
+  },
+  "panel.shop": {
+   "w": 32,
+   "h": 32,
+   "cssScale": 1,
+   "slice": [
+    11,
+    11,
+    11,
+    11
+   ]
+  },
+  "panel.toast": {
+   "w": 16,
+   "h": 16,
+   "cssScale": 1,
+   "slice": [
+    5,
+    5,
+    5,
+    5
+   ]
+  },
+  "row.idle": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1,
+   "slice": [
+    6,
+    6,
+    6,
+    6
+   ]
+  },
+  "row.pressed": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1,
+   "slice": [
+    6,
+    6,
+    6,
+    6
+   ]
+  },
+  "row.selected": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1,
+   "slice": [
+    6,
+    6,
+    6,
+    6
+   ]
+  },
+  "tab.active": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1,
+   "slice": [
+    6,
+    6,
+    6,
+    6
+   ]
+  },
+  "tab.idle": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1,
+   "slice": [
+    6,
+    6,
+    6,
+    6
+   ]
+  },
+  "tab.pressed": {
+   "w": 20,
+   "h": 20,
+   "cssScale": 1,
+   "slice": [
+    6,
+    6,
+    6,
+    6
+   ]
+  },
+  "title.bg": {
+   "w": 480,
+   "h": 200,
+   "cssScale": 2
+  },
+  "title.bg.far": {
+   "w": 480,
+   "h": 200,
+   "cssScale": 2,
+   "parallax": 0.15
+  },
+  "title.bg.mid": {
+   "w": 480,
+   "h": 200,
+   "cssScale": 2,
+   "parallax": 0.4
+  },
+  "title.bg.near": {
+   "w": 480,
+   "h": 200,
+   "cssScale": 2,
+   "parallax": 1.0
+  },
+  "title.bg.sky": {
+   "w": 480,
+   "h": 200,
+   "cssScale": 2,
+   "parallax": 0.0
+  },
+  "title.logo": {
+   "w": 256,
+   "h": 64,
+   "cssScale": 2
+  }
+ }
+}
