@@ -21,7 +21,8 @@ import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
 import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
-import { prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
+import { availableV1Groups, availableV2Groups, prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
+import { resolveArtGroups } from './view/assets/artV2.js';
 import { TERRAIN_GROUP, releaseTerrainEntries, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
 import { GameView } from './view/gameView.js';
@@ -155,7 +156,9 @@ async function boot() {
   if (wantsTerrainArt(params, releaseHero)) releaseGroups.push(TERRAIN_GROUP); // v1.0: the terrain release art (?terrain=placeholder|release, terrainArt.js)
   //   v1.0: the objects' release art (buildings, chests, switches, icons, effects; objectsArt.js)
   releaseGroups.push(...objectsReleaseGroups(params, { releaseHero, protoGroups }));
-  for (const frames of await Promise.all(releaseGroups.map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
+  // Graphics v2: a group's v2 art (src/art-release-v2) in place of its v1 art when enabled (?v2=0, ?<group>=v1|v2; artV2.js)
+  const artGroups = resolveArtGroups(releaseGroups, params, { available: availableV2Groups(), v1Groups: availableV1Groups() });
+  for (const frames of await Promise.all(artGroups.map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
   installItemIcons(artOverrides); // the menus' item icons, from the same art
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
 
@@ -1051,7 +1054,7 @@ async function boot() {
       return c.toDataURL();
     },
     /** P11.5: the art in use (density, how many real-art sprites) and the drawn hero's size in game px. */
-    art: () => ({ density: artDensity, overrides: artOverrides.size, zoom: view.camera.zoom, hero: { w: view.player.texture.width, h: view.player.texture.height, k: view.heroK } }),
+    art: () => ({ density: artDensity, overrides: artOverrides.size, groups: artGroups, zoom: view.camera.zoom, hero: { w: view.player.texture.width, h: view.player.texture.height, k: view.heroK } }),
     /** P8: the auto tour (minutes may be fractional in tests). */
     startTour: (/** @type {number} */ minutes) => startTour(minutes),
     stopTour: () => finishTour(),
