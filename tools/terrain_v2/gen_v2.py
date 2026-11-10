@@ -11,6 +11,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 import grounds as G  # noqa: E402
+import marks as M  # noqa: E402
 import transitions as T  # noqa: E402
 import water as WA  # noqa: E402
 from ramps_v2 import EXT, BASE5, NEW_RAMPS  # noqa: E402
@@ -19,20 +20,40 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 OUT = os.path.join(ROOT, "src", "art-release-v2", "terrain")
 DOCS = os.path.join(ROOT, "docs", "art-release-v2", "terrain")
 
-VARIANTS = [0, 1, 2, 3]
-MACRO = ["m0", "m1", "m2", "m3"]  # TL, TR, BL, BR of a 2x2 block
 MASKS = range(1, 15)
 SEASON_MAT = {"autumn": G.AUTUMN_RAMP}
 
 
 def ground_tiles(ground, season=None):
-    """{suffix: canvas} for the 4 singles and the 4 macro pieces."""
+    """{suffix: canvas}: the 16 edge-matched tiles (0-15) and the macro pieces (macro.q, macro2.q, macro3.q)."""
+    import wang as WG
+
     out = {}
-    build = (lambda v: G.seasonal(ground, v, season)) if season else (lambda v: G.GROUNDS[ground](v))
-    for v in VARIANTS:
-        out[str(v)] = build(v)
-    for k, piece in enumerate(G.cut_macro(build("m"))):
-        out[MACRO[k]] = piece
+    if season == "winter":  # the winter of a grass-like ground: the snow tile of the same index + a few buried tips
+        tip = {"grass": "grass", "plains": "plains", "lake": "lake", "moss": "pine"}[ground]
+
+        def single(n):
+            c = WG.wang_tile("snow", n)
+            if n and n % 3 == 1:
+                M.draw_clump(c, tip, 14 + (n % 5), 19, "S", light=False)
+            return c
+
+        def big(name):
+            return WG.macro_canvas("snow", name)
+    else:
+        def single(n):
+            return WG.wang_tile(ground, n, season=season)
+
+        def big(name):
+            return WG.macro_canvas(ground, name, season=season)
+    for n in range(16):
+        out[str(n)] = single(n)
+    for name, k in WG.MACROS.items():
+        for q, piece in enumerate(WG.cut(big(name), k)):
+            out[f"{name}.{q}"] = piece
+    if season == "autumn":
+        for c in out.values():
+            c.remap({ground: G.AUTUMN_RAMP[ground]})
     return out
 
 
@@ -70,22 +91,32 @@ def build():
 
 
 def check_seams(cv):
-    """Every single variant and every macro piece of a ground must have the same 2-px edge band on the
-    edges it shares with any other tile (the seam layer): that is what makes them join in any order."""
+    """Edge matching: for every ground (and season), every tile whose edge on a side has type t must show the
+    same 2-px band on that side (so any two tiles that agree on a shared edge's type join); macro pieces
+    show the type-0 band on their outer edges."""
+    import wang as WG
+
     errors = []
-    bands = {"top": lambda c: [c.px[y][x] for y in (0, 1) for x in range(32)],
-             "bottom": lambda c: [c.px[y][x] for y in (30, 31) for x in range(32)],
-             "left": lambda c: [c.px[y][x] for y in range(32) for x in (0, 1)],
-             "right": lambda c: [c.px[y][x] for y in range(32) for x in (30, 31)]}
-    outer = {"m0": ("top", "left"), "m1": ("top", "right"), "m2": ("bottom", "left"), "m3": ("bottom", "right")}
-    prefixes = sorted({k.rsplit(".", 1)[0] for k in cv if k.rsplit(".", 1)[1] == "0" and ".e" not in k and "water" not in k})
-    for p in prefixes:
-        ref = cv[f"{p}.0"]
-        for s in [str(v) for v in VARIANTS[1:]] + MACRO:
-            c = cv[f"{p}.{s}"]
-            for side in outer.get(s, bands.keys()):
-                if bands[side](c) != bands[side](ref):
-                    errors.append(f"{p}.{s} {side}")
+    bands = {WG.N: lambda c: [c.px[y][x] for y in (0, 1) for x in range(32)],
+             WG.S: lambda c: [c.px[y][x] for y in (30, 31) for x in range(32)],
+             WG.W: lambda c: [c.px[y][x] for y in range(32) for x in (0, 1)],
+             WG.E: lambda c: [c.px[y][x] for y in range(32) for x in (30, 31)]}
+    sets = sorted({k.rsplit(".", 1)[0] for k in cv if k.endswith(".15") and ".e" not in k and "water" not in k})
+    for p in sets:
+        for side, band in bands.items():
+            ref = {}
+            for n in range(16):
+                t = WG.types_of(n)[side]
+                b = band(cv[f"{p}.{n}"])
+                if t in ref and ref[t] != b:
+                    errors.append(f"{p}.{n} side {side} type {t}")
+                ref.setdefault(t, b)
+            for name, k in WG.MACROS.items():
+                for q in range(k * k):
+                    a, r = q % k, q // k
+                    outer = {WG.N: r == 0, WG.S: r == k - 1, WG.W: a == 0, WG.E: a == k - 1}[side]
+                    if outer and band(cv[f"{p}.{name}.{q}"]) != ref[0]:
+                        errors.append(f"{p}.{name}.{q} side {side}")
     return errors
 
 
@@ -150,6 +181,16 @@ def main():
         if k.split(".")[-1] in ("0", "m0") and ".e" not in k and "water" not in k:
             n, sd = stats(im)
             lines.append(f"  {final_name(k):<30} colours {n:2d}  spread {sd:4.1f}")
+    from measure_repeat import measure
+    from PIL import Image
+
+    imgs = dict(images)
+    for k in ("tile.metal", "tile.walltop", "tile.wood", "tile.dark", "tile.pit"):
+        imgs["v1:" + k] = Image.open(os.path.join(V1, k + ".png")).convert("RGBA")
+    lines += ["", "32-px repeat (the inspection's measure: mean |dL| at 32 px / at 24 px on 40x24 fields; target >= 0.8)"]
+    for season in (None, "autumn", "winter"):
+        res = measure(imgs, season, "gplmnsd=u" if season is None else "gplm")
+        lines.append(f"  {season or 'summer':<7} " + "  ".join(f"{k}:{r[2]:.2f}" for k, r in res.items()))
     with open(os.path.join(DOCS, "check.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     write_names(files, redrawn, new, copied, os.path.join(DOCS, "NAMES.md"))

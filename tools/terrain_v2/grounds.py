@@ -1,4 +1,5 @@
-"""Ground v2 tiles: per ground, 4 single variants (.0-.3) and one 2x2 macro piece (.m0 TL, .m1 TR,
+"""ROUND 1 (kept for reference; the files now come from wang.py, round 2 — this module still supplies
+GROUNDS / SEASONAL / AUTUMN_RAMP to gen_v2.py). Ground v2 tiles: per ground, 4 single variants (.0-.3) and one 2x2 macro piece (.m0 TL, .m1 TR,
 .m2 BL, .m3 BR). 8 tiles per ground.
 
 How the variants stay seamless with each other in ANY order: every tile of a ground is

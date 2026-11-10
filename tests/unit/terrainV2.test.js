@@ -19,7 +19,10 @@ const MASKS = range(14).map((i) => i + 1);
 /** [ground, season prefix] for every set */
 const SETS = [...Object.keys(PREFIX).map((g) => [g, '']), ...['autumn.', 'winter.'].flatMap((s) => SEASONAL.map((g) => [g, s]))];
 const base = (g, s) => `${s}${PREFIX[g]}${SINGLE.includes(g) ? '' : '.0'}`;
-const tiles = (g, s) => [base(g, s), ...[1, 2, 3].map((n) => `${s}${PREFIX[g]}.${n}`), ...range(4).map((q) => `${s}${PREFIX[g]}.macro.${q}`)];
+const single = (g, s, n) => (n === 0 ? base(g, s) : `${s}${PREFIX[g]}.${n}`);
+const MACROS = { macro: 2, macro2: 2, macro3: 3 };
+const macros = (g, s) => Object.entries(MACROS).flatMap(([m, k]) => range(k * k).map((q) => `${s}${PREFIX[g]}.${m}.${q}`));
+const tiles = (g, s) => [...range(16).map((n) => single(g, s, n)), ...macros(g, s)];
 const edges = (g, s) => MASKS.flatMap((m) => [0, 1].map((v) => `${s}${PREFIX[g]}.edge.${m}.${v}`));
 const GROUND_KEYS = SETS.flatMap(([g, s]) => tiles(g, s));
 const OVERLAY_KEYS = SETS.flatMap(([g, s]) => edges(g, s));
@@ -113,7 +116,7 @@ describe('ground v2 art', { timeout: 60000 }, () => {  // ~800 PNGs decoded: slo
     }
   });
 
-  it("every variant and macro piece shares the ground's 2-px edge band (they join in any order)", () => {
+  it('edge-matched tiles: every tile with the same edge type on a side shows the same 2-px band there; macros show type 0 outside', () => {
     const band = (t, side) => {
       const pts = [];
       for (let k = 0; k < 32; k++) {
@@ -126,14 +129,24 @@ describe('ground v2 art', { timeout: 60000 }, () => {  // ~800 PNGs decoded: slo
       }
       return pts.join('|');
     };
-    const outer = [['top', 'left'], ['top', 'right'], ['bottom', 'left'], ['bottom', 'right']];
+    const SIDE = { top: 1, right: 2, bottom: 4, left: 8 }; // tile index n = N + 2E + 4S + 8W
     for (const [g, s] of SETS) {
-      const [b, ...rest] = tiles(g, s);
-      const ref = png(b);
-      rest.forEach((k, i) => {
-        const sides = i < 3 ? ['top', 'bottom', 'left', 'right'] : outer[i - 3];
-        for (const side of sides) expect(band(png(k), side), `${k} ${side}`).toBe(band(ref, side));
-      });
+      for (const [side, bit] of Object.entries(SIDE)) {
+        const ref = {};
+        for (const n of range(16)) {
+          const t = n & bit ? 1 : 0;
+          const b = band(png(single(g, s, n)), side);
+          if (t in ref) expect(b, `${single(g, s, n)} ${side} type ${t}`).toBe(ref[t]);
+          else ref[t] = b;
+        }
+        for (const [m, k] of Object.entries(MACROS)) {
+          for (const q of range(k * k)) {
+            const [a, r] = [q % k, Math.floor(q / k)];
+            const outer = { top: r === 0, bottom: r === k - 1, left: a === 0, right: a === k - 1 }[side];
+            if (outer) expect(band(png(`${s}${PREFIX[g]}.${m}.${q}`), side), `${s}${PREFIX[g]}.${m}.${q} ${side}`).toBe(ref[0]);
+          }
+        }
+      }
     }
   });
 
@@ -184,6 +197,18 @@ describe('ground v2 art', { timeout: 60000 }, () => {  // ~800 PNGs decoded: slo
         for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) if (a.px(x, y).join() !== b.px(x, y).join()) n++;
         expect(n, `${p} ${f}->${(f + 1) % 4}`).toBeGreaterThanOrEqual(12);
         expect(n, `${p} ${f}->${(f + 1) % 4}`).toBeLessThanOrEqual(30);
+      }
+    }
+  });
+
+  it('foam overlays change at most 40 px from frame to frame', () => {
+    for (const m of MASKS) {
+      for (const f of range(4)) {
+        const a = png(`tile.water.foam.${m}.${f}`);
+        const b = png(`tile.water.foam.${m}.${(f + 1) % 4}`);
+        let n = 0;
+        for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) if (a.px(x, y).join() !== b.px(x, y).join()) n++;
+        expect(n, `foam ${m} ${f}`).toBeLessThanOrEqual(40);
       }
     }
   });
