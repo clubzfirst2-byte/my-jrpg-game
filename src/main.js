@@ -23,7 +23,7 @@ import { testHeroFrames } from './debug/testHero.js';
 import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
 import { availableV1Groups, availableV2Groups, prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
 import { resolveArtGroups } from './view/assets/artV2.js';
-import { GROUND_RUIN_BUNDLE, TERRAIN_GROUP, releaseTerrainEntries, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
+import { GROUND_RUIN_BUNDLE, TERRAIN_GROUP, releaseTerrainEntries, v2BundleParts, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
 import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
@@ -189,7 +189,14 @@ async function boot() {
     }),
   );
   // P8: each region's art is its own bundle, loaded by the view near the region.
-  for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name, artOverrides));
+  // gfx W1: with the v2 ground, a region's own ground is apart (its calm tiles and edges in
+  // "ground:<region>", its pictures in "pictures:<region>"), and so is each seasonal ground's autumn /
+  // winter art ("season:<season>:<ground>"): terrainArt.v2BundleParts. (REGION_ENTRIES holds the seasons too.)
+  for (const name of Object.keys(REGION_ENTRIES)) {
+    const parts = groundV2Entries.length > 0 ? v2BundleParts(name) : null;
+    if (!parts) assets.register(name, () => buildRegionPack(name, artOverrides));
+    else for (const [part, keep] of parts) assets.register(part, () => buildRegionPack(name, artOverrides, (e) => keep(e.key)));
+  }
   // v1.0: the final boss's art (loaded by the view only near its arena).
   // gfx W1 round 3: the ruin floor's edges over water, loaded with the chunks where the ruin floor meets water
   const ruinV2Entries = releaseTerrainEntries(GROUND_RUIN_BUNDLE, artOverrides);

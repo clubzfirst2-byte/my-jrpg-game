@@ -35,7 +35,7 @@ export function wantsTerrainArt(params, releaseHero) {
 }
 
 /** Region grounds: <region>.<ground>.<variant> (gameView.surfaceKey). */
-const REGION_GROUND = /^(desert\.sand|plains\.grass|forest\.grass|mountains\.snow|lake\.grass)\.(?:\d+|macro[23]?\.\d|edge\.\d+\.\d)$/;
+const REGION_GROUND = /^(desert\.sand|plains\.grass|forest\.grass|mountains\.snow|lake\.grass)\.(?:\d+|macro[2-8]?\.\d|edge\.\d+\.\d)$/;
 
 /** The nature objects drawn by the terrain art (the other obj.* keys are the objects art's). */
 export const TERRAIN_OBJECTS = Object.freeze(['obj.tree', 'obj.rock', 'obj.bramble', 'obj.stump', 'obj.cactus', 'forest.pine', 'mountains.pine']);
@@ -163,6 +163,78 @@ const V11_KEYS = /** @type {[RegExp, string][]} */ ([
   [new RegExp(`^autumn\\.(?:tile\\.grass\\.(?:[3-9]|\\d\\d)|(?:plains|lake|forest)\\.grass\\.(?:[4-9]|\\d\\d)|(?:tile|plains|lake|forest)\\.grass\\.${V2_PIECE})$`), 'season:autumn'],
   [new RegExp(`^winter\\.(?:tile\\.grass\\.(?:[3-9]|\\d\\d)|(?:plains|lake|forest)\\.grass\\.(?:[4-9]|\\d\\d)|(?:tile|plains|lake|forest)\\.grass\\.${V2_PIECE})$`), 'season:winter'],
 ]);
+
+/**
+ * gfx W1: with the v2 ground, each region's own ground (its grass, moss, snow or desert sand, the v1
+ * keys too) is apart from the rest of the region's art, in 2 bundles: "ground:<region>" (its 16 calm
+ * tiles and its edges, 256 × 256) and "pictures:<region>" (its 8 pictures' pieces, 256 × 256). A chunk
+ * of the region loads both; a chunk whose display tiles reach one cell into the region loads only its
+ * ground (no picture can lie there: a picture covers a cell of the chunk drawing it). The region's own
+ * atlas keeps its v1 size (gameView.chunkBundles).
+ */
+export const REGION_GROUND_PREFIX = Object.freeze({
+  'region:plains': 'plains.grass',
+  'region:lake': 'lake.grass',
+  'region:forest': 'forest.grass',
+  'region:mountains': 'mountains.snow',
+  'region:desert': 'desert.sand',
+});
+
+/** The ground bundle of a region bundle ("region:plains" → "ground:plains"), or null. @param {string} region */
+export const groundBundleOf = (region) => (region in REGION_GROUND_PREFIX ? `ground:${region.slice('region:'.length)}` : null);
+
+/** The pictures bundle of a region bundle ("region:plains" → "pictures:plains"), or null. @param {string} region */
+export const picturesBundleOf = (region) => (region in REGION_GROUND_PREFIX ? `pictures:${region.slice('region:'.length)}` : null);
+
+/**
+ * Which part of a region's own ground a key is: "pictures" (<prefix>.macro….<q>), "ground" (its other
+ * keys), or null (the rest of the region's art). @param {string} region @param {string} key
+ * @returns {'ground' | 'pictures' | null}
+ */
+export function regionGroundPart(region, key) {
+  const p = /** @type {Record<string, string>} */ (REGION_GROUND_PREFIX)[region];
+  if (!p || (key !== p && !key.startsWith(`${p}.`))) return null;
+  return /^macro\d?\./.test(key.slice(p.length + 1)) ? 'pictures' : 'ground';
+}
+
+/**
+ * gfx W1 round 6: with the v2 ground, the autumn / winter art of the 4 seasonal grounds (their 32 calm
+ * tiles, pictures and edges, 512 × 256 each) is apart from the rest of the season's art, one bundle per
+ * ground: "season:<season>:<ground>", loaded only by the chunks that have that ground (gameView.chunkBundles).
+ */
+export const SEASON_GROUND_PREFIX = Object.freeze({ grass: 'tile.grass', plains: 'plains.grass', lake: 'lake.grass', moss: 'forest.grass' });
+
+/** The bundle of a seasonal ground's art in a season bundle ("season:winter", "plains" → "season:winter:plains"). @param {string} season @param {string} cls */
+export const seasonGroundBundleOf = (season, cls) => `${season}:${cls}`;
+
+/** Which seasonal ground a key of a season's art belongs to ("winter.plains.grass.7" → "plains"), or null. @param {string} season e.g. "winter" @param {string} key */
+export function seasonGroundOf(season, key) {
+  for (const [cls, p] of Object.entries(SEASON_GROUND_PREFIX)) {
+    const q = `${season}.${p}`;
+    if (key === q || key.startsWith(`${q}.`)) return cls;
+  }
+  return null;
+}
+
+/**
+ * gfx W1: with the v2 ground, the bundles a region or season bundle is registered as — [name, keep a
+ * key?] — or null when it stays whole: a region as itself, "ground:" and "pictures:"; autumn / winter as
+ * themselves and one bundle per seasonal ground. @param {string} name @returns {[string, (key: string) => boolean][] | null}
+ */
+export function v2BundleParts(name) {
+  const ground = groundBundleOf(name);
+  const pictures = picturesBundleOf(name);
+  if (ground && pictures) {
+    return [
+      [name, (k) => regionGroundPart(name, k) === null],
+      [ground, (k) => regionGroundPart(name, k) === 'ground'],
+      [pictures, (k) => regionGroundPart(name, k) === 'pictures'],
+    ];
+  }
+  const season = /^season:(autumn|winter)$/.exec(name)?.[1];
+  if (!season) return null;
+  return [[name, (k) => seasonGroundOf(season, k) === null], ...Object.keys(SEASON_GROUND_PREFIX).map((cls) => /** @type {[string, (key: string) => boolean]} */ ([seasonGroundBundleOf(name, cls), (k) => seasonGroundOf(season, k) === cls]))];
+}
 
 /** gfx W1 round 3: the bundle of the ruin floor's edges over water, loaded with the chunks where the ruin floor meets water (gameView.chunkBundles). */
 export const GROUND_RUIN_BUNDLE = 'common:ruin';

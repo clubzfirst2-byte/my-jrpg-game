@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { GameView } from '../../src/view/gameView.js';
 import { Ground, Shape } from '../../src/game/world/tilemap.js';
-import { PREFIX, displayLayers, landKey, CORNERS } from '../../src/view/groundV2.js';
+import { PREFIX, displayLayers, landKey, CORNERS, calmNumber } from '../../src/view/groundV2.js';
 import { readdirSync } from 'node:fs';
 
 // gfx W1 rounds 2-5: the view's choice of ground tiles and pictures (GameView.wangAt / macroAt /
@@ -76,7 +76,7 @@ describe('ground v2 rounds 2-5: the view picks the tiles the reference renderer 
     for (const [id, names] of byBlock) expect(names.map((n) => n.split('.')[1]).sort(), id).toEqual(['0', '1', '2', '3']);
   });
 
-  it('every flat land display tile: a calm tile hash(i + 3, j + 11) % 16, or the ruin floor\'s row / column tile', () => {
+  it('every flat land display tile: its calm tile (calmNumber), or the ruin floor\'s row / column tile', () => {
     for (const season of [null, 'autumn', 'winter']) {
       const v = view(rows, { season });
       for (let j = 0; j < H - 1; j++) {
@@ -85,7 +85,7 @@ describe('ground v2 rounds 2-5: the view picks the tiles the reference renderer 
           if (!low) continue;
           const n = v.wangAt(i, j, low);
           if (low === 'ruin') expect(Math.floor(n / 6)).toBe((32 * j) % 11);
-          else expect(n, `${season} ${low} ${i},${j}`).toBe(dhash(i + 3, j + 11) % 16);
+          else expect(n, `${season} ${low} ${i},${j}`).toBe(calmNumber(i, j, dhash));
         }
       }
     }
@@ -156,11 +156,11 @@ describe('ground v2 rounds 2-5: the view picks the tiles the reference renderer 
     for (let j = 11; j <= 20; j++) for (let i = 1; i <= 9; i++) if (j <= 19 || i === 4 || i === 5) expect(v.lowestLand(i, j), `${i},${j}`).toBeNull();
     for (let j = 9; j <= 21; j++) for (let i = 0; i <= 11; i++) if (v.macroAt(i, j)) expect(v.uniformBlock(...v.macroAt(i, j).block.split(',').map(Number), 2), `${i},${j}`).toBe('grass');
     // a raised grass block (A): calm tiles by hash, as a display tile's
-    for (let y = 12; y <= 19; y++) for (let x = 2; x <= 9; x++) expect(v.cellWang(x, y, 'grass')).toBe(dhash(x + 3, y + 11) % 16);
+    for (let y = 12; y <= 19; y++) for (let x = 2; x <= 9; x++) expect(v.cellWang(x, y, 'grass')).toBe(calmNumber(x, y, dhash));
     // a raised sand block (A): calm tiles; a raised ruin block (C): one row phase per row
     for (let y = 14; y <= 17; y++) {
       for (let x = 32; x <= 35; x++) {
-        expect(v.cellWang(x, y, 'sand')).toBe(dhash(x + 3, y + 11) % 16);
+        expect(v.cellWang(x, y, 'sand')).toBe(calmNumber(x, y, dhash));
         expect(ART.has(landKey('sand', String(v.cellWang(x, y, 'sand'))))).toBe(true);
       }
     }

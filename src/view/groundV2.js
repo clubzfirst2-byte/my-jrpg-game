@@ -168,11 +168,12 @@ export function displayLayers({ cls, deep, waterVariant, edgeVariant, pick, macr
  */
 export const quarterOfCorner = (k) => /** @type {const} */ (['se', 'sw', 'ne', 'nw'])[k];
 
-// --- Rounds 2-5 (NAMES.md section 1): the tile of a display tile, picked in one of 2 ways ---
-//   A  (round 5) every ground but the ruin floor (island / plains / lake grass, moss, path, mountain snow,
-//      island sand, desert sand; and the autumn / winter sets of the 4 seasonal grounds, their season's
-//      keys): 8 pictures of 2×2 tiles, at most one per block of 3×3 display tiles (macroPlacement), and
-//      elsewhere one of 16 calm tiles by hash (calmTile); nothing crosses their edges
+// --- Rounds 2-6 (NAMES.md section 1): the tile of a display tile, picked in one of 2 ways ---
+//   A  (rounds 5-6) every ground but the ruin floor (island / plains / lake grass, moss, path, mountain
+//      snow, island sand, desert sand; and the autumn / winter sets of the 4 seasonal grounds, their
+//      season's keys): 8 pictures of 2×2 tiles, at most one per block of 3×3 display tiles
+//      (macroPlacement), and elsewhere one of 32 calm tiles, light (0-15) or dark (16-31) by a noise,
+//      never the same as a neighbour's (calmNumber); nothing crosses their edges
 //   C  ruin floor: 66 tiles, stone courses 11 art px high across the whole map: the row phase R of the
 //      tile's row and the symbols (0-2) of its column's two edges, n = 6R + 2W + (E if E < W else E - 1);
 //      its overlay over water is edge.<mask>.<R>; no pictures
@@ -187,10 +188,78 @@ export const MACRO_NAMES = Object.freeze(['macro', 'macro2', 'macro3', 'macro4',
 export const tileScheme = (cls) => (cls === 'ruin' ? 'C' : 'A');
 
 /** How many tiles a ground has (names "0" .. count - 1). @param {string} cls */
-export const tileCount = (cls) => (tileScheme(cls) === 'C' ? 66 : 16);
+export const tileCount = (cls) => (tileScheme(cls) === 'C' ? 66 : 32);
 
-/** A: the calm tile of display tile (i, j): hash(i + 3, j + 11) % 16. @param {number} i @param {number} j @param {(a: number, b: number) => number} hash */
-export const calmTile = (i, j, hash) => hash(i + 3, j + 11) % 16;
+/** @typedef {(a: number, b: number) => number} Hash */
+
+/** Python's floor modulo (the reference's % on negative numbers). @param {number} a @param {number} n */
+const pmod = (a, n) => ((a % n) + n) % n;
+
+/**
+ * NAMES.md 1 A: a value noise in [0, 1], lattice values (hash(gx + sx0, gy + sy0) % 1024) / 1023 every
+ * `cell` units, smoothstep-blended (render_ref._smooth_noise).
+ * @param {number} x @param {number} y @param {number} cell @param {number} sx0 @param {number} sy0 @param {Hash} hash
+ */
+export function smoothNoise(x, y, cell, sx0, sy0, hash) {
+  const gx = Math.floor(x / cell);
+  const gy = Math.floor(y / cell);
+  const fx = (pmod(x, cell) + 0.5) / cell;
+  const fy = (pmod(y, cell) + 0.5) / cell;
+  const v = (/** @type {number} */ p, /** @type {number} */ q) => (hash(p + sx0, q + sy0) % 1024) / 1023;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const top = v(gx, gy) + (v(gx + 1, gy) - v(gx, gy)) * sx;
+  const bot = v(gx, gy + 1) + (v(gx + 1, gy + 1) - v(gx, gy + 1)) * sx;
+  return top + (bot - top) * sy;
+}
+
+/** The neighbours a cell of class (x % 2, y % 2) avoids (steps 4 and 6): B (1, 0) its 2 side ones, C (0, 1) 6, D (1, 1) all 8; A none. @param {number} x @param {number} y @returns {[number, number][]} */
+function avoided(x, y) {
+  const cx = pmod(x, 2);
+  const cy = pmod(y, 2);
+  if (cx === 0 && cy === 0) return [];
+  if (cx === 1 && cy === 0) return [[x - 1, y], [x + 1, y]];
+  if (cx === 0) return [[x, y - 1], [x, y + 1], [x - 1, y - 1], [x + 1, y - 1], [x - 1, y + 1], [x + 1, y + 1]];
+  /** @type {[number, number][]} */
+  const out = [];
+  for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (dx || dy) out.push([x + dx, y + dy]);
+  return out;
+}
+
+/** A step 6: the calm tiles' group of display tile (i, j): 0 light (0-15), 1 dark (16-31), by a noise of 6-tile cells. @param {number} i @param {number} j @param {Hash} hash */
+export function calmGroup(i, j, hash) {
+  const n = smoothNoise(i, j, 6, 12011, 3407, hash);
+  const q = Math.min(1, Math.max(0, 0.8 * (n - 0.5) + 0.5));
+  return (hash(i + 71, j + 113) % 1024) / 1024 < q ? 1 : 0;
+}
+
+/**
+ * A step 6: the calm tile (0-31) of display tile (i, j) — or of a cell drawn on the cell grid, by the same
+ * rule over cells: its group's raw number, or (classes B, C, D by (i % 2, j % 2)) the k-th number of
+ * its group none of the neighbours it avoids has. The neighbours' numbers come first, so a memo is
+ * passed: one per chunk build (gameView.groundPiecesV2), never kept per frame.
+ * @param {number} i @param {number} j @param {Hash} hash @param {Map<number, number>} [memo] keyed by calmKey
+ */
+export function calmNumber(i, j, hash, memo = new Map()) {
+  const key = calmKey(i, j);
+  const known = memo.get(key);
+  if (known !== undefined) return known;
+  const h = hash(i + 3, j + 11);
+  const g = calmGroup(i, j, hash);
+  let n = 16 * g + (h % 16);
+  const nb = avoided(i, j);
+  if (nb.length) {
+    const taken = new Set(nb.map(([x, y]) => calmNumber(x, y, hash, memo)));
+    const free = [];
+    for (let k = 0; k < 16; k++) if (!taken.has(16 * g + k)) free.push(16 * g + k);
+    n = free[(h >>> 4) % free.length];
+  }
+  memo.set(key, n);
+  return n;
+}
+
+/** A memo key for (i, j) (|i|, |j| < 2^15). @param {number} i @param {number} j */
+const calmKey = (i, j) => (i + 32768) * 65536 + (j + 32768);
 
 /** C: the row phase of display-tile row j: (32·j) mod 11. @param {number} j */
 export const ruinRow = (j) => (((10 * j) % 11) + 11) % 11;
@@ -233,8 +302,6 @@ const OFF = Object.freeze([0, 0, 1, 2, 2, 2]);
 /** A step 2: blocks per cell of the density noise. */
 const NOISE_CELL = 4;
 
-/** @typedef {(a: number, b: number) => number} Hash */
-
 /** A step 3: the raw offsets of block (a, b). @param {number} a @param {number} b @param {Hash} hash @returns {[number, number]} */
 export function rawOffsets(a, b, hash) {
   const h = hash(a, b);
@@ -258,18 +325,7 @@ export function blockOffsets(a, b, hash) {
 }
 
 /** A step 2: the density noise of block (a, b), 0..1 (value noise on a lattice of 4 blocks, smoothstep-blended). @param {number} a @param {number} b @param {Hash} hash */
-export function blockDensity(a, b, hash) {
-  const gx = Math.floor(a / NOISE_CELL);
-  const gy = Math.floor(b / NOISE_CELL);
-  const fx = ((((a % NOISE_CELL) + NOISE_CELL) % NOISE_CELL) + 0.5) / NOISE_CELL;
-  const fy = ((((b % NOISE_CELL) + NOISE_CELL) % NOISE_CELL) + 0.5) / NOISE_CELL;
-  const v = (/** @type {number} */ x, /** @type {number} */ y) => (hash(x + 5003, y + 7919) % 1024) / 1023;
-  const sx = fx * fx * (3 - 2 * fx);
-  const sy = fy * fy * (3 - 2 * fy);
-  const top = v(gx, gy) + (v(gx + 1, gy) - v(gx, gy)) * sx;
-  const bot = v(gx, gy + 1) + (v(gx + 1, gy + 1) - v(gx, gy + 1)) * sx;
-  return top + (bot - top) * sy;
-}
+export const blockDensity = (a, b, hash) => smoothNoise(a, b, NOISE_CELL, 5003, 7919, hash);
 
 /** A step 2: whether block (a, b) has a picture: ((h >> 16) % 1024) / 1024 >= pNone. @param {number} a @param {number} b @param {Hash} hash */
 export function blockHasPicture(a, b, hash) {
@@ -277,16 +333,31 @@ export function blockHasPicture(a, b, hash) {
   return ((hash(a, b) >>> 16) % 1024) / 1024 >= pNone;
 }
 
-/** A step 4: the raw picture number of block (a, b). @param {number} a @param {number} b @param {Hash} hash */
-const rawPicture = (a, b, hash) => hash(a + 409, b + 1031) % 8;
-
-/** A step 4: the picture number (0-7) of block (a, b); no two side-by-side blocks share one. @param {number} a @param {number} b @param {Hash} hash */
-export function blockPicture(a, b, hash) {
-  const r = rawPicture(a, b, hash);
-  if ((((a + b) % 2) + 2) % 2 === 0) return r;
-  const taken = new Set([rawPicture(a - 1, b, hash), rawPicture(a + 1, b, hash), rawPicture(a, b - 1, hash), rawPicture(a, b + 1, hash)]);
-  const free = [0, 1, 2, 3, 4, 5, 6, 7].filter((m) => !taken.has(m));
-  return free[Math.floor(hash(a + 409, b + 1031) / 8) % free.length];
+/**
+ * A step 4 (round 6): the picture number (0-7) of block (a, b): no block shares it with any of its 8
+ * neighbours where it can be helped. Classes by (a % 2, b % 2) as the calm tiles (avoided): A its raw
+ * number hash(a + 409, b + 1031) % 8; B, C, D the k-th number none of their avoided neighbours has
+ * (D: if none is left, only its 4 side neighbours), k = floor(hash(a + 409, b + 1031) / 8).
+ * @param {number} a @param {number} b @param {Hash} hash @param {Map<number, number>} [memo] keyed by calmKey
+ */
+export function blockPicture(a, b, hash, memo = new Map()) {
+  const key = calmKey(a, b);
+  const known = memo.get(key);
+  if (known !== undefined) return known;
+  const h = hash(a + 409, b + 1031);
+  let m = h % 8;
+  const nb = avoided(a, b);
+  if (nb.length) {
+    const freeOf = (/** @type {[number, number][]} */ list) => {
+      const taken = new Set(list.map(([x, y]) => blockPicture(x, y, hash, memo)));
+      return [0, 1, 2, 3, 4, 5, 6, 7].filter((k) => !taken.has(k));
+    };
+    let free = freeOf(nb);
+    if (!free.length) free = freeOf([[a - 1, b], [a + 1, b], [a, b - 1], [a, b + 1]]);
+    m = free[Math.floor(h / 8) % free.length];
+  }
+  memo.set(key, m);
+  return m;
 }
 
 /**
@@ -297,11 +368,12 @@ export function blockPicture(a, b, hash) {
  * j0 + 2 < height) and the 9 map cells under it (i0 … i0+2, j0 … j0+2) are one flat ground with
  * pictures (MACRO_GROUNDS). Its 4 display tiles are "<name>.<q>", q = 0 NW, 1 NE, 2 SW, 3 SE.
  * @param {number} i @param {number} j
- * @param {{ uniformBlock: (i: number, j: number, k: number) => string | null, hash: Hash, width: number, height: number }} ctx
- *   uniformBlock(i, j, k): the one flat land ground of the (k+1)×(k+1) cells from (i, j), or null; width / height: the map's, in cells
+ * @param {{ uniformBlock: (i: number, j: number, k: number) => string | null, hash: Hash, width: number, height: number, pictures?: Map<number, number> }} ctx
+ *   uniformBlock(i, j, k): the one flat land ground of the (k+1)×(k+1) cells from (i, j), or null; width / height: the map's, in cells;
+ *   pictures: a memo of the blocks' picture numbers (blockPicture)
  * @returns {{ name: string, block: string } | null} name: "<picture>.<q>"; block: the picture's NW tile "i0,j0"
  */
-export function macroPlacement(i, j, { uniformBlock, hash, width, height }) {
+export function macroPlacement(i, j, { uniformBlock, hash, width, height, pictures }) {
   const A = Math.floor(i / 3);
   const B = Math.floor(j / 3);
   for (const [a, b] of [[A, B], [A - 1, B], [A, B - 1], [A - 1, B - 1]]) {
@@ -313,7 +385,7 @@ export function macroPlacement(i, j, { uniformBlock, hash, width, height }) {
     if (!blockHasPicture(a, b, hash) || i0 + 2 >= width || j0 + 2 >= height) continue;
     const g = uniformBlock(i0, j0, 2);
     if (g === null || !MACRO_GROUNDS.includes(g)) continue;
-    return { name: `${MACRO_NAMES[blockPicture(a, b, hash)]}.${i - i0 + (j - j0) * 2}`, block: `${i0},${j0}` };
+    return { name: `${MACRO_NAMES[blockPicture(a, b, hash, pictures)]}.${i - i0 + (j - j0) * 2}`, block: `${i0},${j0}` };
   }
   return null;
 }

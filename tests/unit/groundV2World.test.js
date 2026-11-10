@@ -6,7 +6,7 @@ import { Ground } from '../../src/game/world/tilemap.js';
 import { regionAt } from '../../src/game/world/world.js';
 import { inSeason } from '../../src/game/env/weather.js';
 import { REGION_ENTRIES, SEASON_ENTRIES, placeholderEntries } from '../../src/view/assets/placeholderPack.js';
-import { GROUND_RUIN_BUNDLE, releaseTerrainEntries } from '../../src/view/assets/terrainArt.js';
+import { GROUND_RUIN_BUNDLE, releaseTerrainEntries, v2BundleParts } from '../../src/view/assets/terrainArt.js';
 import { MACRO_GROUNDS, MACRO_NAMES, macroPlacement, tileScheme } from '../../src/view/groundV2.js';
 
 // gfx W1 round 3: the whole world map, chunk by chunk, through the same code that draws the v2 ground
@@ -20,14 +20,20 @@ const keysOf = (/** @type {{ key: string }[]} */ es) => es.map((e) => e.key);
 const BASE = new Set([...keysOf(placeholderEntries()), ...keysOf(releaseTerrainEntries('placeholder', overrides)), ...keysOf(releaseTerrainEntries('common:ground', overrides))]);
 const BUNDLE = new Map([
   [GROUND_RUIN_BUNDLE, new Set(keysOf(releaseTerrainEntries(GROUND_RUIN_BUNDLE, overrides)))],
-  ...Object.entries({ ...REGION_ENTRIES, ...SEASON_ENTRIES }).map(([n, make]) => [n, new Set([...keysOf(make()), ...keysOf(releaseTerrainEntries(n, overrides))])]),
+  // (with the v2 ground, as main.js registers them: a region's own ground and pictures, and each seasonal
+  // ground's autumn / winter art, are bundles of their own — terrainArt.v2BundleParts)
+  ...Object.entries({ ...REGION_ENTRIES, ...SEASON_ENTRIES }).flatMap(([n, make]) => {
+    const all = [...keysOf(make()), ...keysOf(releaseTerrainEntries(n, overrides))];
+    const parts = v2BundleParts(n);
+    return parts ? parts.map(([part, keep]) => [part, new Set(all.filter(keep))]) : [[n, new Set(all)]];
+  }),
 ]);
 
 /** A view of the world with only what the ground needs (no renderer), the v2 art "loaded". */
 function worldView() {
   const state = createGameState(MAPS.world);
   const v = Object.create(GameView.prototype);
-  const assets = { hasTexture: (k) => ART.has(k), isLoaded: () => true, load: async () => {}, unload: () => {}, builders: new Map([[GROUND_RUIN_BUNDLE, () => null]]), version: 0 };
+  const assets = { hasTexture: (k) => ART.has(k), isLoaded: () => true, load: async () => {}, unload: () => {}, builders: new Map([...BUNDLE.keys()].map((n) => [n, () => null])), version: 0 };
   Object.assign(v, {
     map: state.map,
     regions: state.regions,
@@ -89,6 +95,16 @@ describe('ground v2 on the world map: no key is ever missing', () => {
       }
       expect([...missing]).toEqual([]);
       expect([...unloaded]).toEqual([]);
+      // a border loads the neighbour's ground, not all of its art: the mountains' south row of chunks (y 64-95) meets the forest at y = 96
+      const border = v.chunkBundles(5, 2);
+      expect(border).toEqual(expect.arrayContaining(['region:mountains', 'ground:mountains', 'pictures:mountains', 'ground:forest']));
+      expect(border).not.toContain('region:forest');
+      expect(border).not.toContain('pictures:forest');
+      // a season's ground art only where that ground is: none in the mountains' heart (snow has no seasons), the plains' in the plains
+      if (season !== 'summer') {
+        expect(v.chunkBundles(5, 1).filter((b) => b.startsWith(`season:${season}:`))).toEqual([]);
+        expect(v.chunkBundles(1, 3)).toContain(`season:${season}:plains`);
+      }
       expect([...v.v2Missing]).toEqual([]);
       // the walk covers every way of picking a tile
       const any = (re) => [...drawn].some((k) => re.test(k));
@@ -100,9 +116,9 @@ describe('ground v2 on the world map: no key is ever missing', () => {
       expect(any(/^tile\.sand\.macro\d?\.\d$/)).toBe(true);
       expect(any(/^mountains\.snow\.(?:1[0-5]|[1-9])$/)).toBe(true);
       expect(any(/^mountains\.snow\.macro\d?\.\d$/)).toBe(true);
-      // rounds 4-5: no 3×3 piece and no 64 snow / sand tiles any more
+      // rounds 4-6: no 3×3 piece, 32 calm tiles (no 64 snow / sand tiles any more)
       expect(any(/\.macro3\.[4-8]$/)).toBe(false);
-      expect(any(/^(?:winter\.(?:tile|plains|lake|forest)\.grass|mountains\.snow|tile\.sand|desert\.sand)\.(?:1[6-9]|[2-9]\d)$/)).toBe(false);
+      expect(any(/^(?:winter\.(?:tile|plains|lake|forest)\.grass|mountains\.snow|tile\.sand|desert\.sand)\.(?:3[2-9]|[4-9]\d)$/)).toBe(false);
       expect(any(/^tile\.water\.foam\./)).toBe(true);
       // the seasonal grounds: their season's calm tiles and pictures (all 8)
       const p = season === 'summer' ? '' : `${season}\\.`;

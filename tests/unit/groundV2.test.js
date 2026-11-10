@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
-import { PRIORITY, PREFIX, SEASONAL, MACRO_GROUNDS, MACRO_NAMES, CORNERS, deepMap, displayLayers, groundClass, landKey, quarterOfCorner, WATER_FRAMES, ruinRow, ruinSymbol, ruinIndex, ruinTile, ruinCellTile, edgeVariantOf, tileScheme, tileCount, calmTile } from '../../src/view/groundV2.js';
+import { PRIORITY, PREFIX, SEASONAL, MACRO_GROUNDS, MACRO_NAMES, CORNERS, deepMap, displayLayers, groundClass, landKey, quarterOfCorner, WATER_FRAMES, ruinRow, ruinSymbol, ruinIndex, ruinTile, ruinCellTile, edgeVariantOf, tileScheme, tileCount, calmNumber, calmGroup } from '../../src/view/groundV2.js';
 
 vi.mock('pixi.js', () => ({ Rectangle: class {}, Texture: class {} }));
 const { REGION_ENTRIES, SEASON_ENTRIES, placeholderEntries, releaseHeroEntries, releaseNpcEntries, releaseEnemyEntries, atlasSizeFor, tallestFirstOrder, mustKeepSize, ART_SCALE } = await import('../../src/view/assets/placeholderPack.js');
-const { releaseTerrainEntries, GROUND_RUIN_BUNDLE } = await import('../../src/view/assets/terrainArt.js');
+const { releaseTerrainEntries, GROUND_RUIN_BUNDLE, v2BundleParts } = await import('../../src/view/assets/terrainArt.js');
 
 // gfx W1: ground v2 on the dual grid (src/view/groundV2.js), per docs/art-release-v2/terrain/NAMES.md
 // and tools/terrain_v2/render_ref.py.
@@ -46,7 +46,7 @@ describe('ground v2: classes, keys, priority', () => {
     return names;
   };
 
-  it('every land key the engine can name exists in the v2 art: 16 tiles (ruin 66), 8 pictures × 4 (A only), 14 masks × 2 (ruin × 11 rows)', () => {
+  it('every land key the engine can name exists in the v2 art: 32 calm tiles (ruin 66), 8 pictures × 4 (A only), 14 masks × 2 (ruin × 11 rows)', () => {
     let n = 0;
     for (const cls of Object.keys(PREFIX)) {
       for (const name of namesOf(cls)) {
@@ -57,25 +57,25 @@ describe('ground v2: classes, keys, priority', () => {
     expect(landKey('sand', '0')).toBe('tile.sand');
     expect(landKey('ruin', '65')).toBe('tile.ruin.65');
     expect(landKey('dsand', '0')).toBe('desert.sand.0');
-    expect(tileCount('grass') + tileCount('sand') + tileCount('ruin')).toBe(16 + 16 + 66);
-    // round 5 removed the 64 sand tiles
-    expect(has('tile.sand.16') || has('desert.sand.16')).toBe(false);
-    // 8 A grounds × (16 + 32 + 28) + the ruin floor 66 + 154
-    expect(n).toBe(8 * 76 + 220);
+    expect(tileCount('grass') + tileCount('sand') + tileCount('ruin')).toBe(32 + 32 + 66);
+    // round 5 removed the 64 sand tiles, round 6 brought 32 calm tiles
+    expect(has('tile.sand.31') && !has('tile.sand.32') && !has('desert.sand.32')).toBe(true);
+    // 8 A grounds × (32 + 32 + 28) + the ruin floor 66 + 154
+    expect(n).toBe(8 * 92 + 220);
     for (const f of range(WATER_FRAMES)) {
       for (const k of ['tile.water', 'tile.water.v1', 'tile.water.deep', 'tile.water.deep.v1']) expect(has(`${k}.${f}`), `${k}.${f}`).toBe(true);
       for (let m = 1; m <= 14; m++) expect(has(`tile.water.deep.edge.${m}.${f}`) && has(`tile.water.foam.${m}.${f}`)).toBe(true);
     }
   });
 
-  it('the seasons: autumn and winter have every key of the 4 seasonal grounds (16 calm tiles + 8 pictures + edges)', () => {
+  it('the seasons: autumn and winter have every key of the 4 seasonal grounds (32 calm tiles + 8 pictures + edges)', () => {
     for (const season of ['autumn', 'winter']) {
       for (const cls of SEASONAL) for (const name of namesOf(cls)) expect(has(`${season}.${landKey(cls, name)}`), `${season}.${landKey(cls, name)}`).toBe(true);
     }
-    expect(namesOf('grass').length).toBe(16 + 32 + 28);
-    // round 4 removed the 64 snow tiles of winter and the 3×3 macro3
-    expect(has('winter.tile.grass.16')).toBe(false);
-    expect(has('mountains.snow.16')).toBe(false);
+    expect(namesOf('grass').length).toBe(32 + 32 + 28);
+    // round 4 removed the 64 snow tiles of winter and the 3×3 macro3 (round 6: 32 calm tiles)
+    expect(has('winter.tile.grass.31') && !has('winter.tile.grass.32')).toBe(true);
+    expect(has('mountains.snow.32')).toBe(false);
     expect(has('tile.grass.macro3.4')).toBe(false);
     expect(has('winter.tile.grass.macro8.3')).toBe(true);
   });
@@ -166,11 +166,28 @@ describe('ground v2 rounds 2-5: the 2 ways of picking a tile', () => {
     expect(MACRO_NAMES).toEqual(['macro', 'macro2', 'macro3', 'macro4', 'macro5', 'macro6', 'macro7', 'macro8']);
   });
 
-  it('A: the calm tile is hash(i + 3, j + 11) % 16, all 16 used', () => {
-    expect(calmTile(5, 7, hash)).toBe(hash(8, 18) % 16);
+  it('A (round 6): 32 calm tiles, light 0-15 / dark 16-31 by the group noise; no calm tile has the number of any of its 8 neighbours', () => {
+    const memo = new Map();
+    const N = 60;
+    const c = (i, j) => calmNumber(i, j, hash, memo);
     const seen = new Set();
-    for (let i = 0; i < 40; i++) for (let j = 0; j < 40; j++) seen.add(calmTile(i, j, hash));
-    expect(seen.size).toBe(16);
+    let dark = 0;
+    for (let i = -1; i < N; i++) {
+      for (let j = -1; j < N; j++) {
+        const n = c(i, j);
+        seen.add(n);
+        // its group's numbers only
+        expect(Math.floor(n / 16), `${i},${j}`).toBe(calmGroup(i, j, hash));
+        if (n >= 16) dark++;
+        for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) if (di || dj) expect(c(i + di, j + dj), `${i},${j} / ${i + di},${j + dj}`).not.toBe(n);
+      }
+    }
+    expect(seen.size).toBe(32);
+    expect(dark / ((N + 1) * (N + 1))).toBeGreaterThan(0.25);
+    expect(dark / ((N + 1) * (N + 1))).toBeLessThan(0.75);
+    // class A tiles (even i, even j) keep their raw number; the memo changes nothing
+    expect(c(4, 6)).toBe(16 * calmGroup(4, 6, hash) + (hash(7, 17) % 16));
+    expect(calmNumber(17, 23, hash)).toBe(c(17, 23));
   });
 
   it('C: the ruin floor by its row phase (32·j mod 11) and its column symbols: 66 tiles, neighbouring lines never alike', () => {
@@ -211,7 +228,12 @@ describe('ground v2: bundles and memory', () => {
     ['base', base],
     ['common:ground', releaseTerrainEntries('common:ground', keys)],
     [GROUND_RUIN_BUNDLE, releaseTerrainEntries(GROUND_RUIN_BUNDLE, keys)],
-    ...Object.entries({ ...REGION_ENTRIES, ...SEASON_ENTRIES }).map(([n, make]) => [n, [...make(), ...releaseTerrainEntries(n, keys)]]),
+    // (as main.js registers them with the v2 ground: terrainArt.v2BundleParts)
+    ...Object.entries({ ...REGION_ENTRIES, ...SEASON_ENTRIES }).flatMap(([n, make]) => {
+      const all = [...make(), ...releaseTerrainEntries(n, keys)];
+      const parts = v2BundleParts(n);
+      return parts ? parts.map(([part, keep]) => [part, all.filter((e) => keep(e.key))]) : [[n, all]];
+    }),
   ]);
   const held = new Set([...bundles.values()].flatMap((es) => es.map((e) => e.key)));
 
@@ -226,19 +248,20 @@ describe('ground v2: bundles and memory', () => {
     }
   });
 
-  it('each ground key is in the bundle that is loaded where it is drawn: island grounds, ruin floor and water with the base, the ruin floor\'s edges over water with their chunks, a region\'s with the region, a season\'s with the season', () => {
+  it('each ground key is in the bundle that is loaded where it is drawn: island grounds, ruin floor and water with the base, the ruin floor\'s edges over water with their chunks, a region\'s in its ground / pictures bundles, a season\'s in that season\'s bundle of the ground', () => {
     const where = (k) => [...bundles].filter(([, es]) => es.some((e) => e.key === k)).map(([n]) => n);
-    const home = { grass: 'base|common:ground', sand: 'base|common:ground', path: 'base|common:ground', ruin: 'base|common:ground', plains: 'region:plains', lake: 'region:lake', moss: 'region:forest', snow: 'region:mountains', dsand: 'region:desert' };
+    const region = { plains: 'plains', lake: 'lake', moss: 'forest', snow: 'mountains', dsand: 'desert' };
+    const homeOf = (cls, n) => (region[cls] ? `${n.startsWith('macro') ? 'pictures' : 'ground'}:${region[cls]}` : 'base|common:ground');
     for (const cls of Object.keys(PREFIX)) {
       const names = [...range(tileCount(cls)).map(String), ...(tileScheme(cls) === 'A' ? MACRO_NAMES.map((m) => `${m}.3`) : []), ...(cls === 'ruin' ? [] : ['edge.1.0', 'edge.14.1'])];
       for (const n of names) {
         const w = where(landKey(cls, n));
         expect(w.length, landKey(cls, n)).toBe(1);
-        expect(home[cls].split('|'), landKey(cls, n)).toContain(w[0]);
+        expect(homeOf(cls, n).split('|'), landKey(cls, n)).toContain(w[0]);
       }
       if (!SEASONAL.includes(cls)) continue;
       for (const season of ['autumn', 'winter']) {
-        for (const n of [...range(16).map(String), ...MACRO_NAMES.map((m) => `${m}.0`), 'edge.1.0', 'edge.14.1']) expect(where(`${season}.${landKey(cls, n)}`), `${season}.${landKey(cls, n)}`).toEqual([`season:${season}`]);
+        for (const n of [...range(32).map(String), ...MACRO_NAMES.map((m) => `${m}.0`), 'edge.1.0', 'edge.14.1']) expect(where(`${season}.${landKey(cls, n)}`), `${season}.${landKey(cls, n)}`).toEqual([`season:${season}:${cls}`]);
       }
     }
     expect(where('tile.water.foam.14.3')).toEqual(['common:ground']);
@@ -246,19 +269,26 @@ describe('ground v2: bundles and memory', () => {
     for (let m = 1; m <= 14; m++) for (const r of range(11)) expect(where(`tile.ruin.edge.${m}.${r}`)).toEqual([GROUND_RUIN_BUNDLE]);
   });
 
-  it('atlas sizes with the v2 ground: the ruin floor\'s edges 512 × 512, a region at most 512 × 512, a season at most 1024 × 512', () => {
+  it('atlas sizes with the v2 ground: the ruin floor\'s edges 512 × 512; a region\'s ground 512 × 256 and pictures 256 × 256; a season\'s art of one ground 512 × 256; the rest of a region / season no v2 ground', () => {
     const withImage = (es) => es.filter((e) => release.has(e.key)).map((e) => ({ ...e, image: { width: release.get(e.key).w, height: release.get(e.key).h } }));
-    expect(atlasSizeFor(withImage(bundles.get(GROUND_RUIN_BUNDLE)))).toEqual({ width: 512, height: 512 });
-    for (const n of Object.keys({ ...REGION_ENTRIES, ...SEASON_ENTRIES })) {
-      const size = atlasSizeFor(withImage(bundles.get(n)));
-      expect(size.width * size.height, n).toBeLessThanOrEqual(n.startsWith('season:') ? 1024 * 512 : 512 * 512);
+    const size = (n) => atlasSizeFor(withImage(bundles.get(n)));
+    expect(size(GROUND_RUIN_BUNDLE)).toEqual({ width: 512, height: 512 });
+    for (const r of ['plains', 'lake', 'forest', 'mountains', 'desert']) {
+      expect(size(`ground:${r}`), r).toEqual({ width: 512, height: 256 });
+      expect(size(`pictures:${r}`), r).toEqual({ width: 256, height: 256 });
+      expect(bundles.get(`region:${r}`).some((e) => /\.(?:\d+|macro\d?\.\d|edge\.\d+\.\d)$/.test(e.key) && /^(?:plains|lake|forest)\.grass|^mountains\.snow|^desert\.sand/.test(e.key))).toBe(false);
+    }
+    for (const s of ['autumn', 'winter']) {
+      for (const cls of SEASONAL) expect(size(`season:${s}:${cls}`), `${s} ${cls}`).toEqual({ width: 512, height: 256 });
+      const rest = size(`season:${s}`);
+      expect(rest.width * rest.height, s).toBeLessThanOrEqual(256 * 256);
     }
   });
 
   it('the island grounds and the water fit in the base atlas, packed tallest first: still 2048 × 1024, no second atlas', () => {
     const withImage = (es) => es.filter((e) => release.has(e.key)).map((e) => ({ ...e, image: { width: release.get(e.key).w, height: release.get(e.key).h } }));
     const g = releaseTerrainEntries('common:ground', keys);
-    expect(g.length).toBe(414); // the island grass, sand, path and ruin floor tiles, picture pieces and edges, and the water, less the keys v1 has too
+    expect(g.length).toBe(462); // the island grass, sand, path and ruin floor tiles, picture pieces and edges, and the water, less the keys v1 has too
     const packed = tallestFirstOrder(withImage([...base, ...g]));
     expect(atlasSizeFor(packed)).toEqual({ width: 2048, height: 1024 });
     // tallest first, the given order kept among equals; nothing lost

@@ -30,8 +30,8 @@ import { seasonAt } from '../game/env/weather.js';
 import { SEASON_ENTRIES, seasonKeys, SOURCE_BUNDLE, SOURCE_REGIONS } from './assets/placeholderPack.js';
 import { HeroAnimator } from './heroAnim.js';
 import { DECOR_TYPES, decorOffset, macroQuarter, patchVariant, placementEnabled } from './placement.js';
-import { CORNERS, MACRO_NAMES, PREFIX, PRIORITY, SEASONAL, WATER_FRAMES, WATER_FRAME_SEC as WATER_FRAME_SEC_V2, calmTile, deepMap, displayLayers, edgeVariantOf, groundClass, landKey, macroPlacement, quarterOfCorner, ruinCellTile, ruinTile, tileScheme } from './groundV2.js';
-import { GROUND_RUIN_BUNDLE, GROUND_V2_KEY, faceMaterial, faceVariant, groundCacheResolution, groundVariant, indoorLight, levelBrightness, releaseSeasonKeys, usesReleaseTerrain, waterAround, waterEdgePieces } from './assets/terrainArt.js';
+import { CORNERS, MACRO_NAMES, PREFIX, PRIORITY, SEASONAL, WATER_FRAMES, WATER_FRAME_SEC as WATER_FRAME_SEC_V2, calmNumber, deepMap, displayLayers, edgeVariantOf, groundClass, landKey, macroPlacement, quarterOfCorner, ruinCellTile, ruinTile, tileScheme } from './groundV2.js';
+import { GROUND_RUIN_BUNDLE, GROUND_V2_KEY, groundBundleOf, picturesBundleOf, seasonGroundBundleOf, faceMaterial, faceVariant, groundCacheResolution, groundVariant, indoorLight, levelBrightness, releaseSeasonKeys, usesReleaseTerrain, waterAround, waterEdgePieces } from './assets/terrainArt.js';
 import { openingView } from '../game/story/story.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
 import { SilhouetteCache, placeFlash } from './flashOverlay.js';
@@ -187,6 +187,12 @@ export class GameView {
     this.waterStats = { redraws: 0, ms: 0, deferred: 0 };
     /** W1: ground keys asked for and not in the loaded art (tests: none). @type {Set<string>} */
     this.v2Missing = new Set();
+    /** W1 round 6: the calm tiles' numbers of the display grid / of the cell grid, only while a chunk is built (groundV2.calmNumber). @type {Map<number, number> | null} */
+    this.calmMemo = null;
+    /** @type {Map<number, number> | null} */
+    this.cellCalmMemo = null;
+    /** W1 round 6: the blocks' picture numbers (groundV2.blockPicture), fixed for the map; one per 3×3 display tiles. @type {Map<number, number> | null} */
+    this.v2Pictures = null;
     /** @type {{ x: number, y: number, w: number, h: number } | null} */
     this.viewRect = null;
     this.sandUnderTrees = new Set(
@@ -366,16 +372,18 @@ export class GameView {
     // v1.1: the release terrain's own season keys (autumn forest and mountains, the lips of the cliff
     // variants), where the season's bundle has them.
     if (this.releaseTerrain) for (const k of releaseSeasonKeys(want)) if (this.assets.hasTexture(`${want}.${k}`)) this.seasonKeySet.add(k);
-    // gfx W1: the v2 ground's season keys (16 calm tiles, the 8 pictures' pieces, edges of the 4 seasonal grounds);
+    // gfx W1: the v2 ground's season keys (32 calm tiles, the 8 pictures' pieces, edges of the 4 seasonal grounds);
     // the mountains' snow has no v2 seasons, so its ground and its edges stay as they are.
     if (this.groundV2 && want) {
       for (const k of [...this.seasonKeySet]) if (k.startsWith('mountains.snow.')) this.seasonKeySet.delete(k);
       for (const cls of SEASONAL) {
         const p = /** @type {any} */ (PREFIX)[cls];
-        const names = [...Array.from({ length: 16 }, (_, n) => String(n)), ...MACRO_NAMES.flatMap((m) => [0, 1, 2, 3].map((q) => `${m}.${q}`)), ...Array.from({ length: 14 }, (_, m) => [0, 1].map((v) => `edge.${m + 1}.${v}`)).flat()];
+        const names = [...Array.from({ length: 32 }, (_, n) => String(n)), ...MACRO_NAMES.flatMap((m) => [0, 1, 2, 3].map((q) => `${m}.${q}`)), ...Array.from({ length: 14 }, (_, m) => [0, 1].map((v) => `edge.${m + 1}.${v}`)).flat()];
+        // (each seasonal ground's season art is a bundle of its own, loaded by the chunks that have it)
+        const apart = bundle !== null && this.assets.builders.has(seasonGroundBundleOf(bundle, cls));
         for (const n of names) {
           const k = landKey(cls, n);
-          if (k !== p && this.assets.hasTexture(`${want}.${k}`)) this.seasonKeySet.add(k);
+          if (k !== p && (apart || this.assets.hasTexture(`${want}.${k}`))) this.seasonKeySet.add(k);
         }
       }
     }
@@ -546,13 +554,13 @@ export class GameView {
   }
 
   /**
-   * W1 rounds 2-5: the tile of a cell drawn on the cell grid (raised ground, and quarters of cells that
-   * cannot blend), picked as its ground asks (groundV2.js): A a calm tile by hash (as a display tile's),
-   * C the ruin floor by its row and column.
+   * W1 rounds 2-6: the tile of a cell drawn on the cell grid (raised ground, and quarters of cells that
+   * cannot blend), picked as its ground asks (groundV2.js): A a calm tile (calmNumber over the cells, as
+   * over the display tiles), C the ruin floor by its row and column.
    * @param {number} x @param {number} y @param {string} cls
    */
   cellWang(x, y, cls) {
-    return tileScheme(cls) === 'C' ? ruinCellTile(x, y, hash) : calmTile(x, y, hash);
+    return tileScheme(cls) === 'C' ? ruinCellTile(x, y, hash) : calmNumber(x, y, hash, this.cellCalmMemo ?? undefined);
   }
 
   /**
@@ -607,20 +615,21 @@ export class GameView {
   macroAt(i, j) {
     const key = `m${i},${j}`;
     if (this.v2Tiles.has(key)) return this.v2Tiles.get(key);
-    const out = macroPlacement(i, j, { uniformBlock: (a, b, k) => this.uniformBlock(a, b, k), hash, width: this.map.width, height: this.map.height });
+    if (!this.v2Pictures) this.v2Pictures = new Map();
+    const out = macroPlacement(i, j, { uniformBlock: (a, b, k) => this.uniformBlock(a, b, k), hash, width: this.map.width, height: this.map.height, pictures: this.v2Pictures });
     this.v2Tiles.set(key, out);
     return out;
   }
 
   /**
-   * W1 rounds 2-5: the tile of display tile (i, j) whose lowest land is cls (render_ref), picked as its
+   * W1 rounds 2-6: the tile of display tile (i, j) whose lowest land is cls (render_ref), picked as its
    * ground asks (groundV2.js); a picture piece, where one is placed, is drawn instead (macroAt):
-   *   A  a calm tile, hash(i + 3, j + 11) % 16;
+   *   A  a calm tile 0-31 (calmNumber: light / dark group, never a neighbour's number);
    *   C  the ruin floor: its row phase and its column's symbols.
    * @param {number} i @param {number} j @param {string} cls
    */
   wangAt(i, j, cls) {
-    return tileScheme(cls) === 'C' ? ruinTile(i, j, hash) : calmTile(i, j, hash);
+    return tileScheme(cls) === 'C' ? ruinTile(i, j, hash) : calmNumber(i, j, hash, this.calmMemo ?? undefined);
   }
 
   /**
@@ -668,6 +677,32 @@ export class GameView {
     const j1 = Math.min(map.height, (cy + 1) * CHUNK) - 1;
     /** @type {{ key: string, anim: boolean, x: number, y: number, quarter: string | null }[]} */
     const out = [];
+    // round 6: a calm tile's number depends on its neighbours' (groundV2.calmNumber): worked out once per
+    // chunk build, in memos that live only while the chunk is built (buildChunk; nothing per frame, nothing kept)
+    const own = !this.calmMemo;
+    if (own) {
+      this.calmMemo = new Map();
+      this.cellCalmMemo = new Map();
+    }
+    try {
+      this.groundPiecesInto(out, cx, cy, j1, i1, clampX, clampY, flat, half, ts);
+    } finally {
+      if (own) {
+        this.calmMemo = null;
+        this.cellCalmMemo = null;
+      }
+    }
+    return out;
+  }
+
+  /**
+   * groundPiecesV2's loop. @param {{ key: string, anim: boolean, x: number, y: number, quarter: string | null }[]} out
+   * @param {number} cx @param {number} cy @param {number} j1 @param {number} i1
+   * @param {(x: number) => number} clampX @param {(y: number) => number} clampY @param {(x: number, y: number) => boolean} flat
+   * @param {number} half @param {number} ts
+   */
+  groundPiecesInto(out, cx, cy, j1, i1, clampX, clampY, flat, half, ts) {
+    const map = this.map;
     for (let j = cy * CHUNK - 1; j <= j1; j++) {
       for (let i = cx * CHUNK - 1; i <= i1; i++) {
         const px = i * ts + half;
@@ -700,7 +735,6 @@ export class GameView {
         });
       }
     }
-    return out;
   }
 
   /**
@@ -747,20 +781,59 @@ export class GameView {
       .filter((r) => r.bundle && r.tx < x0 + CHUNK && r.tx + r.tw > x0 && r.ty < y0 + CHUNK && r.ty + r.th > y0)
       .map((r) => /** @type {string} */ (r.bundle));
     if (this.groundV2) {
-      // gfx W1: on the dual grid a chunk's display tiles reach one cell out of it: the next region's
-      // bundle too, where a cell of that ring has that region's own ground
-      for (const b of this.ringBundles(cx, cy)) if (!list.includes(b)) list.push(b);
+      // gfx W1: a region's own ground is apart (terrainArt.REGION_GROUND_PREFIX): its calm tiles and
+      // edges ("ground:"), its pictures ("pictures:"); and on the dual grid a chunk's display tiles reach
+      // one cell out of it: the next region's ground too where a cell of that ring has it (only its
+      // calm tiles and edges: a picture always covers a cell of the chunk drawing it)
+      const part = (/** @type {string | null} */ b) => (b && this.assets.builders.has(b) ? b : null);
+      for (const r of [...list]) {
+        for (const b of [part(groundBundleOf(r)), part(picturesBundleOf(r))]) if (b && !list.includes(b)) list.push(b);
+      }
+      for (const r of this.ringBundles(cx, cy)) {
+        const b = part(groundBundleOf(r)) ?? r;
+        if (!list.includes(b)) list.push(b);
+      }
       // round 3: the ruin floor's edges over water, only where the ruin floor meets water
       if (this.assets.builders.has(GROUND_RUIN_BUNDLE) && this.chunkHasRuinShore(cx, cy)) list.push(GROUND_RUIN_BUNDLE);
     }
-    // P10.2: and the season's look.
-    return this.seasonBundle ? [...list, this.seasonBundle] : list;
+    // P10.2: and the season's look (gfx W1: the season's art of each seasonal ground the chunk has, apart).
+    if (!this.seasonBundle) return list;
+    list.push(this.seasonBundle);
+    if (this.groundV2) {
+      for (const cls of this.chunkClasses(cx, cy)) {
+        const b = seasonGroundBundleOf(this.seasonBundle, cls);
+        if (this.assets.builders.has(b)) list.push(b);
+      }
+    }
+    return list;
   }
 
   /**
-   * W1: the region bundles the ring of cells just outside a chunk needs (its display tiles reach one
-   * cell out): those of the regions whose own ground (region grass, moss, snow, desert sand) lies in
-   * the ring. Fixed for the map. @param {number} cx @param {number} cy @returns {string[]}
+   * W1: the ground classes of a chunk's cells and of the ring of cells its display tiles reach. Fixed
+   * for the map. @param {number} cx @param {number} cy @returns {string[]}
+   */
+  chunkClasses(cx, cy) {
+    const key = `k${cx},${cy}`;
+    let out = this.v2Tiles.get(key);
+    if (out === undefined) {
+      const map = this.map;
+      const set = new Set();
+      for (let y = Math.max(0, cy * CHUNK - 1); y <= Math.min(map.height - 1, (cy + 1) * CHUNK); y++) {
+        for (let x = Math.max(0, cx * CHUNK - 1); x <= Math.min(map.width - 1, (cx + 1) * CHUNK); x++) {
+          const c = this.groundClassAt(x, y);
+          if (c) set.add(c);
+        }
+      }
+      out = [...set].sort();
+      this.v2Tiles.set(key, out);
+    }
+    return out;
+  }
+
+  /**
+   * W1: the region bundles whose ground the ring of cells just outside a chunk needs (its display
+   * tiles reach one cell out): those of the regions whose own ground (region grass, moss, snow, desert
+   * sand) lies in the ring (chunkBundles loads their ground bundle). Fixed for the map. @param {number} cx @param {number} cy @returns {string[]}
    */
   ringBundles(cx, cy) {
     const key = `b${cx},${cy}`;
@@ -822,6 +895,19 @@ export class GameView {
    * @returns {Chunk}
    */
   buildChunk(cx, cy) {
+    // W1 round 6: the calm tiles' numbers of this chunk, worked out once while it is built (groundV2.calmNumber)
+    this.calmMemo = new Map();
+    this.cellCalmMemo = new Map();
+    try {
+      return this.buildChunkInner(cx, cy);
+    } finally {
+      this.calmMemo = null;
+      this.cellCalmMemo = null;
+    }
+  }
+
+  /** buildChunk's work. @param {number} cx @param {number} cy */
+  buildChunkInner(cx, cy) {
     const map = this.map;
     const ts = map.tileSize;
     const base = new Container();
@@ -985,6 +1071,10 @@ export class GameView {
     }
     this.chunkStats.updates++;
     let pending = 0;
+    // the bundles of chunks still waiting for others (gfx W1: a chunk may wait on several bundles that
+    // are not a region's, e.g. a region's pictures and the next region's ground: none is let go meanwhile)
+    /** @type {Set<string>} */
+    const waiting = new Set();
     for (let cy = want.y0; cy <= want.y1; cy++) {
       for (let cx = want.x0; cx <= want.x1; cx++) {
         const key = this.chunkKey(cx, cy);
@@ -993,6 +1083,7 @@ export class GameView {
         const missing = bundles.filter((b) => !this.assets.isLoaded(b));
         if (missing.length > 0) {
           for (const b of missing) this.requestBundle(b);
+          for (const b of bundles) waiting.add(b);
           pending++;
           continue;
         }
@@ -1015,7 +1106,7 @@ export class GameView {
         this.assets.unload(b); // the chunks hold their own references now
         this.preloaded.delete(b);
       } else if (!this.bundlesLoading.has(b)) {
-        const stillWanted = this.regions.some((r) => r.bundle === b && this.regionNear(r, origin, viewW, viewH));
+        const stillWanted = waiting.has(b) || this.regions.some((r) => r.bundle === b && this.regionNear(r, origin, viewW, viewH));
         if (!stillWanted) {
           if (b === 'region:plains') this.npcs.clear();
           this.dropBossSprites();

@@ -284,9 +284,13 @@ export function sourceEntries() {
   return Object.entries(sourceFrames()).map(([key, rows]) => ({ key, rows, anchor: FEET }));
 }
 
-/** @param {string} name @param {Map<string, ArtSource>} [overrides] */
-export function buildRegionPack(name, overrides) {
-  return buildPlaceholderPack([...REGION_ENTRIES[name](), ...releaseBossEntries(name, overrides), ...releaseTerrainEntries(name, overrides)], overrides);
+/**
+ * @param {string} name @param {Map<string, ArtSource>} [overrides]
+ * @param {(e: { key: string }) => boolean} [keep] only these entries (gfx W1: a region's own ground in a bundle of its own)
+ */
+export function buildRegionPack(name, overrides, keep) {
+  const entries = [...REGION_ENTRIES[name](), ...releaseBossEntries(name, overrides), ...releaseTerrainEntries(name, overrides)];
+  return buildPlaceholderPack(keep ? entries.filter(keep) : entries, overrides);
 }
 
 /** Enemy release frames: enemy.<kind>.<action>.<n> (docs/art-release/enemy/frames.json on the art branch). */
