@@ -1,0 +1,213 @@
+{
+ "version": 2,
+ "minimal": {
+  "enemy.beast.0": "enemy.beast.idle.0",
+  "enemy.beast.1": "enemy.beast.move.0",
+  "enemy.archer.0": "enemy.archer.idle.0",
+  "enemy.archer.1": "enemy.archer.move.0"
+ },
+ "kinds": {
+  "beast": {
+   "facing": "right",
+   "actions": {
+    "idle": {
+     "frames": 4,
+     "size": [
+      44,
+      32
+     ]
+    },
+    "move": {
+     "frames": 8,
+     "size": [
+      44,
+      32
+     ]
+    },
+    "windup": {
+     "frames": 4,
+     "size": [
+      44,
+      32
+     ]
+    },
+    "attack": {
+     "frames": 5,
+     "size": [
+      44,
+      32
+     ]
+    },
+    "hurt": {
+     "frames": 3,
+     "size": [
+      44,
+      32
+     ]
+    },
+    "defeat": {
+     "frames": 6,
+     "size": [
+      44,
+      32
+     ]
+    }
+   }
+  },
+  "archer": {
+   "facing": "right",
+   "actions": {
+    "idle": {
+     "frames": 4,
+     "size": [
+      32,
+      56
+     ]
+    },
+    "move": {
+     "frames": 8,
+     "size": [
+      32,
+      56
+     ]
+    },
+    "windup": {
+     "frames": 4,
+     "size": [
+      32,
+      56
+     ]
+    },
+    "attack": {
+     "frames": 5,
+     "size": [
+      32,
+      56
+     ]
+    },
+    "hurt": {
+     "frames": 3,
+     "size": [
+      32,
+      56
+     ]
+    },
+    "defeat": {
+     "frames": 6,
+     "size": [
+      32,
+      56
+     ]
+    }
+   }
+  },
+  "slime": {
+   "facing": "right",
+   "actions": {
+    "idle": {
+     "frames": 4,
+     "size": [
+      32,
+      28
+     ]
+    },
+    "move": {
+     "frames": 8,
+     "size": [
+      32,
+      28
+     ]
+    },
+    "windup": {
+     "frames": 4,
+     "size": [
+      32,
+      28
+     ]
+    },
+    "attack": {
+     "frames": 5,
+     "size": [
+      32,
+      28
+     ]
+    },
+    "hurt": {
+     "frames": 3,
+     "size": [
+      32,
+      28
+     ]
+    },
+    "defeat": {
+     "frames": 6,
+     "size": [
+      32,
+      28
+     ]
+    }
+   }
+  },
+  "sentinel": {
+   "facing": "right",
+   "actions": {
+    "idle": {
+     "frames": 4,
+     "size": [
+      40,
+      56
+     ]
+    },
+    "move": {
+     "frames": 8,
+     "size": [
+      40,
+      56
+     ]
+    },
+    "windup": {
+     "frames": 4,
+     "size": [
+      40,
+      56
+     ]
+    },
+    "attack": {
+     "frames": 5,
+     "size": [
+      40,
+      56
+     ]
+    },
+    "hurt": {
+     "frames": 3,
+     "size": [
+      40,
+      56
+     ]
+    },
+    "defeat": {
+     "frames": 6,
+     "size": [
+      40,
+      56
+     ]
+    }
+   }
+  }
+ },
+ "anchor": "feet = bottom centre (shots: centre)",
+ "fps_hint_ms": {
+  "idle": 180,
+  "idle2": 180,
+  "move": 90,
+  "windup": "split the wind-up time evenly",
+  "attack": 80,
+  "hurt": 90,
+  "stagger": 120,
+  "defeat": 140,
+  "transform": 140,
+  "tendril": 120,
+  "shot": 90
+ }
+}
