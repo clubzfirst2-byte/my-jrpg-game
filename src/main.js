@@ -814,6 +814,7 @@ async function boot() {
     if (bossKey !== shownBoss) {
       shownBoss = bossKey;
       bossBar.hidden = !boss;
+      uiRoot.classList.toggle('boss-fight', !!boss); // toasts move to the bottom (styles.css)
       if (boss) {
         bossName.textContent = boss.name;
         bossFill.style.width = `${(100 * boss.hp) / boss.maxHp}%`;
