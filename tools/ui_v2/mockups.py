@@ -70,7 +70,6 @@ def title_screen(base, out):
         x, y = (852 - bw) / 2, 196 + i * 54
         paste(im, nine("btn.text.idle" if i else "btn.text.selected", bw, bh), x, y)
         text(im, (426, y + 22), label, 16, anchor="mm", bold=True)
-    text(im, (426, 360), "© 星環のレガリア", 11, fill=(200, 210, 230), anchor="mm")
     im.save(out)
 
 

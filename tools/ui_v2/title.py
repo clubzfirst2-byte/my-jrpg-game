@@ -1,33 +1,96 @@
 """The title: the logo 「星環のレガリア」 and a layered vista (sky, sea, the island with the star ring, a
 foreground frame). 1 art px = 2 CSS px (6 device px on iPhone 15 Pro, 4 on SE): crisp, integer.
 
-The lettering starts from a 1-bit glyph skeleton (IPA Gothic, IPA Font License; only used as the base
-shape, the strokes are re-cut), then gets the game's treatment: thick strokes, a gold ramp lit from the
-top, a navy outline and a gem-blue outer line, a drop shadow; の sits in the star ring emblem.
+The lettering is original hand-drawn pixel art: each character is written below as its own strokes on a
+24 x 24 grid (no font is used or traced), scaled to the logo size and cut 2 px thick, then gets the game's
+treatment: a gold ramp lit from the top, a navy outline and a gem-blue outer line, a drop shadow; の sits
+in the star ring emblem.
 """
 
 import math
 import random
 
-from PIL import Image, ImageDraw, ImageFont
-
 from common import col, new, outline
 
-FONT = "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf"
+# Hand-drawn strokes per character on a 24 x 24 grid: ("h", x0, x1, y) horizontal, ("v", x, y0, y1)
+# vertical, ("p", (x, y), (x, y), ...) a polyline (diagonals and curves, point to point).
+GLYPHS = {
+    "星": [  # 日 over 生
+        ("v", 5, 1, 9), ("v", 18, 1, 9), ("h", 5, 18, 1), ("h", 5, 18, 5), ("h", 5, 18, 9),
+        ("p", (8, 11), (6, 14), (3, 16)), ("h", 5, 19, 14), ("v", 11, 11, 22), ("h", 6, 17, 18), ("h", 1, 22, 22),
+    ],
+    "環": [  # 王 (the jewel radical) beside 睘
+        ("h", 0, 6, 3), ("h", 1, 5, 11), ("v", 3, 3, 19), ("p", (0, 21), (6, 17)),
+        ("h", 9, 22, 1), ("h", 9, 22, 6), ("v", 9, 1, 6), ("v", 13, 1, 6), ("v", 18, 1, 6), ("v", 22, 1, 6),
+        ("h", 10, 21, 9),
+        ("h", 12, 19, 11), ("h", 12, 19, 14), ("v", 12, 11, 14), ("v", 19, 11, 14),
+        ("v", 14, 16, 23), ("p", (13, 17), (9, 23)), ("p", (16, 17), (23, 23)), ("p", (19, 16), (21, 18)),
+    ],
+    "の": [
+        ("p", (13, 4), (12, 10), (10, 16), (8, 20), (6, 21), (4, 20), (3, 17), (3, 12), (5, 8), (8, 5), (12, 3),
+         (16, 3), (19, 5), (21, 8), (22, 12), (21, 16), (19, 19), (16, 21), (13, 22)),
+    ],
+    "レ": [
+        ("v", 5, 2, 19), ("p", (5, 20), (8, 21), (12, 20), (16, 17), (19, 14), (21, 11)),
+    ],
+    "ガ": [  # カ + the voiced marks
+        ("h", 2, 16, 7), ("p", (16, 7), (16, 17), (15, 20), (13, 21), (11, 21)),
+        ("p", (10, 1), (10, 7), (9, 12), (7, 17), (3, 22)),
+        ("p", (18, 0), (19, 2)), ("p", (21, 0), (22, 2)),
+    ],
+    "リ": [
+        ("v", 6, 3, 13), ("p", (6, 14), (7, 15)),
+        ("v", 17, 1, 13), ("p", (17, 14), (16, 17), (14, 20), (11, 22), (8, 23)),
+    ],
+    "ア": [
+        ("h", 3, 21, 3), ("p", (21, 3), (20, 5), (18, 7), (16, 9)),
+        ("p", (12, 8), (12, 13), (11, 17), (9, 20), (5, 23)),
+    ],
+}
 TEXT_A, TEXT_NO, TEXT_B = "星環", "の", "レガリア"
-GLYPH = 30  # px: the glyph height before thickening
+SCALE = 1.25  # 24-grid -> 30 px glyphs
+THICK = 2  # px per stroke
 
 
-def _glyph_mask(text, size):
-    f = ImageFont.truetype(FONT, size)
-    l, t, r, b = f.getbbox(text)
-    im = Image.new("1", (r - l + 4, b - t + 4), 0)
-    ImageDraw.Draw(im).text((2 - l, 2 - t), text, font=f, fill=1)
-    w, h = im.size
-    m = [[im.getpixel((x, y)) != 0 for x in range(w)] for y in range(h)]
-    # thicken: every stroke grows 1 px right and down (a bold, chunky pixel cut)
-    out = [[m[y][x] or (x > 0 and m[y][x - 1]) or (y > 0 and m[y - 1][x]) for x in range(w)] for y in range(h)]
-    return out
+def _line(m, x0, y0, x1, y1):
+    n = max(abs(x1 - x0), abs(y1 - y0), 1)
+    for i in range(n + 1):
+        x = round(x0 + (x1 - x0) * i / n)
+        y = round(y0 + (y1 - y0) * i / n)
+        if 0 <= y < len(m) and 0 <= x < len(m[0]):
+            m[y][x] = True
+
+
+def _glyph_mask(text, size=None):
+    """The hand-drawn strokes of `text`, side by side, scaled and thickened (a bold pixel cut)."""
+    cell = int(24 * SCALE) + THICK + 1
+    gap = 2
+    w = len(text) * cell + (len(text) - 1) * gap
+    h = cell
+    m = [[False] * w for _ in range(h)]
+    for i, ch in enumerate(text):
+        ox = i * (cell + gap)
+        S = lambda v: round(v * SCALE)  # noqa: E731
+        for st in GLYPHS[ch]:
+            if st[0] == "h":
+                _line(m, ox + S(st[1]), S(st[3]), ox + S(st[2]), S(st[3]))
+            elif st[0] == "v":
+                _line(m, ox + S(st[1]), S(st[2]), ox + S(st[1]), S(st[3]))
+            else:
+                pts = st[1:]
+                for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+                    _line(m, ox + S(ax), S(ay), ox + S(bx), S(by))
+    out = [row[:] for row in m]
+    for y in range(h):  # thicken: each stroke grows right and down
+        for x in range(w):
+            if m[y][x]:
+                for dy in range(THICK):
+                    for dx in range(THICK):
+                        if y + dy < h and x + dx < w:
+                            out[y + dy][x + dx] = True
+    # trim empty columns at both ends
+    cols = [x for x in range(w) if any(out[y][x] for y in range(h))]
+    return [row[cols[0]:cols[-1] + 1] for row in out]
 
 
 def _letters(mask, mat):
@@ -50,9 +113,9 @@ def _letters(mask, mat):
 
 
 def logo():
-    a = _letters(_glyph_mask(TEXT_A, GLYPH), "gold")
-    no = _letters(_glyph_mask(TEXT_NO, GLYPH), "gold")
-    b = _letters(_glyph_mask(TEXT_B, GLYPH), "gold")
+    a = _letters(_glyph_mask(TEXT_A), "gold")
+    no = _letters(_glyph_mask(TEXT_NO), "gold")
+    b = _letters(_glyph_mask(TEXT_B), "gold")
     gap = 6
     ring_w = 44
     W = a.width + b.width + ring_w + 2 * gap + 12

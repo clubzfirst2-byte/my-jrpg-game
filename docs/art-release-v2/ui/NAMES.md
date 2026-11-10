@@ -13,7 +13,7 @@ Art px -> CSS px: x`cssScale` (title x2, everything else x1). Always `image-rend
 | `title.bg.mid.png` | 480×200 | 960×400 |  | parallax 0.4 |
 | `title.bg.near.png` | 480×200 | 960×400 |  | parallax 1.0 |
 | `title.bg.sky.png` | 480×200 | 960×400 |  | parallax 0.0 |
-| `title.logo.png` | 256×64 | 512×128 |  |  |
+| `title.logo.png` | 260×64 | 520×128 |  |  |
 
 ## HUD rings (32)
 
