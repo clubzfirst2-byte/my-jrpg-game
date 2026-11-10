@@ -1,0 +1,40 @@
+# ground v2: measured (gen_v2.py writes this)
+
+files: 1058 = 57 v1 keys redrawn + 683 new keys + 318 v1 keys copied unchanged
+seam check: OK
+
+ground tiles: colours per tile / lightness spread (std, 0-100)
+  tile.grass.0                   colours  6  spread  2.5
+  tile.grass.macro.0             colours  6  spread  3.1
+  plains.grass.0                 colours  6  spread  2.5
+  plains.grass.macro.0           colours  6  spread  3.0
+  lake.grass.0                   colours  6  spread  2.4
+  lake.grass.macro.0             colours  6  spread  3.0
+  forest.grass.0                 colours  5  spread  1.6
+  forest.grass.macro.0           colours  8  spread  2.0
+  mountains.snow.0               colours  6  spread  2.9
+  mountains.snow.macro.0         colours  6  spread  4.0
+  tile.sand                      colours  6  spread  2.9
+  tile.sand.macro.0              colours  6  spread  3.4
+  desert.sand.0                  colours  6  spread  4.6
+  desert.sand.macro.0            colours  6  spread  5.2
+  tile.path                      colours  6  spread  2.6
+  tile.path.macro.0              colours  7  spread  3.0
+  tile.ruin                      colours  6  spread  6.1
+  tile.ruin.macro.0              colours  6  spread  6.2
+  autumn.tile.grass.0            colours  8  spread  2.0
+  autumn.tile.grass.macro.0      colours  8  spread  3.4
+  autumn.plains.grass.0          colours  8  spread  2.0
+  autumn.plains.grass.macro.0    colours  8  spread  3.1
+  autumn.lake.grass.0            colours  8  spread  1.9
+  autumn.lake.grass.macro.0      colours  8  spread  3.1
+  autumn.forest.grass.0          colours  7  spread  3.1
+  autumn.forest.grass.macro.0    colours 10  spread  3.5
+  winter.tile.grass.0            colours  6  spread  2.9
+  winter.tile.grass.macro.0      colours  9  spread  5.2
+  winter.plains.grass.0          colours  6  spread  2.9
+  winter.plains.grass.macro.0    colours  9  spread  5.2
+  winter.lake.grass.0            colours  6  spread  2.9
+  winter.lake.grass.macro.0      colours  9  spread  5.2
+  winter.forest.grass.0          colours  6  spread  2.9
+  winter.forest.grass.macro.0    colours  9  spread  5.9
