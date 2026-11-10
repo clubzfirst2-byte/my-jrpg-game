@@ -45,7 +45,7 @@ const FACE_KEYS = ['earth', 'stone', 'sand', 'desert', 'path'].flatMap((mat) =>
 );
 const GROUND_KEYS = SETS.flatMap(([g, s]) => tiles(g, s));
 // round 7: one-level step rims (mask N 1, E 2, W 4) and the shadow east of them, per set
-const STEP_KEYS = SETS.flatMap(([g, s]) => [...range(7).flatMap((m) => [0, 1].map((v) => `${s}${PREFIX[g]}.step.${m + 1}.${v}`)), ...[0, 1].map((v) => `${s}${PREFIX[g]}.step.shade.${v}`)]);
+const STEP_KEYS = SETS.flatMap(([g, s]) => [...range(7).flatMap((m) => [0, 1].map((v) => `${s}${PREFIX[g]}.step.${m + 1}.${v}`)), ...[0, 1].map((v) => `${s}${PREFIX[g]}.step.shade.${v}`), ...['ne', 'nw'].map((k) => `${s}${PREFIX[g]}.step.inner.${k}`)]);
 const OVERLAY_KEYS = SETS.flatMap(([g, s]) => edges(g, s));
 const WATER_TILES = ['tile.water', 'tile.water.v1', 'tile.water.deep', 'tile.water.deep.v1'].flatMap((p) => range(4).map((f) => `${p}.${f}`));
 const WATER_OVERLAYS = ['tile.water.deep.edge', 'tile.water.foam'].flatMap((p) => MASKS.flatMap((m) => range(4).map((f) => `${p}.${m}.${f}`)));
@@ -218,6 +218,41 @@ describe('ground v2 art', { timeout: 180000 }, () => {  // ~800 PNGs decoded: sl
             if (p.endsWith('foam')) {
               if (m & Number(bit)) expect(opaque, `${p}.${m}.${v} land corner ${bit}`).toBe(false);
             } else expect(opaque, `${p}.${m}.${v} corner ${bit}`).toBe(Boolean(m & Number(bit)));
+          }
+        }
+      }
+    }
+  });
+
+  it('transition overlays (round 8): the terrain and the clear part each reach the tile edge (no island, no hole)', () => {
+    for (const [g, s] of SETS) {
+      if (g === 'ruin') continue;
+      for (const m of MASKS) {
+        for (const v of edgeVariants(g, m)) {
+          const t = png(`${s}${PREFIX[g]}.edge.${m}.${v}`);
+          // tufts of the grass edge stand outside the border: count the solid body only (4-connected parts of 3+ px)
+          for (const want of [true, false]) {
+            const seen = new Set();
+            for (let y = 0; y < 32; y++) {
+              for (let x = 0; x < 32; x++) {
+                if ((t.px(x, y)[3] === 255) !== want || seen.has(y * 32 + x)) continue;
+                const stack = [[x, y]];
+                seen.add(y * 32 + x);
+                let size = 0;
+                let edge = false;
+                while (stack.length) {
+                  const [p, q] = stack.pop();
+                  size++;
+                  if (p === 0 || q === 0 || p === 31 || q === 31) edge = true;
+                  for (const [a, b] of [[p + 1, q], [p - 1, q], [p, q + 1], [p, q - 1]]) {
+                    if (a < 0 || b < 0 || a > 31 || b > 31 || seen.has(b * 32 + a) || (t.px(a, b)[3] === 255) !== want) continue;
+                    seen.add(b * 32 + a);
+                    stack.push([a, b]);
+                  }
+                }
+                if (size >= 6 && !edge) expect(`${s}${PREFIX[g]}.edge.${m}.${v} ${want ? 'island' : 'hole'} at ${x},${y} (${size} px)`).toBe('none');
+              }
+            }
           }
         }
       }

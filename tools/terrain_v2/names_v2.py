@@ -65,13 +65,16 @@ def names_md(files, redrawn, new, copied):
       "all 8 neighbours `m(a±1, b)`, `m(a, b±1)`, `m(a±1, b±1)`; if that leaves no number, avoid only the 4 side "
       "neighbours. `free` = the numbers 0-7 not avoided, in increasing order; `m = free[k(a, b) % len(free)]`. "
       "Name: `macro` for m = 0, else `macro<m+1>` (`macro2` … `macro8`).")
-    a("4b. **Desert dunes** (round 7): for a block whose 9 map cells (step 5) are all desert sand, "
-      "`hd = hash(a + 77, b + 31)`; when `(hd % 1024) / 1024 < 0.1` the block shows the dune picture "
-      "`desert.sand.dune<k>.<q>`, `k = 1 + hash(a + 91, b + 47) % 6`, at the offsets of step 3 — whether or not step 2 gave "
-      "it a picture, and instead of the picture of step 4. About one block in ten: about 5 dunes on a screen, "
-      "6 shapes.")
+    a("4b. **Desert dunes** (round 8): cut the blocks into cells of 4×3 blocks, `sa = floor(a / 4)`, "
+      "`sb = floor(b / 3)`, `hs = hash(sa + 77, sb + 31)`. The cell's one dune block is `(4·sa + hs % 4, "
+      "3·sb + (hs >> 2) % 3)`. If block (a, b) is it and its 9 map cells (step 5) are all desert sand, it shows "
+      "`desert.sand.dune<k>.<q>` with `k = 1 + (sa % 3 + 3·(sb % 2) + hash(floor(sa / 3) + 13, floor(sb / 2) + 29)) "
+      "% 6`, at the offsets of step 3, whether or not step 2 gave it a picture and instead of the picture of "
+      "step 4. One dune per 12 blocks (about 4-5 on a screen); the 6 shapes sit in a 3×2 pattern of cells, so the "
+      "same shape is at least 3 cells apart across and 2 down.")
     a("5. **Draw it** only when it stays on the map (`i0 + 2`, `j0 + 2` inside) and the 9 map cells under its 4 display "
-      "tiles (cells `i0 … i0+2`, `j0 … j0+2`) are all one ground of this scheme: `<prefix>.<name>.<q>`, q = 0 NW "
+      "tiles (cells `i0 … i0+2`, `j0 … j0+2`) are all one ground of this scheme **and one height** (round 8: a "
+      "picture never straddles a step): `<prefix>.<name>.<q>`, q = 0 NW "
       "`(i0, j0)`, 1 NE, 2 SW, 3 SE.")
     a("6. **Every other display tile** whose lowest ground is of this scheme gets a calm tile `<prefix>.<c>`, "
       "c = 0-31 (round 6): 0-15 the light group (more lit grain, small lit patches), 16-31 the dark group. "
@@ -105,6 +108,11 @@ def names_md(files, redrawn, new, copied):
     a("- `W = s(i)`, `E = s(i + 1)`, `n = 6·R + 2·W + (E if E < W else E − 1)`")
     a("- the ruin's overlay over water is `tile.ruin.edge.<mask>.<R>` (R = 0-10, the same row phase), so the courses "
       "run on from the overlay into the full tiles beside it. No pictures.")
+    a("")
+    a("**Changes in round 8** (for the engine): transition overlays never hold a detached island or a hole (16 "
+      "sets × `edge.1.0`, `2.0`, `4.3`, `7.0-3` and the foam redrawn); masks 6 / 9 use the same shared wobble as "
+      "the others; dunes by step 4b (new formula); pictures only on one height (step 5); inner step corners "
+      "`<prefix>.step.inner.<ne|nw>` (2b). No key removed.")
     a("")
     a("**Changes in round 7** (for the engine): transition overlays have 4 variants per mask (masks 6 / 9: 2) chosen "
       "by side states (section 2, step 3); new step rims / shadows (section 2b); the desert's dunes are their own "
@@ -182,6 +190,19 @@ def names_md(files, redrawn, new, copied):
       "`<prefix>.step.shade.<v>` with the LOWER cell's prefix at that cell's position on its own ground "
       "(`((tx+1)·16, ty·16 − h_east)`), `v = hash(tx + 6, ty + 9) % 2`: a 2-8 px shadow from its west side with a wavy "
       "edge.")
+    a("- **Inner corners** (round 8): on a high cell whose north and east neighbours are not lower but whose NE "
+      "neighbour is lower, also draw `<prefix>.step.inner.ne` over its surface; north and west not lower, NW lower: "
+      "`<prefix>.step.inner.nw`. They join the end of the north rim of the side neighbour and the end of the east / "
+      "west rim of the north neighbour (no gap at the corner).")
+    a("- **Strength** (round 8): the outline is the ground's lightest tone at least 28 (0-255) darker than its core, "
+      "and never lighter than tone 1; the shadow and the shaded east rim the lightest at least 15 darker (grass, "
+      "plains, lake: tones 0 / 1; moss 0 / 1; island sand 1 / 1; desert, path, ruin 1 / 2; snow 1 / 2; autumn grass "
+      "1 / 2, lake 1 / 1, moss 0 / 1).")
+    a("- **Order and opacity:** the rim right after the cell's surface, before the next row's surfaces. The shadow "
+      "after all the surfaces of its row (else a slightly lower east cell's surface would hide it), opaque, as "
+      "drawn (it covers the small marks of the lower cell's ground under it; if the engine prefers it "
+      "see-through, draw it at alpha 0.6 — its tone was chosen for full strength). No shadow when the lower east "
+      "cell is water or a ground with no v2 art; a cliff face (south side) keeps its own contact shadow.")
     a("- Along a straight step the outline, rim and shadow depths are 32-periodic in the position along the side, so "
       "they join from cell to cell (variant 1 adds a bump that is 0 at the cell's corners). Keys exist for every "
       "ground of section 1 and every season set (`tile.ruin.step.*` too).")

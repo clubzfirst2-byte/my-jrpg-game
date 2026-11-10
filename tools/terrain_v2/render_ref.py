@@ -192,13 +192,15 @@ def calm_number(i, j):
     return n
 
 
-P_DUNE = 0.1
-
-
 def dune(a, b):
-    """Desert blocks (round 7): a dune picture 1-6 on about one block in ten, else 0 (NAMES.md 1 A, step 4b)."""
-    h = dhash(a + 77, b + 31)
-    return 1 + dhash(a + 91, b + 47) % 6 if (h % 1024) / 1024 < P_DUNE else 0
+    """Desert blocks (round 8): one dune per cell of 4 x 3 blocks, on a hashed block of the cell; its shape 1-6
+    from the cell's place in a 3 x 2 pattern of cells, turned by a hash per pattern (so the 6 shapes are spread
+    out and none comes twice close together). 0 = no dune (NAMES.md 1 A, step 4b)."""
+    sa, sb = a // 4, b // 3
+    hs = dhash(sa + 77, sb + 31)
+    if (a, b) != (4 * sa + hs % 4, 3 * sb + (hs >> 2) % 3):
+        return 0
+    return 1 + (sa % 3 + 3 * (sb % 2) + dhash(sa // 3 + 13, sb // 2 + 29)) % 6
 
 
 def p_none(a, b):

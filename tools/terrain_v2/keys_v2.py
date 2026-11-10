@@ -43,6 +43,8 @@ def final_name(internal):
         return f"{season}{p}.edge.{rest[0][1:]}.{rest[1]}"
     if rest[0].startswith("stepshade"):  # round 7
         return f"{season}{p}.step.shade.{rest[1]}"
+    if rest[0].startswith("stepinner"):  # round 8
+        return f"{season}{p}.step.inner.{rest[1]}"
     if rest[0].startswith("step"):
         return f"{season}{p}.step.{rest[0][4:]}.{rest[1]}"
     if rest[0].startswith(("macro", "dune")):

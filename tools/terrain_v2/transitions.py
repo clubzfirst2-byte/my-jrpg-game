@@ -57,7 +57,7 @@ def inner_wobble(x, y, variant):
 SIDES = ("N", "E", "S", "W")
 BUMP = 0.15
 SHARED = 0.35  # round 7: the wobble every tile shares (32-periodic) is weaker; the per-tile parts carry the shape
-INNER_AMP = {1: 3.6, 2: 3.1, 3: 3.5, 4: 2.7, 5: 2.1, 7: 2.8, 8: 2.8, 10: 1.6, 11: 2.2, 12: 1.7, 13: 1.6, 14: 2.4}  # tuned: border swing per variant (jit)
+INNER_AMP = {1: 3.6, 2: 3.1, 3: 3.5, 4: 2.7, 5: 2.1, 7: 2.8, 8: 2.8, 10: 2.0, 11: 2.2, 12: 1.7, 13: 1.6, 14: 2.4}  # tuned: border swing per variant (jit)
 
 
 def crossing_sides(mask):
@@ -100,7 +100,7 @@ def inner7(mask, x, y, variant):
     """Round 7: an inner wobble on every variant (two phase sets by the variant's parity), zero on the edges."""
     u, v = (x + 0.5) / 32, (y + 0.5) / 32
     w = math.sin(math.pi * u) * math.sin(math.pi * v)  # 0 on the tile's edges
-    ph = 1.3 * (variant % 2) + 0.7 * (variant // 2) + 0.9 * mask
+    ph = 3.1 * (variant % 2) + 4.7 * (variant // 2) + 0.9 * mask  # round 8: the 4 variants far apart (mask 10 repeated)
     amp = INNER_AMP.get(mask, 1.0)
     return amp * w * (0.05 * math.sin(TAU * (1.5 * u + 1.2 * v) + 0.4 + ph) + 0.035 * math.sin(TAU * (2.5 * v - 0.7 * u) + 1.1 - ph))
 
@@ -112,8 +112,8 @@ def field(mask, x, y, variant=0, legacy=False):
     f = nw * (1 - u) * (1 - v) + ne * u * (1 - v) + sw * (1 - u) * v + se * u * v
     if legacy:
         return f + wobble(x, y) + inner_wobble(x, y, variant)
-    if mask in (6, 9):
-        return f + wobble(x, y) + inner_wobble(x, y, variant)
+    if mask in (6, 9):  # round 8: the same shared wobble as the other masks, so they join their neighbours
+        return f + SHARED * wobble(x, y) + inner_wobble(x, y, variant)
     return f + SHARED * wobble(x, y) + inner7(mask, x, y, variant) + side_terms(mask, x, y, variant)
 
 
@@ -128,18 +128,80 @@ def gradient(mask, x, y):
 RIM = 0.06  # field band of the rim (about 2 px)
 
 
+_CLEAN = {}
+
+
+def clean_inside(mask, variant, legacy=False):
+    """Round 8: which pixels are the terrain's, as one piece. The field can leave a small island of terrain or a
+    round hole near a corner; a terrain part that does not reach the tile's edge is dropped, and a hole (a
+    clear part that does not reach the edge) is filled. Returns (F, inside, dist): the field, the cleaned
+    inside, and each pixel's 4-step distance to the inside (capped at 9)."""
+    key = (mask, variant, legacy)
+    if key in _CLEAN:
+        return _CLEAN[key]
+    F = [[field(mask, x, y, variant, legacy=legacy) for x in range(32)] for y in range(32)]
+    raw = [[F[y][x] > 0.5 for x in range(32)] for y in range(32)]
+
+    def parts(want):
+        seen, out = set(), []
+        for y in range(32):
+            for x in range(32):
+                if raw[y][x] != want or (x, y) in seen:
+                    continue
+                comp, stack = [], [(x, y)]
+                seen.add((x, y))
+                while stack:
+                    p, q = stack.pop()
+                    comp.append((p, q))
+                    for a, b in ((p + 1, q), (p - 1, q), (p, q + 1), (p, q - 1)):
+                        if 0 <= a < 32 and 0 <= b < 32 and (a, b) not in seen and raw[b][a] == want:
+                            seen.add((a, b))
+                            stack.append((a, b))
+                out.append(comp)
+        return out
+
+    inside = [row[:] for row in raw]
+    for want in (True, False):
+        for comp in parts(want):
+            if not any(p in (0, 31) or q in (0, 31) for p, q in comp):
+                for p, q in comp:
+                    inside[q][p] = not want
+    dist = [[0 if inside[y][x] else 9 for x in range(32)] for y in range(32)]
+    frontier = [(x, y) for y in range(32) for x in range(32) if inside[y][x]]
+    for d in range(1, 9):
+        nxt = []
+        for p, q in frontier:
+            for a, b in ((p + 1, q), (p - 1, q), (p, q + 1), (p, q - 1)):
+                if 0 <= a < 32 and 0 <= b < 32 and dist[b][a] > d:
+                    dist[b][a] = d
+                    nxt.append((a, b))
+        frontier = nxt
+    near = [[False] * 32 for _ in range(32)]  # inside pixels within 3 steps of the clear part (where the rim goes)
+    frontier = [(x, y) for y in range(32) for x in range(32) if not inside[y][x]]
+    for _ in range(3):
+        nxt = []
+        for p, q in frontier:
+            for a, b in ((p + 1, q), (p - 1, q), (p, q + 1), (p, q - 1)):
+                if 0 <= a < 32 and 0 <= b < 32 and inside[b][a] and not near[b][a]:
+                    near[b][a] = True
+                    nxt.append((a, b))
+        frontier = nxt
+    _CLEAN[key] = (F, inside, dist, near)
+    return _CLEAN[key]
+
+
 def overlay(tex, mat, mask, variant, style):
     c = Canvas(32, 32, None, wrap=False)
-    F = [[field(mask, x, y, variant, legacy=(style == "ruin")) for x in range(32)] for y in range(32)]  # ruin: round-6 shapes
+    F, inside, dist, near = clean_inside(mask, variant, legacy=(style == "ruin"))  # ruin: round-6 shapes
     for y in range(32):
         for x in range(32):
             f = F[y][x]
-            if f <= 0.5:
+            if not inside[y][x]:
                 continue
             c.px[y][x] = tex.px[y][x]
             gx, gy = gradient(mask, x, y)
             lit_side = (gx + gy) > 0.05  # the terrain lies to the lower right: this edge faces up / left
-            if f < 0.5 + RIM:
+            if 0.5 < f < 0.5 + RIM and near[y][x]:  # (no rim around a filled hole)
                 if style == "grass":
                     c.put(x, y, mat, 4 if lit_side else 2)  # turf edge: lit toward the light, shaded away
                 elif style == "sand":
@@ -156,7 +218,7 @@ def overlay(tex, mat, mask, variant, style):
         for y in range(32):
             for x in range(32):
                 f = F[y][x]
-                if not (0.5 - 0.05 < f <= 0.5) or x in (0, 31) or y in (0, 31):  # round 7: none on the outer ring
+                if inside[y][x] or dist[y][x] > 2 or not 0.5 - 0.05 < f or x in (0, 31) or y in (0, 31):  # r7: not on the outer ring
                     continue
                 r = _rnd(x, y, mask, variant)
                 if r > 0.42:
@@ -167,14 +229,41 @@ def overlay(tex, mat, mask, variant, style):
                 step = -1 if gy >= 0 else 1  # the turf below: blades rise; the turf above: they hang
                 xx, yy = x, y
                 for k in range(h):
-                    if not (1 <= xx < 31 and 1 <= yy < 31) or (k and F[yy][xx] > 0.5):
+                    if not (1 <= xx < 31 and 1 <= yy < 31) or (k and inside[yy][xx]):
                         break
                     tip = k == h - 1
                     c.put(xx, yy, mat, (5 if tip else 4) if step < 0 else (2 if tip else 3))
                     yy += step
                     if k == 1:
                         xx += lean
+        _open_pockets(c, inside)
     return c
+
+
+def _open_pockets(c, inside):
+    """Round 8: tufts may close a clear pocket (in the narrow gap of masks 6 / 9); take the tufts around it away."""
+    seen = set()
+    for y in range(32):
+        for x in range(32):
+            if c.px[y][x] is not None or (x, y) in seen:
+                continue
+            comp, stack, edge = [], [(x, y)], False
+            seen.add((x, y))
+            while stack:
+                p, q = stack.pop()
+                comp.append((p, q))
+                edge |= p in (0, 31) or q in (0, 31)
+                for a, b in ((p + 1, q), (p - 1, q), (p, q + 1), (p, q - 1)):
+                    if 0 <= a < 32 and 0 <= b < 32 and (a, b) not in seen and c.px[b][a] is None:
+                        seen.add((a, b))
+                        stack.append((a, b))
+            if edge:
+                continue
+            for p, q in comp:
+                for a in range(p - 2, p + 3):
+                    for b in range(q - 2, q + 3):
+                        if 0 <= a < 32 and 0 <= b < 32 and not inside[b][a]:
+                            c.px[b][a] = None
 
 
 def _rnd(x, y, mask, variant):

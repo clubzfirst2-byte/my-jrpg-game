@@ -15,7 +15,7 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 from canvas import Canvas  # noqa: E402
 import marks as M  # noqa: E402
-from transitions import field, gradient  # noqa: E402
+from transitions import clean_inside, field, gradient  # noqa: E402
 
 FRAMES = 4
 CREST_LIFE = [  # (rows) per life stage; digits = tones, '.' = leave the water
@@ -78,10 +78,11 @@ def foam_overlay(mask, frame, variant=0):
     """Foam on the water just outside a shore (mask = corners that are land). Land side transparent (the
     land overlay is drawn over it). Includes a 1-px lighter shallow line beyond the foam."""
     c = Canvas(32, 32, None, wrap=False)
+    F, inside, dist, _near = clean_inside(mask, variant)  # round 8: no foam ring around a dropped island
     for y in range(32):
         for x in range(32):
-            f = field(mask, x, y, variant)
-            if f > 0.5:
+            f = F[y][x]
+            if inside[y][x] or dist[y][x] > 3:
                 continue
             reach = FOAM_DEPTH[frame]
             if mask in (6, 9) and ((x - y) < 0 if mask == 6 else (x + y) > 31):
@@ -92,4 +93,24 @@ def foam_overlay(mask, frame, variant=0):
                 c.put(x, y, "shallow", 6 if along in FOAM_BITS else 5)
             elif f > 0.5 - reach - 0.035:
                 c.put(x, y, "shallow", 4)
+    # round 8: no lone foam specks (a patch under 3 px that does not reach the tile's edge, 8-connected)
+    seen = set()
+    for y in range(32):
+        for x in range(32):
+            if c.px[y][x] is None or (x, y) in seen:
+                continue
+            comp, st, edge = [], [(x, y)], False
+            seen.add((x, y))
+            while st:
+                p, q = st.pop()
+                comp.append((p, q))
+                edge |= p in (0, 31) or q in (0, 31)
+                for a in (p - 1, p, p + 1):
+                    for b in (q - 1, q, q + 1):
+                        if 0 <= a < 32 and 0 <= b < 32 and (a, b) not in seen and c.px[b][a] is not None:
+                            seen.add((a, b))
+                            st.append((a, b))
+            if not edge and len(comp) < 3:
+                for p, q in comp:
+                    c.px[q][p] = None
     return c

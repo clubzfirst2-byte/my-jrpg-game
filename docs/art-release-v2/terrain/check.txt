@@ -1,45 +1,45 @@
 # ground v2: measured (gen_v2.py writes this)
 
-files: 2818 = 189 v1 keys redrawn + 2443 new keys + 186 v1 keys copied unchanged
+files: 2852 = 189 v1 keys redrawn + 2477 new keys + 186 v1 keys copied unchanged
 seam check: OK
 
 ground tiles: colours per tile / lightness spread (std, 0-100)
   tile.grass.0                   colours  3  spread  1.7
-  tile.grass.step.1.0            colours  3  spread  7.7
-  tile.grass.step.2.0            colours  2  spread  2.2
-  tile.grass.step.3.0            colours  4  spread  6.5
-  tile.grass.step.4.0            colours  3  spread  7.6
-  tile.grass.step.5.0            colours  3  spread  7.7
-  tile.grass.step.6.0            colours  4  spread  6.5
-  tile.grass.step.7.0            colours  4  spread  7.0
-  tile.grass.step.shade.0        colours  2  spread  1.7
+  tile.grass.step.1.0            colours  3  spread 12.9
+  tile.grass.step.2.0            colours  2  spread  5.1
+  tile.grass.step.3.0            colours  4  spread 10.8
+  tile.grass.step.4.0            colours  3  spread 12.8
+  tile.grass.step.5.0            colours  3  spread 13.0
+  tile.grass.step.6.0            colours  4  spread 10.7
+  tile.grass.step.7.0            colours  4  spread 11.7
+  tile.grass.step.shade.0        colours  2  spread  4.1
   plains.grass.0                 colours  5  spread  1.7
-  plains.grass.step.1.0          colours  3  spread  7.7
-  plains.grass.step.2.0          colours  2  spread  2.2
-  plains.grass.step.3.0          colours  4  spread  6.5
-  plains.grass.step.4.0          colours  3  spread  7.6
-  plains.grass.step.5.0          colours  3  spread  7.7
-  plains.grass.step.6.0          colours  4  spread  6.5
-  plains.grass.step.7.0          colours  4  spread  7.0
-  plains.grass.step.shade.0      colours  2  spread  1.7
+  plains.grass.step.1.0          colours  3  spread 12.9
+  plains.grass.step.2.0          colours  2  spread  5.1
+  plains.grass.step.3.0          colours  4  spread 10.8
+  plains.grass.step.4.0          colours  3  spread 12.8
+  plains.grass.step.5.0          colours  3  spread 13.0
+  plains.grass.step.6.0          colours  4  spread 10.7
+  plains.grass.step.7.0          colours  4  spread 11.7
+  plains.grass.step.shade.0      colours  2  spread  4.1
   lake.grass.0                   colours  3  spread  1.4
-  lake.grass.step.1.0            colours  3  spread  7.5
-  lake.grass.step.2.0            colours  2  spread  2.2
-  lake.grass.step.3.0            colours  4  spread  6.3
-  lake.grass.step.4.0            colours  3  spread  7.4
-  lake.grass.step.5.0            colours  3  spread  7.5
-  lake.grass.step.6.0            colours  4  spread  6.2
-  lake.grass.step.7.0            colours  4  spread  6.8
-  lake.grass.step.shade.0        colours  2  spread  1.8
+  lake.grass.step.1.0            colours  3  spread 12.3
+  lake.grass.step.2.0            colours  2  spread  4.8
+  lake.grass.step.3.0            colours  4  spread 10.3
+  lake.grass.step.4.0            colours  3  spread 12.2
+  lake.grass.step.5.0            colours  3  spread 12.4
+  lake.grass.step.6.0            colours  4  spread 10.2
+  lake.grass.step.7.0            colours  4  spread 11.1
+  lake.grass.step.shade.0        colours  2  spread  3.8
   forest.grass.0                 colours  3  spread  1.1
-  forest.grass.step.1.0          colours  3  spread  6.0
-  forest.grass.step.2.0          colours  2  spread  1.7
-  forest.grass.step.3.0          colours  4  spread  5.0
-  forest.grass.step.4.0          colours  3  spread  5.9
-  forest.grass.step.5.0          colours  3  spread  6.0
-  forest.grass.step.6.0          colours  4  spread  5.0
-  forest.grass.step.7.0          colours  4  spread  5.5
-  forest.grass.step.shade.0      colours  2  spread  1.3
+  forest.grass.step.1.0          colours  3  spread  9.7
+  forest.grass.step.2.0          colours  2  spread  3.7
+  forest.grass.step.3.0          colours  4  spread  8.1
+  forest.grass.step.4.0          colours  3  spread  9.6
+  forest.grass.step.5.0          colours  3  spread  9.7
+  forest.grass.step.6.0          colours  4  spread  8.0
+  forest.grass.step.7.0          colours  4  spread  8.8
+  forest.grass.step.shade.0      colours  2  spread  2.9
   mountains.snow.0               colours  4  spread  3.2
   mountains.snow.step.1.0        colours  3  spread 16.0
   mountains.snow.step.2.0        colours  2  spread  5.8
@@ -51,13 +51,13 @@ ground tiles: colours per tile / lightness spread (std, 0-100)
   mountains.snow.step.shade.0    colours  2  spread  4.6
   tile.sand                      colours  3  spread  1.5
   tile.sand.step.1.0             colours  3  spread  9.4
-  tile.sand.step.2.0             colours  2  spread  4.4
-  tile.sand.step.3.0             colours  4  spread  7.9
+  tile.sand.step.2.0             colours  1  spread  0.0
+  tile.sand.step.3.0             colours  3  spread  8.3
   tile.sand.step.4.0             colours  3  spread  9.3
   tile.sand.step.5.0             colours  3  spread  9.4
-  tile.sand.step.6.0             colours  4  spread  7.8
-  tile.sand.step.7.0             colours  4  spread  8.5
-  tile.sand.step.shade.0         colours  2  spread  3.5
+  tile.sand.step.6.0             colours  3  spread  8.6
+  tile.sand.step.7.0             colours  3  spread  9.0
+  tile.sand.step.shade.0         colours  1  spread  0.0
   desert.sand.0                  colours 11  spread  2.8
   desert.sand.dune1.0            colours  4  spread  4.9
   desert.sand.dune2.0            colours  3  spread  2.3
@@ -111,22 +111,22 @@ ground tiles: colours per tile / lightness spread (std, 0-100)
   autumn.plains.grass.step.shade.0 colours  2  spread  1.8
   autumn.lake.grass.0            colours  5  spread  2.1
   autumn.lake.grass.step.1.0     colours  3  spread  9.9
-  autumn.lake.grass.step.2.0     colours  2  spread  3.7
-  autumn.lake.grass.step.3.0     colours  4  spread  8.3
+  autumn.lake.grass.step.2.0     colours  1  spread  0.0
+  autumn.lake.grass.step.3.0     colours  3  spread  8.7
   autumn.lake.grass.step.4.0     colours  3  spread  9.8
   autumn.lake.grass.step.5.0     colours  3  spread  9.9
-  autumn.lake.grass.step.6.0     colours  4  spread  8.2
-  autumn.lake.grass.step.7.0     colours  4  spread  8.9
-  autumn.lake.grass.step.shade.0 colours  2  spread  2.9
+  autumn.lake.grass.step.6.0     colours  3  spread  9.1
+  autumn.lake.grass.step.7.0     colours  3  spread  9.5
+  autumn.lake.grass.step.shade.0 colours  1  spread  0.0
   autumn.forest.grass.0          colours  3  spread  1.4
-  autumn.forest.grass.step.1.0   colours  3  spread  6.3
-  autumn.forest.grass.step.2.0   colours  2  spread  1.6
-  autumn.forest.grass.step.3.0   colours  4  spread  5.3
-  autumn.forest.grass.step.4.0   colours  3  spread  6.2
-  autumn.forest.grass.step.5.0   colours  3  spread  6.3
-  autumn.forest.grass.step.6.0   colours  4  spread  5.3
-  autumn.forest.grass.step.7.0   colours  4  spread  5.8
-  autumn.forest.grass.step.shade.0 colours  2  spread  1.2
+  autumn.forest.grass.step.1.0   colours  3  spread 10.4
+  autumn.forest.grass.step.2.0   colours  2  spread  4.1
+  autumn.forest.grass.step.3.0   colours  4  spread  8.7
+  autumn.forest.grass.step.4.0   colours  3  spread 10.3
+  autumn.forest.grass.step.5.0   colours  3  spread 10.4
+  autumn.forest.grass.step.6.0   colours  4  spread  8.6
+  autumn.forest.grass.step.7.0   colours  4  spread  9.4
+  autumn.forest.grass.step.shade.0 colours  2  spread  3.2
   winter.tile.grass.0            colours  6  spread  3.4
   winter.tile.grass.step.1.0     colours  3  spread 16.0
   winter.tile.grass.step.2.0     colours  2  spread  5.8
@@ -170,6 +170,6 @@ ground tiles: colours per tile / lightness spread (std, 0-100)
   winter  g:0.99  p:0.99  l:0.99  m:0.99
 
 banding (autocorrelation of the row means / of the column means: at 32 px, then at 64 px; 80x48 fields; target <= 0.3)
-  summer  g:-0.04/+0.07  +0.09/+0.03  p:+0.04/+0.03  +0.02/-0.04  l:+0.11/+0.14  +0.07/+0.03  m:+0.06/+0.04  +0.06/+0.06  n:-0.00/+0.20  -0.02/+0.06  s:-0.10/-0.05  -0.04/-0.01  d:-0.02/+0.07  +0.03/+0.04  =:+0.10/+0.18  +0.09/+0.05  u:-0.12/-0.03  -0.23/+0.27
+  summer  g:-0.04/+0.07  +0.09/+0.03  p:+0.04/+0.03  +0.02/-0.04  l:+0.11/+0.14  +0.07/+0.03  m:+0.06/+0.04  +0.06/+0.06  n:-0.00/+0.20  -0.02/+0.06  s:-0.10/-0.05  -0.04/-0.01  d:-0.02/+0.06  +0.00/+0.01  =:+0.10/+0.18  +0.09/+0.05  u:-0.12/-0.03  -0.23/+0.27
   autumn  g:-0.09/+0.26  +0.08/+0.11  p:+0.12/+0.19  +0.14/+0.11  l:+0.06/+0.10  +0.14/+0.01  m:+0.04/+0.07  +0.06/+0.03
   winter  g:+0.02/+0.21  -0.02/+0.17  p:-0.02/+0.14  -0.01/+0.06  l:+0.01/+0.13  +0.06/+0.13  m:-0.04/+0.17  +0.02/+0.21
