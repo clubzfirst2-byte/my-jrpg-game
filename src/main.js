@@ -22,16 +22,17 @@ import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
 import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
 import { availableV1Groups, availableV2Groups, prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
-import { resolveArtGroups } from './view/assets/artV2.js';
+import { resolveArtGroups, v2Name } from './view/assets/artV2.js';
+import { installUiSkin, showButtonLabels } from './ui/uiSkin.js';
 import { TERRAIN_GROUP, releaseTerrainEntries, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
 import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
 import { InputManager } from './platform/inputManager.js';
 import { installLifecycle } from './platform/lifecycle.js';
-import { loadSettings, saveSettings } from './platform/settings.js';
+import { countSession, loadSettings, saveSettings } from './platform/settings.js';
 import { PauseOverlay } from './ui/pauseOverlay.js';
-import { SettingsMenu } from './ui/settingsMenu.js';
+import { BUTTON_LABELS_ROW, SETTING_ROWS, SettingsMenu } from './ui/settingsMenu.js';
 import { HeartsHud } from './ui/hud.js';
 import { RotateHint } from './ui/rotateHint.js';
 import { TitleScreen } from './ui/title.js';
@@ -158,7 +159,14 @@ async function boot() {
   releaseGroups.push(...objectsReleaseGroups(params, { releaseHero, protoGroups }));
   // Graphics v2: a group's v2 art (src/art-release-v2) in place of its v1 art when enabled (?v2=0, ?<group>=v1|v2; artV2.js)
   const artGroups = resolveArtGroups(releaseGroups, params, { available: availableV2Groups(), v1Groups: availableV1Groups() });
-  for (const frames of await Promise.all(artGroups.map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
+  // W4: the v2 UI art (v2/ui) is not world art: it goes to the DOM UI (uiSkin.js), not the sprite packs.
+  const uiArtGroup = artGroups.find((g) => g === v2Name('ui'));
+  // (its frames are cut out and encoded as soon as its sheet is in, while the world art still loads;
+  // if that fails, the v1 UI)
+  const uiSkinLoad = uiArtGroup ? releaseFrames(uiArtGroup).then((f) => (f.size ? (installUiSkin(uiRoot, f), true) : false)).catch((err) => (console.warn(`art: v2 ui: ${String(err)}; using the v1 UI`), false)) : Promise.resolve(false);
+  for (const frames of await Promise.all(artGroups.filter((g) => g !== uiArtGroup).map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
+  const uiV2 = await uiSkinLoad;
+  const sessions = uiV2 ? countSession() : 1; // (the v1 UI stores nothing new)
   installItemIcons(artOverrides); // the menus' item icons, from the same art
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
 
@@ -515,8 +523,10 @@ async function boot() {
       applySettings();
     },
     onClose: () => pauseOverlay.refresh(),
-  });
+  }, uiV2 ? [...SETTING_ROWS, BUTTON_LABELS_ROW] : SETTING_ROWS);
   function applySettings() {
+    // W4: the round buttons' text labels (v2 UI): the first few sessions, always, or never.
+    uiRoot.classList.toggle('ui-labels', uiV2 && showButtonLabels(settings.buttonLabels, sessions));
     uiRoot.classList.toggle('text-large', settings.textSize === 'large');
     uiRoot.classList.toggle('btn-small', settings.buttonSize === 'small');
     uiRoot.classList.toggle('btn-large', settings.buttonSize === 'large');
@@ -834,7 +844,13 @@ async function boot() {
     menu.setNearby(inTitle || inTalk() ? null : state.nearby, state.nearbyNpc?.name ?? '');
     // The ability button shows the selected 星環 power (hidden until the first one is learned).
     const abilityLabel = state.progress.ability ? ABILITY_NAMES[state.progress.ability] : '';
-    if (abilityButton.textContent !== abilityLabel) abilityButton.textContent = abilityLabel;
+    if (abilityButton.textContent !== abilityLabel) {
+      abilityButton.textContent = abilityLabel;
+      if (abilityLabel) abilityButton.setAttribute('aria-label', abilityLabel); // W4: the v2 UI shows an icon
+    }
+    // W4 (v2 UI): the round buttons are hidden while the dialogue box is open (styles.css).
+    const talking = !!state.dialogue;
+    if (uiRoot.classList.contains('talking') !== talking) uiRoot.classList.toggle('talking', talking);
     const showAbility = !!state.progress.ability && !inTitle;
     if (abilityButton.hidden === showAbility) abilityButton.hidden = !showAbility;
     const showNext = showAbility && state.progress.abilities.length > 1;

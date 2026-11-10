@@ -128,6 +128,7 @@ class HoldButton {
     this.el.type = 'button';
     this.el.className = 'action-button';
     this.el.textContent = label;
+    this.el.setAttribute('aria-label', label); // W4: the v2 UI may show only an icon
     root.append(this.el);
     /** @type {Set<number>} */
     this.pointers = new Set();

@@ -68,16 +68,21 @@ export class PauseOverlay {
       });
       sound.append(toTitle);
     }
-    this.overlay.append(title);
+    // W4: title, version, message and 再開 sit in a panel with the v2 UI (`display: contents` in v1).
+    const panel = document.createElement('div');
+    panel.className = 'pause-panel';
+    this.overlay.append(panel);
+    panel.append(title);
     // v1.0 final: the version sits in the centred column under the title (it used to be pinned
     // to the top-left corner, where it overlapped the pause button).
     if (handlers.version) {
       const v = document.createElement('div');
       v.className = 'pause-version';
       v.textContent = handlers.version;
-      this.overlay.append(v);
+      panel.append(v);
     }
-    this.overlay.append(this.message, sound, resume);
+    panel.append(this.message, resume);
+    this.overlay.append(sound);
     this.refresh();
     this.overlay.addEventListener('click', () => handlers.onResume());
 

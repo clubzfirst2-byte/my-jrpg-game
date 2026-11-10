@@ -59,6 +59,7 @@ export class InventoryMenu {
     this.pot = [];
 
     this.bagButton = button('bag-button', '持ち物', () => this.open());
+    this.bagButton.setAttribute('aria-label', '持ち物'); // W4: the v2 UI may show only an icon
     // The station (fire / anvil) is decided when the button is pressed: the game is paused while the
     // menu is open, so the player is still there.
     this.useButton = button('use-button', '', () => (this.useKind === 'talk' || this.useKind === 'sleep' ? this.hooks.talk?.() : this.open(this.useTab, true)));
