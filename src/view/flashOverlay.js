@@ -89,20 +89,27 @@ function makeSilhouette(tex, mode) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return Texture.WHITE;
   ctx.drawImage(img, Math.round(f.x * res), Math.round(f.y * res), w, h, 0, 0, w, h);
+  ctx.globalCompositeOperation = 'source-in';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
   if (mode === 'rim') {
-    const img = ctx.getImageData(0, 0, w, h);
-    const a = new Uint8ClampedArray(w * h);
-    for (let i = 0; i < a.length; i++) a[i] = img.data[i * 4 + 3];
-    const rim = rimAlpha(a, w, h, Math.max(1, Math.round(res)));
-    for (let i = 0; i < a.length; i++) {
-      img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = 255;
-      img.data[i * 4 + 3] = rim[i];
+    // The same as rimAlpha, by compositing (no pixel read-back, which is slow): the body shrunk by
+    // one game px (the silhouette kept only where its copies shifted by r px all four ways are
+    // opaque), faded out of the silhouette to RIM_FLASH.inside.
+    const r = Math.max(1, Math.round(res));
+    const inner = document.createElement('canvas');
+    inner.width = w;
+    inner.height = h;
+    const ic = inner.getContext('2d');
+    if (ic) {
+      ic.drawImage(canvas, 0, 0);
+      ic.globalCompositeOperation = 'destination-in';
+      for (const [dx, dy] of [[r, 0], [-r, 0], [0, r], [0, -r]]) ic.drawImage(canvas, dx, dy);
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.globalAlpha = RIM_FLASH.edge - RIM_FLASH.inside;
+      ctx.drawImage(inner, 0, 0);
+      ctx.globalAlpha = 1;
     }
-    ctx.putImageData(img, 0, 0);
-  } else {
-    ctx.globalCompositeOperation = 'source-in';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, w, h);
   }
   // Same set-up as the atlases (placeholderPack.js): the frame is measured in game pixels.
   const source = Texture.from(canvas, true).source;

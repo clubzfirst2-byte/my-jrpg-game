@@ -36,7 +36,7 @@ import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
 import { SilhouetteCache, placeFlash, RIM_FLASH } from './flashOverlay.js';
 import { EnemySlots } from './enemySlots.js';
 import { objectShadow, characterShadow, placeShadow, weatherShadow, SHADOW } from './shadows.js';
-import { PANE_AREA, windowGlow, hasWindows, paneImage, windowLightSpots } from './houseWindows.js';
+import { PANE_AREA, windowGlow, hasWindows, paneImageFromTable, windowLightSpots } from './houseWindows.js';
 import { AmbientParticles, ambientKinds, mistTextures } from './ambientParticles.js';
 import { HitFx } from './hitFx.js';
 import { isDark, hourOf } from '../game/env/weather.js';
@@ -1046,8 +1046,8 @@ export class GameView {
   }
 
   /**
-   * gfx W5: the lit glass of a house texture (houseWindows.paneImage, from its pixels), made once per
-   * texture; null when it cannot be read or has no glass.
+   * gfx W5: the lit glass of a house texture (houseWindows.HOUSE_GLASS, read off the release house's
+   * art), made once per texture; null when there is none.
    * @param {Texture} tex @returns {{ tex: Texture, scale: number } | null}
    */
   paneTexture(tex) {
@@ -1056,20 +1056,9 @@ export class GameView {
     /** @type {{ tex: Texture, scale: number } | null} */
     let out = null;
     try {
-      // the frame's pixels from its image (a canvas copy, as flashOverlay.js does: no GPU read-back)
-      const res = tex.source.resolution || 1;
-      const f = tex.frame;
-      const width = Math.round(f.width * res);
-      const height = Math.round(f.height * res);
-      const src = /** @type {any} */ (tex.source.resource);
-      const rc = document.createElement('canvas');
-      rc.width = width;
-      rc.height = height;
-      const rctx = /** @type {CanvasRenderingContext2D} */ (rc.getContext('2d', { willReadFrequently: true }));
-      rctx.drawImage(src, Math.round(f.x * res), Math.round(f.y * res), width, height, 0, 0, width, height);
-      const pixels = rctx.getImageData(0, 0, width, height).data;
-      const scale = width / tex.width;
-      const img = paneImage(pixels, width, scale);
+      // the glass of the release house, from the table read off its art (no pixel read-back)
+      const img = paneImageFromTable();
+      const scale = img.scale;
       if (img.glass > 0) {
         const c = document.createElement('canvas');
         c.width = img.w;

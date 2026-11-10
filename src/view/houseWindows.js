@@ -46,6 +46,43 @@ export function glassKind(r, g, b, a) {
   return lum < 40 ? 2 : lum < 110 ? 1 : 0;
 }
 
+/**
+ * The glass pixels of the release house's two windows (art px, 2 per game px; rows top to bottom over
+ * each HOUSE_WINDOWS rect): g glass, d the darkest glass, . anything else (frame, mullion, glints).
+ * Read off the art by glassKind (a unit test checks it still matches obj.house.png), so the game
+ * needs no pixel read-back from the GPU (which cost about a second on loading the village).
+ */
+export const HOUSE_GLASS = Object.freeze([
+  Object.freeze([
+    'dd...d...ddddd',
+    'd...dd..dddddd',
+    '...ggg..gggggg',
+    '..ggg...gggggg',
+    '.ggg.g..gggggg',
+    'ggg.gg..gggggg',
+    'gg.ggg..gggggg',
+    '..............',
+    '..............',
+    'gggggg..gggggg',
+    'gggggg..gggggg',
+    'gggggg..gggggg',
+  ]),
+  Object.freeze([
+    'dd...d...ddddd',
+    'd...dd..dddddd',
+    '...ggg..gggggg',
+    '..ggg...gggggg',
+    '.ggg.g..gggggg',
+    'ggg.gg..gggggg',
+    'gg.ggg..gggggg',
+    '..............',
+    '..............',
+    'gggggg..gggggg',
+    'gggggg..gggggg',
+    'gggggg..gggggg',
+  ]),
+]);
+
 /** The area of the art that holds both windows (game px from the feet): one sprite per house. */
 export const PANE_AREA = Object.freeze({ x: HOUSE_WINDOWS[0].x, y: HOUSE_WINDOWS[0].y, w: HOUSE_WINDOWS[1].x + HOUSE_WINDOWS[1].w - HOUSE_WINDOWS[0].x, h: HOUSE_WINDOWS[0].h });
 
@@ -82,6 +119,36 @@ export function paneImage(px, width, scale) {
     }
   }
   return { w, h, data, glass };
+}
+
+/**
+ * The lit panes as an RGBA image over PANE_AREA, from HOUSE_GLASS (the same image paneImage makes
+ * from the art's pixels; 2 art px per game px).
+ * @returns {{ w: number, h: number, data: Uint8ClampedArray, glass: number, scale: number }}
+ */
+export function paneImageFromTable() {
+  const scale = 2;
+  const w = PANE_AREA.w * scale;
+  const h = PANE_AREA.h * scale;
+  const data = new Uint8ClampedArray(w * h * 4);
+  let glass = 0;
+  HOUSE_WINDOWS.forEach((win, k) => {
+    const x0 = (win.x - PANE_AREA.x) * scale;
+    const y0 = (win.y - PANE_AREA.y) * scale;
+    HOUSE_GLASS[k].forEach((row, y) => {
+      for (let x = 0; x < row.length; x++) {
+        if (row[x] === '.') continue;
+        const c = row[x] === 'd' ? WINDOW_GLOW.deep : WINDOW_GLOW.glass;
+        const o = ((y0 + y) * w + x0 + x) * 4;
+        data[o] = (c >> 16) & 255;
+        data[o + 1] = (c >> 8) & 255;
+        data[o + 2] = c & 255;
+        data[o + 3] = 255;
+        glass++;
+      }
+    });
+  });
+  return { w, h, data, glass, scale };
 }
 
 /**

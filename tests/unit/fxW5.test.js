@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { Texture } from 'pixi.js';
 import { objectShadow, characterShadow, shadowMask, weatherShadow, SHADOW, HOUSE_SHADOW } from '../../src/view/shadows.js';
-import { HOUSE_WINDOWS, HOUSE_SIZE, PANE_AREA, WINDOW_GLOW, windowGlow, hasWindows, glassKind, paneImage, windowLightSpots } from '../../src/view/houseWindows.js';
+import { HOUSE_WINDOWS, HOUSE_SIZE, PANE_AREA, WINDOW_GLOW, HOUSE_GLASS, windowGlow, hasWindows, glassKind, paneImage, paneImageFromTable, windowLightSpots } from '../../src/view/houseWindows.js';
+import { readFileSync } from 'node:fs';
+import { inflateSync } from 'node:zlib';
 import { ambientKinds, AmbientParticles, AMBIENT, MIST_DAWN, MIST_ALPHA, MIST_BANDS, mistBand } from '../../src/view/ambientParticles.js';
 import { HitFx, fxFor, FX_POOL, RING_FRAMES, SPARK_STEPS, ringPixels, sparkStep } from '../../src/view/hitFx.js';
 import { rimAlpha, RIM_FLASH } from '../../src/view/flashOverlay.js';
@@ -386,5 +388,55 @@ describe('the wind-up overlay as a rim (gfx W5)', () => {
     expect(r[2 * w + 2]).toBe(Math.round(255 * RIM_FLASH.edge)); // (2 art px = 1 game px)
     expect(r[3 * w + 3]).toBe(Math.round(255 * RIM_FLASH.inside));
     expect(RIM_FLASH.inside).toBeLessThan(0.5);
+  });
+});
+
+/** A minimal PNG reader (8-bit RGBA, not interlaced: the release art) for checking tables against the art. @param {string} path */
+function readPng(path) {
+  const buf = readFileSync(path);
+  let pos = 8;
+  let width = 0;
+  let height = 0;
+  const idat = [];
+  while (pos < buf.length) {
+    const len = buf.readUInt32BE(pos);
+    const type = buf.toString('ascii', pos + 4, pos + 8);
+    const body = buf.subarray(pos + 8, pos + 8 + len);
+    if (type === 'IHDR') {
+      width = body.readUInt32BE(0);
+      height = body.readUInt32BE(4);
+      expect([body[8], body[9], body[12]]).toEqual([8, 6, 0]); // 8-bit RGBA, no interlace
+    } else if (type === 'IDAT') idat.push(body);
+    pos += 12 + len;
+  }
+  const raw = inflateSync(Buffer.concat(idat));
+  const bpp = 4;
+  const stride = width * bpp;
+  const out = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    const f = raw[y * (stride + 1)];
+    for (let x = 0; x < stride; x++) {
+      const v = raw[y * (stride + 1) + 1 + x];
+      const a = x >= bpp ? out[y * stride + x - bpp] : 0;
+      const b = y > 0 ? out[(y - 1) * stride + x] : 0;
+      const c = x >= bpp && y > 0 ? out[(y - 1) * stride + x - bpp] : 0;
+      const p = a + b - c;
+      const pr = Math.abs(p - a) <= Math.abs(p - b) && Math.abs(p - a) <= Math.abs(p - c) ? a : Math.abs(p - b) <= Math.abs(p - c) ? b : c;
+      out[y * stride + x] = (v + [0, a, b, (a + b) >> 1, pr][f]) & 255;
+    }
+  }
+  return { width, height, data: out };
+}
+
+describe('lit windows: the glass table matches the house art', () => {
+  it('HOUSE_GLASS is what glassKind reads off src/art-release/objects/obj.house.png', () => {
+    const png = readPng('src/art-release/objects/obj.house.png');
+    expect([png.width, png.height]).toEqual([HOUSE_SIZE.w * 2, HOUSE_SIZE.h * 2]);
+    const fromArt = paneImage(png.data, png.width, 2);
+    const fromTable = paneImageFromTable();
+    expect(fromTable.glass).toBe(fromArt.glass);
+    expect(fromTable.glass).toBeGreaterThan(100);
+    expect([...fromTable.data]).toEqual([...fromArt.data]);
+    for (const t of HOUSE_GLASS) for (const row of t) expect(row).toMatch(/^[.gd]{14}$/);
   });
 });
