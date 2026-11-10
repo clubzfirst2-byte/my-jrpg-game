@@ -1,38 +1,40 @@
 # Ground v2 — key scheme (for wiring)
 
-Folder `src/art-release-v2/terrain/`: **1859 PNGs** = 189 v1 keys redrawn + 1484 new keys + 186 v1 keys copied unchanged (not redrawn: ruin / wall faces, v1.1 shores, trees, rocks, floors…). The group **contains every key of the v1 terrain group**, so it can replace it as a whole (`manifest.json` lists the three groups; the test checks v2 ⊇ v1). All new / redrawn ground tiles are 32×32 art px (= one 16 px map cell), anchor **top-left**, alpha 0 / 255. Generator: `tools/terrain_v2/gen_v2.py`; `tools/terrain_v2/render_ref.py` is a reference renderer of everything below (the review images use it).
+Folder `src/art-release-v2/terrain/`: **1914 PNGs** = 189 v1 keys redrawn + 1539 new keys + 186 v1 keys copied unchanged (not redrawn: ruin / wall faces, v1.1 shores, trees, rocks, floors…). The group **contains every key of the v1 terrain group**, so it can replace it as a whole (`manifest.json` lists the three groups; the test checks v2 ⊇ v1). All new / redrawn ground tiles are 32×32 art px (= one 16 px map cell), anchor **top-left**, alpha 0 / 255. Generator: `tools/terrain_v2/gen_v2.py`; `tools/terrain_v2/render_ref.py` is a reference renderer of everything below (the review images use it).
 
 ## 1. Grounds
 
 | ground | prefix (= the v1 key) | tiles | picked by | macro pieces | seasons |
 |---|---|---|---|---|---|
-| island grass | `tile.grass` | `tile.grass.0` – `.15` | A: 4 edge types, P = 22 % | `.macro.0-3`, `.macro2.0-3`, `.macro3.0-8` | autumn (16 tiles + macros), winter (64 tiles, as snow) |
-| plains grass | `plains.grass` | `plains.grass.0` – `.15` | A: 4 edge types, P = 10 % | `.macro.0-3`, `.macro2.0-3`, `.macro3.0-8` | autumn (16 tiles + macros), winter (64 tiles, as snow) |
-| lake shore grass | `lake.grass` | `lake.grass.0` – `.15` | A: 4 edge types, P = 10 % | `.macro.0-3`, `.macro2.0-3`, `.macro3.0-8` | autumn (16 tiles + macros), winter (64 tiles, as snow) |
-| forest floor (moss) | `forest.grass` | `forest.grass.0` – `.15` | A: 4 edge types, P = 12 % | `.macro.0-3`, `.macro2.0-3`, `.macro3.0-8` | autumn (16 tiles + macros), winter (64 tiles, as snow) |
-| mountain snow | `mountains.snow` | `mountains.snow.0` – `.63` | B: W / E phases | — | — |
+| island grass | `tile.grass` | `tile.grass.0` – `.15` | A: calm tile by hash | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | autumn (16 calm tiles + 8 pictures), winter (16 calm snow tiles + 8 pictures, with the plant's tips) |
+| plains grass | `plains.grass` | `plains.grass.0` – `.15` | A: calm tile by hash | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | autumn (16 calm tiles + 8 pictures), winter (16 calm snow tiles + 8 pictures, with the plant's tips) |
+| lake shore grass | `lake.grass` | `lake.grass.0` – `.15` | A: calm tile by hash | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | autumn (16 calm tiles + 8 pictures), winter (16 calm snow tiles + 8 pictures, with the plant's tips) |
+| forest floor (moss) | `forest.grass` | `forest.grass.0` – `.15` | A: calm tile by hash | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | autumn (16 calm tiles + 8 pictures), winter (16 calm snow tiles + 8 pictures, with the plant's tips) |
+| mountain snow | `mountains.snow` | `mountains.snow.0` – `.15` | A: calm tile by hash | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | — |
 | island sand | `tile.sand` | `tile.sand`, `tile.sand.1` – `.63` | B: W / E phases | — | — |
 | desert sand | `desert.sand` | `desert.sand.0` – `.63` | B: W / E phases | — | — |
-| path | `tile.path` | `tile.path`, `tile.path.1` – `.15` | A: 4 edge types, P = 10 % | `.macro.0-3`, `.macro2.0-3`, `.macro3.0-8` | — |
+| path | `tile.path` | `tile.path`, `tile.path.1` – `.15` | A: calm tile by hash | `.macro.0-3`, `.macro2.0-3` … `.macro8.0-3` | — |
 | ruin floor | `tile.ruin` | `tile.ruin`, `tile.ruin.1` – `.65` | C: row phase + column symbols | — | — |
 
-The tiles are edge-matched, so no ground repeats every 32 px. `hash` = gameView's hash. Display tile (i, j) (section 2) has the vertical edge `hash(2i, 2j+1)` on its left and the horizontal edge `hash(2i+1, 2j)` above it. For tile.sand / tile.path / tile.ruin, n = 0 is the bare v1 key. `render_ref.py` does all of this.
+`hash(i, j)` = gameView's hash (render_ref.dhash). For tile.sand / tile.path / tile.ruin, n = 0 is the bare v1 key. `render_ref.py` does all of this.
 
-**A. Grass-likes, moss, path (16 tiles):** every edge has a type 0 / 1; `n = N + 2·E + 4·S + 8·W` (N = the type of the top edge, E right, S bottom, W left). Type 1 when `id % 100 < P`; type 0 when the two tiles' lowest grounds differ, or the edge is on the outside of a macro block. What crosses a type-1 edge (a swale, a clump, a moss bed, a worn stretch) continues in the next tile. An engine noise patch may raise or lower P. Island grass (round 3): P = 22 %, and its own feature, clover carpets in white bloom.
+**A. Island / plains / lake grass, moss, path, mountain snow, and the winter of the 4 seasonal grounds (round 4; 16 calm tiles + 8 pictures of 2×2 tiles):**
+- **Pictures first.** Cut the display grid (section 2) into blocks of 3×3 display tiles. Block `(a, b)` covers display tiles `3a … 3a+2`, `3b … 3b+2`. Per block: `h = hash(a, b)`; the picture's NW tile is `(i0, j0) = (3a + h % 2, 3b + (h >> 1) % 2)` (**a hashed offset of 0 or 1 tile on each axis: pictures are NOT on even tiles and never touch**); picture number `m = (h >> 2) % 8`; **no picture** when `(h >> 5) % 8 == 0`, when the picture would leave the map, or when the 9 map cells under its 4 display tiles (cells `i0 … i0+2`, `j0 … j0+2`) are not all one ground of this scheme. The picture's 4 display tiles are drawn with `<prefix>.<name>.<q>`, name = `macro` (m = 0) or `macro<m+1>` (m = 1-7: `macro2` … `macro8`), q = 0 NW `(i0, j0)`, 1 NE, 2 SW, 3 SE.
+- **Every other display tile** whose lowest ground is of this scheme: calm tile `n = hash(i + 3, j + 11) % 16`. Any calm tile joins any other and any picture (nothing crosses their edges), so no edge types.
+- In winter the 4 seasonal grounds use the same rule with their `winter.` keys (snow with the tips of the ground's own plant); mountain snow has no seasons.
+- Why: the 8 pictures carry the large things (thickets, lit patches, clover carpets / flowers / reeds, moss beds, worn stretches; on snow: blue hollows, drift swells, wind ridges, glints, capped stones), the calm tiles a grain and the small things (clumps, single clover in 4 forms, pebbles, needles, small hollows, glints…). Each kind's positions are spread evenly over x and y (in the pictures: all different modulo 32), so no 32- or 64-px pattern on average; the hashed offset keeps the pictures off a 64-px grid.
 
-**B. Sand, desert sand, snow, and the winter of the 4 seasonal grounds (64 tiles; round 3):** only the W / E edges carry anything: the ripples / wind ridges cross them at one of 8 phases. `n = E + 8·W`, E / W = `(id >> 8) % 8` of that vertical edge; 0 when the two tiles' lowest grounds differ. Nothing crosses the N / S edges. No macro pieces. (Every row of a tile is a ripple crest in exactly one phase, so the rows' brightness has no 32-px period.)
+**B. Sand, desert sand (64 tiles; round 3):** only the W / E edges carry anything: the ripples cross them at one of 8 phases. `n = E + 8·W`, E / W = `(hash(2i, 2j+1) >> 8) % 8` for the vertical edge on the left of display tile (i, j) (W) and `(hash(2i+2, 2j+1) >> 8) % 8` on its right (E); 0 when the two tiles' lowest grounds differ. Nothing crosses the N / S edges. No pictures. Round 4: where the ripples bend from their W rows to their E rows depends on `(E − W) mod 8`, so the bends are not on the same columns in every tile.
 
 **C. Ruin floor (66 tiles; round 3):** rectangular stones in straight courses 11 art px high that run across the whole map, their joints staggered course by course.
 - row phase `R = (32·j) mod 11` = `(10·j) mod 11` (0-10), the same for a whole row of display tiles (j ≥ 0)
 - column symbol `s(i)` (0-2) of the vertical line of edges at the west of column i (i ≥ 0), never the same on two neighbouring lines: `k = floor(i / 2)`, `e0 = hash(k, 7) % 3`, `e1 = hash(k + 1, 7) % 3`; `s = e0` when i is even; when i is odd, `s = 3 − e0 − e1` if `e0 ≠ e1`, else `(e0 + 1 + hash(k, 11) % 2) % 3`
 - `W = s(i)`, `E = s(i + 1)`, `n = 6·R + 2·W + (E if E < W else E − 1)`
-- the ruin's overlay over water is `tile.ruin.edge.<mask>.<R>` (R = 0-10, the same row phase), so the courses run on from the overlay into the full tiles beside it. No macro pieces.
+- the ruin's overlay over water is `tile.ruin.edge.<mask>.<R>` (R = 0-10, the same row phase), so the courses run on from the overlay into the full tiles beside it. No pictures.
 
-**Macro pieces** (A only; all with type-0 outer edges, so force the edges around a placed block to type 0):
-- `<prefix>.macro3.<q>` 3×3 (q = 0-8 in reading order), `<prefix>.macro.<q>` and `<prefix>.macro2.<q>` 2×2 (q = 0 NW, 1 NE, 2 SW, 3 SE)
-- render_ref: 3×3 blocks at i, j multiples of 3 whose 16 corner cells are one land ground, `hash(i, j) % 6 == 0`; then 2×2 blocks at even i, j (9 corner cells one ground, not overlapping): `hash(i+1, j) % 4`: 0 → `.macro`, 1 → `.macro2`. Not in winter (the winter grounds are snow: B).
-- **Seasons:** `autumn.<key>` / `winter.<key>` for every key of the 4 seasonal grounds (the existing season-key scheme); winter has the 64 snow tiles (with a few buried tips) and no macros. `autumn.mountains.snow.*` stays the v1.1 art (copied).
-- Measured (`check.txt`): the repeat measure of the first inspection (mean |ΔL| at 32 px ÷ at 24 px, 40×24 fields) and the banding measure of the second (autocorrelation at 32 px of the row means and of the column means).
+**Changes in round 4** (for the engine): scheme A replaces the round-3 edge types of the grass-likes, moss and path (no `N + 2E + 4S + 8W`, no P %), and now also covers mountain snow and the 4 winter sets (round 3: B with 64 tiles). `.macro3` is now a 2×2 picture like the others. Keys removed (all were new in v2; every v1 key stays): `*.macro3.4-8`, `mountains.snow.16-63`, `winter.<4 grounds>.16-63`. Keys added: `*.macro4.0-3` … `*.macro8.0-3`, and `.macro.0-3` … `.macro8.0-3` of `mountains.snow` and of the 4 winter sets.
+- **Seasons:** `autumn.<key>` / `winter.<key>` for every key of the 4 seasonal grounds (the existing season-key scheme). `autumn.mountains.snow.*` stays the v1.1 art (copied).
+- Measured (`check.txt`): the repeat measure of the first inspection (mean |ΔL| at 32 px ÷ at 24 px) and the banding measure (autocorrelation of the row means and of the column means at 32 px and at 64 px), 80×48 fields.
 
 ## 2. Transitions — dual grid, 4 corners, layered overlays
 
@@ -76,51 +78,104 @@ Notes:
 - `autumn.forest.grass.edge.*` — 28
 - `autumn.forest.grass.macro.*` — 4
 - `autumn.forest.grass.macro2.*` — 4
-- `autumn.forest.grass.macro3.*` — 9
+- `autumn.forest.grass.macro3.*` — 4
+- `autumn.forest.grass.macro4.*` — 4
+- `autumn.forest.grass.macro5.*` — 4
+- `autumn.forest.grass.macro6.*` — 4
+- `autumn.forest.grass.macro7.*` — 4
+- `autumn.forest.grass.macro8.*` — 4
 - `autumn.lake.grass.*` — 12
 - `autumn.lake.grass.edge.*` — 28
 - `autumn.lake.grass.macro.*` — 4
 - `autumn.lake.grass.macro2.*` — 4
-- `autumn.lake.grass.macro3.*` — 9
+- `autumn.lake.grass.macro3.*` — 4
+- `autumn.lake.grass.macro4.*` — 4
+- `autumn.lake.grass.macro5.*` — 4
+- `autumn.lake.grass.macro6.*` — 4
+- `autumn.lake.grass.macro7.*` — 4
+- `autumn.lake.grass.macro8.*` — 4
 - `autumn.plains.grass.*` — 12
 - `autumn.plains.grass.edge.*` — 28
 - `autumn.plains.grass.macro.*` — 4
 - `autumn.plains.grass.macro2.*` — 4
-- `autumn.plains.grass.macro3.*` — 9
+- `autumn.plains.grass.macro3.*` — 4
+- `autumn.plains.grass.macro4.*` — 4
+- `autumn.plains.grass.macro5.*` — 4
+- `autumn.plains.grass.macro6.*` — 4
+- `autumn.plains.grass.macro7.*` — 4
+- `autumn.plains.grass.macro8.*` — 4
 - `autumn.tile.grass.*` — 13
 - `autumn.tile.grass.edge.*` — 28
 - `autumn.tile.grass.macro.*` — 4
 - `autumn.tile.grass.macro2.*` — 4
-- `autumn.tile.grass.macro3.*` — 9
+- `autumn.tile.grass.macro3.*` — 4
+- `autumn.tile.grass.macro4.*` — 4
+- `autumn.tile.grass.macro5.*` — 4
+- `autumn.tile.grass.macro6.*` — 4
+- `autumn.tile.grass.macro7.*` — 4
+- `autumn.tile.grass.macro8.*` — 4
 - `desert.sand.*` — 61
 - `desert.sand.edge.*` — 28
 - `forest.grass.*` — 12
 - `forest.grass.edge.*` — 28
 - `forest.grass.macro.*` — 4
 - `forest.grass.macro2.*` — 4
-- `forest.grass.macro3.*` — 9
+- `forest.grass.macro3.*` — 4
+- `forest.grass.macro4.*` — 4
+- `forest.grass.macro5.*` — 4
+- `forest.grass.macro6.*` — 4
+- `forest.grass.macro7.*` — 4
+- `forest.grass.macro8.*` — 4
 - `lake.grass.*` — 12
 - `lake.grass.edge.*` — 28
 - `lake.grass.macro.*` — 4
 - `lake.grass.macro2.*` — 4
-- `lake.grass.macro3.*` — 9
-- `mountains.snow.*` — 60
+- `lake.grass.macro3.*` — 4
+- `lake.grass.macro4.*` — 4
+- `lake.grass.macro5.*` — 4
+- `lake.grass.macro6.*` — 4
+- `lake.grass.macro7.*` — 4
+- `lake.grass.macro8.*` — 4
+- `mountains.snow.*` — 12
 - `mountains.snow.edge.*` — 28
+- `mountains.snow.macro.*` — 4
+- `mountains.snow.macro2.*` — 4
+- `mountains.snow.macro3.*` — 4
+- `mountains.snow.macro4.*` — 4
+- `mountains.snow.macro5.*` — 4
+- `mountains.snow.macro6.*` — 4
+- `mountains.snow.macro7.*` — 4
+- `mountains.snow.macro8.*` — 4
 - `plains.grass.*` — 12
 - `plains.grass.edge.*` — 28
 - `plains.grass.macro.*` — 4
 - `plains.grass.macro2.*` — 4
-- `plains.grass.macro3.*` — 9
+- `plains.grass.macro3.*` — 4
+- `plains.grass.macro4.*` — 4
+- `plains.grass.macro5.*` — 4
+- `plains.grass.macro6.*` — 4
+- `plains.grass.macro7.*` — 4
+- `plains.grass.macro8.*` — 4
 - `tile.grass.*` — 13
 - `tile.grass.edge.*` — 28
 - `tile.grass.macro.*` — 4
 - `tile.grass.macro2.*` — 4
-- `tile.grass.macro3.*` — 9
+- `tile.grass.macro3.*` — 4
+- `tile.grass.macro4.*` — 4
+- `tile.grass.macro5.*` — 4
+- `tile.grass.macro6.*` — 4
+- `tile.grass.macro7.*` — 4
+- `tile.grass.macro8.*` — 4
 - `tile.path.*` — 15
 - `tile.path.edge.*` — 28
 - `tile.path.macro.*` — 4
 - `tile.path.macro2.*` — 4
-- `tile.path.macro3.*` — 9
+- `tile.path.macro3.*` — 4
+- `tile.path.macro4.*` — 4
+- `tile.path.macro5.*` — 4
+- `tile.path.macro6.*` — 4
+- `tile.path.macro7.*` — 4
+- `tile.path.macro8.*` — 4
 - `tile.ruin.*` — 65
 - `tile.ruin.edge.*` — 154
 - `tile.sand.*` — 63
@@ -131,13 +186,45 @@ Notes:
 - `tile.water.deep.v1.*` — 4
 - `tile.water.foam.*` — 56
 - `tile.water.v1.*` — 4
-- `winter.forest.grass.*` — 60
+- `winter.forest.grass.*` — 12
 - `winter.forest.grass.edge.*` — 28
-- `winter.lake.grass.*` — 60
+- `winter.forest.grass.macro.*` — 4
+- `winter.forest.grass.macro2.*` — 4
+- `winter.forest.grass.macro3.*` — 4
+- `winter.forest.grass.macro4.*` — 4
+- `winter.forest.grass.macro5.*` — 4
+- `winter.forest.grass.macro6.*` — 4
+- `winter.forest.grass.macro7.*` — 4
+- `winter.forest.grass.macro8.*` — 4
+- `winter.lake.grass.*` — 12
 - `winter.lake.grass.edge.*` — 28
-- `winter.plains.grass.*` — 60
+- `winter.lake.grass.macro.*` — 4
+- `winter.lake.grass.macro2.*` — 4
+- `winter.lake.grass.macro3.*` — 4
+- `winter.lake.grass.macro4.*` — 4
+- `winter.lake.grass.macro5.*` — 4
+- `winter.lake.grass.macro6.*` — 4
+- `winter.lake.grass.macro7.*` — 4
+- `winter.lake.grass.macro8.*` — 4
+- `winter.plains.grass.*` — 12
 - `winter.plains.grass.edge.*` — 28
-- `winter.tile.grass.*` — 61
+- `winter.plains.grass.macro.*` — 4
+- `winter.plains.grass.macro2.*` — 4
+- `winter.plains.grass.macro3.*` — 4
+- `winter.plains.grass.macro4.*` — 4
+- `winter.plains.grass.macro5.*` — 4
+- `winter.plains.grass.macro6.*` — 4
+- `winter.plains.grass.macro7.*` — 4
+- `winter.plains.grass.macro8.*` — 4
+- `winter.tile.grass.*` — 13
 - `winter.tile.grass.edge.*` — 28
+- `winter.tile.grass.macro.*` — 4
+- `winter.tile.grass.macro2.*` — 4
+- `winter.tile.grass.macro3.*` — 4
+- `winter.tile.grass.macro4.*` — 4
+- `winter.tile.grass.macro5.*` — 4
+- `winter.tile.grass.macro6.*` — 4
+- `winter.tile.grass.macro7.*` — 4
+- `winter.tile.grass.macro8.*` — 4
 
 Redrawn v1 keys: `autumn.face.earth.top-base.4`, `autumn.face.earth.top-base.4.v1`, `autumn.face.earth.top-base.4.v2`, `autumn.face.earth.top-base.8`, `autumn.face.earth.top-base.8.v1`, `autumn.face.earth.top-base.8.v2`, `autumn.face.earth.top.4`, `autumn.face.earth.top.4.v1`, `autumn.face.earth.top.4.v2`, `autumn.face.earth.top.8`, `autumn.face.earth.top.8.v1`, `autumn.face.earth.top.8.v2`, `autumn.face.stone.top-base.4`, `autumn.face.stone.top-base.4.v1`, `autumn.face.stone.top-base.4.v2`, `autumn.face.stone.top-base.8`, `autumn.face.stone.top-base.8.v1`, `autumn.face.stone.top-base.8.v2`, `autumn.face.stone.top.4`, `autumn.face.stone.top.4.v1`, `autumn.face.stone.top.4.v2`, `autumn.face.stone.top.8`, `autumn.face.stone.top.8.v1`, `autumn.face.stone.top.8.v2`, `autumn.forest.grass.0`, `autumn.forest.grass.1`, `autumn.forest.grass.2`, `autumn.forest.grass.3`, `autumn.lake.grass.0`, `autumn.lake.grass.1`, `autumn.lake.grass.2`, `autumn.lake.grass.3`, `autumn.plains.grass.0`, `autumn.plains.grass.1`, `autumn.plains.grass.2`, `autumn.plains.grass.3`, `autumn.tile.grass.0`, `autumn.tile.grass.1`, `autumn.tile.grass.2`, `desert.sand.0`, `desert.sand.1`, `desert.sand.2`, `face.desert.mid-base.4`, `face.desert.mid-base.4.v1`, `face.desert.mid-base.8`, `face.desert.mid-base.8.v1`, `face.desert.mid.4`, `face.desert.mid.4.v1`, `face.desert.mid.8`, `face.desert.mid.8.v1`, `face.desert.top-base.4`, `face.desert.top-base.4.v1`, `face.desert.top-base.8`, `face.desert.top-base.8.v1`, `face.desert.top.4`, `face.desert.top.4.v1`, `face.desert.top.8`, `face.desert.top.8.v1`, `face.earth.mid-base.4`, `face.earth.mid-base.4.v1`, `face.earth.mid-base.4.v2`, `face.earth.mid-base.8`, `face.earth.mid-base.8.v1`, `face.earth.mid-base.8.v2`, `face.earth.mid.4`, `face.earth.mid.4.v1`, `face.earth.mid.4.v2`, `face.earth.mid.8`, `face.earth.mid.8.v1`, `face.earth.mid.8.v2`, `face.earth.top-base.4`, `face.earth.top-base.4.v1`, `face.earth.top-base.4.v2`, `face.earth.top-base.8`, `face.earth.top-base.8.v1`, `face.earth.top-base.8.v2`, `face.earth.top.4`, `face.earth.top.4.v1`, `face.earth.top.4.v2`, `face.earth.top.8`, `face.earth.top.8.v1`, `face.earth.top.8.v2`, `face.path.mid-base.4`, `face.path.mid-base.4.v1`, `face.path.mid-base.8`, `face.path.mid-base.8.v1`, `face.path.mid.4`, `face.path.mid.4.v1`, `face.path.mid.8`, `face.path.mid.8.v1`, `face.path.top-base.4`, `face.path.top-base.4.v1`, `face.path.top-base.8`, `face.path.top-base.8.v1`, `face.path.top.4`, `face.path.top.4.v1`, `face.path.top.8`, `face.path.top.8.v1`, `face.sand.mid-base.4`, `face.sand.mid-base.4.v1`, `face.sand.mid-base.8`, `face.sand.mid-base.8.v1`, `face.sand.mid.4`, `face.sand.mid.4.v1`, `face.sand.mid.8`, `face.sand.mid.8.v1`, `face.sand.top-base.4`, `face.sand.top-base.4.v1`, `face.sand.top-base.8`, `face.sand.top-base.8.v1`, `face.sand.top.4`, `face.sand.top.4.v1`, `face.sand.top.8`, `face.sand.top.8.v1`, `face.stone.mid-base.4`, `face.stone.mid-base.4.v1`, `face.stone.mid-base.4.v2`, `face.stone.mid-base.8`, `face.stone.mid-base.8.v1`, `face.stone.mid-base.8.v2`, `face.stone.mid.4`, `face.stone.mid.4.v1`, `face.stone.mid.4.v2`, `face.stone.mid.8`, `face.stone.mid.8.v1`, `face.stone.mid.8.v2`, `face.stone.top-base.4`, `face.stone.top-base.4.v1`, `face.stone.top-base.4.v2`, `face.stone.top-base.8`, `face.stone.top-base.8.v1`, `face.stone.top-base.8.v2`, `face.stone.top.4`, `face.stone.top.4.v1`, `face.stone.top.4.v2`, `face.stone.top.8`, `face.stone.top.8.v1`, `face.stone.top.8.v2`, `forest.grass.0`, `forest.grass.1`, `forest.grass.2`, `forest.grass.3`, `lake.grass.0`, `lake.grass.1`, `lake.grass.2`, `lake.grass.3`, `mountains.snow.0`, `mountains.snow.1`, `mountains.snow.2`, `mountains.snow.3`, `plains.grass.0`, `plains.grass.1`, `plains.grass.2`, `plains.grass.3`, `tile.grass.0`, `tile.grass.1`, `tile.grass.2`, `tile.path`, `tile.ruin`, `tile.sand`, `tile.water.0`, `tile.water.1`, `winter.face.earth.top-base.4`, `winter.face.earth.top-base.4.v1`, `winter.face.earth.top-base.4.v2`, `winter.face.earth.top-base.8`, `winter.face.earth.top-base.8.v1`, `winter.face.earth.top-base.8.v2`, `winter.face.earth.top.4`, `winter.face.earth.top.4.v1`, `winter.face.earth.top.4.v2`, `winter.face.earth.top.8`, `winter.face.earth.top.8.v1`, `winter.face.earth.top.8.v2`, `winter.forest.grass.0`, `winter.forest.grass.1`, `winter.forest.grass.2`, `winter.forest.grass.3`, `winter.lake.grass.0`, `winter.lake.grass.1`, `winter.lake.grass.2`, `winter.lake.grass.3`, `winter.plains.grass.0`, `winter.plains.grass.1`, `winter.plains.grass.2`, `winter.plains.grass.3`, `winter.tile.grass.0`, `winter.tile.grass.1`, `winter.tile.grass.2`.
