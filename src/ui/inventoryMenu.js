@@ -304,17 +304,24 @@ export class InventoryMenu {
       const hint = document.createElement('span');
       hint.className = 'inv-hint';
       hint.textContent = `→ ${known ? itemDef(result).name : '？？？'}`;
+      if (known) hint.prepend(itemIconElement(result));
       pot.append(
         hint,
         button('inv-cook', '料理する', () => {
           const r = cook(inv, this.pot);
           if (r) this.hooks.toast(`${r.name}ができた！${r.discovered ? '（新しいレシピ）' : ''}`);
+          this.cooked = r ? r.result : null;
           this.pot = [];
           this.render();
         }),
       );
     }
     list.append(pot);
+    // v1.0.1: what was just cooked, with its icon (until the next ingredient goes in)
+    if (this.cooked && this.pot.length === 0) {
+      const id = this.cooked;
+      list.append(row('inv-cooked', `できた：${itemDef(baseId(id)).name}`, `持ち物 ×${inv.items[id] ?? 0}`, false, null, id));
+    }
     const mats = Object.keys(inv.items).filter((id) => itemDef(baseId(id)).type === 'material');
     if (mats.length === 0) {
       const p = document.createElement('p');
@@ -327,6 +334,7 @@ export class InventoryMenu {
       const left = inv.items[id] - used;
       list.append(
         row(`inv-add-${id}`, `${itemDef(id).name} ×${left}`, '鍋に入れる（3 つまで）', false, left > 0 && this.pot.length < 3 ? () => {
+          this.cooked = null;
           this.pot.push(id);
           this.render();
         } : null, id),

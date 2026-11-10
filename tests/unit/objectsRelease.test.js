@@ -68,8 +68,6 @@ const SIZES = {
   ...Object.fromEntries(DISHES.map((n) => [`icon.dish.${n}`, [20, 20]])),
 };
 const NAMES = Object.keys(SIZES).sort();
-// v1.0.1 icons drawn before the game has sprite keys for them (itemView.js still falls back to icon.sword / icon.armor)
-const NOT_YET_KEYS = new Set(['icon.spear', 'icon.greatsword', 'icon.ember_sword', 'icon.star_sword', 'icon.cap', 'icon.boots', ...DISHES.map((n) => `icon.dish.${n}`)]);
 const CENTRE = new Set(['fx.slash', 'fx.shadow', 'fx.arrow', 'fx.orb', 'fx.shield', 'fx.bow', 'fx.smoke', 'fx.light', 'ui.marker']);
 
 describe('release objects (src/art-release/objects)', () => {
@@ -78,7 +76,7 @@ describe('release objects (src/art-release/objects)', () => {
     expect(files).toEqual(NAMES.map((n) => `${n}.png`).sort());
     expect(NAMES).toHaveLength(80); // 62 + the star ring (2) + the v1.0 icons (2) + the v1.0.1 icons (6) + the dishes (8)
     const keys = new Set([...placeholderEntries(), ...Object.values(REGION_ENTRIES).flatMap((f) => f())].map((e) => e.key));
-    for (const n of NAMES.filter((k) => !NOT_YET_KEYS.has(k))) expect(keys.has(n), n).toBe(true);
+    for (const n of NAMES) expect(keys.has(n), n).toBe(true);
   });
 
   it('has each sprite at its release size (2x the placeholder; the house 96x112)', () => {
