@@ -21,9 +21,10 @@ const covered = (k) => ART.has(k) || fallback.has(k);
 
 describe('objects release art: names → the game keys', () => {
   it('every release sprite is a key the game draws (no renaming needed)', () => {
-    expect(ART.size).toBe(72); // 62 + the beach ring's 2 + the v1.0 icons (star shard, charm) + the v1.0.1 icons (6)
+    expect(ART.size).toBe(80); // 62 + the beach ring's 2 + the v1.0 icons (star shard, charm) + the v1.0.1 icons (6) + dishes (8)
     // v1.0.1 weapon / armour icons: drawn, not wired yet (itemView.js ICON_BY_ID + placeholder keys come next)
-    const notYet = new Set(['icon.spear', 'icon.greatsword', 'icon.ember_sword', 'icon.star_sword', 'icon.cap', 'icon.boots']);
+    const notYet = new Set(['icon.spear', 'icon.greatsword', 'icon.ember_sword', 'icon.star_sword', 'icon.cap', 'icon.boots',
+      ...['grilled_meat', 'mushroom_skewer', 'berry_jam', 'hunter_stew', 'ember_soup', 'hearty_skewer', 'mixed_stew', 'dubious_food'].map((n) => `icon.dish.${n}`)]);
     for (const k of ART) if (!notYet.has(k)) expect(KEYS.has(k), k).toBe(true);
   });
 

@@ -41,6 +41,7 @@ const read = (name) => {
   return { w, h, alpha: (x, y) => px[y * stride + x * 4 + 3] };
 };
 
+const DISHES = ['grilled_meat', 'mushroom_skewer', 'berry_jam', 'hunter_stew', 'ember_soup', 'hearty_skewer', 'mixed_stew', 'dubious_food'];
 const SIZES = {
   // wave 1 (approved samples, finalised)
   'obj.house': [96, 112], 'obj.chest.closed': [32, 28], 'obj.chest.open': [32, 28], 'obj.jar': [20, 24],
@@ -63,17 +64,19 @@ const SIZES = {
   'icon.star_shard': [20, 20], 'icon.charm': [20, 20],
   // v1.0.1: weapons and armour that fell back to icon.sword / icon.armor get icons of their own
   ...Object.fromEntries(['spear', 'greatsword', 'ember_sword', 'star_sword', 'cap', 'boots'].map((n) => [`icon.${n}`, [20, 20]])),
+  // v1.0.1: one icon per dish (icon.food stays the fallback)
+  ...Object.fromEntries(DISHES.map((n) => [`icon.dish.${n}`, [20, 20]])),
 };
 const NAMES = Object.keys(SIZES).sort();
 // v1.0.1 icons drawn before the game has sprite keys for them (itemView.js still falls back to icon.sword / icon.armor)
-const NOT_YET_KEYS = new Set(['icon.spear', 'icon.greatsword', 'icon.ember_sword', 'icon.star_sword', 'icon.cap', 'icon.boots']);
+const NOT_YET_KEYS = new Set(['icon.spear', 'icon.greatsword', 'icon.ember_sword', 'icon.star_sword', 'icon.cap', 'icon.boots', ...DISHES.map((n) => `icon.dish.${n}`)]);
 const CENTRE = new Set(['fx.slash', 'fx.shadow', 'fx.arrow', 'fx.orb', 'fx.shield', 'fx.bow', 'fx.smoke', 'fx.light', 'ui.marker']);
 
 describe('release objects (src/art-release/objects)', () => {
-  it('holds exactly the expected 72 sprites (rock, bramble, stump, cactus belong to the terrain producer), every one a real sprite key of the game', () => {
+  it('holds exactly the expected 80 sprites (rock, bramble, stump, cactus belong to the terrain producer), every one a real sprite key of the game', () => {
     const files = readdirSync(DIR).sort();
     expect(files).toEqual(NAMES.map((n) => `${n}.png`).sort());
-    expect(NAMES).toHaveLength(72); // 62 + the star ring (2) + the v1.0 icons (2) + the v1.0.1 icons (6)
+    expect(NAMES).toHaveLength(80); // 62 + the star ring (2) + the v1.0 icons (2) + the v1.0.1 icons (6) + the dishes (8)
     const keys = new Set([...placeholderEntries(), ...Object.values(REGION_ENTRIES).flatMap((f) => f())].map((e) => e.key));
     for (const n of NAMES.filter((k) => !NOT_YET_KEYS.has(k))) expect(keys.has(n), n).toBe(true);
   });

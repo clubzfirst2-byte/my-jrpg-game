@@ -16,6 +16,7 @@ swords that share its pose, by the blade's own colour (fire / star blue) and a l
 
 from draw import to_rgba
 from objects import hline, vline
+from icons_dishes import DISH_ICONS
 from objects2 import cv
 
 
@@ -219,4 +220,5 @@ ANCHOR3 = {k: "feet" for k in SIZES3}
 ITEM_ICONS = {
     "guard_spear": "icon.spear", "rusty_greatsword": "icon.greatsword", "ember_sword": "icon.ember_sword",
     "star_steel_sword": "icon.star_sword", "insulated_cap": "icon.cap", "grip_boots": "icon.boots",
+    **DISH_ICONS,  # the eight dishes (icons_dishes.py); icon.food stays the fallback
 }

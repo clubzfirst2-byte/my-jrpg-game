@@ -1,4 +1,4 @@
-# 建物・物・アイコン・効果・UI の絵 製品版（72 枚）
+# 建物・物・アイコン・効果・UI の絵 製品版（80 枚）
 
 承認された見本（PR #54 `design/object-samples`）と絵柄のガイド（PR #51 `docs/art-style-guide` 7e0f6bc）の決まりで、**残りの物の絵 45 枚を作り、見本 17 枚を仕上げて**、製品版の大きさで書き出しました。
 
@@ -22,7 +22,7 @@
 - 光の色：**星環の物＝主人公の宝石の青**（記録の石・受信機・祭壇・長老のお守り）、**遺跡の仕掛け＝遺跡の青緑**（踏むスイッチ・光センサー・共鳴石・柱・扉の紋）、火＝ガイドの炎の色
 - 効果も半透明の点なし（薄くするのはプログラム）
 
-## 一覧（72 枚）
+## 一覧（80 枚）
 
 基準点：足＝足元（下の真ん中）、中＝中心。「主な色」は使ったランプ（**新**＝今回新しく作ったランプ、**ガ**＝ガイドのランプを今回この道具に足したもの）。
 
@@ -98,6 +98,14 @@
 | `icon.star_sword` | v1.0.1。星鋼の剣。刃が星環の青（宝石の青）で光り、金のつばの真ん中に青い星 | gem steel gold |
 | `icon.cap` | v1.0.1。雷よけの帽子。耳当てのある革の帽子、白い麻の帯、前に雷の結晶の黄色の稲妻 | leather shock linen |
 | `icon.boots` | v1.0.1。岩登りの靴。横向きの革のブーツ、前にひも、鉄の鋲のついた厚い底（底がでこぼこ） | leather iron string |
+| `icon.dish.grilled_meat` | v1.0.1。焼き肉（`grilled_meat`）。焼いた骨つき肉。こげ茶の肉に斜めの焼き目、上につや、右下に骨 | stew bone fire |
+| `icon.dish.mushroom_skewer` | v1.0.1。きのこ串（`mushroom_skewer`）。細い棒に、丸いかさのきのこ 3 つ（白い点と白い柄） | wood cap bone |
+| `icon.dish.berry_jam` | v1.0.1。木の実のジャム（`berry_jam`）。ガラスびんの赤いジャム。口に布をかぶせてひもで結ぶ | glass berry linen |
+| `icon.dish.hunter_stew` | v1.0.1。狩人の煮込み（`hunter_stew`）。鉄の小鍋に具だくさんの煮込み、大きな骨が突き出る、取っ手 2 つ | iron stew bone |
+| `icon.dish.ember_soup` | v1.0.1。火照りのスープ（`ember_soup`）。青緑の器に赤いスープ、炎が立つ | glaze pepper fire |
+| `icon.dish.hearty_skewer` | v1.0.1。がっつり串（`hearty_skewer`）。斜めの太い串。大きな焼いた肉の角切りと緑の野菜を交互に | wood stew leaf |
+| `icon.dish.mixed_stew` | v1.0.1。ごった煮（`mixed_stew`）。木の器に緑の山盛り、赤い粒がまざる（何でも入れた） | wood leaf berry |
+| `icon.dish.dubious_food` | v1.0.1。あやしい料理（`dubious_food`）。白い皿に、ゆがんだ黒こげのかたまり、くるっと煙（おかしいが、汚くはない） | linen ash smoke |
 
 
 ### 効果・UI
@@ -248,7 +256,7 @@
 ほかの借りもの（今回は作っていない。人が決めるなら追加する）：
 - `wood_sword`・`travel_sword` → `icon.sword`：どちらも片手剣なので剣のアイコンのままでよいと考えた
 - `wood_bow`・`hunter_bow` → `icon.bow`、`bark_vest` → `icon.armor`：弓・胴当てそのものなので合っている
-- 料理 8 つ（`grilled_meat` `mushroom_skewer` `berry_jam` `hunter_stew` `ember_soup` `hearty_skewer` `mixed_stew` `dubious_food`）→ `icon.food`：料理全体のアイコンとして使っている。焼き肉・串・ジャムは器の絵と違うので、料理ごとに分けるなら次の作業
+- 料理 8 つ → `icon.food`：下の「料理のアイコン 8 枚」で 1 つずつ作った（`icon.food` は料理の仮の・予備のアイコンとして残す）
 
 決まり：20×20、1 ドットの余白、素材 3 つまで、アルファ 0/255、全部ランプの色（作るときとテストで確認）。`icon.sword` との違い：槍・大剣・帽子・靴は形、灯火の剣・星鋼の剣は剣と同じ向きだが刃の色（炎・青）と炎・つばの星。
 
@@ -267,3 +275,36 @@
 確かめた絵：`/tmp/claude-0/-home-user-my-jrpg-game/b046b55c-c649-5668-ab0a-0dc53b730c1c/scratchpad/team/v1objects/icons_v1_1.png`（左から 剣（くらべる見本）・槍・大剣・灯火の剣・星鋼の剣・鎧（くらべる見本）・帽子・靴。上から UI・草・道・赤い砂・雪・遺跡の床・暗闇。等倍と 4 倍）。`review_icons.png` にも足した。
 
 **ゲームにつなぐには**（別の作業。ここではゲームのコードを変えていない）：`src/view/itemView.js` の `ICON_BY_ID` に上の表の 6 つを足し、仮の絵（`placeholderArt.js` / `placeholderPack.js`）に同じ名前を足す。それまでテストではこの 6 つだけ「ゲームの名前にあること」を外している（`NOT_YET_KEYS`）。
+
+### 料理のアイコン 8 枚（v1.0.1）
+
+料理は全部 `icon.food`（器のシチュー）で出ていたので、1 つずつ作りました。名前は `icon.dish.<持ち物の id>`。`icon.food` はそのまま（予備）。作る道具は `tools/object_release/icons_dishes.py`、id → アイコンの表は `icons_v1_1.py` の `ITEM_ICONS`（`DISH_ICONS` を含む）。
+
+| 持ち物の id | 料理 | 新しいアイコン |
+|---|---|---|
+| `grilled_meat` | 焼き肉 | `icon.dish.grilled_meat` |
+| `mushroom_skewer` | きのこ串 | `icon.dish.mushroom_skewer` |
+| `berry_jam` | 木の実のジャム | `icon.dish.berry_jam` |
+| `hunter_stew` | 狩人の煮込み | `icon.dish.hunter_stew` |
+| `ember_soup` | 火照りのスープ | `icon.dish.ember_soup` |
+| `hearty_skewer` | がっつり串 | `icon.dish.hearty_skewer` |
+| `mixed_stew` | ごった煮 | `icon.dish.mixed_stew` |
+| `dubious_food` | あやしい料理 | `icon.dish.dubious_food` |
+
+見分け方：焼き肉＝骨つきの丸い肉、きのこ串＝縦の棒にかさ 3 つ、がっつり串＝斜めの太い角切り、ジャム＝赤いびん、狩人の煮込み＝灰色の鉄鍋と骨、火照りのスープ＝青緑の器に炎、ごった煮＝木の器に緑の山、あやしい料理＝皿に黒こげと煙（笑える失敗。汚い色・したたり・虫は使っていない）。
+
+背景との明るさの差が 20 以上ある点の割合（確認と同じ測り方）。UI の上は全部 44% 以上：
+
+| アイコン | UI `#20242c` | 草 | 道 | 雪 | 赤い砂 | 遺跡の床 | 暗闇 |
+|---|---|---|---|---|---|---|---|
+| `icon.dish.grilled_meat` | 51% | 55% | 63% | 86% | 41% | 34% | 73% |
+| `icon.dish.mushroom_skewer` | 47% | 68% | 59% | 82% | 59% | 57% | 59% |
+| `icon.dish.berry_jam` | 53% | 42% | 58% | 85% | 58% | 42% | 57% |
+| `icon.dish.hunter_stew` | 52% | 47% | 38% | 88% | 38% | 36% | 74% |
+| `icon.dish.ember_soup` | 47% | 52% | 44% | 88% | 44% | 45% | 68% |
+| `icon.dish.hearty_skewer` | 56% | 75% | 60% | 80% | 58% | 58% | 62% |
+| `icon.dish.mixed_stew` | 48% | 40% | 36% | 95% | 36% | 28% | 69% |
+| `icon.dish.dubious_food` | 44% | 38% | 80% | 72% | 68% | 54% | 47% |
+| `icon.food`（今までの予備） | 49% | 44% | 36% | 90% | 34% | 40% | 77% |
+
+確かめた絵は上と同じ `icons_v1_1.png`（下の段に料理 8 つと `icon.food`）。`review_icons.png` にも足した。ゲームにつなぐには `ICON_BY_ID` に上の 8 つを足し、仮の絵に同じ名前を足す。それまでテストではこの 8 つも「ゲームの名前にあること」を外している。
