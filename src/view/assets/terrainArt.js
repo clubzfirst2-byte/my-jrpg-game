@@ -117,12 +117,151 @@ export function groundVariant(hash, n, release) {
   return k <= n ? 0 : k - n;
 }
 
+// --- v1.1 (docs/art-release/terrain/NAMES.md): water edges, cliff band variants, plateau faces,
+// autumn forest and mountains. These keys have no placeholder: like the hero's frames, they get a
+// slot in their bundle only when the art is given, and the view uses them only with the release
+// terrain, so the placeholder look is unchanged.
+
+const FEET = /** @type {[number, number]} */ ([0.5, 1]);
+const TOP_LEFT = /** @type {[number, number]} */ ([0, 0]);
+const EDGE = '(?:\\d+|inner\\.(?:ne|se|sw|nw))\\.[01]';
+const PART = '(?:top|mid)(?:-base)?\\.(?:4|8)';
+const LIP = 'top(?:-base)?\\.(?:4|8)';
+/** v1.1 keys → the bundle that holds them ('placeholder' = the base bundle, a region's, a season's). */
+const V11_KEYS = /** @type {[RegExp, string][]} */ ([
+  [new RegExp(`^tile\\.(?:shore|bank)\\.${EDGE}$`), 'placeholder'],
+  [new RegExp(`^tile\\.shore-desert\\.${EDGE}$`), 'region:desert'],
+  [new RegExp(`^face\\.(?:earth|ruin|wall)\\.${PART}\\.v[12]$`), 'placeholder'],
+  [new RegExp(`^face\\.stone\\.${PART}\\.v[12]$`), 'region:mountains'],
+  [new RegExp(`^face\\.(?:sand|path)\\.${PART}(?:\\.v1)?$`), 'placeholder'],
+  [new RegExp(`^face\\.desert\\.${PART}(?:\\.v1)?$`), 'region:desert'],
+  [new RegExp(`^winter\\.face\\.earth\\.${LIP}\\.v[12]$`), 'season:winter'],
+  [new RegExp(`^autumn\\.face\\.earth\\.${LIP}\\.v[12]$`), 'season:autumn'],
+  [new RegExp(`^autumn\\.face\\.stone\\.${LIP}(?:\\.v[12])?$`), 'season:autumn'],
+  [/^autumn\.(?:forest\.grass|mountains\.snow)\.\d$/, 'season:autumn'],
+  [/^autumn\.(?:forest|mountains)\.pine$/, 'season:autumn'],
+]);
+
+/** The bundle a v1.1 terrain key belongs in ('placeholder' = the base bundle), or null. @param {string} key */
+export function v11Bundle(key) {
+  return V11_KEYS.find(([re]) => re.test(key))?.[1] ?? null;
+}
+
+/**
+ * The v1.1 terrain entries of one bundle, for the art given (only the names are read). Tiles and
+ * faces keep the 16 px grid (placeholderPack.withOverrides checks their size: 32×32, 32×8, 32×16);
+ * the pines stand on their feet.
+ * @param {string} bundle 'placeholder' (base), 'region:<id>' or 'season:<id>'
+ * @param {Map<string, unknown> | Set<string>} [overrides]
+ * @returns {{ key: string, rows: string[], anchor: [number, number] }[]}
+ */
+export function releaseTerrainEntries(bundle, overrides) {
+  if (!overrides?.size) return [];
+  return [...overrides.keys()]
+    .filter((k) => v11Bundle(k) === bundle)
+    .sort()
+    .map((key) => {
+      if (key.endsWith('.pine')) return { key, rows: Array(30).fill('.'.repeat(16)), anchor: FEET };
+      const h = /^(?:\w+\.)?face\./.test(key) ? (/\.8(?:\.v[12])?$/.test(key) ? 8 : 4) : 16;
+      return { key, rows: Array(h).fill('.'.repeat(16)), anchor: TOP_LEFT };
+    });
+}
+
+/**
+ * The keys (without the season's prefix) a season replaces with v1.1 art: the autumn forest and
+ * mountains (ground, pines, stone lips) and the season lips of the cliff variants.
+ * @param {string} season
+ * @returns {string[]}
+ */
+export function releaseSeasonKeys(season) {
+  const lips = (/** @type {string} */ mat) => ['top', 'top-base'].flatMap((p) => [4, 8].flatMap((h) => ['', '.v1', '.v2'].map((v) => `face.${mat}.${p}.${h}${v}`)));
+  if (season === 'winter') return lips('earth').filter((k) => k.includes('.v'));
+  if (season !== 'autumn') return [];
+  return [
+    ...lips('earth').filter((k) => k.includes('.v')),
+    ...lips('stone'),
+    ...[0, 1, 2, 3].flatMap((i) => [`forest.grass.${i}`, `mountains.snow.${i}`]),
+    'forest.pine',
+    'mountains.pine',
+  ];
+}
+
+/**
+ * The cliff band variant of a tile's face (every segment of it): 0 = the plain key, 1 = ".v1",
+ * 2 = ".v2", from the tile's hash, so long cliffs do not repeat every 32 px (release terrain only).
+ * The plateau faces (sand, desert, path) have a ".v1" only: hash % 2. The view draws a variant only
+ * where its art is loaded (gameView.addFace), else the plain key.
+ * @param {number} hash @param {string} mat @param {boolean} release
+ */
+export function faceVariant(hash, mat, release) {
+  if (!release || !mat) return '';
+  if (PLATEAU_FACES.includes(mat)) return ['', '.v1'][hash % 2];
+  return ['', '.v1', '.v2'][hash % 3];
+}
+
+/** The plateau face materials (v1.1), with one band variant (.v1). */
+const PLATEAU_FACES = ['sand', 'desert', 'path'];
+
+/**
+ * The face material under a raised tile. The placeholders: ruin, wall, the mountains' stone, else
+ * earth. The release terrain also has plateau faces for sand (the desert's own) and paths, instead
+ * of the grass-lipped earth.
+ * @param {'ruin' | 'wall' | 'sand' | 'path' | 'other'} ground @param {string | undefined} region
+ * @param {boolean} release
+ */
+export function faceMaterial(ground, region, release) {
+  if (ground === 'ruin') return 'ruin';
+  if (ground === 'wall') return 'wall';
+  if (release && ground === 'sand') return region === 'desert' ? 'desert' : 'sand';
+  if (release && ground === 'path') return 'path';
+  return region === 'mountains' ? 'stone' : 'earth';
+}
+
+/** The diagonals, the two side bits next to each (a side piece already draws that corner) and the offset. */
+const DIAGONALS = /** @type {const} */ ([
+  ['ne', 1, 2, 1, -1],
+  ['se', 4, 2, 1, 1],
+  ['sw', 4, 8, -1, 1],
+  ['nw', 1, 8, -1, -1],
+]);
+
+/**
+ * The water around a tile: the 4-neighbour mask (N = 1, E = 2, S = 4, W = 8) and the diagonals
+ * that are water while neither side next to them is (they need an inner-corner piece).
+ * @param {(dx: number, dy: number) => boolean} water whether the neighbour at (dx, dy) is water
+ * @returns {{ mask: number, corners: ('ne' | 'se' | 'sw' | 'nw')[] }}
+ */
+export function waterAround(water) {
+  const mask = (water(0, -1) ? 1 : 0) | (water(1, 0) ? 2 : 0) | (water(0, 1) ? 4 : 0) | (water(-1, 0) ? 8 : 0);
+  const corners = DIAGONALS.filter(([, a, b, dx, dy]) => !(mask & a) && !(mask & b) && water(dx, dy)).map(([d]) => d);
+  return { mask, corners };
+}
+
+/**
+ * The water-edge pieces of a tile (keys without the frame: ".0" / ".1" follow the water).
+ *   'shore' / 'shore-desert': a full tile in place of the sand, so one piece only: the side piece
+ *     (mask), or an inner corner when only one diagonal is water. A corner beside a side piece, or
+ *     2+ corners alone, have no piece of their own (fallback: true; that corner stays plain sand).
+ *   'bank': overlays drawn on the grass-like ground; they stack, so every corner gets its piece.
+ * @param {'shore' | 'shore-desert' | 'bank'} kind @param {{ mask: number, corners: string[] }} around
+ * @returns {{ base: string | null, overlays: string[], fallback: boolean }}
+ */
+export function waterEdgePieces(kind, { mask, corners }) {
+  if (kind === 'bank') {
+    return { base: null, overlays: [...(mask ? [`tile.bank.${mask}`] : []), ...corners.map((d) => `tile.bank.inner.${d}`)], fallback: false };
+  }
+  if (mask) return { base: `tile.${kind}.${mask}`, overlays: [], fallback: corners.length > 0 };
+  if (corners.length === 1) return { base: `tile.${kind}.inner.${corners[0]}`, overlays: [], fallback: false };
+  return { base: null, overlays: [], fallback: corners.length > 1 };
+}
+
 /**
  * Debug / test helper (window.__debugApi.terrainArt): of the terrain keys loaded right now, which are
  * drawn from the release art (2 pixels per game pixel) and which from the placeholder.
  * @param {import('./assetManager.js').AssetManager} assets
+ * @param {any} [view] the game view (v1.1: its chunks' water-edge pieces)
  */
-export function terrainDebugApi(assets) {
+export function terrainDebugApi(assets, view) {
   return {
     terrainArt: () => {
       /** @type {Set<string>} */
@@ -136,6 +275,12 @@ export function terrainDebugApi(assets) {
         }
       }
       return { release: [...release].sort(), placeholder: [...placeholder].sort(), bundles: [...assets.loaded.keys()] };
+    },
+    /** v1.1: the water-edge pieces in the built chunks (texture names as drawn now) and the water's frame. */
+    terrainEdges: () => {
+      const chunks = /** @type {{ edges?: { sprite: { texture: { label?: string } }, key: string }[] }[]} */ ([...(view?.chunks?.values() ?? [])]);
+      const edges = chunks.flatMap((c) => c.edges ?? []);
+      return { count: edges.length, keys: [...new Set(edges.map((e) => e.key))].sort(), frame: view?.waterFrame ?? -1, fallbacks: view?.edgeStats?.fallbacks ?? 0 };
     },
   };
 }

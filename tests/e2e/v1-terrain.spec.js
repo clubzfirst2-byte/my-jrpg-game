@@ -34,10 +34,10 @@ async function visit(page, tx, ty) {
 
 const STOPS = [
   ['plains', 50, 100, 'plains.grass.0'],
-  ['desert', 48, 190, 'desert.sand.0'],
+  ['desert', 48, 190, 'tile.shore-desert.1.0'],
   ['lake', 128 + 34, 232, 'lake.grass.0'],
   ['forest', 128 + 30, 148, 'forest.pine'],
-  ['mountains', 128 + 47, 70, 'face.stone.top.8'],
+  ['mountains', 128 + 47, 70, 'face.stone.mid.4.v1'],
 ];
 
 test('normal play draws the terrain from its release art: base, every region, no warnings', async ({ page }, testInfo) => {
@@ -45,7 +45,7 @@ test('normal play draws the terrain from its release art: base, every region, no
   const problems = await open(page, '&season=summer');
   const t = await api(page, 'terrainArt');
   expect(t.placeholder).toEqual([]);
-  for (const key of ['tile.grass.0', 'tile.path', 'tile.sand', 'tile.water.0', 'tile.water.1', 'tile.ruin', 'tile.wood', 'tile.walltop', 'tile.dark', 'tile.pit', 'tile.vine', 'tile.ramp', 'face.earth.top.8', 'face.ruin.mid-base.4', 'face.wall.top.8', 'obj.tree', 'obj.rock', 'obj.bramble', 'obj.stump']) {
+  for (const key of ['tile.grass.0', 'tile.path', 'tile.sand', 'tile.water.0', 'tile.water.1', 'tile.ruin', 'tile.wood', 'tile.walltop', 'tile.dark', 'tile.pit', 'tile.vine', 'tile.ramp', 'face.earth.top.8', 'face.ruin.mid-base.4', 'face.wall.top.8', 'obj.tree', 'obj.rock', 'obj.bramble', 'obj.stump', 'tile.shore.5.0', 'tile.bank.inner.ne.1', 'face.earth.mid.8.v2', 'face.sand.top.8', 'face.path.mid-base.4', 'face.path.top.8.v1']) {
     expect(t.release, key).toContain(key);
   }
   expect(await api(page, 'artUrl', 'tile.grass.0')).not.toBeNull();
@@ -61,8 +61,25 @@ test('normal play draws the terrain from its release art: base, every region, no
   expect(problems).toEqual([]);
 });
 
+test('v1.1 water edges: shore tiles and grass banks along the island beach, following the water frames', async ({ page }) => {
+  const problems = await open(page, '&season=summer');
+  await visit(page, 26, 62);
+  const a = await api(page, 'terrainEdges');
+  expect(a.count).toBeGreaterThan(20);
+  expect(a.keys.some((k) => k.startsWith('tile.shore.'))).toBe(true);
+  expect(a.keys.some((k) => k.startsWith('tile.bank.'))).toBe(true);
+  // the pieces switch with the water's 2 frames (0.6 s each)
+  await expect.poll(async () => (await api(page, 'terrainEdges')).frame, { timeout: 5_000 }).not.toBe(a.frame);
+  // the placeholder terrain has no edge pieces
+  const p = await page.context().newPage();
+  await open(p, '&season=summer&terrain=placeholder');
+  await visit(p, 26, 62);
+  expect((await api(p, 'terrainEdges')).count).toBe(0);
+  expect(problems).toEqual([]);
+});
+
 test('each season brings its own terrain art (spring tree, autumn and winter ground, lips, trees)', async ({ page }) => {
-  for (const [season, key] of [['spring', 'spring.obj.tree'], ['autumn', 'autumn.tile.grass.0'], ['winter', 'winter.face.earth.top.8']]) {
+  for (const [season, key] of [['spring', 'spring.obj.tree'], ['autumn', 'autumn.tile.grass.0'], ['winter', 'winter.face.earth.top.8'], ['autumn', 'autumn.forest.grass.0'], ['autumn', 'autumn.face.stone.top.8.v1'], ['autumn', 'autumn.mountains.pine'], ['winter', 'winter.face.earth.top-base.4.v2']]) {
     const p = await page.context().newPage();
     const problems = await open(p, `&season=${season}`);
     await expect.poll(async () => (await api(p, 'terrainArt')).bundles, { timeout: 10_000 }).toContain(`season:${season}`);
@@ -81,7 +98,7 @@ test('?terrain=placeholder keeps the placeholder terrain beside the release hero
   await open(p, '&season=summer&terrain=placeholder');
   const art = await api(p, 'art');
   expect(art).toMatchObject({ density: 2, hero: { w: 16, h: 28 } });
-  expect(art.overrides).toBe(withArt - 111);
+  expect(art.overrides).toBe(withArt - 375);
   const t = await api(p, 'terrainArt');
   expect(t.release).toEqual([]);
   expect(t.placeholder).toContain('tile.grass.0');
