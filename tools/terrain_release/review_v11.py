@@ -121,14 +121,15 @@ GROUPS = [  # (title, how the engine uses it, test on the name)
      "foam and a 1-2 px earth bank. Animate with the water.", lambda n: n.startswith("tile.bank.")),
     ("Cliff band variants", "Pick per tile (e.g. `hash(tx, ty) % 3`: 0 = the existing key without suffix, 1 = `.v1`, 2 = `.v2`) "
      "for every segment of that tile's face. All variants join each other and the existing faces.",
-     lambda n: n.startswith("face.") and n[-3:-1] == ".v"),
+     lambda n: n.startswith("face.") and n[-3:-1] == ".v" and not n.startswith(("face.sand.", "face.desert.", "face.path."))),
     ("Season lips of the cliff variants", "`<season>.<key>` like every season key: the season bundle replaces the variant key.",
      lambda n: n.startswith(("autumn.face.earth.", "winter.face.earth.")) and n[-3:-1] == ".v"),
     ("Plateau faces", "`face.sand.*` under a raised `tile.sand`, `face.desert.*` under raised desert sand, `face.path.*` "
-     "under a raised path (instead of `face.earth.*`). Same parts and stacking as `face.earth.*`.",
+     "under a raised path (instead of `face.earth.*`). Same parts and stacking as `face.earth.*`. Each part also has a "
+     "`.v1` (other pebble / clod positions): pick per tile (e.g. `hash % 2`: 0 = no suffix, 1 = `.v1`).",
      lambda n: n.startswith(("face.sand.", "face.desert.", "face.path."))),
     ("Autumn: forest and mountains", "`<season>.<key>` keys for the autumn season bundle (add them to its key set, like "
-     "`autumn.tile.grass.0`). `autumn.mountains.snow.N` is the mountains' ground in autumn (scree, no snow).",
+     "`autumn.tile.grass.0`). `autumn.mountains.snow.N` is the mountains' ground in autumn (partial snow: bare patches of warm rock and dry grass).",
      lambda n: n.startswith(("autumn.forest.", "autumn.mountains.", "autumn.face.stone."))),
 ]
 
@@ -145,7 +146,10 @@ def write_names(images, v10, path):
              "- Mask (water edges): bit N = 1, E = 2, S = 4, W = 8 = the 4-neighbours that are WATER; 1-15. "
              "`inner.<ne|se|sw|nw>`: no 4-neighbour is water, only that diagonal one. A tile with mask 0 and 2+ diagonal "
              "water neighbours has no piece (use the plain ground; rare in the maps).",
-             "- Season keys follow the existing scheme `<season>.<key>` (gameView.seasonKey).", ""]
+             "- Season keys follow the existing scheme `<season>.<key>` (gameView.seasonKey).",
+             "- Each water-edge piece's 2 frames differ by 12-30 px, like `tile.water` (guide 3.5).",
+             "- No water edge for path (`=`) or ruin floor (`u`) next to water (~150 tiles in the maps): they keep the "
+             "straight edge (built stone and roads; by design).", ""]
     for title, how, test in GROUPS:
         names = [n for n in new if test(n)]
         if not names:
@@ -153,7 +157,7 @@ def write_names(images, v10, path):
         lines += [f"## {title} ({len(names)})", "", how, "", "| key | size | anchor | frames |", "|---|---|---|---|"]
         seen = set()
         for n in names:
-            frame = n.rsplit(".", 1)[1] if ".shore." in n or n.startswith("tile.bank.") else None
+            frame = n.rsplit(".", 1)[1] if n.startswith(("tile.shore", "tile.bank.")) else None
             key = n.rsplit(".", 1)[0] + ".<0|1>" if frame else n
             if key in seen:
                 continue

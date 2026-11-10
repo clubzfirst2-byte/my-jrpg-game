@@ -43,7 +43,7 @@ const V11 = [
   ...EDGE_SETS.flatMap(([p]) => edgeKeys(p)),
   ...variants([...faces('earth'), ...faces('ruin'), ...faces('wall'), ...faces('stone')]),
   ...variants([...lips('autumn'), ...lips('winter')]),
-  ...faces('sand'), ...faces('desert'), ...faces('path'),
+  ...[...faces('sand'), ...faces('desert'), ...faces('path')].flatMap((n) => [n, `${n}.v1`]),
   ...GROUND11, 'autumn.forest.pine', 'autumn.mountains.pine',
   ...[4, 8].flatMap((h) => ['top', 'top-base'].map((k) => `autumn.face.stone.${k}.${h}`)).flatMap((n) => [n, `${n}.v1`, `${n}.v2`]),
 ];
@@ -190,6 +190,19 @@ describe('terrain release art', () => {
             expect(t.px(x, yy).join(), `${p}.${m}.${f} @${x},${yy}`).toBe(g.px(x, yy).join());
           }
         }
+      }
+    }
+  });
+
+  it('water edges: the two frames differ by 12-30 px, like tile.water (guide 3.5)', () => {
+    for (const [p] of EDGE_SETS) {
+      for (const k of edgeKeys(p).filter((n) => n.endsWith('.0'))) {
+        const a = readPng(k);
+        const b = readPng(`${k.slice(0, -1)}1`);
+        let d = 0;
+        for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) if (a.px(x, y).join() !== b.px(x, y).join()) d++;
+        expect(d, k).toBeGreaterThanOrEqual(12);
+        expect(d, k).toBeLessThanOrEqual(30);
       }
     }
   });

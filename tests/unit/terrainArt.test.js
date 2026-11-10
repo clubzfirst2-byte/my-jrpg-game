@@ -49,7 +49,7 @@ describe('terrain release art → game sprite keys', () => {
         m[1].endsWith('.<0|1>') ? [0, 1].map((f) => m[1].replace('<0|1>', String(f))) : [m[1]],
       ),
     );
-    expect(v11.size).toBe(240);
+    expect(v11.size).toBe(264);
     expect(ART.size).toBe(111 + v11.size);
     expect([...RECORD.keys()].sort()).toEqual([...ART.keys()].filter((k) => !v11.has(k)).sort());
     for (const name of ART.keys()) expect(isTerrainKey(name), name).toBe(true);

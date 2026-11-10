@@ -7,7 +7,7 @@
   2. cliff band variants: face.<earth|ruin|wall|stone>.<part>.v1 / .v2 (+ the earth lips' autumn / winter)
   3. plateau faces: face.sand.* (island sand), face.desert.* (red desert sand), face.path.*
   4. autumn for the forest and the mountains: autumn.forest.grass.0-3, autumn.forest.pine,
-     autumn.mountains.snow.0-3 (no snow: scree and dry grass), autumn.mountains.pine,
+     autumn.mountains.snow.0-3 (partial snow: bare warm rock and dry grass), autumn.mountains.pine,
      autumn.face.stone.<top|top-base>.<4|8> (+ .v1 / .v2)
 
 Same method as v1.0: 5-tone ramps, hand-placed stamps, alpha 0 / 255. The variants re-use the v1.0
@@ -54,6 +54,8 @@ P_W = [8, 7, 7, 6, 6, 7, 7, 8, 9, 9, 8, 8, 7, 7, 6, 6, 6, 7, 8, 8, 9, 8, 8, 7, 7
 R = 4  # radius of the rounded corners
 # Foam: where the edge of the water carries a bright cluster (2 px), along the edge, per 32 px.
 FOAM = {2, 3, 11, 12, 19, 20, 27, 28}
+LAP = {6, 7, 8, 22, 23, 24}  # ripples just off the foam (small pieces only, see water_edge)
+LAP_DENSE = {p for p in range(32) if p % 4 in (1, 2)}  # the inner corners' small notch of water
 INNER = {"ne": (N, E), "se": (SO, E), "sw": (SO, W), "nw": (N, W)}
 
 
@@ -62,8 +64,27 @@ def _round_out(a, b):
     return 0 <= a < R and 0 <= b < R and (R - a - 0.5) ** 2 + (R - b - 0.5) ** 2 > R * R
 
 
+ISLET = [  # mask 15 (water on all 4 sides): a low sandbar, longer than wide, hand-drawn ("#" = land)
+    "..........................",
+    "..........#######.........",
+    ".......#############......",
+    ".....#################....",
+    "...#####################..",
+    "..######################..",
+    "..#######################.",
+    "...#####################..",
+    "....###################...",
+    "......##############......",
+    "..........######..........",
+]
+ISLET_AT = (3, 11)  # top-left of the drawing in the tile
+
+
 def is_water(x, y, mask=0, inner=None):
     xm, ym = x % 32, y % 32
+    if mask == 15 and not inner:  # the islet: a drawn shape, water all round (the edges stay water)
+        ix, iy = x - ISLET_AT[0], y - ISLET_AT[1]
+        return not (0 <= iy < len(ISLET) and 0 <= ix < len(ISLET[0]) and ISLET[iy][ix] == "#")
     if inner:  # a notch of water in one corner
         v, h = INNER[inner]
         a = (x - (32 - P_E[ym])) if h == E else (P_W[ym] - 1 - x)  # px inside the band
@@ -81,9 +102,13 @@ def is_water(x, y, mask=0, inner=None):
     return False
 
 
-def water_edge(land, mask, frame, inner=None, kind="sand"):
+def water_edge(land, mask, frame, inner=None, kind="sand", moving=None, lap=False):
     """land: a Tile (the land under the tile) or None for an overlay. kind: 'sand' (a wet band on the
-    land side) or 'bank' (a 1-2 px earth bank, the land side transparent elsewhere)."""
+    land side) or 'bank' (a 1-2 px earth bank, the land side transparent elsewhere). moving: in frame 1,
+    how many foam pixels (in reading order) take the moved foam pattern (None = all); the others keep
+    frame 0's, so each piece's two frames differ by 12-30 px like tile.water (guide 3.5). lap: short
+    lit ripples one px further out (moving 2 px per frame), for the small pieces whose foam alone moves too
+    little."""
     wt = S.water_tile(frame)
     t = land if land is not None else new_tile(32, 32, base=None, wrap_x=False, wrap_y=False)
     if land is None:
@@ -100,12 +125,19 @@ def water_edge(land, mask, frame, inner=None, kind="sand"):
         for x in range(32):
             if (x, y) in wet:
                 t.px[y][x] = wt.px[y][x]
+    foam_n = 0
     for y in range(32):
         for x in range(32):
             if (x, y) in wet:
                 if any(not wat(x + dx, y + dy) for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0))):
-                    along = x if (not wat(x, y - 1) or not wat(x, y + 1)) else y
-                    t.put(x, y, "water", 4 if (along + 2 * frame) % 32 in FOAM else 3)
+                    along = y if (not wat(x - 1, y) or not wat(x + 1, y)) else x  # along a side edge: y
+                    f = frame if (moving is None or foam_n < moving) else 0
+                    foam_n += 1
+                    t.put(x, y, "water", 4 if (along + 2 * f) % 32 in FOAM else 3)
+                elif lap and any(not wat(x + dx, y + dy) for dx in (-2, 0, 2) for dy in (-2, 0, 2)):
+                    along = y if (not wat(x - 2, y) or not wat(x + 2, y)) else x
+                    if (along + 2 * frame) % 32 in lap:
+                        t.put(x, y, "water", 3)
                 continue
             near = [(dx, dy) for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0)) if wat(x + dx, y + dy)]
             if not near:
@@ -120,13 +152,35 @@ def water_edge(land, mask, frame, inner=None, kind="sand"):
     return t
 
 
+def _diff(a, b):
+    return sum(1 for p, q in zip(a.image().get_flattened_data(), b.image().get_flattened_data()) if p != q)
+
+
+def _pair(land_fn, kind, mask, inner):
+    """Frame 0 and a frame 1 whose difference is in the guide's 12-30 px (closest to 20): as much of the
+    foam moves as keeps it there."""
+    best = None
+    for lap in (False, LAP, LAP_DENSE):
+        f0 = water_edge(land_fn(), mask, 0, inner=inner, kind=kind, lap=lap)
+        for n in [None] + list(range(200, -1, -4)):
+            f1 = water_edge(land_fn(), mask, 1, inner=inner, kind=kind, moving=n, lap=lap)
+            d = _diff(f0, f1)
+            score = (0 if 12 <= d <= 30 else 1, abs(d - 20))
+            if best is None or score < best[0]:
+                best = (score, f0, f1)
+            if score == (0, 0) or (n is None and d < 12):
+                break
+        if best[0][0] == 0:
+            break
+    return best[1], best[2]
+
+
 def shore_set(prefix, land_fn, kind):
     out = {}
-    for frame in (0, 1):
-        for mask in range(1, 16):
-            out[f"{prefix}.{mask}.{frame}"] = water_edge(land_fn(), mask, frame, kind=kind)
-        for corner in INNER:
-            out[f"{prefix}.inner.{corner}.{frame}"] = water_edge(land_fn(), 0, frame, inner=corner, kind=kind)
+    for mask in range(1, 16):
+        out[f"{prefix}.{mask}.0"], out[f"{prefix}.{mask}.1"] = _pair(land_fn, kind, mask, None)
+    for corner in INNER:
+        out[f"{prefix}.inner.{corner}.0"], out[f"{prefix}.inner.{corner}.1"] = _pair(land_fn, kind, 0, corner)
     return out
 
 
@@ -233,7 +287,11 @@ def plateau_face(name, kind, seg):
 
 
 def plateau_faces():
-    return {f"face.{n}.{kind}.{seg}": plateau_face(n, kind, seg) for n in PLATEAU for seg in (4, 8) for kind in KINDS}
+    """v0 and one variant .v1 (the earth face's v1 detail positions), so the pebbles do not repeat every 32 px."""
+    out = {f"face.{n}.{kind}.{seg}": plateau_face(n, kind, seg) for n in PLATEAU for seg in (4, 8) for kind in KINDS}
+    with patched(S, **EARTH_VAR[1]):
+        out.update({f"face.{n}.{kind}.{seg}.v1": plateau_face(n, kind, seg) for n in PLATEAU for seg in (4, 8) for kind in KINDS})
+    return out
 
 
 # ---------------------------------------------------------------------------------------------
@@ -259,40 +317,73 @@ def autumn_forest_grass(v):
     return t
 
 
-SCREE_TUFTS = {  # dry grass (lake.reed) on the scree, at different heights per variant
-    0: [(5, 10, TUFT_S), (22, 24, SPRIG)],
-    1: [(20, 18, TUFT_M), (3, 27, TUFT_S)],
-    2: [(25, 6, SPRIG), (4, 20, TUFT_S)],
-    3: [(14, 14, TUFT_M), (27, 29, SPRIG)],
+# Autumn in the mountains (director's decision after the v1.1 inspection): PARTIAL snow. The summer snow
+# ground with bare patches (about 20-30 % of the tile) of warm rock (desert.stone) and dry ochre grass
+# (autumn.grass), at different places per variant. The patches wrap like everything on a ground tile.
+BARE = {  # the bare patches per variant: each a few overlapping ellipses (cx, cy, rx, ry), hand-placed and
+    # kept 1 px inside the tile (a patch cut by the tile's edge would not continue on a neighbour of another variant)
+    0: [[(8, 9, 6, 3.5), (12, 11, 5, 3), (4, 11, 3, 2)], [(23, 23, 5, 3), (19, 25, 4, 2.5), (26, 26, 3, 2.5)]],
+    1: [[(21, 7, 6, 3.5), (25, 9.5, 4.5, 3), (16, 9, 3, 2)], [(8, 22, 6, 3.5), (5, 25, 4, 2.5), (12, 24, 3, 2)]],
+    2: [[(15, 15, 7, 4), (20, 18.5, 5, 3), (10, 18.5, 3.5, 2.5)], [(26, 5, 3.5, 2.5), (28.5, 7, 2, 1.5)]],
+    3: [[(24, 12, 5, 3.5), (20.5, 15.5, 4, 2.5), (27, 15, 2.5, 2)], [(9, 26, 6, 3), (14, 24, 4, 2.5), (4, 27, 2.5, 2)]],
 }
+BARE_GRASS = {  # dry grass tufts, drawn only on the bare rock
+    0: [(5, 8, TUFT_S), (21, 23, SPRIG), (11, 10, SPRIG)],
+    1: [(20, 5, TUFT_M), (5, 21, TUFT_S), (10, 23, SPRIG)],
+    2: [(12, 14, TUFT_M), (19, 17, SPRIG), (25, 4, SPRIG)],
+    3: [(22, 11, TUFT_S), (7, 24, TUFT_M)],
+}
+BARE_STONES = {0: [(13, 8), (25, 24)], 1: [(24, 8), (9, 21)], 2: [(17, 17)], 3: [(25, 13), (12, 25)]}
 
 
 def autumn_mountains_ground(v):
-    """No snow in autumn: the snow becomes scree (mount.rock, tone for tone, so the drifts become low
-    ridges), the ice patch a small pool (water.surface), and tufts of dry grass are drawn on it."""
     t = mountains_snow(v)
-    set_ramp(t, "mount.snow", "mount.rock")
-    set_ramp(t, "mount.ice", "water.surface")
-    set_ramp(t, "lake.reed", "lake.reed")
-    for x, y, p in SCREE_TUFTS[v]:
-        t.stamp(x, y, p, tones("lake.reed"))
-    for y in range(32):  # no bright 4 on the scree (the snow's sparkle would read as snow)
-        for x in range(32):
-            if t.px[y][x] == ("mount.snow", 4):
-                t.px[y][x] = ("mount.snow", 3)
+    for m in ("desert.stone", "autumn.grass"):
+        set_ramp(t, m, m)
+    bare = set()
+    for patch in BARE[v]:
+        for cx, cy, rx, ry in patch:
+            rx, ry = rx * 1.2, ry * 1.2  # about 20-30 % of the ground bare (director, v1.1 inspection)
+            for y in range(int(cy - ry) - 1, int(cy + ry) + 2):
+                for x in range(int(cx - rx) - 1, int(cx + rx) + 2):
+                    if ((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 <= 1 and 1 <= x <= 30 and 1 <= y <= 30:
+                        bare.add((x, y))
+    for x, y in bare:
+        up, down = ((x, (y - 1) % 32) in bare), ((x, (y + 1) % 32) in bare)
+        left, right = (((x - 1) % 32, y) in bare), (((x + 1) % 32, y) in bare)
+        tone = 2
+        if not up:
+            tone = 1  # the snow bank above casts a shadow on the rock
+        elif not down or not right:
+            tone = 3 if left else 2  # the lower right rim catches the light from the top left
+        t.put(x, y, "desert.stone", tone)
+    for x, y in bare:  # the snow's edge around the patch: a lit rim on top, a shaded rim below
+        for dx, dy, tone in ((0, -1, 3), (0, 1, 1), (1, 0, 2), (-1, 0, 3)):
+            q = ((x + dx) % 32, (y + dy) % 32)
+            if q not in bare and t.px[q[1]][q[0]] and t.px[q[1]][q[0]][0] == "mount.snow":
+                t.put(q[0], q[1], "mount.snow", tone)
+    for x, y, p in BARE_GRASS[v]:
+        t.stamp(x, y, p, tones("autumn.grass"), only_on="desert.stone")
+    for x, y in BARE_STONES[v]:
+        t.stamp(x, y, ["43", "32"], tones("desert.stone"), only_on="desert.stone")
     return t
 
 
+LIP_BARE = [(5, 12), (20, 26)]  # x ranges where the autumn lip shows dry grass instead of snow
+
+
 def autumn_stone_lip(kind, seg, var=0):
-    """The mountain cliff's lip without snow: dry grass (lake.reed, tone for tone)."""
+    """The mountain cliff's snow lip with bare stretches of dry grass (autumn.grass, tone for tone)."""
     ctx = patched(F, **STONE_VAR[var]) if var else contextlib.nullcontext()
     with ctx:
         t = F.stone_face(kind, seg)
-    set_ramp(t, "mount.snow", "lake.reed")
+    set_ramp(t, "autumn.grass", "autumn.grass")
+    shift = 7 * var
     for y in range(t.h):
         for x in range(t.w):
-            if t.px[y][x] == ("mount.snow", 4):
-                t.px[y][x] = ("mount.snow", 3)
+            v = t.px[y][x]
+            if v and v[0] == "mount.snow" and any(a <= (x - shift) % 32 <= b for a, b in LIP_BARE):
+                t.px[y][x] = ("autumn.grass", min(3, v[1]))
     return t
 
 
@@ -316,7 +407,7 @@ def autumn_set():
         out[f"autumn.forest.grass.{v}"] = autumn_forest_grass(v)
         out[f"autumn.mountains.snow.{v}"] = autumn_mountains_ground(v)
     out["autumn.forest.pine"] = autumn_forest_pine()
-    out["autumn.mountains.pine"] = pine(slim=True)
+    out["autumn.mountains.pine"] = pine(snow=1, slim=True)  # a light snow, as on the partly snowy ground
     for seg in (4, 8):
         for kind in ("top", "top-base"):
             out[f"autumn.face.stone.{kind}.{seg}"] = autumn_stone_lip(kind, seg)
