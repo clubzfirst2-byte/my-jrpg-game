@@ -6,6 +6,8 @@ Frames (ENEMY_BOSS_DESIGN.md 2.3): idle 2, move (hop) 4, windup 2, attack (body 
 defeat 3 (melts away). Wind-up shows by SHAPE: squashed flat and wide before the hop.
 """
 
+import numpy as np
+
 from rig import Rig
 
 W, H = 32, 28
@@ -55,6 +57,19 @@ def draw(p):
         body &= ~r.m_ellipse(cx + 2, top - 3, rx * 0.9, ry * (0.5 + 0.45 * p.melt))
         body |= r.m_ellipse(cx, base - 1, rx + 2 * p.melt, 2.4)
     r.add(body, "murk", soft=3)
+    if p.melt < 2:
+        # round 6: the light caught in the jelly's upper-left edge -- the 2-px rim keeps the
+        # light tone, the jelly inside it steps down half a tone, so the edge reads as lit
+        inside = body.copy()
+        inside[:, 2:] &= body[:, :-2]
+        inside[2:, :] &= body[:-2, :]
+        inside[1:, 1:] &= body[:-1, :-1]
+        r.shade(inside, lambda t: 2.5 if t == 3 else t, on=True)
+        # ...and dark masses inside the jelly: a large one round the core (the shadow tone), a
+        # smaller one up on the lit side (the core tone); clean ovals, no speckle
+        kx0, ky0 = round(cx + p.lean * 0.4 + 1), round(base - ry * 0.55 + (1 if p.melt else 0))
+        r.add(r.m_ellipse(kx0 + 0.5, ky0 + 0.5, 5.6, 4.2) & inside, "murk", tone=1, cast=False)
+        r.add(r.m_ellipse(round(cx - rx * 0.4 + p.lean * 0.5), round(base - ry * 1.15), 3.4, 2.4) & inside, "murk", tone=2, cast=False)
     # round 4: three bubbles at fixed places in the dark lower jelly -- they scale with the body
     # (squash and stretch), they never jump from frame to frame
     if p.melt < 2:

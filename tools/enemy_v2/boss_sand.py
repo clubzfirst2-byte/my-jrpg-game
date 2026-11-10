@@ -84,6 +84,14 @@ def draw(p):
         hy_ = 66 + dy - abs(tx) * 4 / 14
         body |= r.m_poly([(cx + tx - 3.5, hy_ - 2), (cx + tx + 3.5, hy_ - 2), (cx + tx + 2, hy_ + 2), (cx + tx + 1.5, hy_ + 5), (cx + tx - 0.5, hy_ + 5), (cx + tx - 1.5, hy_ + 2)])
     r.add(body, "murksand", soft=4)
+    # round 6: the robe is layered -- a torn mantle lies over the shoulders and chest, its ragged
+    # edge hanging over the robe below (its own lit top, its own shadow under the edge)
+    mantle = r.m_poly([(cx - 17, 28 + dy), (cx + 17, 28 + dy), (cx + 22, 45 + dy), (cx + 17, 53 + dy), (cx + 13, 48 + dy), (cx + 8, 56 + dy),
+                       (cx + 3, 50 + dy), (cx - 3, 57 + dy), (cx - 8, 50 + dy), (cx - 13, 55 + dy), (cx - 17, 48 + dy), (cx - 22, 45 + dy)]) & body
+    under = np.zeros_like(mantle)
+    under[2:, :] = mantle[:-2, :] | mantle[1:-1, :]
+    r.shade(under & ~mantle & body, lambda t: 1, on=True)
+    r.add(mantle, "murksand", soft=4, cast=False)
     # sand streams on the robe
     for x in (-12, -5, 6, 13):
         r.shade(r.m_line(cx + x, 36 + dy, cx + x * 1.15, 60 + dy), lambda t: max(1, t - 1))
@@ -107,13 +115,14 @@ def draw(p):
     # crease one tone lighter than the cloth under it with its shadow (one tone darker) on the
     # right. Offsets from the hood's point, so the folds belong to the hood and move with it.
     cloth = hood.copy()
-    hood = hood & ~r.m_ellipse(cx, hy + 1, 14.5, 14.5)  # the folds stop short of the rolled rim
     for fx0, fx1, fx2 in ((-3, -9, -15), (-1, -5, -10), (3, 7, 11), (5, 11, 16)):
-        crease = _connect4(r.m_chain([(cx + fx0 * 1.6, hy - 12), (cx + fx1, hy - 5), (cx + fx2, hy + 6)], [1.3, 1.7, 1.7]) & hood) & hood
+        crease = _connect4(r.m_chain([(cx + fx0 * 1.6, hy - 12), (cx + fx1, hy - 5), (cx + fx2, hy + 6)], [1.4, 1.8, 1.8]) & hood) & hood
         shadow = np.zeros_like(crease)
         shadow[:, 2:] = crease[:, :-2] | crease[:, 1:-1]
-        r.shade(_connect4(shadow & ~crease & hood) & ~crease & hood, lambda t: 1, on=True)
-        r.shade(crease, lambda t: 3, on=True)
+        # round 6: the folds run the whole hood again, under the rolled rim, and take their
+        # tone from the cloth they lie on (one step lighter, a two-step shadow)
+        r.shade(_connect4(shadow & ~crease & hood) & ~crease & hood, lambda t: max(1, t - 1), on=True)
+        r.shade(crease, lambda t: min(3, t + 1), on=True)
     # round 5: the hood's edge is folded back round the face -- a 2-px rolled rim, lit on its
     # upper left (tone 3), in shadow on its lower right (tone 1): two clean arcs
     rim = r.m_ellipse(cx, hy + 1, 13, 13) & cloth

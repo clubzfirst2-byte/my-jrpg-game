@@ -371,25 +371,28 @@ describe('enemy & boss art v2 (src/art-release-v2/enemy)', () => {
           if (blocks.length) per.push(median(blocks));
         }
       }
-      // the round-4 medians (inspect_enemy_v2.md 11.5). Do not lower these without asking the director.
-      const min = { beast: 8, archer: 14.5, slime: 8, sentinel: 12, boss_root: 9, boss_frost: 6, boss_sand: 6, boss_storm: 9, boss_source: 7.5 }[kind];
+      // the round-4 medians (inspect_enemy_v2.md 11.5; root and source raised to their real round-4
+      // values, 12.2). Do not lower these without asking the director.
+      const min = { beast: 8, archer: 14.5, slime: 8, sentinel: 12, boss_root: 9.5, boss_frost: 6, boss_sand: 6, boss_storm: 9, boss_source: 8 }[kind];
       expect(median(per), `${kind}: colours per 16x16`).toBeGreaterThanOrEqual(min);
     }
   });
 
   it('no dot scatter: isolated dots per 1000 px and glow-colour isolated dots stay near the round-4 values', () => {
     // An isolated dot: a 1-2 px patch of one colour (4-connected) whose every 4-neighbour is
-    // opaque and differs from it by >= 12 in luminance (0-100). Round 3 scattered such dots over
-    // the bodies (many in the glow colour); round 4 replaced them with strokes and clusters.
-    // Caps = the round-4 values + 10% (dots per 1000 px) / + 5% (glow dots, all frames summed).
+    // opaque and differs from it by >= 12 in luminance on 0-255 (the inspector's measure,
+    // inspect_enemy_v2.md 12.2; each patch counts once). Round 3 scattered such dots over the
+    // bodies (many in the glow colour); round 4 replaced them with strokes and clusters.
+    // Caps: dots per 1000 px = the inspection's values (round 4 + 10%, section 12.2, approved by
+    // the director); glow-colour dots = round 4 + 5% on the same measure (all frames summed).
     // Do not raise these without asking the director.
     const CAP = {
-      beast: [78.2, 472], archer: [40.4, 101], slime: [36.1, 339], sentinel: [59.3, 1049], boss_root: [23.2, 1479],
-      boss_frost: [84.2, 1641], boss_sand: [24.0, 1282], boss_storm: [44.6, 507], boss_source: [26.5, 1538],
+      beast: [125.6, 445], archer: [83.8, 100], slime: [42.2, 292], sentinel: [70.0, 1013], boss_root: [56.0, 1562],
+      boss_frost: [75.9, 1646], boss_sand: [41.0, 1138], boss_storm: [66.9, 496], boss_source: [38.9, 1899],
     };
     const GLOW = new Set(RAMP8.glow);
-    const lum = (px, j) => (0.299 * px[j] + 0.587 * px[j + 1] + 0.114 * px[j + 2]) / 2.55;
-    const same = (px, a, b) => px[a] === px[b] && px[a + 1] === px[b + 1] && px[a + 2] === px[b + 2] && px[a + 3] === px[b + 3];
+    const lum = (px, j) => 0.299 * px[j] + 0.587 * px[j + 1] + 0.114 * px[j + 2];
+    const same = (px, a, b) => px[b + 3] && px[a] === px[b] && px[a + 1] === px[b + 1] && px[a + 2] === px[b + 2];
     const STEP = [[1, 0], [-1, 0], [0, 1], [0, -1]];
     for (const [kind, k] of Object.entries(MAN.kinds)) {
       if (kind === 'shot') continue;
@@ -410,6 +413,7 @@ describe('enemy & boss art v2 (src/art-release-v2/enemy)', () => {
               const comp = [[x, y]];
               if (m.length === 1) {
                 if (mates(m[0][0], m[0][1]).length > 1) continue; // part of a patch of 3+
+                if (m[0][1] < y || (m[0][1] === y && m[0][0] < x)) continue; // a pair counts once, at its first pixel
                 comp.push(m[0]);
               }
               let alone = true;
@@ -430,6 +434,7 @@ describe('enemy & boss art v2 (src/art-release-v2/enemy)', () => {
           }
         }
       }
+      if (process.env.ENEMY_V2_PRINT) console.log(`dots ${kind} ${((1000 * dots) / opaque).toFixed(1)} glow ${glow}`);
       expect((1000 * dots) / opaque, `${kind}: isolated dots per 1000 px`).toBeLessThanOrEqual(CAP[kind][0]);
       expect(glow, `${kind}: glow-colour isolated dots`).toBeLessThanOrEqual(CAP[kind][1]);
     }

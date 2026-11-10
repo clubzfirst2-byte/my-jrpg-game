@@ -151,10 +151,21 @@ def draw(p):
     r.add(lit, "ashfur", tone=3)
     # round 4: two fur wedges on the shoulder, two on the haunch (lit over a dark tip, lying back),
     # and one 2-px scar across the haunch -- all from the masses' centres, so they ride the body
-    # round 5: the wedges are larger clumps (7x4: a 2-px lit back over a 2-px shadow)
-    for (ox, oy), base_ in (((-4, -4), C_), ((-1, 0), C_), ((-4, -4), H_), ((-1, 1), H_)):
-        r.stamp(int(round(base_[0] + ox)), int(round(base_[1] + oy)), ["...3333", ".333311", "3331111", ".1111.."], WEDGE_LEG)
-    r.stamp(int(round(H_[0])) - 2, int(round(H_[1])) + 1, ["333..", "1111.", "..111"], WEDGE_LEG)
+    # round 6: the shoulder and the haunch are cut into planes -- each muscle is its own rounded
+    # mass (a lit upper-left plane, a core plane) set off from the body by a 2-px shadow arc
+    # behind and under it. Whole pixels from the masses' centres, so they ride the body.
+    for (mx, my, mrx, mry) in ((round(C_[0]) - 0.5, round(C_[1]) + 1.0, 4.4, 5.4), (round(H_[0]) - 0.5, round(H_[1]) + 1.5, 5.4, 4.8)):
+        muscle = r.m_ellipse(mx, my, mrx, mry) & body
+        arc = r.m_ellipse(mx + 1.6, my + 1.2, mrx + 1.2, mry + 1.2) & ~r.m_ellipse(mx, my, mrx, mry) & body
+        r.add(arc, "ashfur", tone=1, cast=False)
+        r.add(muscle, "ashfur", tone=2, cast=False)
+        r.add(muscle & ~r.m_ellipse(mx + 3.4, my + 3.4, mrx, mry), "ashfur", tone=2.5, cast=False)
+        r.add(muscle & ~r.m_ellipse(mx + 1.6, my + 1.6, mrx, mry), "ashfur", tone=3, cast=False)
+    # ...and the ribs show on the barrel between them: three short slanted shadows, 2 px wide
+    for i in range(3):
+        rx0 = round(H_[0] + 7 + i * 3.4 + p.stretch * 0.3 * i)
+        ry0 = round((hip[1] + sh[1]) / 2 - 3)
+        r.add(r.m_px([(rx0, ry0), (rx0, ry0 + 1), (rx0 - 1, ry0 + 1), (rx0 - 1, ry0 + 2), (rx0 - 1, ry0 + 3), (rx0 - 2, ry0 + 3)]) & body, "ashfur", tone=1, cast=False)
     # mane ruff on the neck and shoulders (paler, tufted)
     rx, ry = sh[0] + 2, sh[1] - 6
     ruff = r.m_poly([(rx - 7, ry), (rx - 5, ry - 2), (rx - 3, ry - 4), (rx - 1, ry - 3), (rx + 2, ry - 5), (rx + 5, ry - 1), (rx + 3, ry + 1),

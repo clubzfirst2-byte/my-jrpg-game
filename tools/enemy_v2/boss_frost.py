@@ -17,7 +17,9 @@ ice crystals rising around it; charge = antlers levelled forward, a front hoof s
 
 import math
 
-from rig import Rig, PAD
+import numpy as np
+
+from rig import Rig, PAD, _connect4
 from bossparts import glow_eyes, cracks
 
 W, H = 96, 88
@@ -102,11 +104,33 @@ def antler(r, s, x0, y0, k, rot, lev, broken, y_ref=None):
         r.add(r.m_line(x0_, y0_, x1_, y1_), "ice", tone=4 if s < 0 else 3, cast=False)
 
 
+def flow(r, mass, hanks, tones=(3, 1)):
+    """Round 6: hanks of fur ON a mass: each a lit strand (tone 3, 2-3 px wide, tapering) with its
+    shadow (tone 1, 2 px) on the right; kept one pixel inside the mass so its outline stays clean."""
+    inner = mass.copy()
+    inner[1:, :] &= mass[:-1, :]
+    inner[:-1, :] &= mass[1:, :]
+    inner[:, 1:] &= mass[:, :-1]
+    inner[:, :-1] &= mass[:, 1:]
+    for pts in hanks:
+        pts = [(round(x), round(y)) for x, y in pts]
+        lit = _connect4(r.m_chain(pts, [1.2, 1.9, 0.9]) & inner) & inner
+        sh = np.zeros_like(lit)
+        sh[:, 2:] = lit[:, :-2] | lit[:, 1:-1]
+        sh = _connect4(sh & ~lit & inner) & ~lit & inner
+        r.add(sh, "frostfur", tone=tones[1], cast=False)
+        r.add(lit, "frostfur", tone=tones[0], cast=False)
+
+
 def leg(r, top, knee, foot, r_top, r_knee, r_foot, dark, hoof_tone):
     """A leg with a joint: a thick upper leg to the knee, a thin cannon to the fetlock, a fur tuft
     at the fetlock, a dark hoof."""
     (tx, ty), (kx, ky), (fx, fy) = top, knee, foot
-    r.limb(tx, ty, kx, ky, r_top, r_knee, "frostfur", dark=dark, soft=2, tex=("fur", 90, 3))
+    up = r.limb(tx, ty, kx, ky, r_top, r_knee, "frostfur", dark=dark, soft=2, tex=("fur", 90, 3))
+    # round 6: the coat's flow down the thighs (two hanks each; the far legs' a tone darker)
+    ax, ay = int(round(tx)), int(round(ty))
+    flow(r, up, [[(ax - 3, ay - 2), (ax - 3 + (kx - tx) * 0.5, ay + 4), (ax - 2 + (kx - tx), ay + 10)],
+                 [(ax + 2, ay), (ax + 2 + (kx - tx) * 0.5, ay + 5), (ax + 3 + (kx - tx), ay + 11)]], tones=(2, 1) if dark else (3, 1))
     r.limb(kx, ky, fx, fy - 2, r_knee * 0.8, r_foot, "frostfur", dark=dark, soft=1)
     # the knee: a knob, one tone lighter on its lit side
     r.ellipse(kx - 0.5, ky, r_knee * 0.95, r_knee * 0.8, "frostfur", dark=dark, soft=1)
@@ -173,6 +197,11 @@ def draw(p):
     # round 4: fur wedges down the shoulders and chest, ice plates on the shoulder tops
     for ox, oy in LOCKS:
         r.stamp(int(round(cx + ox)), int(round(sy + oy)), LOCK, FUR)
+    # round 6: the flow of the coat down the body's sides -- long hanks (3-4 px wide: a lit
+    # strand with a 2-px shadow on its right) sweeping out and down over each hump, in two
+    # rows; whole pixels from the shoulder line, so they ride with the body
+    flow(r, chest, [[(cx + s * (14 + ox) + fx, sy + oy + fy) for fx, fy in ((0, 0), (s * 1.5, 5), (s * 4, 10))]
+                    for s in (-1, 1) for ox, oy in ((-8, -5), (-2, -7), (4, -5), (9, -1), (-5, 4), (1, 5), (7, 6), (-11, 2), (-3, 10), (-9, 9))])
     for ox, oy in PLATES:
         r.stamp(int(round(cx + ox)), int(round(sy + oy)), PLATE, ICE)
     # the crease between the shoulder humps and the chest (a fold, not a line across)
