@@ -6,6 +6,8 @@ Frames (ENEMY_BOSS_DESIGN.md 2.4): idle 2, move 4, windup 2, attack (slam) 2, hu
 (crumbles). Wind-up shows by SHAPE: the fist raised over the head (it clears the dome, behind it). The red ring is the program's.
 """
 
+import numpy as np
+
 from rig import Rig
 
 W, H = 40, 56
@@ -101,12 +103,18 @@ def draw(p):
     # the chest plate emblem: a dim diamond with a centre point (the light gone out, tainted glow).
     # Symmetric left-right, so it reads the same when the game mirrors the sprite (no letter shape)
     r.stamp(cx - 2, top + 3, ["..a..", ".aba.", "abcba", ".aba.", "..a.."], {"a": ("glow", 2), "b": ("glow", 3), "c": ("glow", 4)})
-    # v2 (hostile): the murk has split the stone -- glowing magenta cracks run out of the emblem
-    # (2-px: a bright line with a dark lip), so it never reads as a friendly statue
-    for (x0, y0, x1, y1, x2, y2) in ((cx + 2, top + 6, cx + 6, top + 4, cx + 8, top + 7), (cx - 2, top + 6, cx - 6, top + 5, cx - 8, top + 1),
-                                     (cx, top + 8, cx - 1, top + 12, cx + 2, top + 16)):
-        r.add(r.m_line(x0, y0, x1, y1) | r.m_line(x1, y1, x2, y2), "glow", tone=3, cast=False)
-        r.add(r.m_line(x0, y0 + 1, x1, y1 + 1) | r.m_line(x1, y1 + 1, x2, y2 + 1), "glow", tone=1, cast=False)
+    # v2 (hostile): the murk has split the stone -- two thick glowing cracks run out of the emblem
+    # (round 2: 2 px wide, a bright core with a dark lip under it; two, not three, so they read at
+    # 1x without being busy)
+    for (x0, y0, x1, y1, x2, y2) in ((cx + 2, top + 5, cx + 6, top + 3, cx + 9, top + 6), (cx - 1, top + 8, cx - 3, top + 12, cx - 1, top + 16)):
+        core = r.m_line(x0, y0, x1, y1) | r.m_line(x1, y1, x2, y2)
+        wide = core.copy()
+        wide[:, 1:] |= core[:, :-1]
+        lip = np.zeros_like(wide)
+        lip[1:, :] = wide[:-1, :]
+        r.add(lip & ~wide, "glow", tone=1, cast=False)
+        r.add(wide & ~core, "glow", tone=2, cast=False)
+        r.add(core, "glow", tone=3, cast=False)
     # head: a dome on a bronze collar, visor slit with the eye
     hx_, hy = cx + 1, top - 7 + p.tilt * 0.5
     r.add(r.m_rect(hx_ - 5, top - 2, hx_ + 5, top + 1), "bronze")
@@ -189,8 +197,7 @@ def frames():
     out = {}
     st = dict(fist=F("low"), nf=(22.0, G), ff=(14.0, G))
     name(out, "idle", loop(Pose, 4, [
-        (0.0, dict(st, dy=0.0, tilt=0.0)), (0.25, dict(st, dy=0.5, tilt=0.5, fist=(3.0, 8.5, 5.0, 16.5))),
-        (0.5, dict(st, dy=1.0, tilt=1.0, fist=(3.0, 9.0, 5.5, 17.0))), (0.75, dict(st, dy=0.5, tilt=0.0, fist=(3.0, 8.5, 5.5, 16.5))),
+        (0.0, dict(st)), (0.25, dict(st, dy=1)), (0.5, dict(st, dy=1, tilt=1)), (0.75, dict(st, tilt=1)),
     ]), draw)
     name(out, "move", loop(Pose, 8, [
         (0.0, dict(st, nf=(25.0, G), ff=(11.0, G), dy=1.0, fist=(3.0, 8.0, 4.0, 16.0))),
@@ -224,9 +231,11 @@ def frames():
         (0.5, dict(fist=F("hurt"), tilt=1.0, dy=3.0, eye=0, nf=(22.0, G), ff=(13.0, G))),
         (1.0, dict(fist=F("hurt"), tilt=3.0, dy=5.0, eye=0, nf=(22.0, G), ff=(13.0, G))),
     ])
-    d += [Pose(collapse=2), Pose(collapse=3)]
-    name(out, "defeat", d, draw)
+    # round 2: the machine sags and its corrupted stone melts into the murk, then only rubble is left
+    from anim import dissolve_from
+    name(out, "defeat", dissolve_from(draw, [d[0], d[2], d[3]], Pose(collapse=3), pools=(8, 12)), None)
     return out
 
 
 ACTIONS = (("idle", 4), ("move", 8), ("windup", 4), ("attack", 5), ("hurt", 3), ("defeat", 6))
+SMOOTH = set()  # shape fields that stay smooth (the rest snap to whole pixels)

@@ -60,32 +60,37 @@ RAMPS = {
 RGB = {k: [hx(c) for c in v] for k, v in RAMPS.items()}
 
 
-# ------------------------------------------------------------------ v2: 11-step ramps
-# The v1 ramps keep their 5 tones (0 outline, 1 shadow, 2 core, 3 light, 4 highlight); v2 adds two
-# steps between each pair (at 1/3 and 2/3: 1-2, 2-3, 3-4) so large bodies turn in many small steps
-# (hero-level colour density), and lifts the outline: the hero's rule is "the outline is the
-# darkest tone OF THE MATERIAL", never near-black, so a tone 0 darker than max(r, g, b) 34 is mixed
-# 40% toward tone 1.
-# Index: 0 outline, 1 tone 1, 2-3 between 1 and 2, 4 tone 2, 5-6 between 2 and 3, 7 tone 3,
-# 8-9 between 3 and 4 (glints only), 10 tone 4.
+# ------------------------------------------------------------------ v2: 7-step ramps (round 2)
+# The v1 ramps keep their 5 tones (0 outline, 1 shadow, 2 core, 3 light, 4 highlight); v2 adds ONE
+# in-between step under the core and one over it (1.5, 2.5) -- the hero's style is a few clear
+# tones in clusters, not a gradient. Per material: normal enemies use at most 6 tones (a shiny
+# material drops 1.5), bosses at most 7. An in-between pixel is only kept inside a 2x2 block of
+# itself (clusters >= 2 px wide, never a 1-px diagonal stair; see Rig.image).
+# The outline is the material's own tone 0, as dark as the hero's (his cloak #10180e, trousers
+# #14141c): only a tone 0 darker than max(r, g, b) 24 is lifted a quarter toward tone 1.
+# Index: 0 outline, 1 tone 1, 2 = 1.5, 3 tone 2, 4 = 2.5, 5 tone 3, 6 tone 4.
 def _mix(a, b, f):
     return tuple(int(math.floor(a[i] + (b[i] - a[i]) * f + 0.5)) for i in range(3))  # = JS Math.round
 
 
-def _ramp11(c):
-    o = c[0] if max(c[0]) >= 34 else _mix(c[0], c[1], 0.4)
-    out = [o]
-    for i in (1, 2, 3):
-        out += [c[i], _mix(c[i], c[i + 1], 1 / 3), _mix(c[i], c[i + 1], 2 / 3)]
-    return out + [c[4]]
+def _ramp7(c):
+    o = c[0] if max(c[0]) >= 34 else _mix(c[0], c[1], 0.2)
+    return [o, c[1], _mix(c[1], c[2], 0.5), c[2], _mix(c[2], c[3], 0.5), c[3], c[4]]
 
 
-RGB8 = {k: _ramp11(v) for k, v in RGB.items()}
+RGB8 = {k: _ramp7(v) for k, v in RGB.items()}
+MID = (2, 4)  # the in-between indices
 
 
 def idx8(tone, sub=0):
-    """v1 tone (0..4, or a fixed in-between like 2.5) + the sub-step (0..2) -> v2 ramp index (0..10)."""
-    return 0 if tone <= 0 else min(10, int(math.floor(3 * (tone - 1) + 1 + sub + 0.5)))
+    """v1 tone (0..4, or a fixed in-between 1.5 / 2.5) + the in-between flag -> v2 ramp index (0..6)."""
+    if tone <= 0:
+        return 0
+    if tone >= 4:
+        return 6
+    return min(5, int(math.floor(2 * (tone - 1) + 1 + sub + 0.5)))
+
+
 # materials that may carry tone 4 (a glint) in the volume shading; the others stop at tone 3
 SHINY = {"glow", "eye", "ice", "spark", "bronze", "bone", "mask", "oldstone"}
 
@@ -293,6 +298,7 @@ class Rig:
         yy, xx = np.mgrid[0:self.H, 0:self.W]
         self.X, self.Y = xx - PAD + 0.5, yy - PAD + 0.5  # pixel centres in frame coordinates
         self.parts = []
+        self.boss = w >= 64  # a boss may use 7 tones per material, a normal enemy 6
 
     # -------------------------------------------------------------- shapes (masks)
     def m_ellipse(self, cx, cy, rx, ry):
@@ -450,14 +456,12 @@ class Rig:
             t = np.full(B.shape, 2)
             t[I > 0.62] = 3
             t[I < 0.30] = 1
-            # v2: each light band is split in three; the brighter thirds take the in-between steps
+            # v2: the brighter part of the shadow band takes 1.5 and the brighter part of the core
+            # band takes 2.5 (a normal enemy's shiny material keeps only 2.5: at most 6 tones)
             hf = np.zeros(t.shape, int)
-            for tt, a1, a2 in ((1, 0.12, 0.22), (2, 0.41, 0.52), (3, 0.70, 0.78)):
-                if tt == 3 and p.mat not in SHINY:
-                    continue
-                band = (t == tt) & (I <= (0.86 if tt == 3 else 9))
-                hf[band & (I > a1)] = 1
-                hf[band & (I > a2)] = 2
+            if not (p.mat in SHINY and not self.boss):
+                hf[(t == 1) & (I > 0.20)] = 1
+            hf[(t == 2) & (I > 0.48)] = 1
             if p.mat in SHINY:
                 t[I > 0.86] = 4
             # the 1-pixel rim: an outside edge facing up or left is lit, down or right is shaded
@@ -473,9 +477,9 @@ class Rig:
             t = np.clip(t - p.dark + p.lit, 1, 4)
             if p.mat not in SHINY:
                 t = np.minimum(t, 3)
-            if p.mat not in SHINY:
-                hf[t > 2] = 0
-            hf[t > 3] = 0
+            hf[t > 2] = 0
+            if p.mat in SHINY and not self.boss:
+                hf[t == 1] = 0
             full = np.full((H, W), -1)
             full[y0:y1, x0:x1] = t
             tone[vis] = full[vis]
@@ -498,7 +502,7 @@ class Rig:
                     b = idx[y - dy, x - dx]
                     if b > a and self.parts[b].cast and self.parts[b].mat is not None:
                         tone[y, x] = max(1, min(tone[y, x], 2) - 1) if tone[y, x] <= 2 else 2
-                        half[y, x] = 1 if tone[y, x] == 1 else 0
+                        half[y, x] = 0
                         break
         # inline: parts drawn with inline=True get tone 0 where they border a part behind them
         for i, p in enumerate(self.parts):
@@ -527,11 +531,28 @@ class Rig:
         H, W, P = self.H, self.W, PAD
         out = [[None] * self.w for _ in range(self.h)]
         filled = tone >= 0
+        # ramp index per pixel; an in-between tone survives only inside a 2x2 block of the same
+        # material and index (clusters, not stairs or dither): else it drops to the tone below
+        idx = np.zeros((H, W), int)
+        code = np.full((H, W), -1)
+        names = {m: i for i, m in enumerate(RGB8)}
+        for Y, X in zip(*np.nonzero(filled)):
+            idx[Y, X] = idx8(tone[Y, X], self.half[Y, X])
+            code[Y, X] = names[mat[Y, X]] * 16 + idx[Y, X]
+        mid = filled & np.isin(idx, MID)
+        keep = np.zeros((H, W), bool)
+        for dy in (0, 1):
+            for dx in (0, 1):
+                a = code[:H - 1, :W - 1]
+                blk = mid[:H - 1, :W - 1] & mid[1:, :W - 1] & mid[:H - 1, 1:] & mid[1:, 1:] & \
+                    (code[1:, :W - 1] == a) & (code[:H - 1, 1:] == a) & (code[1:, 1:] == a)
+                keep[dy:H - 1 + dy, dx:W - 1 + dx] |= blk
+        idx[mid & ~keep] -= 1
         for y in range(self.h):
             for x in range(self.w):
                 Y, X = y + P, x + P
                 if filled[Y, X]:
-                    out[y][x] = RGB8[mat[Y, X]][idx8(tone[Y, X], self.half[Y, X])] + (255,)
+                    out[y][x] = RGB8[mat[Y, X]][idx[Y, X]] + (255,)
                 elif outline:
                     best = None
                     for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0)):

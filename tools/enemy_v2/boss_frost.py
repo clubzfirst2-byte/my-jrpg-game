@@ -268,8 +268,7 @@ def frames():
     from anim import boss
     P2 = dict(phase2=True)
     K = {
-        "idle": [{}, dict(dy=0.5, head=0.5, rot=1), dict(dy=1, head=1, rot=2), dict(dy=0.5, head=0.5, rot=1, mouth=0.6)],
-        # a heavy elk's walk: the near fore and the far hind leg lift together, the body rolls
+        "idle": [{}, dict(dy=1), dict(dy=1, mouth=1), dict(mouth=1)],
         "move": [dict(legs=(4, 0, 3, 0), shift=-2), dict(legs=(1, 1, 1, 1), dy=-1, head=-1, rot=-2),
                  dict(legs=(0, 3, 0, 4), shift=2), dict(legs=(1, 1, 1, 1), dy=-0.5, head=1, rot=2)],
         "windup_slam": (dict(head=7, rot=28, fore=0.85, dy=1), dict(head=14, rot=56, fore=0.68, dy=2)),
@@ -284,13 +283,15 @@ def frames():
                           dict(head=6, lev=0.7, rot=8, hs=1.06, fore=0.85, **P2)),
         "hurt": dict(head=-3, rot=-6, eyes="shut", mouth=2, shift=-2),
         "stagger": (dict(shift=-5, legs=(0, 0, 3, 6), head=3, rot=10, eyes="shut"), dict(shift=4, legs=(5, 2, 0, 0), head=4, rot=14, eyes="shut")),
-        "idle2": [dict(**P2), dict(dy=0.5, head=0.5, rot=1, **P2), dict(dy=1, head=1, rot=2, **P2), dict(dy=0.5, head=0.5, rot=1, mouth=0.6, **P2)],
+        "idle2": [dict(**P2), dict(dy=1, **P2), dict(dy=1, mouth=1, **P2), dict(mouth=1, **P2)],
+        # defeat (round 2): the hit, the buckle, the collapse -- which then melts over two frames
         "defeat": [dict(head=-4, rot=-8, eyes="shut", mouth=3, shift=-3, **P2), dict(head=-3, rot=-6, eyes="shut", mouth=3, legs=(3, 0, 0, 0), **P2),
-                   dict(collapse=1, head=6, rot=24, eyes="shut", **P2), dict(collapse=2, head=8, rot=32, eyes="shut", **P2),
-                   dict(collapse=3, head=10, rot=40, eyes="shut", **P2), dict(collapse=4)],
+                   dict(collapse=2, head=8, rot=32, eyes="shut", **P2)],
+        "remains": dict(collapse=4),
     }
-    return boss(Pose, draw, K, PATTERNS)
+    return boss(Pose, draw, K, PATTERNS, phase2=("charge",))
 
 
 PATTERNS = ("slam", "ring", "charge")
 ACTIONS = __import__("anim").boss_actions(PATTERNS)
+SMOOTH = {"rot", "lev", "fore", "hs", "shard_r", "shard_s"}  # shape fields that stay smooth (the rest snap to whole pixels)

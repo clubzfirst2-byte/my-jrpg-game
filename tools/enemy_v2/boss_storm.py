@@ -204,24 +204,27 @@ def frames():
     P2 = dict(phase2=True)
     K = {
         # the S sways and rises with each breath; the crest flickers
-        "idle": [dict(crest=0), dict(sway=0.5, raise_=0.5, crest=1), dict(sway=1, raise_=1, crest=0), dict(sway=0.5, raise_=0.5, crest=1, drop=0.6)],
+        "idle": [dict(crest=0), dict(crest=1), dict(crest=1, drop=1), dict(crest=0, drop=1)],
         "move": [dict(sway=-3, crest=1), dict(sway=0, raise_=1.5, crest=0), dict(sway=3, raise_=1, crest=1), dict(sway=0, raise_=0, drop=1, crest=0)],
         "windup_ring": (dict(sparks=4, crest=1, coil=7, crest_up=1.5, fin=19, jaw=1), dict(sparks=8, coil=11, crest_up=1.8, fin=22, jaw=1, sway=-2)),
-        "attack_ring": (dict(sparks=8, fly=6, raise_=4, jaw=2, crest=1), dict(sparks=4, fly=12, raise_=2)),
+        "attack_ring": (dict(sparks=8, fly=6, raise_=4, jaw=3, crest=0, crest_up=1.5, fin=22, sway=3, pull=-3), dict(sparks=4, fly=12, raise_=2),
+                        dict(sparks=8, fly=9, raise_=3, jaw=4, crest=0, crest_up=1.35, fin=23, sway=4, pull=-5)),
         "windup_volley": (dict(jaw=3, mouth_spark=True, pull=8, drop=-3), dict(jaw=4, mouth_spark=True, pull=13, drop=-5, raise_=2, crest=1)),
-        "attack_volley": (dict(jaw=3, drop=6, hs=1.08, sway=1), dict(jaw=1, drop=3)),
-        "windup_slam": (dict(raise_=5, jaw=1, crest=0, sway=-4, **P2), dict(raise_=6, jaw=2, sway=-6, **P2)),
+        "attack_volley": (dict(jaw=4, drop=6, hs=1.1, sway=2, pull=-4), dict(jaw=1, drop=3),
+                          dict(jaw=4, drop=9, hs=1.14, sway=3, pull=-7)),
+        "windup_slam": (dict(raise_=5, jaw=1, crest=0, sway=-4, **P2), dict(raise_=6, jaw=2, sway=-6, **P2), dict(raise_=4, jaw=0, crest=0, sway=-3, **P2)),
         "attack_slam": (dict(drop=16, raise_=-6, hs=1.08, splash=True, jaw=2, **P2), dict(drop=10, raise_=-3, jaw=1, **P2)),
         "hurt": dict(sway=-2, drop=-3, eyes="shut", jaw=2),
         "stagger": (dict(sway=-5, drop=4, eyes="shut", jaw=1), dict(sway=4, drop=6, eyes="shut")),
-        "idle2": [dict(crest=0, **P2), dict(sway=0.5, raise_=0.5, crest=1, **P2), dict(sway=1, raise_=1, crest=0, **P2),
-                  dict(sway=0.5, raise_=0.5, crest=1, drop=0.6, **P2)],
+        "idle2": [dict(crest=0, **P2), dict(crest=1, **P2), dict(crest=1, drop=1, **P2), dict(crest=0, drop=1, **P2)],
+        # defeat (round 2): the hit, the buckle, the collapse -- which then melts over two frames
         "defeat": [dict(raise_=2, eyes="shut", jaw=3, sway=-2, **P2), dict(raise_=4, eyes="shut", jaw=3, **P2),
-                   dict(collapse=1, drop=6, eyes="shut", jaw=1, sway=-2, **P2), dict(collapse=2, drop=7, eyes="shut", sway=-2, **P2),
-                   dict(collapse=3, drop=8, eyes="shut", sway=-3, **P2), dict(collapse=4)],
+                   dict(collapse=2, drop=7, eyes="shut", sway=-2, **P2)],
+        "remains": dict(collapse=4),
     }
-    return boss(Pose, draw, K, PATTERNS)
+    return boss(Pose, draw, K, PATTERNS, phase2=("slam",))
 
 
 PATTERNS = ("ring", "volley", "slam")
 ACTIONS = __import__("anim").boss_actions(PATTERNS)
+SMOOTH = {"hs", "crest_up"}  # shape fields that stay smooth (the rest snap to whole pixels)

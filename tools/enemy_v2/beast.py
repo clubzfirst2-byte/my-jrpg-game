@@ -320,10 +320,7 @@ def frames():
     stand = dict(nf=(27.0, G), ff=(29.0, G), nh=(13.0, G), fh=(11.0, G))
     # idle: breathing -- the chest rises and falls, the head bobs after it, the tail sways
     name(out, "idle", loop(Pose, 4, [
-        (0.0, dict(stand, dy=0.0, tail=0.0, head=(0.0, 0.0))),
-        (0.25, dict(stand, dy=0.5, tail=1.0, head=(0.0, 0.5))),
-        (0.5, dict(stand, dy=1.0, tail=1.5, head=(0.0, 1.0))),
-        (0.75, dict(stand, dy=0.5, tail=-0.5, head=(0.0, 0.5), ear=1)),
+        (0.0, dict(stand)), (0.25, dict(stand, dy=1)), (0.5, dict(stand, dy=1, tail=1.5)), (0.75, dict(stand, tail=1.5)),
     ]), draw)
     # move: a 4-beat lope (contact, gathered, contact, extended) with the passing poses between;
     # the body rises on the gathered beat and stretches on the extended one
@@ -361,9 +358,11 @@ def frames():
         (0.5, dict(dy=3.0, pitch=2.0, head=(-1.0, 2.0), jaw=1, ear=1, tail=-2.0, spike=0, nf=(28.0, G), ff=(30.0, G), nh=(13.0, G), fh=(11.0, G))),
         (1.0, dict(dy=5.0, pitch=3.0, head=(-1.0, 4.0), jaw=1, ear=1, tail=-2.0, spike=-1, nf=(29.0, G), ff=(31.0, G), nh=(13.0, G), fh=(11.0, G))),
     ])
-    d += [Pose(lying=1, puddle=1), Pose(lying=1, puddle=2), Pose(puddle=3)]
-    name(out, "defeat", d, draw)
+    # round 2: the collapse melts into the murk over two frames (no pop to the lying pose)
+    from anim import dissolve_from
+    name(out, "defeat", dissolve_from(draw, d, Pose(puddle=3), pools=(8, 12)), None)
     return out
 
 
 ACTIONS = (("idle", 4), ("move", 8), ("windup", 4), ("attack", 5), ("hurt", 3), ("defeat", 6))
+SMOOTH = {"tail"}  # shape fields that stay smooth (the rest snap to whole pixels)

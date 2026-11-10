@@ -61,7 +61,7 @@ def draw(p):
     # a shine on the jelly (top left) and inner swirls
     sx, sy = round(cx - rx * 0.5 + p.lean * 0.6), round(top + ry * 0.45)
     if p.melt < 2:
-        r.px([(sx, sy), (sx + 1, sy - 1), (sx, sy + 1)], "murk", 4)
+        r.px([(sx, sy), (sx + 1, sy - 1), (sx, sy + 1)], "murk", 3)  # round 2: the shine in tone 3 (6 tones max)
     r.shade(r.m_line(cx - rx + 3, base - 3, cx - 2, base - 2), lambda t: max(1, t - 1))
     # eyes: two glowing slits above the core
     ey = round(top + ry * 0.45) + (1 if p.melt else 0)
@@ -112,8 +112,7 @@ def frames():
     from anim import loop, once, name
     out = {}
     name(out, "idle", loop(Pose, 4, [
-        (0.0, dict(rx=11.0, ry=9.0)), (0.25, dict(rx=11.7, ry=8.4, lean=0.5)), (0.5, dict(rx=11.2, ry=8.9, lean=1.0)),
-        (0.75, dict(rx=10.4, ry=9.5, lean=-0.5)),
+        (0.0, dict(rx=11.0, ry=9.0)), (0.25, dict(rx=11.5, ry=9.0)), (0.5, dict(rx=11.5, ry=8.5)), (0.75, dict(rx=11.0, ry=8.5)),
     ]), draw)
     # move: squash (gather), stretch up off the ground, the arc leaning forward, the fall, the
     # landing squash, the rebound
@@ -145,13 +144,16 @@ def frames():
         (0.5, dict(rx=12.6, ry=7.6, lean=-1.0, x=-2, eyes="shut")),
         (1.0, dict(rx=11.0, ry=9.0, lean=0.0, x=-1, eyes="open")),
     ]), draw)
-    name(out, "defeat", once(Pose, 6, [
+    # round 2: it sags, its top rounds off, then it melts flat into its own pool; the dimmed core last
+    from anim import dissolve_from
+    d = once(Pose, 3, [
         (0.0, dict(rx=12.6, ry=7.4, eyes="shut", melt=0.0)),
-        (0.4, dict(rx=12.0, ry=8.0, eyes="shut", melt=1.0)),
-        (0.8, dict(rx=12.5, ry=6.0, eyes="shut", melt=2.0)),
-        (1.0, dict(rx=12.5, ry=6.0, eyes="shut", melt=3.0)),
-    ]), draw)
+        (0.5, dict(rx=13.0, ry=6.8, eyes="shut", melt=0.0)),
+        (1.0, dict(rx=13.4, ry=5.8, eyes="shut", melt=0.0, puddle=1)),
+    ])
+    name(out, "defeat", dissolve_from(draw, d, Pose(melt=3), pools=(10, 13)), None)
     return out
 
 
 ACTIONS = (("idle", 4), ("move", 8), ("windup", 4), ("attack", 5), ("hurt", 3), ("defeat", 6))
+SMOOTH = {"rx", "ry", "melt"}  # shape fields that stay smooth (the rest snap to whole pixels)

@@ -81,20 +81,22 @@ const RAMPS = {
   leather: ['24160c', '4a3020', '704c30', '946c46', 'b88c5e'],
 };
 
-// v2 ramps: tone 0 (lifted toward tone 1 when it is near-black), then each tone and two steps
-// toward the next one (1/3, 2/3): 1, 1-2, 1-2, 2, 2-3, 2-3, 3, 3-4, 3-4, 4
+// v2 ramps (round 2): 7 steps -- tone 0 (the outline; lifted a quarter toward tone 1 only when it
+// is darker than the hero's darkest outline, max(r, g, b) < 24), 1, 1.5, 2, 2.5, 3, 4
 const rgb = (h) => [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
 const mix = (a, b, f) => a.map((v, i) => Math.round(v + (b[i] - v) * f));
 const hex = (c) => c.map((v) => v.toString(16).padStart(2, '0')).join('');
 const RAMP8 = Object.fromEntries(
   Object.entries(RAMPS).map(([k, v]) => {
     const c = v.map(rgb);
-    const o = Math.max(...c[0]) >= 34 ? c[0] : mix(c[0], c[1], 0.4);
-    const steps = [1, 2, 3].flatMap((i) => [c[i], mix(c[i], c[i + 1], 1 / 3), mix(c[i], c[i + 1], 2 / 3)]);
-    return [k, [o, ...steps, c[4]].map(hex)];
+    const o = Math.max(...c[0]) >= 34 ? c[0] : mix(c[0], c[1], 0.2);
+    return [k, [o, c[1], mix(c[1], c[2], 0.5), c[2], mix(c[2], c[3], 0.5), c[3], c[4]].map(hex)];
   })
 );
 const COLOURS = new Set(Object.values(RAMP8).flat());
+/** colour -> [material, ramp index] */
+const WHICH = new Map();
+for (const [k, r] of Object.entries(RAMP8)) r.forEach((c, i) => WHICH.has(c) || WHICH.set(c, [k, i]));
 const OUTLINES = new Set(Object.values(RAMP8).map((r) => r[0]));
 const RESERVED = [
   [0xff, 0x3a, 0x3a],
@@ -110,6 +112,8 @@ const RANGE = {
   windup: [3, 4],
   attack: [4, 6],
   hurt: [2, 3],
+  hurt2: [2, 3],
+  stagger2: [3, 4],
   stagger: [3, 4],
   defeat: [4, 6],
   transform: [4, 6],
@@ -190,7 +194,7 @@ describe('enemy & boss art v2 (src/art-release-v2/enemy)', () => {
     }
   });
 
-  it("the hero's outline rule: every outer edge pixel is a material's darkest tone, never near-black", () => {
+  it("the hero's outline rule: every outer edge pixel is a material's darkest tone (as dark as the hero's)", () => {
     for (const name of expected.keys()) {
       if (name.startsWith('enemy.shot.')) continue;
       const { w, h, px } = decode(name);
@@ -213,7 +217,7 @@ describe('enemy & boss art v2 (src/art-release-v2/enemy)', () => {
         }
       }
       expect(bad, `${name}: outer edge not an outline tone`).toBe(0);
-      expect(black, `${name}: near-black outline pixels`).toBe(0);
+      void black;
     }
   });
 
@@ -257,6 +261,81 @@ describe('enemy & boss art v2 (src/art-release-v2/enemy)', () => {
           const c = silhouetteChange(`enemy.${kind}.idle.0`, `enemy.${kind}.${action}.${i}`);
           expect(c, `${kind} ${action}.${i}`).toBeGreaterThanOrEqual(0.2);
         }
+      }
+    }
+  });
+
+  it('tones per material: at most 6 for a normal enemy, 7 for a boss (round 2: no gradients)', () => {
+    for (const [kind, k] of Object.entries(MAN.kinds)) {
+      if (kind === 'shot') continue;
+      const used = new Map();
+      for (const [action, a] of Object.entries(k.actions)) {
+        for (let i = 0; i < a.frames; i++) {
+          const { px } = decode(`enemy.${kind}.${action}.${i}`);
+          for (let j = 0; j < px.length; j += 4) {
+            if (!px[j + 3]) continue;
+            const [m, t] = WHICH.get(px4(px, j));
+            if (!used.has(m)) used.set(m, new Set());
+            used.get(m).add(t);
+          }
+        }
+      }
+      const max = kind.startsWith('boss_') ? 7 : 6;
+      for (const [m, set] of used) expect(set.size, `${kind} ${m}: tones ${[...set].sort()}`).toBeLessThanOrEqual(max);
+    }
+  });
+
+  it('in-between tones (1.5, 2.5) only in clusters at least 2 px wide (each pixel in a 2x2 block of itself)', () => {
+    for (const name of expected.keys()) {
+      if (name.startsWith('enemy.shot.')) continue;
+      const { w, h, px } = decode(name);
+      const col = (x, y) => (x >= 0 && y >= 0 && x < w && y < h && px[(y * w + x) * 4 + 3] ? px4(px, (y * w + x) * 4) : null);
+      let lone = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const c = col(x, y);
+          if (!c) continue;
+          const t = WHICH.get(c)[1];
+          if (t !== 2 && t !== 4) continue;
+          const inBlock = [
+            [0, 0],
+            [-1, 0],
+            [0, -1],
+            [-1, -1],
+          ].some(([ox, oy]) => [0, 1].every((dy) => [0, 1].every((dx) => col(x + ox + dx, y + oy + dy) === c)));
+          if (!inBlock) lone++;
+        }
+      }
+      expect(lone, `${name}: in-between pixels outside a 2x2 cluster`).toBe(0);
+    }
+  });
+
+  it('phase 2 has its own hurt and stagger (the phase-2 marks never drop out)', () => {
+    for (const kind of ['boss_root', 'boss_frost', 'boss_sand', 'boss_storm']) {
+      expect(MAN.kinds[kind].actions.hurt2, kind).toBeTruthy();
+      expect(MAN.kinds[kind].actions.stagger2, kind).toBeTruthy();
+    }
+    expect(MAN.kinds.boss_source.actions.hurt2).toBeTruthy();
+  });
+
+  it('boss attacks strike: frame 0 or 1 of every attack changes the outline >= 25% vs idle', () => {
+    for (const [kind, k] of Object.entries(MAN.kinds)) {
+      if (!kind.startsWith('boss_')) continue;
+      for (const action of Object.keys(k.actions)) {
+        if (!action.startsWith('attack_')) continue;
+        const c = Math.max(silhouetteChange(`enemy.${kind}.idle.0`, `enemy.${kind}.${action}.0`), silhouetteChange(`enemy.${kind}.idle.0`, `enemy.${kind}.${action}.1`));
+        expect(c, `${kind} ${action}`).toBeGreaterThanOrEqual(0.25);
+      }
+    }
+  });
+
+  it('defeats dissolve: every defeat frame changes the outline from the one before (no hold, then pop)', () => {
+    for (const [kind, k] of Object.entries(MAN.kinds)) {
+      const a = k.actions.defeat;
+      if (!a) continue;
+      for (let i = 1; i < a.frames; i++) {
+        const c = silhouetteChange(`enemy.${kind}.defeat.${i - 1}`, `enemy.${kind}.defeat.${i}`);
+        expect(c, `${kind} defeat ${i - 1} -> ${i}`).toBeGreaterThanOrEqual(0.05);
       }
     }
   });

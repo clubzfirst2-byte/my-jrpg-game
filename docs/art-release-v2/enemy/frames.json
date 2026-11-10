@@ -283,6 +283,20 @@
       80
      ]
     },
+    "hurt2": {
+     "frames": 3,
+     "size": [
+      96,
+      80
+     ]
+    },
+    "stagger2": {
+     "frames": 4,
+     "size": [
+      96,
+      80
+     ]
+    },
     "defeat": {
      "frames": 6,
      "size": [
@@ -366,6 +380,20 @@
      ]
     },
     "idle2": {
+     "frames": 4,
+     "size": [
+      96,
+      88
+     ]
+    },
+    "hurt2": {
+     "frames": 3,
+     "size": [
+      96,
+      88
+     ]
+    },
+    "stagger2": {
      "frames": 4,
      "size": [
       96,
@@ -461,6 +489,20 @@
       96
      ]
     },
+    "hurt2": {
+     "frames": 3,
+     "size": [
+      80,
+      96
+     ]
+    },
+    "stagger2": {
+     "frames": 4,
+     "size": [
+      80,
+      96
+     ]
+    },
     "defeat": {
      "frames": 6,
      "size": [
@@ -550,6 +592,20 @@
       96
      ]
     },
+    "hurt2": {
+     "frames": 3,
+     "size": [
+      88,
+      96
+     ]
+    },
+    "stagger2": {
+     "frames": 4,
+     "size": [
+      88,
+      96
+     ]
+    },
     "defeat": {
      "frames": 6,
      "size": [
@@ -633,6 +689,13 @@
      ]
     },
     "hurt": {
+     "frames": 3,
+     "size": [
+      128,
+      128
+     ]
+    },
+    "hurt2": {
      "frames": 3,
      "size": [
       128,

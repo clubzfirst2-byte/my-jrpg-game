@@ -178,10 +178,7 @@ def frames():
     hold = dict(staff=S("hold"), nf=(19.0, G), ff=(13.0, G))
     # idle: the hunched breath, the hood point and cloak hem lag behind, the orb pulses
     name(out := {}, "idle", loop(Pose, 4, [
-        (0.0, dict(hold, dy=0.0, head=(0.0, 0.0), cloak=0.0, orb=2.2)),
-        (0.25, dict(hold, dy=0.5, head=(0.0, 0.5), cloak=0.5, orb=2.5)),
-        (0.5, dict(hold, dy=1.0, head=(0.0, 1.0), cloak=1.0, orb=2.7)),
-        (0.75, dict(hold, dy=0.5, head=(0.0, 0.5), cloak=1.5, orb=2.4)),
+        (0.0, dict(hold, orb=2.2)), (0.25, dict(hold, dy=1, orb=2.2)), (0.5, dict(hold, dy=1, orb=2.7)), (0.75, dict(hold, orb=2.7)),
     ]), draw)
     # move: a shuffling, hunched walk, the body bobs on the passing steps, the hem trails
     name(out, "move", loop(Pose, 8, [
@@ -195,6 +192,7 @@ def frames():
     name(out, "windup", once(Pose, 4, [
         (0.0, dict(staff=S("hold"), orb=2.8, lean=-1.0, dy=0.5, nf=(20.0, G), ff=(12.0, G), mouth=0, cloak=0.0)),
         (0.4, dict(staff=S("raise"), orb=3.2, lean=-2.0, x=1, nf=(21.0, G), ff=(11.0, G), mouth=1, cloak=1.0)),
+        (0.67, dict(staff=(5.0, -1.0, -6.0, 11.0, 3.0, -10.0), orb=3.7, x=-1, lean=1.0, nf=(20.0, G), ff=(9.0, G), mouth=1, head=(1.0, 0.0), cloak=1.0)),
         (1.0, dict(staff=S("thrust"), orb=4.0, x=-3, lean=2.0, nf=(19.0, G), ff=(8.0, G), mouth=1, head=(1.0, 0.0), cloak=1.0), "in"),
     ]), draw)
     # attack: the release (orb gone, staff whipped low), the follow-through, the settle, back to hold
@@ -216,9 +214,11 @@ def frames():
         (0.4, dict(staff=S("flail"), orb=1.4, dy=2.0, lean=-1.0, head=(0.0, 1.0), nf=(18.0, G), ff=(12.0, G), cloak=1.0)),
         (1.0, dict(staff=S("flail"), orb=1.0, dy=6.0, lean=1.0, head=(0.0, 3.0), nf=(19.0, G), ff=(12.0, G), cloak=2.0)),
     ])
-    d += [Pose(fallen=2), Pose(fallen=3)]
-    name(out, "defeat", d, draw)
+    # round 2: the slumped goblin melts into the murk over two frames, then only the cloak is left
+    from anim import dissolve_from
+    name(out, "defeat", dissolve_from(draw, [d[0], d[2], d[3]], Pose(fallen=3), pools=(7, 11)), None)
     return out
 
 
 ACTIONS = (("idle", 4), ("move", 8), ("windup", 4), ("attack", 5), ("hurt", 3), ("defeat", 6))
+SMOOTH = {"orb"}  # shape fields that stay smooth (the rest snap to whole pixels)

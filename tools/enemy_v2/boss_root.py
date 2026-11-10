@@ -195,26 +195,29 @@ def frames():
     from anim import boss
     P2 = dict(phase2=True)
     K = {
-        "idle": [{}, dict(dy=0.5, lift=0.5, spikes=0.5), dict(dy=1, lift=1, spikes=1), dict(dy=0.5, lift=0.5, spikes=1, head=0.6, jaw=0.4)],
-        # a heavy plod: a front root foot lifts, the body rolls over it, the other foot
+        "idle": [{}, dict(dy=1), dict(dy=1, jaw=1), dict(jaw=1)],
         "move": [dict(legs=(5, 0), shift=-2), dict(legs=(2, 2), dy=-1, head=-1), dict(legs=(0, 5), shift=2), dict(legs=(1, 1), dy=-0.5, head=1)],
         "windup_charge": (dict(lift=-5, head=10, hs=1.04, spikes=4, fan=5, spread=5), dict(lift=-6, head=12, hs=1.1, spikes=5, fan=6, spread=6, jaw=1)),
-        "attack_charge": (dict(lift=-2, head=8, hs=1.15, spread=3, jaw=2, legs=(2, 2), fan=2), dict(lift=-1, head=5, hs=1.1, spread=2, jaw=1, fan=1)),
+        "attack_charge": (dict(lift=-4, head=12, hs=1.2, spread=6, jaw=3, legs=(3, 3), fan=4, spikes=3), dict(lift=-1, head=5, hs=1.1, spread=2, jaw=1, fan=1),
+                          dict(lift=-5, head=13, hs=1.26, spread=8, jaw=3, legs=(4, 4), fan=5, spikes=4, dy=2)),
         "windup_slam": (dict(dy=-5, lift=-2, head=-5, raise_=0.55, spread=-2, jaw=1), dict(dy=-8, lift=-3, head=-8, raise_=0.9, spread=-3, jaw=2)),
-        "attack_slam": (dict(dy=3, head=3, spread=4, jaw=2, chips=True), dict(dy=2, head=2, spread=3, jaw=1)),
+        "attack_slam": (dict(dy=4, head=5, spread=7, jaw=3, chips=True, fan=3), dict(dy=2, head=2, spread=3, jaw=1),
+                        dict(dy=5, head=6, spread=9, jaw=3, chips=True, fan=5, spikes=3, lift=2)),
         "windup_volley": (dict(jaw=3, orbs=3, head=-8, spread=8, fan=5, spikes=3, lift=-1, **P2),
                           dict(jaw=4, orbs=5, head=-9, spread=9, fan=6, spikes=3, lift=-2, **P2)),
-        "attack_volley": (dict(jaw=3, head=-2, dy=-1, **P2), dict(jaw=1, head=0, **P2)),
+        "attack_volley": (dict(jaw=4, head=-9, spread=8, fan=6, spikes=3, lift=-2, **P2), dict(jaw=1, head=0, **P2),
+                          dict(jaw=4, head=-5, spread=9, fan=7, spikes=4, lift=-3, dy=-2, hs=1.08, **P2)),
         "hurt": dict(head=-4, eyes="shut", dy=-1, jaw=1, shift=-2),
         "stagger": (dict(shift=-5, legs=(0, 6), head=2, eyes="shut", jaw=1), dict(shift=4, legs=(4, 0), head=3, eyes="shut")),
-        "idle2": [dict(spikes=1, **P2), dict(dy=0.5, lift=0.5, spikes=1.5, **P2), dict(dy=1, lift=1, spikes=2, **P2),
-                  dict(dy=0.5, lift=0.5, spikes=2, head=0.6, **P2)],
+        "idle2": [dict(spikes=1, **P2), dict(dy=1, spikes=1, **P2), dict(dy=1, spikes=1, jaw=1, **P2), dict(spikes=1, jaw=1, **P2)],
+        # defeat (round 2): the hit, the buckle, the collapse -- which then melts over two frames
         "defeat": [dict(head=-6, eyes="shut", jaw=3, shift=-3, **P2), dict(head=-5, eyes="shut", jaw=2, **P2),
-                   dict(collapse=1, head=4, eyes="shut", spread=3, **P2), dict(collapse=2, head=5, eyes="shut", spread=4, **P2),
-                   dict(collapse=3, head=6, eyes="shut", spread=5), dict(collapse=4)],
+                   dict(collapse=2, head=5, eyes="shut", spread=4, **P2)],
+        "remains": dict(collapse=4),
     }
-    return boss(Pose, draw, K, PATTERNS)
+    return boss(Pose, draw, K, PATTERNS, phase2=("volley",))
 
 
 PATTERNS = ("charge", "slam", "volley")
 ACTIONS = __import__("anim").boss_actions(PATTERNS)
+SMOOTH = {"raise_", "hs"}  # shape fields that stay smooth (the rest snap to whole pixels)

@@ -257,10 +257,9 @@ def tendril_frames_v2():
 def frames():
     from anim import loop, once, name, mix
     out = {}
-    I = [dict(spin=0), dict(spin=1, dy=0.5, look=(0.5, 0)), dict(spin=2, dy=1, look=(1, 0)), dict(spin=3, dy=0.5, look=(0.5, 0.5))]
+    I = [dict(spin=0), dict(spin=0, dy=1), dict(spin=1, dy=1, look=(1, 0)), dict(spin=1, look=(1, 0))]
     name(out, "idle", loop(Pose, 4, [(i / 4, k) for i, k in enumerate(I)]), draw)
-    I2 = [dict(k, phase2=True, crack=3, shards=6) for k in (dict(spin=0), dict(spin=1, dy=0.5, look=(-0.5, 0)), dict(spin=2, dy=1, look=(-1, 0)),
-                                                           dict(spin=3, dy=0.5, look=(-0.5, 0.5)))]
+    I2 = [dict(k, phase2=True, crack=3, shards=6) for k in (dict(spin=0), dict(spin=0, dy=1), dict(spin=1, dy=1, look=(-1, 0)), dict(spin=1, look=(-1, 0)))]
     name(out, "idle2", loop(Pose, 4, [(i / 4, k) for i, k in enumerate(I2)]), draw)
     # each pattern opens 1 / 2 / 3 / 4 sockets and takes its own tendril pose; the eye narrows
     W = {
@@ -274,30 +273,48 @@ def frames():
     A = {
         "volley": (dict(eye="wide", open=1, spin=2, orbs=5), dict(eye="open", open=1, spin=3)),
         "ring": (dict(eye="wide", open=2, shards=8, orbit=4, spin=2), dict(eye="open", open=2, shards=8, orbit=8, spin=3)),
-        "slam": (dict(eye="wide", open=3, tendrils="slam", dy=2, spin=2), dict(eye="open", open=3, tendrils="slam", dy=1, spin=3)),
-        "charge": (dict(eye="wide", open=4, scale=1.12, dy=4, shards=0), dict(eye="open", open=4, scale=1.06, dy=2, shards=2)),
+        "slam": (dict(eye="wide", open=3, tendrils="slam", dy=4, spin=2, scale=1.05), dict(eye="open", open=3, tendrils="slam", dy=1, spin=3)),
+        "charge": (dict(eye="wide", open=4, scale=1.14, dy=5, shards=0, tendrils="tuck"), dict(eye="open", open=4, scale=1.06, dy=2, shards=2)),
     }
+    # round 2: the strike of each pattern (the impact pose: volley -- the ring jerks back as the
+    # orbs leave, tendrils flung up; ring -- it slams down wide as the shards burst; charge -- it
+    # rams forward, biggest)
+    S = {
+        "volley": dict(eye="wide", open=1, spin=3, orbs=5, tendrils="aim", dy=-5, scale=1.04),
+        "ring": dict(eye="wide", open=2, shards=8, orbit=14, spin=3, tendrils="spread", dy=5, scale=1.04),
+        "charge": dict(eye="wide", open=4, scale=1.16, dy=6, shards=0, tendrils="tuck"),
+    }
+    A["volley"] = (dict(eye="wide", open=1, spin=2, orbs=5, tendrils="aim", dy=-3), A["volley"][1])
+    A["ring"] = (dict(eye="wide", open=2, shards=8, orbit=8, spin=2, tendrils="spread", dy=3), A["ring"][1])
     for p in PATTERNS:
         w0, w1 = W[p]
         a0, a1 = A[p]
         name(out, f"windup_{p}", once(Pose, 4, [(0.0, dict(w0, dy=w0.get("dy", 0) * 0.6, spin=3)), (0.34, w0), (1.0, w1)]), draw)
-        name(out, f"attack_{p}", once(Pose, 5, [(0.0, a0), (0.25, mix(Pose, a0, a1, 0.5)), (0.5, a1), (0.75, dict(a1, spin=(a1.get("spin", 0) + 1) % 4, dy=a1.get("dy", 0) * 0.6)),
+        # round 2: frame 1 is the strike -- an overshoot past the release (the ring lunges, the eye
+        # bulges, the tendrils whip further), then it recovers
+        name(out, f"attack_{p}", once(Pose, 5, [(0.0, a0), (0.25, S.get(p, dict(mix(Pose, I[0], a0, 1.5), eye="wide")), "in"), (0.5, a1), (0.75, dict(a1, spin=(a1.get("spin", 0) + 1) % 4, dy=a1.get("dy", 0) * 0.6)),
                                                 (1.0, dict(mix(Pose, a1, I[0], 0.7), tendrils=a1.get("tendrils", "hang")))]), draw)
-    name(out, "hurt", once(Pose, 3, [(0.0, dict(eye="shut", dy=-2, spin=1, tendrils="limp")), (0.5, dict(eye="shut", dy=-1, spin=2, tendrils="limp")),
-                                     (1.0, dict(eye="narrow", dy=0, spin=3))]), draw)
+    for suf, ex in (("", {}), ("2", dict(phase2=True, crack=3, shards=6))):  # hurt2: the cracks stay in phase 2
+        name(out, "hurt" + suf, once(Pose, 3, [(0.0, dict(eye="shut", dy=-2, spin=1, tendrils="limp", **ex)),
+                                               (0.5, dict(eye="shut", dy=-1, spin=2, tendrils="limp", **ex)),
+                                               (1.0, dict(eye="narrow", dy=0, spin=3, **ex))]), draw)
     # transform (phase 1 -> 2): the eye clenches, the ring cracks, rises, the sockets wake, it settles
     T = [dict(eye="shut", crack=1, spin=0), dict(eye="shut", crack=1, spin=1, dy=-1), dict(eye="shut", crack=2, spin=1, dy=-2, tendrils="lift"),
          dict(eye="shut", crack=2, spin=2, dy=-3, tendrils="lift", shards=5, orbit=3), dict(eye="wide", crack=3, spin=2, dy=-3, open=4, tendrils="lift", shards=6, orbit=6),
          dict(eye="open", crack=3, spin=3, phase2=True, shards=6)]
     name(out, "transform", [Pose(**dict(k)) for k in T], draw)
-    D = [dict(eye="wide", phase2=True, crack=3, dy=-2, tendrils="limp", shards=4, orbit=8), dict(eye="shut", phase2=True, crack=3, dy=0, tendrils="limp", shards=2, orbit=14),
-         dict(eye="gone", crack=3, dy=8, tendrils="limp", shards=0, broken=2), dict(eye="gone", crack=3, dy=20, tendrils="gone", shards=0, broken=2),
-         dict(broken=3), dict(broken=4)]
-    name(out, "defeat", [Pose(**dict(k)) for k in D], draw)
+    # defeat (round 2): the eye bulges, shuts, the ring breaks and sinks -- then melts over two
+    # frames into the murk -- and only the broken ring is left
+    from anim import dissolve
+    D = [dict(eye="wide", phase2=True, crack=3, dy=-2, tendrils="limp", shards=4, orbit=8),
+         dict(eye="shut", phase2=True, crack=3, dy=0, tendrils="limp", shards=2, orbit=14),
+         dict(eye="gone", crack=3, dy=8, tendrils="limp", shards=0, broken=2)]
+    name(out, "defeat", dissolve(Pose, draw, D, dict(broken=4), pools=(16, 26)), None)
     out.update(tendril_frames_v2())
     return out
 
 
 PATTERNS = ("volley", "ring", "slam", "charge")
 ACTIONS = (("idle", 4), ("idle2", 4)) + tuple(x for p in PATTERNS for x in ((f"windup_{p}", 4), (f"attack_{p}", 5))) + \
-    (("hurt", 3), ("transform", 6), ("defeat", 6), ("tendril", 4))
+    (("hurt", 3), ("hurt2", 3), ("transform", 6), ("defeat", 6), ("tendril", 4))
+SMOOTH = {"scale"}  # shape fields that stay smooth (the rest snap to whole pixels)
