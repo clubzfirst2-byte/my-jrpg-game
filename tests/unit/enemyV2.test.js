@@ -81,7 +81,8 @@ const RAMPS = {
   leather: ['24160c', '4a3020', '704c30', '946c46', 'b88c5e'],
 };
 
-// v2 ramps: tone 0 (lifted toward tone 1 when it is near-black), 1, 1-2, 2, 2-3, 3, 3-4, 4
+// v2 ramps: tone 0 (lifted toward tone 1 when it is near-black), then each tone and two steps
+// toward the next one (1/3, 2/3): 1, 1-2, 1-2, 2, 2-3, 2-3, 3, 3-4, 3-4, 4
 const rgb = (h) => [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
 const mix = (a, b, f) => a.map((v, i) => Math.round(v + (b[i] - v) * f));
 const hex = (c) => c.map((v) => v.toString(16).padStart(2, '0')).join('');
@@ -89,7 +90,8 @@ const RAMP8 = Object.fromEntries(
   Object.entries(RAMPS).map(([k, v]) => {
     const c = v.map(rgb);
     const o = Math.max(...c[0]) >= 34 ? c[0] : mix(c[0], c[1], 0.4);
-    return [k, [o, c[1], mix(c[1], c[2], 0.5), c[2], mix(c[2], c[3], 0.5), c[3], mix(c[3], c[4], 0.5), c[4]].map(hex)];
+    const steps = [1, 2, 3].flatMap((i) => [c[i], mix(c[i], c[i + 1], 1 / 3), mix(c[i], c[i + 1], 2 / 3)]);
+    return [k, [o, ...steps, c[4]].map(hex)];
   })
 );
 const COLOURS = new Set(Object.values(RAMP8).flat());
@@ -119,7 +121,7 @@ const RANGE = {
 };
 const range = (a) => RANGE[a] || RANGE[a.split('_')[0]];
 /** kinds still being drawn (W3 is pushed in batches: enemies first, then bosses and shots) */
-const BATCH_PENDING = ['boss_root', 'boss_frost', 'boss_sand', 'boss_storm', 'boss_source', 'shot'];
+const BATCH_PENDING = [];
 
 function silhouetteChange(a, b) {
   const A = decode(a);

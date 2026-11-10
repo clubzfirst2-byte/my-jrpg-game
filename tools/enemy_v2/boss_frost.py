@@ -260,3 +260,37 @@ def frames_v1():  # the v1 key poses (kept for reference; v2 frames() is at the 
 
 SIZE = (W, H)
 PATTERNS = ("slam", "ring", "charge")
+
+
+# ------------------------------------------------------------------ v2 frames (4-8 per action)
+
+def frames():
+    from anim import boss
+    P2 = dict(phase2=True)
+    K = {
+        "idle": [{}, dict(dy=0.5, head=0.5, rot=1), dict(dy=1, head=1, rot=2), dict(dy=0.5, head=0.5, rot=1, mouth=0.6)],
+        # a heavy elk's walk: the near fore and the far hind leg lift together, the body rolls
+        "move": [dict(legs=(4, 0, 3, 0), shift=-2), dict(legs=(1, 1, 1, 1), dy=-1, head=-1, rot=-2),
+                 dict(legs=(0, 3, 0, 4), shift=2), dict(legs=(1, 1, 1, 1), dy=-0.5, head=1, rot=2)],
+        "windup_slam": (dict(head=7, rot=28, fore=0.85, dy=1), dict(head=14, rot=56, fore=0.68, dy=2)),
+        "attack_slam": (dict(head=16, rot=70, fore=0.6, dy=3, chips=True), dict(head=10, rot=40, fore=0.8, dy=2)),
+        "windup_ring": (dict(rear=4, head=-1, rot=-4, fore=0.75, mouth=1, shards=4, shard_r=0.2, shard_s=1.0),
+                        dict(rear=8, head=-1, rot=-6, fore=0.65, mouth=2, shards=6, shard_r=0.35, shard_s=1.3)),
+        "attack_ring": (dict(head=-1, rot=-8, fore=0.65, mouth=3, dy=1, shards=8, shard_r=1.0, shard_s=1.1, chips=True),
+                        dict(head=-3, rot=-12, fore=0.8, mouth=1, shards=6, shard_r=1.25, shard_s=0.7)),
+        "windup_charge": (dict(head=6, lev=0.7, rot=8, fore=0.8, legs=(5, 0, 0, 0), **P2),
+                          dict(head=8, lev=0.95, rot=10, fore=0.75, legs=(0, 0, 0, 5), shift=1, **P2)),
+        "attack_charge": (dict(head=9, lev=1.0, rot=12, hs=1.12, fore=0.75, legs=(3, 0, 0, 0), **P2),
+                          dict(head=6, lev=0.7, rot=8, hs=1.06, fore=0.85, **P2)),
+        "hurt": dict(head=-3, rot=-6, eyes="shut", mouth=2, shift=-2),
+        "stagger": (dict(shift=-5, legs=(0, 0, 3, 6), head=3, rot=10, eyes="shut"), dict(shift=4, legs=(5, 2, 0, 0), head=4, rot=14, eyes="shut")),
+        "idle2": [dict(**P2), dict(dy=0.5, head=0.5, rot=1, **P2), dict(dy=1, head=1, rot=2, **P2), dict(dy=0.5, head=0.5, rot=1, mouth=0.6, **P2)],
+        "defeat": [dict(head=-4, rot=-8, eyes="shut", mouth=3, shift=-3, **P2), dict(head=-3, rot=-6, eyes="shut", mouth=3, legs=(3, 0, 0, 0), **P2),
+                   dict(collapse=1, head=6, rot=24, eyes="shut", **P2), dict(collapse=2, head=8, rot=32, eyes="shut", **P2),
+                   dict(collapse=3, head=10, rot=40, eyes="shut", **P2), dict(collapse=4)],
+    }
+    return boss(Pose, draw, K, PATTERNS)
+
+
+PATTERNS = ("slam", "ring", "charge")
+ACTIONS = __import__("anim").boss_actions(PATTERNS)

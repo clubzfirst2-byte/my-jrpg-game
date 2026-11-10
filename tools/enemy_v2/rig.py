@@ -60,28 +60,32 @@ RAMPS = {
 RGB = {k: [hx(c) for c in v] for k, v in RAMPS.items()}
 
 
-# ------------------------------------------------------------------ v2: 8-step ramps
-# The v1 ramps keep their 5 tones (0 outline, 1 shadow, 2 core, 3 light, 4 highlight); v2 adds a
-# half step between each pair (1-2, 2-3, 3-4) so large bodies get hero-level colour density, and
-# lifts the outline: the hero's rule is "the outline is the darkest tone OF THE MATERIAL", never
-# near-black, so a tone 0 darker than max(r, g, b) 34 is mixed 40% toward tone 1.
-# Index: 0 outline, 1 = tone 1, 2 = half 1-2, 3 = tone 2, 4 = half 2-3, 5 = tone 3, 6 = half 3-4,
-# 7 = tone 4.
+# ------------------------------------------------------------------ v2: 11-step ramps
+# The v1 ramps keep their 5 tones (0 outline, 1 shadow, 2 core, 3 light, 4 highlight); v2 adds two
+# steps between each pair (at 1/3 and 2/3: 1-2, 2-3, 3-4) so large bodies turn in many small steps
+# (hero-level colour density), and lifts the outline: the hero's rule is "the outline is the
+# darkest tone OF THE MATERIAL", never near-black, so a tone 0 darker than max(r, g, b) 34 is mixed
+# 40% toward tone 1.
+# Index: 0 outline, 1 tone 1, 2-3 between 1 and 2, 4 tone 2, 5-6 between 2 and 3, 7 tone 3,
+# 8-9 between 3 and 4 (glints only), 10 tone 4.
 def _mix(a, b, f):
     return tuple(int(math.floor(a[i] + (b[i] - a[i]) * f + 0.5)) for i in range(3))  # = JS Math.round
 
 
-def _ramp8(c):
+def _ramp11(c):
     o = c[0] if max(c[0]) >= 34 else _mix(c[0], c[1], 0.4)
-    return [o, c[1], _mix(c[1], c[2], 0.5), c[2], _mix(c[2], c[3], 0.5), c[3], _mix(c[3], c[4], 0.5), c[4]]
+    out = [o]
+    for i in (1, 2, 3):
+        out += [c[i], _mix(c[i], c[i + 1], 1 / 3), _mix(c[i], c[i + 1], 2 / 3)]
+    return out + [c[4]]
 
 
-RGB8 = {k: _ramp8(v) for k, v in RGB.items()}
+RGB8 = {k: _ramp11(v) for k, v in RGB.items()}
 
 
-def idx8(tone, half=0):
-    """v1 tone (0..4, or a half step like 2.5) + half flag -> v2 ramp index (0..7)."""
-    return 0 if tone <= 0 else min(7, int(round(2 * tone - 1 + half)))
+def idx8(tone, sub=0):
+    """v1 tone (0..4, or a fixed in-between like 2.5) + the sub-step (0..2) -> v2 ramp index (0..10)."""
+    return 0 if tone <= 0 else min(10, int(math.floor(3 * (tone - 1) + 1 + sub + 0.5)))
 # materials that may carry tone 4 (a glint) in the volume shading; the others stop at tone 3
 SHINY = {"glow", "eye", "ice", "spark", "bronze", "bone", "mask", "oldstone"}
 
@@ -446,10 +450,14 @@ class Rig:
             t = np.full(B.shape, 2)
             t[I > 0.62] = 3
             t[I < 0.30] = 1
-            # v2: the upper half of each light band takes the half step toward the next tone
-            hf = ((t == 1) & (I > 0.17)) | ((t == 2) & (I > 0.46))
-            if p.mat in SHINY:
-                hf |= (t == 3) & (I > 0.75) & (I <= 0.86)
+            # v2: each light band is split in three; the brighter thirds take the in-between steps
+            hf = np.zeros(t.shape, int)
+            for tt, a1, a2 in ((1, 0.12, 0.22), (2, 0.41, 0.52), (3, 0.70, 0.78)):
+                if tt == 3 and p.mat not in SHINY:
+                    continue
+                band = (t == tt) & (I <= (0.86 if tt == 3 else 9))
+                hf[band & (I > a1)] = 1
+                hf[band & (I > a2)] = 2
             if p.mat in SHINY:
                 t[I > 0.86] = 4
             # the 1-pixel rim: an outside edge facing up or left is lit, down or right is shaded
@@ -466,8 +474,8 @@ class Rig:
             if p.mat not in SHINY:
                 t = np.minimum(t, 3)
             if p.mat not in SHINY:
-                hf &= t <= 2
-            hf &= t <= 3
+                hf[t > 2] = 0
+            hf[t > 3] = 0
             full = np.full((H, W), -1)
             full[y0:y1, x0:x1] = t
             tone[vis] = full[vis]

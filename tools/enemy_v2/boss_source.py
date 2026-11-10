@@ -237,3 +237,67 @@ def frames_v1():  # the v1 key poses (kept for reference; v2 frames() is at the 
 
 SIZE = (W, H)
 PATTERNS = ("volley", "ring", "slam", "charge")
+
+
+# ------------------------------------------------------------------ v2 frames (4-8 per action)
+
+def tendril_frames_v2():
+    """The separate tendril sprite, v2: 4 frames (rise, sway left, sway right, lash)."""
+    out = {}
+    for i, (bend, tip, lean) in enumerate(((3, 6, -2), (-4, 4, 3), (1, 3, 6), (2, 2, 8))):
+        r = Rig(32, 48)
+        r.ellipse(16, 45, 9, 1.5, "murk", soft=1, dark=1)
+        r.chain([(16, 42.5), (16 + bend, 30), (16 + lean, 12 + tip), (16 + lean + bend * 0.5, 4 + tip)], [5.0, 4.0, 2.8, 1.0], "murk", soft=2)
+        r.stamp(round(16 + lean) - 1, round(14 + tip) - 1, ["ab", "bc"], {"a": ("glow", 4), "b": ("glow", 3), "c": ("glow", 2)})
+        r.shade(r.m_line(16 + 2, 44, 16 + bend + 2, 30), lambda t: min(3, t + 1))
+        out[f"tendril.{i}"] = r
+    return out
+
+
+def frames():
+    from anim import loop, once, name, mix
+    out = {}
+    I = [dict(spin=0), dict(spin=1, dy=0.5, look=(0.5, 0)), dict(spin=2, dy=1, look=(1, 0)), dict(spin=3, dy=0.5, look=(0.5, 0.5))]
+    name(out, "idle", loop(Pose, 4, [(i / 4, k) for i, k in enumerate(I)]), draw)
+    I2 = [dict(k, phase2=True, crack=3, shards=6) for k in (dict(spin=0), dict(spin=1, dy=0.5, look=(-0.5, 0)), dict(spin=2, dy=1, look=(-1, 0)),
+                                                           dict(spin=3, dy=0.5, look=(-0.5, 0.5)))]
+    name(out, "idle2", loop(Pose, 4, [(i / 4, k) for i, k in enumerate(I2)]), draw)
+    # each pattern opens 1 / 2 / 3 / 4 sockets and takes its own tendril pose; the eye narrows
+    W = {
+        "volley": (dict(eye="narrow", open=1, spin=0, tendrils="aim", dy=-2), dict(eye="narrow", open=1, spin=1, orbs=3, dy=-3, tendrils="aim")),
+        "ring": (dict(eye="narrow", open=2, shards=6, orbit=-6, spin=0, tendrils="spread", dy=3),
+                 dict(eye="narrow", open=2, shards=8, orbit=-10, spin=1, dy=4, tendrils="spread")),
+        "slam": (dict(eye="narrow", open=3, tendrils="lift", dy=-3, spin=0), dict(eye="narrow", open=3, tendrils="lift", dy=-6, spin=1)),
+        "charge": (dict(eye="narrow", open=4, scale=0.92, dy=-4, look=(0, 2), tendrils="tuck"),
+                   dict(eye="narrow", open=4, scale=0.86, dy=-6, look=(0, 3), shards=2, tendrils="tuck")),
+    }
+    A = {
+        "volley": (dict(eye="wide", open=1, spin=2, orbs=5), dict(eye="open", open=1, spin=3)),
+        "ring": (dict(eye="wide", open=2, shards=8, orbit=4, spin=2), dict(eye="open", open=2, shards=8, orbit=8, spin=3)),
+        "slam": (dict(eye="wide", open=3, tendrils="slam", dy=2, spin=2), dict(eye="open", open=3, tendrils="slam", dy=1, spin=3)),
+        "charge": (dict(eye="wide", open=4, scale=1.12, dy=4, shards=0), dict(eye="open", open=4, scale=1.06, dy=2, shards=2)),
+    }
+    for p in PATTERNS:
+        w0, w1 = W[p]
+        a0, a1 = A[p]
+        name(out, f"windup_{p}", once(Pose, 4, [(0.0, dict(w0, dy=w0.get("dy", 0) * 0.6, spin=3)), (0.34, w0), (1.0, w1)]), draw)
+        name(out, f"attack_{p}", once(Pose, 5, [(0.0, a0), (0.25, mix(Pose, a0, a1, 0.5)), (0.5, a1), (0.75, dict(a1, spin=(a1.get("spin", 0) + 1) % 4, dy=a1.get("dy", 0) * 0.6)),
+                                                (1.0, dict(mix(Pose, a1, I[0], 0.7), tendrils=a1.get("tendrils", "hang")))]), draw)
+    name(out, "hurt", once(Pose, 3, [(0.0, dict(eye="shut", dy=-2, spin=1, tendrils="limp")), (0.5, dict(eye="shut", dy=-1, spin=2, tendrils="limp")),
+                                     (1.0, dict(eye="narrow", dy=0, spin=3))]), draw)
+    # transform (phase 1 -> 2): the eye clenches, the ring cracks, rises, the sockets wake, it settles
+    T = [dict(eye="shut", crack=1, spin=0), dict(eye="shut", crack=1, spin=1, dy=-1), dict(eye="shut", crack=2, spin=1, dy=-2, tendrils="lift"),
+         dict(eye="shut", crack=2, spin=2, dy=-3, tendrils="lift", shards=5, orbit=3), dict(eye="wide", crack=3, spin=2, dy=-3, open=4, tendrils="lift", shards=6, orbit=6),
+         dict(eye="open", crack=3, spin=3, phase2=True, shards=6)]
+    name(out, "transform", [Pose(**dict(k)) for k in T], draw)
+    D = [dict(eye="wide", phase2=True, crack=3, dy=-2, tendrils="limp", shards=4, orbit=8), dict(eye="shut", phase2=True, crack=3, dy=0, tendrils="limp", shards=2, orbit=14),
+         dict(eye="gone", crack=3, dy=8, tendrils="limp", shards=0, broken=2), dict(eye="gone", crack=3, dy=20, tendrils="gone", shards=0, broken=2),
+         dict(broken=3), dict(broken=4)]
+    name(out, "defeat", [Pose(**dict(k)) for k in D], draw)
+    out.update(tendril_frames_v2())
+    return out
+
+
+PATTERNS = ("volley", "ring", "slam", "charge")
+ACTIONS = (("idle", 4), ("idle2", 4)) + tuple(x for p in PATTERNS for x in ((f"windup_{p}", 4), (f"attack_{p}", 5))) + \
+    (("hurt", 3), ("transform", 6), ("defeat", 6), ("tendril", 4))

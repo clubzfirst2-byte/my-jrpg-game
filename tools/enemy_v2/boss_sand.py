@@ -34,6 +34,17 @@ class Pose:
         self.__dict__.update(k)
 
 
+# hand positions (x from the centre, y from the top) for the named arm poses
+ARMS = {
+    "rest": (-25, 52, 25, 52), "up": (-24, 18, 24, 18), "forward": (-12, 58, 12, 58), "wide": (-30, 34, 30, 34),
+    "fling": (-29, 25, 29, 25), "limp": (-20, 58, 20, 58), "brace": (-22, 26, 26, 46),
+}
+
+
+def A(n):
+    return tuple(float(v) for v in ARMS[n])
+
+
 def blade_arm(r, sx, sy, hx_, hy, s, **k):
     """Arm of sand from the shoulder to the hand, a stone blade jutting past the hand."""
     r.limb(sx, sy, hx_, hy, 4.4, 3.2, "murksand", soft=2, **k)
@@ -76,16 +87,8 @@ def draw(p):
             if c < 3 else {"a": ("glow", 2), "b": ("glow", 1), "c": ("glow", 1), "d": ("glow", 0)})
     # arms
     sl, sr = (cx - 15, 33 + dy), (cx + 15, 33 + dy)
-    a = p.arms
-    hands = {
-        "rest": ((cx - 25, 52 + dy), (cx + 25, 52 + dy)),
-        "up": ((cx - 24, 18 + dy), (cx + 24, 18 + dy)),
-        "forward": ((cx - 12, 58 + dy), (cx + 12, 58 + dy)),
-        "wide": ((cx - 30, 34 + dy), (cx + 30, 34 + dy)),
-        "fling": ((cx - 29, 25 + dy), (cx + 29, 25 + dy)),
-        "limp": ((cx - 20, 58 + dy), (cx + 20, 58 + dy)),
-        "brace": ((cx - 22, 26 + dy), (cx + 26, 46 + dy)),
-    }[a]
+    a = ARMS[p.arms] if isinstance(p.arms, str) else p.arms  # v2: a tuple, eased between the named poses
+    hands = ((cx + a[0], a[1] + dy), (cx + a[2], a[3] + dy))
     blade_arm(r, sl[0], sl[1], hands[0][0], hands[0][1], -1)
     blade_arm(r, sr[0], sr[1], hands[1][0], hands[1][1], 1)
     # hood: pointed, its point bending back slightly
@@ -189,3 +192,35 @@ def frames_v1():  # the v1 key poses (kept for reference; v2 frames() is at the 
 
 SIZE = (W, H)
 PATTERNS = ("volley", "charge", "ring")
+
+
+# ------------------------------------------------------------------ v2 frames (4-8 per action)
+
+def frames():
+    from anim import boss
+    P2 = dict(phase2=True)
+    K = {
+        "idle": [dict(spin=0, arms=A("rest")), dict(spin=1, dy=0.5, arms=(-25.0, 53.0, 25.0, 51.0)), dict(spin=2, dy=1, arms=A("rest")),
+                 dict(spin=3, dy=0.5, arms=(-25.0, 51.0, 25.0, 53.0))],
+        # it glides: the whirl spins, the body sways from side to side
+        "move": [dict(spin=0, shift=-3, arms=(-26.0, 50.0, 23.0, 54.0)), dict(spin=1, shift=0, dy=1, arms=A("rest")),
+                 dict(spin=2, shift=3, arms=(-23.0, 54.0, 26.0, 50.0)), dict(spin=3, shift=0, dy=-1, arms=A("rest"))],
+        "windup_volley": (dict(arms=A("up"), grains=3, spin=0, dy=-3), dict(arms=(-25.0, 15.0, 25.0, 15.0), grains=5, spin=1, dy=-3)),
+        "attack_volley": (dict(arms=A("forward"), spin=2, dy=1, lean=2), dict(arms=A("rest"), spin=3)),
+        "windup_charge": (dict(arms=A("brace"), lean=3, tight=3, spin=0), dict(arms=(-23.0, 24.0, 27.0, 47.0), lean=3.5, tight=3, spin=2)),
+        "attack_charge": (dict(arms=A("forward"), lean=4, tight=3, spin=1, dy=2), dict(arms=A("forward"), lean=3, tight=2, spin=3, dy=1)),
+        "windup_ring": (dict(arms=A("wide"), pebbles=8, orbit=-6, spin=0, **P2), dict(arms=(-31.0, 33.0, 31.0, 33.0), pebbles=9, orbit=-10, spin=2, dy=-1, **P2)),
+        "attack_ring": (dict(arms=A("fling"), pebbles=9, orbit=4, spin=1, dy=-2, **P2), dict(arms=A("wide"), pebbles=5, orbit=6, spin=3, **P2)),
+        "hurt": dict(arms=A("limp"), eyes="shut", dy=-2, lean=-1, spin=1),
+        "stagger": (dict(arms=A("limp"), shift=-5, eyes="shut", spin=2, dy=2), dict(arms=A("limp"), shift=4, eyes="shut", spin=0, dy=3)),
+        "idle2": [dict(spin=0, pebbles=6, arms=A("rest"), **P2), dict(spin=1, dy=0.5, pebbles=6, arms=(-25.0, 53.0, 25.0, 51.0), **P2),
+                  dict(spin=2, dy=1, pebbles=6, arms=A("rest"), **P2), dict(spin=3, dy=0.5, pebbles=6, arms=(-25.0, 51.0, 25.0, 53.0), **P2)],
+        "defeat": [dict(arms=A("limp"), eyes="shut", dy=-1, spin=0, pebbles=4, **P2), dict(arms=A("fling"), eyes="shut", dy=-2, spin=1, pebbles=2, **P2),
+                   dict(collapse=1, arms=A("limp"), eyes="shut", spin=2, pebbles=0, **P2), dict(collapse=2, arms=A("limp"), eyes="shut", spin=3, pebbles=0, **P2),
+                   dict(collapse=3, arms=A("limp"), eyes="shut", spin=0, pebbles=0, **P2), dict(collapse=4)],
+    }
+    return boss(Pose, draw, K, PATTERNS)
+
+
+PATTERNS = ("volley", "charge", "ring")
+ACTIONS = __import__("anim").boss_actions(PATTERNS)

@@ -133,3 +133,32 @@ def frames_v1():  # the v1 key poses (kept for reference; v2 frames() is at the 
 
 
 SIZE = (12, 12)
+
+
+# ------------------------------------------------------------------ v2 frames (4 per shot)
+
+def frames():
+    """v2: 4 frames per shot -- the two hand-placed frames and their vertical mirrors (the ball
+    turns over as it flies; a shard keeps pointing right). A map that mirrors onto itself is
+    nudged one pixel down instead, so every frame is a different picture."""
+    out = {}
+    for kind in ("orb", "ice", "sand", "spark"):
+        base = []
+        for n in (0, 1):
+            rows = [row.ljust(12, ".")[:12].replace(" ", ".") for row in MAPS[f"{kind}.{n}"].strip("\n").split("\n")]
+            rows = (rows + ["." * 12] * 12)[:12]
+            base.append(rows)
+        seq = [base[0], base[1]]
+        for rows in base:
+            m = rows[::-1]
+            if m in seq:
+                m = ["." * 12] + rows[:-1]
+            seq.append(m)
+        for i, rows in enumerate(seq):
+            r = Rig(12, 12)
+            r.stamp(0, 0, rows, LEG)
+            out[f"{kind}.{i}"] = r
+    return out
+
+
+ACTIONS = (("orb", 4), ("ice", 4), ("sand", 4), ("spark", 4))
