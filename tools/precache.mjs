@@ -4,18 +4,48 @@
 //   - release art groups the game does not load yet, or loads only for review (?npc=revision…)
 //   - the P12 prototype art (src/art-proto, ?…=proto): one small JS chunk per frame
 
+import { V2_ENABLED } from '../src/view/assets/artV2.js';
+
 /** The fixed files outside the bundle (public/). */
 export const PRECACHE_STATIC = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'];
 
 /**
- * Release art groups (src/art-release/<group>) loaded only on demand, never in normal play:
- * the review sets npc-revision* (?npc=revision…). The terrain and the objects are drawn in
- * normal play since v1.0, so they are kept.
- * A group the game starts to load in normal play must be taken off this list (else it is not
- * available offline): terrain and objects since v1.0 (terrainArt.js, objectsArt.js).
+ * Release art groups loaded only on demand, never kept for offline play:
+ *   - the review sets npc-revision* (?npc=revision…);
+ *   - a graphics v2 group (release-v2-<group>, src/art-release-v2) that is not drawn by default
+ *     (artV2.js V2_ENABLED): it loads from the network when asked for (?<group>=v2).
+ * Everything else is kept: every v1 group (src/art-release/<group>) the game loads — terrain and
+ * objects since v1.0 —, and a v2 group once it is drawn by default. A v1 group whose v2 group is drawn
+ * by default (terrain since gfx W1, as the enemies' in fx-v2) STAYS kept, so ?<group>=v1 and ?v2=0
+ * still show it offline; it is only no longer preloaded (preloadReleaseGroup).
  * @param {string} group
  */
-export const onDemandReleaseGroup = (group) => group.startsWith('npc-revision');
+export const onDemandReleaseGroup = (group) => group.startsWith('npc-revision') || (group.startsWith('v2-') && !V2_ENABLED.includes(group.slice(3)));
+
+/**
+ * Whether the page preloads a release art group in its HTML (vite.config.js, transformIndexHtml):
+ * the groups normal play draws. A group that has a v2 counterpart is not preloaded statically: which
+ * of the two is drawn depends on the URL (?<group>=v1|v2, ?v2=0: artV2.js), so the page chooses with a
+ * small script (preloadSwitchScript) — an unused preload is a console warning and a wasted download on
+ * the phone. Which of them are kept for offline play is onDemandReleaseGroup's: the v1 group always,
+ * the v2 group once it is drawn by default.
+ * @param {string} group @param {Set<string>} groups every release group in the build
+ */
+export const preloadReleaseGroup = (group, groups) => !onDemandReleaseGroup(group) && !hasV2Pair(group, groups);
+
+/** Whether a group is one of a v1 / v2 pair in the build ("terrain" with "v2-terrain"). @param {string} group @param {Set<string>} groups */
+export const hasV2Pair = (group, groups) => (group.startsWith('v2-') ? groups.has(group.slice(3)) : groups.has(`v2-${group}`));
+
+/**
+ * The page's script that preloads, for each v1 / v2 pair, the sheet and frame table that will be drawn
+ * (the rule of artV2.artVersion: ?<group>=v1|v2, then ?v2=0, then V2_ENABLED; the terrain: none with
+ * ?terrain=placeholder or ?hd=0, terrainArt.wantsTerrainArt).
+ * @param {Record<string, { v1: { png: string, json: string }, v2: { png: string, json: string } }>} pairs hrefs by group
+ */
+export function preloadSwitchScript(pairs) {
+  const data = JSON.stringify({ pairs, enabled: V2_ENABLED });
+  return `(function(){var d=${data},p=new URLSearchParams(location.search);function add(a){var l=document.createElement('link');for(var k in a)l.setAttribute(k,a[k]);document.head.appendChild(l);}for(var g in d.pairs){var q=p.get(g);if(g==='terrain'&&(q==='placeholder'||p.get('hd')==='0'))continue;var v2=q==='v2'||(q!=='v1'&&p.get('v2')!=='0'&&d.enabled.indexOf(g)>=0);var f=d.pairs[g][v2?'v2':'v1'];if(!v2&&!f)continue;if(!f)continue;add({rel:'preload',as:'image',href:f.png});add({rel:'preload',as:'fetch',type:'application/json',crossorigin:'anonymous',href:f.json});}})();`;
+}
 
 /** The release art group of an emitted sheet / frame table (release-<group>.png|json), or null. @param {string} name */
 export const releaseGroupOf = (name) => /^release-(.+)\.(png|json)$/.exec(name)?.[1] ?? null;

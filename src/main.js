@@ -21,8 +21,9 @@ import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
 import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
-import { prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
-import { TERRAIN_GROUP, releaseTerrainEntries, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
+import { availableV1Groups, availableV2Groups, prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
+import { resolveArtGroups } from './view/assets/artV2.js';
+import { GROUND_RUIN_BUNDLE, ISLAND_EDGES_BUNDLE, ISLAND_STEPS_BUNDLE, TERRAIN_GROUP, releaseTerrainEntries, v2BundleParts, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
 import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
@@ -155,7 +156,9 @@ async function boot() {
   if (wantsTerrainArt(params, releaseHero)) releaseGroups.push(TERRAIN_GROUP); // v1.0: the terrain release art (?terrain=placeholder|release, terrainArt.js)
   //   v1.0: the objects' release art (buildings, chests, switches, icons, effects; objectsArt.js)
   releaseGroups.push(...objectsReleaseGroups(params, { releaseHero, protoGroups }));
-  for (const frames of await Promise.all(releaseGroups.map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
+  // Graphics v2: a group's v2 art (src/art-release-v2) in place of its v1 art when enabled (?v2=0, ?<group>=v1|v2; artV2.js)
+  const artGroups = resolveArtGroups(releaseGroups, params, { available: availableV2Groups(), v1Groups: availableV1Groups() });
+  for (const frames of await Promise.all(artGroups.map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
   installItemIcons(artOverrides); // the menus' item icons, from the same art
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
 
@@ -177,10 +180,30 @@ async function boot() {
 
   // --- assets / logic / view ---
   const assets = new AssetManager();
-  assets.register('placeholder', () => buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides), ...releaseEnemyEntries(artOverrides), ...releaseTerrainEntries('placeholder', artOverrides)], artOverrides));
+  // gfx W1: the v2 ground's island grounds and water (terrainArt.js "common:ground") go in the base atlas,
+  // packed tallest first so that it stays 2048×1024 (no second atlas). Without the v2 ground: as before.
+  const groundV2Entries = releaseTerrainEntries('common:ground', artOverrides);
+  assets.register('placeholder', () =>
+    buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides), ...releaseEnemyEntries(artOverrides), ...releaseTerrainEntries('placeholder', artOverrides), ...groundV2Entries], artOverrides, {
+      tallestFirst: groundV2Entries.length > 0,
+    }),
+  );
   // P8: each region's art is its own bundle, loaded by the view near the region.
-  for (const name of Object.keys(REGION_ENTRIES)) assets.register(name, () => buildRegionPack(name, artOverrides));
+  // gfx W1: with the v2 ground, a region's own ground is apart ("ground:<region>"), and so is each
+  // seasonal ground's autumn /
+  // winter art ("season:<season>:<ground>"): terrainArt.v2BundleParts. (REGION_ENTRIES holds the seasons too.)
+  for (const name of Object.keys(REGION_ENTRIES)) {
+    const parts = groundV2Entries.length > 0 ? v2BundleParts(name) : null;
+    if (!parts) assets.register(name, () => buildRegionPack(name, artOverrides));
+    else for (const [part, keep] of parts) assets.register(part, () => buildRegionPack(name, artOverrides, (e) => keep(e.key)));
+  }
   // v1.0: the final boss's art (loaded by the view only near its arena).
+  // gfx W1 round 3: the ruin floor's edges over water, loaded with the chunks where the ruin floor meets water
+  // (rounds 7-8: and the island grounds' edge variants 2 / 3 and step pieces, loaded with the chunks that draw them)
+  for (const name of [GROUND_RUIN_BUNDLE, ISLAND_EDGES_BUNDLE, ISLAND_STEPS_BUNDLE]) {
+    const entries = releaseTerrainEntries(name, artOverrides);
+    if (entries.length) assets.register(name, () => buildPlaceholderPack(entries, artOverrides));
+  }
   assets.register(SOURCE_BUNDLE, () => buildPlaceholderPack(sourceEntries(), artOverrides));
   await assets.load('placeholder');
   performance.mark('art');
@@ -1051,7 +1074,7 @@ async function boot() {
       return c.toDataURL();
     },
     /** P11.5: the art in use (density, how many real-art sprites) and the drawn hero's size in game px. */
-    art: () => ({ density: artDensity, overrides: artOverrides.size, zoom: view.camera.zoom, hero: { w: view.player.texture.width, h: view.player.texture.height, k: view.heroK } }),
+    art: () => ({ density: artDensity, overrides: artOverrides.size, groups: artGroups, zoom: view.camera.zoom, hero: { w: view.player.texture.width, h: view.player.texture.height, k: view.heroK } }),
     /** P8: the auto tour (minutes may be fractional in tests). */
     startTour: (/** @type {number} */ minutes) => startTour(minutes),
     stopTour: () => finishTour(),

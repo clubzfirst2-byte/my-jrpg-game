@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { packGroup, releaseGroups } from './tools/release-art-pack.mjs';
-import { precacheFiles, onDemandReleaseGroup, releaseGroupOf } from './tools/precache.mjs';
+import { precacheFiles, hasV2Pair, preloadReleaseGroup, preloadSwitchScript, releaseGroupOf } from './tools/precache.mjs';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
@@ -40,6 +40,9 @@ function serviceWorker() {
 function releaseArt() {
   const ID = 'virtual:release-art';
   const root = fileURLToPath(new URL('./src/art-release/', import.meta.url));
+  // Graphics v2 (src/view/assets/artV2.js): src/art-release-v2/<group>, packed the same way, emitted as
+  // release-v2-<group>.png / .json and named "v2/<group>" in the table.
+  const rootV2 = fileURLToPath(new URL('./src/art-release-v2/', import.meta.url));
   let build = false;
   return {
     name: 'release-art',
@@ -52,12 +55,13 @@ function releaseArt() {
     load(id) {
       if (id !== `\0${ID}`) return undefined;
       if (!build) return 'export default null;';
-      const groups = releaseGroups(root).map((group) => {
-        const { png, table, files } = packGroup(join(root, group));
+      const all = [...releaseGroups(root).map((group) => ({ dir: join(root, group), name: group, file: group })), ...releaseGroups(rootV2).map((group) => ({ dir: join(rootV2, group), name: `v2/${group}`, file: `v2-${group}` }))];
+      const groups = all.map(({ dir, name, file }) => {
+        const { png, table, files } = packGroup(dir);
         for (const f of files) this.addWatchFile(f);
-        const sheet = this.emitFile({ type: 'asset', name: `release-${group}.png`, source: png });
-        const frames = this.emitFile({ type: 'asset', name: `release-${group}.json`, source: JSON.stringify(table) });
-        return `  ${JSON.stringify(group)}: { sheet: import.meta.ROLLUP_FILE_URL_${sheet}, table: import.meta.ROLLUP_FILE_URL_${frames} },`;
+        const sheet = this.emitFile({ type: 'asset', name: `release-${file}.png`, source: png });
+        const frames = this.emitFile({ type: 'asset', name: `release-${file}.json`, source: JSON.stringify(table) });
+        return `  ${JSON.stringify(name)}: { sheet: import.meta.ROLLUP_FILE_URL_${sheet}, table: import.meta.ROLLUP_FILE_URL_${frames} },`;
       });
       return `export default {\n${groups.join('\n')}\n};\n`;
     },
@@ -69,14 +73,27 @@ function releaseArt() {
       order: 'post',
       handler(_html, ctx) {
         if (!ctx.bundle) return undefined;
-        return Object.values(ctx.bundle).flatMap((out) => {
+        const assets = Object.values(ctx.bundle).flatMap((out) => {
           if (out.type !== 'asset') return [];
           const group = (out.names ?? []).map(releaseGroupOf).find((g) => g !== null);
-          if (!group || onDemandReleaseGroup(group)) return [];
-          const href = `./${out.fileName}`;
-          const attrs = out.fileName.endsWith('.png') ? { rel: 'preload', as: 'image', href } : { rel: 'preload', as: 'fetch', type: 'application/json', crossorigin: 'anonymous', href };
-          return [{ tag: 'link', attrs, injectTo: /** @type {const} */ ('head') }];
+          return group ? [{ group, href: `./${out.fileName}`, png: out.fileName.endsWith('.png') }] : [];
         });
+        const groups = new Set(assets.map((a) => a.group));
+        // gfx W1: a group with a v2 counterpart (terrain) is preloaded by a script that reads the URL
+        // (only the one drawn: an unused preload is a console warning); the others as before
+        /** @type {Record<string, any>} */
+        const pairs = {};
+        for (const a of assets) {
+          if (!hasV2Pair(a.group, groups)) continue;
+          const g = a.group.replace(/^v2-/, '');
+          const side = a.group.startsWith('v2-') ? 'v2' : 'v1';
+          ((pairs[g] ??= {})[side] ??= {})[a.png ? 'png' : 'json'] = a.href;
+        }
+        const tags = assets
+          .filter((a) => preloadReleaseGroup(a.group, groups))
+          .map((a) => ({ tag: 'link', attrs: a.png ? { rel: 'preload', as: 'image', href: a.href } : { rel: 'preload', as: 'fetch', type: 'application/json', crossorigin: 'anonymous', href: a.href }, injectTo: /** @type {const} */ ('head') }));
+        if (Object.keys(pairs).length) tags.push({ tag: 'script', children: preloadSwitchScript(pairs), injectTo: /** @type {const} */ ('head') });
+        return tags;
       },
     },
   };

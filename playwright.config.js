@@ -1,7 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const isCI = !!process.env.CI;
-const PORT = 4173;
+// E2E_PORT: another port, so that several worktrees can run their own preview side by side.
+const PORT = Number(process.env.E2E_PORT) || 4173;
 
 // iPhone-sized landscape viewport (the game is played in landscape).
 const iphoneLandscape = {

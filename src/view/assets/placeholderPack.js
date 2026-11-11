@@ -284,9 +284,13 @@ export function sourceEntries() {
   return Object.entries(sourceFrames()).map(([key, rows]) => ({ key, rows, anchor: FEET }));
 }
 
-/** @param {string} name @param {Map<string, ArtSource>} [overrides] */
-export function buildRegionPack(name, overrides) {
-  return buildPlaceholderPack([...REGION_ENTRIES[name](), ...releaseBossEntries(name, overrides), ...releaseTerrainEntries(name, overrides)], overrides);
+/**
+ * @param {string} name @param {Map<string, ArtSource>} [overrides]
+ * @param {(e: { key: string }) => boolean} [keep] only these entries (gfx W1: a region's own ground in a bundle of its own)
+ */
+export function buildRegionPack(name, overrides, keep) {
+  const entries = [...REGION_ENTRIES[name](), ...releaseBossEntries(name, overrides), ...releaseTerrainEntries(name, overrides)];
+  return buildPlaceholderPack(keep ? entries.filter(keep) : entries, overrides);
 }
 
 /** Enemy release frames: enemy.<kind>.<action>.<n> (docs/art-release/enemy/frames.json on the art branch). */
@@ -345,6 +349,18 @@ export function releaseNpcEntries(overrides) {
 
 /** Width and height of an entry: its PNG when one replaces it, else the placeholder. @param {{ rows: string[], image?: { width: number, height: number } }} e */
 const sizeOf = (e) => (e.image ? { w: e.image.width, h: e.image.height } : { w: e.rows[0].length, h: e.rows.length });
+
+/**
+ * gfx W1: the entries tallest first (same height: as given). Shelves of one height waste no rows, so the
+ * base atlas also holds the v2 ground's ~360 island and water tiles within 2048×1024 (in the given
+ * order it would need 2048×2048, or a second atlas of 2 MB). Used only with the v2 ground: the v1
+ * atlas keeps its layout.
+ * @template {{ rows: string[], image?: { width: number, height: number } }} E
+ * @param {E[]} entries @returns {E[]}
+ */
+export function tallestFirstOrder(entries) {
+  return entries.map((e, i) => ({ e, i, h: sizeOf(e).h })).sort((a, b) => b.h - a.h || a.i - b.i).map((x) => x.e);
+}
 
 /**
  * The atlas the entries fit in, with the same shelf packing: the narrowest power-of-two width (64 ..
@@ -461,13 +477,14 @@ export async function withOverrides(entries, overrides) {
 /**
  * @param {{ key: string, rows: string[], anchor: [number, number] }[]} [entries]
  * @param {Map<string, ArtSource>} [overrides] the real art (P11.5), by logical name
+ * @param {{ tallestFirst?: boolean }} [opts] tallestFirst: pack the real art tallest first (gfx W1)
  * @returns {Promise<import('./assetManager.js').BuiltBundle>}
  */
-export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map()) {
+export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map(), { tallestFirst = false } = {}) {
   const all = await withOverrides(entries, overrides);
   // The placeholders and the real art are packed apart: the real art's atlas has 2 pixels per unit.
   const plain = all.filter((e) => !e.image);
-  const real = all.filter((e) => e.image);
+  const real = tallestFirst ? tallestFirstOrder(all.filter((e) => e.image)) : all.filter((e) => e.image);
   const packs = [packAtlas(plain, atlasSizeFor(plain), 1)];
   if (real.length) packs.push(packAtlas(real, atlasSizeFor(real), ART_SCALE));
   return mergePacks(packs);

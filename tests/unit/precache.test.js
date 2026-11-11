@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { precacheFiles, onDemandReleaseGroup, releaseGroupOf, PRECACHE_STATIC } from '../../tools/precache.mjs';
+import { precacheFiles, onDemandReleaseGroup, preloadReleaseGroup, releaseGroupOf, PRECACHE_STATIC } from '../../tools/precache.mjs';
 
 /** @param {string} fileName @param {string[]} moduleIds */
 const chunk = (fileName, moduleIds) => [fileName, { type: 'chunk', fileName, moduleIds }];
@@ -14,7 +14,7 @@ const bundle = Object.fromEntries([
   chunk('assets/player.walk.down.0-e.js', ['C:\\r\\src\\art-proto\\hero\\player.walk.down.0.png?url']),
   asset('assets/index-f.css', 'index.css'),
   asset('assets/index-a.js.map', 'index.js.map'),
-  ...['hero', 'npc', 'enemy', 'npc-revision', 'npc-revision-b2', 'terrain', 'objects'].flatMap((g) => [asset(`assets/release-${g}-1.png`, `release-${g}.png`), asset(`assets/release-${g}-2.json`, `release-${g}.json`)]),
+  ...['hero', 'npc', 'enemy', 'npc-revision', 'npc-revision-b2', 'terrain', 'objects', 'v2-terrain', 'v2-ui'].flatMap((g) => [asset(`assets/release-${g}-1.png`, `release-${g}.png`), asset(`assets/release-${g}-2.json`, `release-${g}.json`)]),
 ]);
 
 describe('service worker precache list (perf v1)', () => {
@@ -35,6 +35,18 @@ describe('service worker precache list (perf v1)', () => {
     expect(files).not.toContain('assets/player.walk.down.0-e.js');
     expect(files).not.toContain('assets/index-a.js.map');
     expect(new Set(files).size).toBe(files.length);
+  });
+
+  it('gfx W1: the v2 terrain is drawn by default, so it is kept for offline play; the v1 terrain stays kept (?terrain=v1, ?v2=0 offline); a v2 group not drawn by default is not', () => {
+    for (const g of ['v2-terrain', 'terrain']) expect(files).toEqual(expect.arrayContaining([`assets/release-${g}-1.png`, `assets/release-${g}-2.json`]));
+    expect(files).not.toContain('assets/release-v2-ui-1.png');
+    expect(onDemandReleaseGroup('v2-terrain')).toBe(false);
+    expect(onDemandReleaseGroup('terrain')).toBe(false);
+    expect(onDemandReleaseGroup('v2-ui')).toBe(true);
+    // (neither terrain sheet is preloaded by the HTML itself: a script picks the one drawn)
+    const groups = new Set(['terrain', 'v2-terrain', 'hero']);
+    expect(preloadReleaseGroup('terrain', groups) || preloadReleaseGroup('v2-terrain', groups)).toBe(false);
+    expect(preloadReleaseGroup('hero', groups)).toBe(true);
   });
 
   it('a chunk mixing prototype and other modules is kept', () => {
