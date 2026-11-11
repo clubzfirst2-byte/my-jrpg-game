@@ -6,6 +6,7 @@
 /**
  * @typedef {object} SpriteMeta
  * @property {[number, number]} anchor  0..1, usually feet = [0.5, 1]
+ * @property {boolean} [flipX]  graphics v3: the texture is the right-facing frame, drawn mirrored
  */
 
 /**
@@ -13,6 +14,8 @@
  * @property {Map<string, import('pixi.js').Texture>} textures
  * @property {Map<string, SpriteMeta>} meta
  * @property {() => void} destroy  releases GPU memory
+ * @property {{ canvas: HTMLCanvasElement, source: import('pixi.js').TextureSource }[]} [canvases] the atlases' CPU-side
+ *   canvases (graphics v3: freed once on the GPU, AssetManager.onBuilt)
  */
 
 /** @typedef {() => Promise<BuiltBundle> | BuiltBundle} BundleBuilder */
@@ -25,6 +28,11 @@ export class AssetManager {
     this.loaded = new Map();
     /** Goes up whenever a bundle comes or goes (what hasTexture answers may have changed). */
     this.version = 0;
+    /**
+     * Called with each bundle once it is built, before it is used (graphics v3: upload its atlases to
+     * the GPU and free their CPU-side canvases; main.js). @type {((bundle: BuiltBundle) => void) | null}
+     */
+    this.onBuilt = null;
   }
 
   /** @param {string} name @param {BundleBuilder} builder */
@@ -42,6 +50,7 @@ export class AssetManager {
     const builder = this.builders.get(name);
     if (!builder) throw new Error(`Unknown asset bundle "${name}"`);
     const bundle = await builder();
+    this.onBuilt?.(bundle);
     this.loaded.set(name, { refs: 1, bundle });
     this.version++;
   }

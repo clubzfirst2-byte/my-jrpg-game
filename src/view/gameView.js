@@ -37,6 +37,13 @@ import { openingView } from '../game/story/story.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
 import { SilhouetteCache, placeFlash } from './flashOverlay.js';
 import { EnemySlots } from './enemySlots.js';
+import { setFrame } from './spriteFrame.js';
+import { frameFight, v3GroundKey } from './assets/artV3.js';
+import { activeBoss } from '../game/entities/bosses.js';
+import { hash01, valueNoise } from './placement.js';
+
+/** Graphics v3: the chunk ground's culling groups, in tiles (gameView.groupGround). */
+export const V3_GROUP_TILES = 8;
 
 /** Chunk size in tiles (P8). */
 export const CHUNK = 32;
@@ -115,10 +122,26 @@ export class GameView {
    * @param {import('pixi.js').Application} app
    * @param {import('./assets/assetManager.js').AssetManager} assets
    * @param {import('../game/state.js').GameState} state
+   * @param {{ v3?: boolean }} [opts] v3: graphics v3 and its narrow view (?v3=1, assets/artV3.js)
    */
-  constructor(app, assets, state) {
+  constructor(app, assets, state, opts = {}) {
     this.app = app;
     this.assets = assets;
+    /**
+     * Graphics v3 (?v3=1): the v3 art where it is loaded (the plains' 4×4 grass picture, its trees, the
+     * stone house, the grass tufts and flowers), no cached chunk ground (a cache at 4 texture px per game
+     * px would be 16 MB a chunk: each chunk's ground is a render group of its tiles instead), and in a
+     * boss fight the camera framing the hero, the boss and its telegraph (artV3.frameFight).
+     */
+    this.v3 = !!opts.v3;
+    /** Graphics v3: the tiles with a tree (v3TreeRoom), made on first use. @type {Set<number> | null} */
+    this.v3Trees = null;
+    /** Graphics v3: the tiles with any object (addV3Decor), made on first use. @type {Set<number> | null} */
+    this.v3Taken = null;
+    /** Graphics v3: the camera's view of the last frame, game px (state.viewRect). @type {{ x: number, y: number, width: number, height: number } | null} */
+    this.cameraRect = null;
+    /** Graphics v3: the share of the view the UI covers at the top / bottom in a boss fight (main.js measures it). */
+    this.fightInsets = { top: 0, bottom: 0 };
     /** v1.0: the terrain is drawn from its release art (its brightness and variants, terrainArt.js). */
     this.releaseTerrain = usesReleaseTerrain(assets);
     /** P10.2: the season the world is drawn for, and its art bundle (held while it lasts). */
@@ -302,7 +325,7 @@ export class GameView {
     this.enemyKeys = new Map();
     /** @type {Map<number, Sprite>} */
     this.flashSprites = new Map();
-    this.silhouettes = new SilhouetteCache();
+    this.silhouettes = new SilhouetteCache(this.v3 ? app.renderer : null);
     /** Frame counts of the enemies' release actions, cleared when the loaded art changes. @type {Map<string, number>} */
     this.enemyFrameCounts = new Map();
     this.enemyFrameCountsAt = -1;
@@ -681,6 +704,22 @@ export class GameView {
 
 
   /**
+   * Graphics v3: the v3 ground tile of a display tile whose 4 corners are one ground, or null (no v3 art
+   * for that ground, or the season has its own look of it: the v3 picture is summer's).
+   * @param {string[]} cls @param {number} i @param {number} j
+   */
+  v3GroundAt(cls, i, j) {
+    const c = cls[0];
+    if (cls.some((x) => x !== c)) return null;
+    const prefix = /** @type {Record<string, string>} */ (PREFIX)[c];
+    if (!prefix) return null;
+    const key = v3GroundKey(prefix, i, j);
+    if (!this.assets.hasTexture(key)) return null;
+    if (this.seasonKeySet.has(`${prefix}.0`)) return null;
+    return key;
+  }
+
+  /**
    * W1: what buildGroundV2 draws for a chunk, bottom first: each piece's key (season not applied;
    * anim: a water key without its frame), its position in game px and, for a cell that cannot blend,
    * the quarter of its tile. Pure apart from the view's caches (unit tests walk the world with it).
@@ -707,6 +746,17 @@ export class GameView {
     }
     try {
       this.groundPiecesInto(out, cx, cy, j1, i1, clampX, clampY, flat, half, ts);
+      // graphics v3 (no cache to clip the overhang): the land of the display tiles over the chunk's west /
+      // north edge (x or y before the chunk's first display tile) is the previous chunk's last, drawn by
+      // that chunk only — unclipped, in full (at the map's edge, by this one). The water mesh is still
+      // clipped to the chunk (waterQuads), so its pieces stay.
+      if (this.v3 && (cx > 0 || cy > 0)) {
+        const x0 = cx * CHUNK * ts + half;
+        const y0 = cy * CHUNK * ts + half;
+        let n = 0;
+        for (const p of out) if (p.anim || !((cx > 0 && p.x < x0) || (cy > 0 && p.y < y0))) out[n++] = p;
+        out.length = n;
+      }
     } finally {
       if (own) {
         this.calmMemo = null;
@@ -748,7 +798,11 @@ export class GameView {
             },
           });
         if (allFlat && cls.every((c) => c !== null)) {
-          for (const l of layersOf(/** @type {string[]} */ (cls), true)) out.push({ key: l.key, anim: l.anim, x: px, y: py, quarter: null });
+          const layers = layersOf(/** @type {string[]} */ (cls), true);
+          // graphics v3: open ground of one kind is the v3 4×4 picture where it is loaded (summer / spring)
+          const v3 = this.v3 && layers.length === 1 && !layers[0].anim ? this.v3GroundAt(/** @type {string[]} */ (cls), i, j) : null;
+          if (v3) out.push({ key: v3, anim: false, x: px, y: py, quarter: null });
+          else for (const l of layers) out.push({ key: l.key, anim: l.anim, x: px, y: py, quarter: null });
           continue;
         }
         // W1 (inspection fix): a border between grounds next to a cell with no v2 art or raised (a wall):
@@ -1192,6 +1246,10 @@ export class GameView {
       }
     }
     this.flushShades(shades, y1 - 1, rows, cx);
+    if (this.v3) {
+      this.groupGround(base);
+      this.addV3Decor(base, cx, cy, x1, y1);
+    }
     base.tint = levelTint(0, this.releaseTerrain);
     this.base.addChild(base);
     // A chunk's flat ground -> one textured quad per frame, cached over the whole chunk (see
@@ -1199,7 +1257,11 @@ export class GameView {
     // density (2 with the release terrain, else its fine pixels were halved: terrainArt.groundCacheResolution).
     const area = chunkCacheArea(cx, cy, ts);
     base.boundsArea = new Rectangle(area.x, area.y, area.width, area.height);
-    base.cacheAsTexture({ scaleMode: 'nearest', antialias: false, resolution: groundCacheResolution(this.releaseTerrain) });
+    // graphics v3: no cache (STYLE.md 10.1 (5)); the tiles stay sprites in a render group of their own, so
+    // they are not re-transformed every frame (the display tiles over the chunk's edge are drawn once, by
+    // the chunk they start in: groundPiecesInto)
+    if (this.v3) base.isRenderGroup = true;
+    else base.cacheAsTexture({ scaleMode: 'nearest', antialias: false, resolution: groundCacheResolution(this.releaseTerrain) });
     // gfx W1: the v2 water under it, one mesh over the shared water atlas (its frames redraw no cache)
     let waterMesh = null;
     /** @type {string[]} */
@@ -1230,7 +1292,7 @@ export class GameView {
   /** @param {Chunk} c */
   destroyChunk(c) {
     const map = this.map;
-    c.base.cacheAsTexture(false);
+    if (!this.v3) c.base.cacheAsTexture(false);
     c.base.destroy({ children: true });
     if (c.waterMesh) {
       const g = c.waterMesh.geometry;
@@ -1260,6 +1322,7 @@ export class GameView {
    * @param {{ x: number, y: number }} origin @param {number} viewW @param {number} viewH world px
    */
   updateChunks(origin, viewW, viewH) {
+    if (this.v3) for (const c of this.chunks.values()) this.cullGround(c, origin, viewW, viewH);
     this.viewRect = { x: origin.x, y: origin.y, w: viewW, h: viewH };
     const ts = this.map.tileSize;
     const size = CHUNK * ts;
@@ -1451,7 +1514,122 @@ export class GameView {
     }
     if (o.type === 'charm_shelf') return this.charmHome ? 'obj.charm_shelf.on' : 'obj.charm_shelf'; // P10.1
     if (o.type === 'star_ring') return this.ringOpen ? 'obj.star_ring.on' : 'obj.star_ring.off'; // v1.0
+    if (this.v3) {
+      const v3 = this.v3ObjectKey(o);
+      if (v3) return v3;
+    }
     return `obj.${o.type}`;
+  }
+
+  /**
+   * Graphics v3: the v3 art a plains object is drawn with, where it is loaded (only the drawing: the
+   * object, its tile, collision and saves are unchanged). Summer's look (a season with its own look of
+   * the object keeps it):
+   *   - a tree with no other tree within 2 tiles: the large broadleaf (40×56 game px), within 1 tile: the
+   *     conifer (24×44); trees in a grove keep the v1 tree (1 tile wide), so crowns do not pile up
+   *   - every other house (by its tile): the stone and timber house (same 3-tile footprint)
+   *   - a stump: the mossy v3 stump
+   * @param {any} o @returns {string | null}
+   */
+  v3ObjectKey(o) {
+    if (regionAt(this.regions, o.tx, o.ty)?.id !== 'plains') return null;
+    const has = (/** @type {string} */ k) => this.assets.hasTexture(k);
+    if (o.type === 'tree') {
+      if (this.seasonKeySet.has('obj.tree')) return null;
+      const room = this.v3TreeRoom(o.tx, o.ty);
+      if (room >= 3 && has('obj.v3.oak')) return 'obj.v3.oak';
+      if (room >= 2 && has('obj.v3.pine')) return 'obj.v3.pine';
+      return null;
+    }
+    if (o.type === 'house' && hash01(o.tx, o.ty, 77) < 0.5 && has('obj.v3.house_stone')) return 'obj.v3.house_stone';
+    if (o.type === 'stump' && has('prop.v3.stump')) return 'prop.v3.stump';
+    return null;
+  }
+
+  /**
+   * Graphics v3: grass tufts and flower clumps on the plains' open grass (STYLE.md 7.2), drawn with the
+   * flat ground: only the drawing, nothing to bump into. Fixed per tile (hash), off the tile's centre
+   * (0-8 game px), in loose patches (patch noise), never on a tile with something on it or next to a
+   * path. Only where the v3 art is loaded.
+   * @param {Container} base @param {number} cx @param {number} cy @param {number} x1 @param {number} y1
+   */
+  addV3Decor(base, cx, cy, x1, y1) {
+    const map = this.map;
+    const ts = map.tileSize;
+    const kinds = ['prop.v3.tuft', 'prop.v3.flowers'].filter((k) => this.assets.hasTexture(k));
+    if (!kinds.length || this.seasonKeySet.has('plains.grass.0')) return;
+    if (!this.v3Taken) this.v3Taken = new Set(map.objects.map((/** @type {any} */ o) => o.ty * map.width + o.tx));
+    const grass = (/** @type {number} */ x, /** @type {number} */ y) => inBounds(map, x, y) && map.ground[y * map.width + x] === Ground.GRASS && map.elev[y * map.width + x] === 0;
+    for (let ty = cy * CHUNK; ty < y1; ty++) {
+      for (let tx = cx * CHUNK; tx < x1; tx++) {
+        const i = ty * map.width + tx;
+        if (!grass(tx, ty) || map.solid[i] || this.v3Taken.has(i)) continue;
+        if (!grass(tx - 1, ty) || !grass(tx + 1, ty) || !grass(tx, ty - 1) || !grass(tx, ty + 1)) continue;
+        if (regionAt(this.regions, tx, ty)?.id !== 'plains') continue;
+        const h = hash01(tx, ty, 919);
+        const patch = valueNoise(tx, ty, 6, 31);
+        if (h > 0.05 + 0.12 * Math.max(0, patch - 0.45)) continue;
+        const key = kinds[Math.floor(hash01(tx, ty, 920) * kinds.length)];
+        const sp = new Sprite(this.assets.texture(key));
+        const [ax, ay] = this.assets.meta(key).anchor;
+        sp.anchor.set(ax, ay);
+        sp.position.set(tx * ts + 4 + Math.floor(hash01(tx, ty, 921) * 9), ty * ts + 8 + Math.floor(hash01(tx, ty, 922) * 8));
+        base.addChild(sp);
+      }
+    }
+  }
+
+  /**
+   * Graphics v3 (no ground cache): the chunk's ground sprites in groups of V3_GROUP_TILES × V3_GROUP_TILES
+   * tiles, so the groups off screen are not drawn (cullGround). The pieces of the dual grid's display
+   * tiles do not overlap one another, so regrouping them keeps the picture (decor goes on top after).
+   * @param {Container} base
+   */
+  groupGround(base) {
+    const size = V3_GROUP_TILES * this.map.tileSize;
+    /** @type {Map<string, Container>} */
+    const groups = new Map();
+    for (const child of [...base.children]) {
+      const gx = Math.floor(child.x / size);
+      const gy = Math.floor(child.y / size);
+      const k = `${gx},${gy}`;
+      let g = groups.get(k);
+      if (!g) {
+        g = new Container();
+        g.label = `ground-${k}`;
+        // the area it covers: its tiles, and the display tiles reaching 16 px past it
+        g.boundsArea = new Rectangle(gx * size, gy * size, size + 16, size + 16);
+        groups.set(k, g);
+      }
+      g.addChild(child);
+    }
+    base.removeChildren();
+    for (const g of groups.values()) base.addChild(g);
+  }
+
+  /** Graphics v3: shows only the ground groups that reach into the view (with a tile's margin). @param {Chunk} c @param {{ x: number, y: number }} origin @param {number} vw @param {number} vh */
+  cullGround(c, origin, vw, vh) {
+    const m = 16;
+    for (const g of c.base.children) {
+      const b = g.boundsArea;
+      if (!b) continue;
+      const on = b.x < origin.x + vw + m && b.x + b.width > origin.x - m && b.y < origin.y + vh + m && b.y + b.height > origin.y - m;
+      if (g.visible !== on) g.visible = on;
+    }
+  }
+
+  /** Graphics v3: the distance (tiles, Chebyshev, up to 3) to the nearest other tree. @param {number} tx @param {number} ty */
+  v3TreeRoom(tx, ty) {
+    if (!this.v3Trees) this.v3Trees = new Set(this.map.objects.filter((/** @type {any} */ o) => o.type === 'tree').map((/** @type {any} */ o) => o.ty * this.map.width + o.tx));
+    for (let r = 1; r <= 2; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          if (this.v3Trees.has((ty + dy) * this.map.width + tx + dx)) return r;
+        }
+      }
+    }
+    return 3;
   }
 
   /** @param {any} o */
@@ -1530,12 +1708,9 @@ export class GameView {
     const releaseKey = this.heroAnim.textureKey(pose, p.facing, p.moving, (k) => this.assets.hasTexture(k));
     this.heroKey = releaseKey;
     // Otherwise the placeholder hero. Swimming: head and shoulders above the water, ripples alternate.
-    const tex = releaseKey
-      ? this.assets.texture(releaseKey)
-      : p.swimming
-        ? this.assets.texture(`player.swim.${p.facing}.${Math.floor(p.walkTime * (p.moving ? 6 : 2)) % 2}`)
-        : this.assets.texture(`player.walk.${p.facing}.${frame}`);
-    this.player.texture = tex;
+    const heroFrame = releaseKey ?? (p.swimming ? `player.swim.${p.facing}.${Math.floor(p.walkTime * (p.moving ? 6 : 2)) % 2}` : `player.walk.${p.facing}.${frame}`);
+    setFrame(this.player, this.assets, heroFrame); // (graphics v3: a left frame may be its right frame mirrored)
+    const tex = this.player.texture;
     // P11.5: the glider, the hidden-player check, the stamina wheel, the shield and the bow sit
     // relative to the hero's body, so they follow the drawn hero's height (not its hit box).
     this.heroK = Math.max(1, tex.height / HERO_BASE_H);
@@ -1577,9 +1752,15 @@ export class GameView {
     this.camera.setViewport(this.app.screen.width, this.app.screen.height);
     // Entering / leaving an area (cave) switches the camera bounds and cuts to the player.
     const aimY = CAMERA_TARGET_OFFSET_Y * this.heroK;
-    if (this.applyBounds(state)) this.camera.snapTo(x, y - camZ - aimY);
-    else this.camera.follow(x, y - camZ - aimY, dtSec);
+    // graphics v3: in a boss fight in an arena larger than the view, frame the hero, the boss and its telegraph
+    const aim = (this.v3 && this.fightTarget(state, x, y - z, tex.height)) || { x, y: y - camZ - aimY };
+    if (this.applyBounds(state)) this.camera.snapTo(aim.x, aim.y);
+    else this.camera.follow(aim.x, aim.y, dtSec);
     this.applyCamera();
+    if (this.v3) {
+      const o = this.camera.origin();
+      this.cameraRect = { x: o.x, y: o.y, width: this.camera.viewWidth, height: this.camera.viewHeight };
+    }
     this.updateSeason(state.env.now);
     this.updateSourceBundle(state);
     this.updateChunks(this.camera.origin(), this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom);
@@ -1643,6 +1824,35 @@ export class GameView {
     return true;
   }
 
+  /**
+   * Graphics v3 (STYLE.md 2.3 (2)): where the camera aims in a boss fight whose arena does not fit the
+   * view: between the hero and the boss, taking in the slam / wave being telegraphed, the hero always
+   * on screen and clear of the UI at the top (boss bar, hearts) and bottom (fightInsets). Null outside
+   * a fight, or when the whole arena fits (the camera's bounds then show all of it).
+   * @param {any} state @param {number} hx @param {number} hy the hero's drawn feet (game px) @param {number} heroH
+   * @returns {{ x: number, y: number } | null}
+   */
+  fightTarget(state, hx, hy, heroH) {
+    const boss = activeBoss(state);
+    if (!boss?.arena) return null;
+    const ts = this.map.tileSize;
+    const vw = this.camera.viewWidth;
+    const vh = this.camera.viewHeight;
+    if (boss.arena.tw * ts <= vw && boss.arena.th * ts <= vh) return null;
+    const bx = boss.x;
+    const by = boss.y - (boss.z ?? 0);
+    const hero = { x0: hx - 10, x1: hx + 10, y0: hy - heroH - 4, y1: hy + 4 };
+    const half = boss.final ? 32 : 28;
+    const others = [{ x0: bx - half, x1: bx + half, y0: by - (boss.final ? 72 : 60), y1: by + 6 }];
+    const slams = boss.pattern === 'slam' || boss.pattern === 'wave';
+    if (slams && (boss.state === 'windup' || boss.state === 'attack')) {
+      const r = boss.final ? (boss.pattern === 'slam' ? FINAL_BOSS.slamRadius : FINAL_BOSS.waveRadius) : BOSS_KINDS[boss.bossKind].slamRadius;
+      others.push({ x0: bx - r - 2, x1: bx + r + 2, y0: by - r - 2, y1: by + r + 2 });
+    }
+    const insets = { top: this.fightInsets.top * vh, bottom: this.fightInsets.bottom * vh };
+    return frameFight(hero, others, { width: vw, height: vh }, insets);
+  }
+
   /** Positions the world under the camera. Origin is already snapped to whole screen pixels. */
   applyCamera() {
     const o = this.camera.origin();
@@ -1694,6 +1904,8 @@ export class GameView {
     this.silhouette.visible = occluded;
     if (occluded) {
       this.silhouette.texture = tex;
+      this.silhouette.anchor.copyFrom(this.player.anchor); // (graphics v3: mirrored like the hero)
+      this.silhouette.scale.x = this.player.scale.x;
       this.silhouette.position.set(sx, sy);
     }
   }
@@ -1916,7 +2128,7 @@ export class GameView {
       for (const s of c.water) s.texture = tex;
     }
     for (const e of c.edges) e.sprite.texture = this.edgeTexture(e.key, frame);
-    c.base.updateCacheTexture();
+    if (!this.v3) c.base.updateCacheTexture();
     this.waterStats.redraws++;
     this.waterStats.ms += performance.now() - t0;
   }

@@ -43,6 +43,9 @@ function releaseArt() {
   // Graphics v2 (src/view/assets/artV2.js): src/art-release-v2/<group>, packed the same way, emitted as
   // release-v2-<group>.png / .json and named "v2/<group>" in the table.
   const rootV2 = fileURLToPath(new URL('./src/art-release-v2/', import.meta.url));
+  // Graphics v3 (src/view/assets/artV3.js): src/art-release-v3/<group>, emitted as release-v3-<group>.png /
+  // .json and named "v3/<group>" (loaded only with ?v3=1; not kept for offline play until it is the default).
+  const rootV3 = fileURLToPath(new URL('./src/art-release-v3/', import.meta.url));
   let build = false;
   return {
     name: 'release-art',
@@ -55,7 +58,7 @@ function releaseArt() {
     load(id) {
       if (id !== `\0${ID}`) return undefined;
       if (!build) return 'export default null;';
-      const all = [...releaseGroups(root).map((group) => ({ dir: join(root, group), name: group, file: group })), ...releaseGroups(rootV2).map((group) => ({ dir: join(rootV2, group), name: `v2/${group}`, file: `v2-${group}` }))];
+      const all = [...releaseGroups(root).map((group) => ({ dir: join(root, group), name: group, file: group })), ...releaseGroups(rootV2).map((group) => ({ dir: join(rootV2, group), name: `v2/${group}`, file: `v2-${group}` })), ...releaseGroups(rootV3).map((group) => ({ dir: join(rootV3, group), name: `v3/${group}`, file: `v3-${group}` }))];
       const groups = all.map(({ dir, name, file }) => {
         const { png, table, files } = packGroup(dir);
         for (const f of files) this.addWatchFile(f);

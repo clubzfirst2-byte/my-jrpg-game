@@ -14,6 +14,7 @@ import { direction, overlaps } from '../combat/hitbox.js';
 import { hitPlayer } from '../combat/damage.js';
 import { updateBoss, bossWindup } from './bosses.js';
 import { updateFinalBoss } from './finalBoss.js';
+import { onScreen } from '../core/viewRect.js';
 
 /** @typedef {'beast' | 'archer' | 'slime' | 'sentinel'} EnemyKind */
 
@@ -163,7 +164,9 @@ export function updateEnemy(e, state, dt) {
   const dx = p.x - e.x;
   const dy = p.y - e.y;
   const dist = Math.hypot(dx, dy);
-  const sees = !p.dead && dist < k.sightRange && Math.abs(p.z - e.z) < 24 && !p.swimming;
+  // graphics v3 (?v3=1, the narrow view): an enemy off screen does not see the hero, so it never
+  // aims or shoots from out of sight (state.viewRect; absent otherwise: unchanged)
+  const sees = !p.dead && dist < k.sightRange && Math.abs(p.z - e.z) < 24 && !p.swimming && onScreen(e, state.viewRect);
   const toPlayer = direction(dx, dy, { x: e.faceX, y: e.faceY });
 
   // Knockback slides the enemy regardless of state (a heavy one barely moves).
@@ -206,8 +209,11 @@ export function updateEnemy(e, state, dt) {
       }
       if (e.t >= k.windupMs) {
         if (k.attack === 'shoot') {
-          shoot(e, state, k);
-          e.cooldownMs = k.cooldownMs;
+          // graphics v3: an archer that has gone off screen while drawing lets the shot go (aims again once seen)
+          if (onScreen(e, state.viewRect)) {
+            shoot(e, state, k);
+            e.cooldownMs = k.cooldownMs;
+          }
           setState(e, 'idle');
         } else {
           e.attackSeq += 1;

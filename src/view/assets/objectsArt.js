@@ -86,10 +86,12 @@ function placeholderDataUrl(rows) {
  */
 export function iconBackground(key, src, rows) {
   if (typeof src === 'string') return `url("${src}") 0 0 / ${ICON_CSS_PX}px ${ICON_CSS_PX}px no-repeat`;
-  if (src && 'src' in src.sheet && typeof src.sheet.src === 'string') {
-    const img = /** @type {HTMLImageElement} */ (src.sheet);
-    const k = ICON_CSS_PX / src.w;
-    return `url("${img.src}") ${-src.x * k}px ${-src.y * k}px / ${img.naturalWidth * k}px ${img.naturalHeight * k}px no-repeat`;
+  if (src && 'url' in src) return `url("${src.url}") 0 0 / ${ICON_CSS_PX}px ${ICON_CSS_PX}px no-repeat`;
+  const f = /** @type {import('./placeholderPack.js').SheetFrame | undefined} */ (src);
+  if (f && 'src' in f.sheet && typeof f.sheet.src === 'string') {
+    const img = /** @type {{ src: string, naturalWidth: number, naturalHeight: number }} */ (f.sheet);
+    const k = ICON_CSS_PX / f.w;
+    return `url("${img.src}") ${-f.x * k}px ${-f.y * k}px / ${img.naturalWidth * k}px ${img.naturalHeight * k}px no-repeat`;
   }
   return `url("${placeholderDataUrl(rows)}") 0 0 / ${ICON_CSS_PX}px ${ICON_CSS_PX}px no-repeat`;
 }

@@ -10,14 +10,19 @@
 // opaque pixel turned white) and cached; only frames that are on screen during a wind-up ever get
 // one (a few dozen at most, each the size of one sprite). A silhouette whose source texture was
 // destroyed (its region's art released) is destroyed with it.
-import { Rectangle, Sprite, Texture } from 'pixi.js';
+import { ColorMatrixFilter, Rectangle, Sprite, Texture } from 'pixi.js';
 import { WARNING_FLASH } from './enemyAnim.js';
 
 /** Solid-white copies of sprite frames, made on demand. */
 export class SilhouetteCache {
-  constructor() {
+  /**
+   * @param {any} [renderer] graphics v3: the atlases' CPU-side canvases are freed (assets/v3Memory.js),
+   *   so a silhouette is drawn on the GPU instead, once per frame texture (makeSilhouetteGpu)
+   */
+  constructor(renderer = null) {
     /** @type {Map<Texture, Texture>} */
     this.map = new Map();
+    this.renderer = renderer;
   }
 
   /** @param {Texture} tex */
@@ -25,7 +30,7 @@ export class SilhouetteCache {
     const hit = this.map.get(tex);
     if (hit) return hit;
     this.prune();
-    const made = makeSilhouette(tex);
+    const made = this.renderer && !hasPixels(tex) ? makeSilhouetteGpu(tex, this.renderer) : makeSilhouette(tex);
     this.map.set(tex, made);
     return made;
   }
@@ -42,6 +47,34 @@ export class SilhouetteCache {
   get size() {
     return this.map.size;
   }
+}
+
+/** Whether a texture's source still has its CPU-side pixels. @param {Texture} tex */
+function hasPixels(tex) {
+  const img = /** @type {any} */ (tex.source.resource);
+  return !!img && img.width > 0 && img.height > 0;
+}
+
+/** Every opaque pixel white, alpha kept (a 4×5 colour matrix). */
+const WHITE_MATRIX = /** @type {import('pixi.js').ColorMatrix} */ ([0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0]);
+
+/**
+ * Graphics v3: the silhouette of a frame whose pixels are only on the GPU: the frame drawn once through a
+ * white colour matrix into a texture of its own (same size and resolution as the frame).
+ * @param {Texture} tex @param {any} renderer @returns {Texture}
+ */
+function makeSilhouetteGpu(tex, renderer) {
+  const res = tex.source.resolution || 1;
+  const s = new Sprite(tex);
+  const f = new ColorMatrixFilter();
+  f.matrix = WHITE_MATRIX;
+  f.padding = 0;
+  f.resolution = res;
+  s.filters = [f];
+  const out = renderer.generateTexture({ target: s, resolution: res, antialias: false, frame: new Rectangle(0, 0, tex.frame.width, tex.frame.height), textureSourceOptions: { scaleMode: 'nearest' } });
+  s.destroy();
+  f.destroy();
+  return out;
 }
 
 /** @param {Texture} tex @returns {Texture} */

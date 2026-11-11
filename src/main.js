@@ -18,10 +18,12 @@ import { storyDebugApi } from './debug/storyDebug.js';
 import { startOpening, skipOpening, finishEnding, endingLine, ENDING } from './game/story/story.js';
 import { EndingScreen } from './ui/ending.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
-import { ART_SCALE } from './view/assets/placeholderPack.js';
+import { ART_SCALE, acquireSheet, releaseSheet } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
 import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
-import { availableV1Groups, availableV2Groups, prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
+import { availableV1Groups, availableV2Groups, availableV3Groups, prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
+import { V3_DENSITY, V3_TARGET_HEIGHT, chooseToastSlot, v3ArtGroups, v3Enabled } from './view/assets/artV3.js';
+import { releaseSheetsLazily, dropIdleSheets, sameMirrored, freeAtlasCanvases, cpuImageBytes } from './view/assets/v3Memory.js';
 import { resolveArtGroups } from './view/assets/artV2.js';
 import { GROUND_RUIN_BUNDLE, ISLAND_EDGES_BUNDLE, ISLAND_STEPS_BUNDLE, TERRAIN_GROUP, releaseTerrainEntries, v2BundleParts, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
@@ -130,7 +132,9 @@ async function boot() {
   //                       placeholder frames, so the release art stays out of their way)
   //   ?hero=release       still accepted (the same as no ?hero)
   const heroParam = params.get('hero');
-  const releaseHero = hdParam !== '0' && (heroParam === null || heroParam === 'release') && !protoGroups.includes('hero');
+  // Graphics v3 (?v3=1, artV3.js): the v3 art and the narrow integer view; ?hero=v2 (and the like) keeps one group's previous art
+  const v3 = v3Enabled(params);
+  const releaseHero = hdParam !== '0' && (heroParam === null || heroParam === 'release' || (v3 && heroParam === 'v2')) && !protoGroups.includes('hero');
   /** Release art folders to load (all at once, below), in the order they override each other. @type {string[]} */
   const releaseGroups = releaseHero ? ['hero'] : [];
   //   the villagers' release art (NPC batch 1: elder, merchant, guard; the others keep the
@@ -159,14 +163,22 @@ async function boot() {
   // Graphics v2: a group's v2 art (src/art-release-v2) in place of its v1 art when enabled (?v2=0, ?<group>=v1|v2; artV2.js)
   const artGroups = resolveArtGroups(releaseGroups, params, { available: availableV2Groups(), v1Groups: availableV1Groups() });
   for (const frames of await Promise.all(artGroups.map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
+  // Graphics v3: the v3 groups after the rest, so a v3 frame replaces the frame of the same name (the
+  // rest is drawn as it is, each of its pixels 2×2 v3 pixels); their sheets, like the others', are
+  // decoded only while a bundle is being built (v3Memory.js)
+  const v3Groups = v3 && hdParam !== '0' ? v3ArtGroups(params, availableV3Groups()) : [];
+  for (const frames of await Promise.all(v3Groups.map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
+  if (v3) releaseSheetsLazily(artOverrides);
   installItemIcons(artOverrides); // the menus' item icons, from the same art
-  const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
+  // (graphics v3: the canvas has 4 pixels per game pixel, whatever art is loaded)
+  const artDensity = v3 ? V3_DENSITY : hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
+  if (v3) targetHeight = V3_TARGET_HEIGHT; // k = max(1, round(short side / 640)) device px per v3 pixel (STYLE.md 2.1)
   // Display scale (render_audit.md 案1, approved 2026-11-11; the default stays 'fit' until the director
   // decides): ?scale=int makes every canvas and art pixel a whole number of device pixels (the view area
   // changes); ?scale=fit (default) is the previous view. URL only: nothing is saved.
   // `artDensities` lists the art densities on screen (art px per game px), kept apart from the canvas
   // density: a future finer art set (e.g. 4) is added here and 'int' then keeps its pixels whole too.
-  const viewOpts = { mode: parseScaleMode(params.get('scale')), artDensities: [artDensity] };
+  const viewOpts = v3 ? { mode: /** @type {const} */ ('int'), artDensities: [V3_DENSITY, ART_SCALE] } : { mode: parseScaleMode(params.get('scale')), artDensities: [artDensity] };
 
   /** @type {import('pixi.js').Application} */
   let app;
@@ -186,12 +198,17 @@ async function boot() {
 
   // --- assets / logic / view ---
   const assets = new AssetManager();
+  // Graphics v3 (memory, STYLE.md 10.1): left frames that are their right frame mirrored are not packed
+  // (the view mirrors the right one), and each atlas's CPU-side canvas is freed once it is on the GPU.
+  const packOpts = v3 ? { mirror: { same: sameMirrored } } : {};
+  if (v3) assets.onBuilt = (bundle) => freeAtlasCanvases(app.renderer, bundle);
   // gfx W1: the v2 ground's island grounds and water (terrainArt.js "common:ground") go in the base atlas,
   // packed tallest first so that it stays 2048×1024 (no second atlas). Without the v2 ground: as before.
   const groundV2Entries = releaseTerrainEntries('common:ground', artOverrides);
   assets.register('placeholder', () =>
     buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides), ...releaseEnemyEntries(artOverrides), ...releaseTerrainEntries('placeholder', artOverrides), ...groundV2Entries], artOverrides, {
       tallestFirst: groundV2Entries.length > 0,
+      ...packOpts,
     }),
   );
   // P8: each region's art is its own bundle, loaded by the view near the region.
@@ -200,18 +217,19 @@ async function boot() {
   // winter art ("season:<season>:<ground>"): terrainArt.v2BundleParts. (REGION_ENTRIES holds the seasons too.)
   for (const name of Object.keys(REGION_ENTRIES)) {
     const parts = groundV2Entries.length > 0 ? v2BundleParts(name) : null;
-    if (!parts) assets.register(name, () => buildRegionPack(name, artOverrides));
-    else for (const [part, keep] of parts) assets.register(part, () => buildRegionPack(name, artOverrides, (e) => keep(e.key)));
+    if (!parts) assets.register(name, () => buildRegionPack(name, artOverrides, undefined, packOpts));
+    else for (const [part, keep] of parts) assets.register(part, () => buildRegionPack(name, artOverrides, (e) => keep(e.key), packOpts));
   }
   // v1.0: the final boss's art (loaded by the view only near its arena).
   // gfx W1 round 3: the ruin floor's edges over water, loaded with the chunks where the ruin floor meets water
   // (rounds 7-8: and the island grounds' edge variants 2 / 3 and step pieces, loaded with the chunks that draw them)
   for (const name of [GROUND_RUIN_BUNDLE, ISLAND_EDGES_BUNDLE, ISLAND_STEPS_BUNDLE]) {
     const entries = releaseTerrainEntries(name, artOverrides);
-    if (entries.length) assets.register(name, () => buildPlaceholderPack(entries, artOverrides));
+    if (entries.length) assets.register(name, () => buildPlaceholderPack(entries, artOverrides, packOpts));
   }
-  assets.register(SOURCE_BUNDLE, () => buildPlaceholderPack(sourceEntries(), artOverrides));
+  assets.register(SOURCE_BUNDLE, () => buildPlaceholderPack(sourceEntries(), artOverrides, packOpts));
   await assets.load('placeholder');
+  if (v3) dropIdleSheets(); // graphics v3: the sheets no bundle is cut from now (v3Memory.js)
   performance.mark('art');
   // Without ?map= the game starts at the title on the first island and saves its progress.
   // ?map=... (tests, height/field test maps) skips the title and never touches the save.
@@ -221,7 +239,7 @@ async function boot() {
   const mapName = /** @type {keyof typeof MAPS} */ (mapParam ?? 'world');
   const state = createGameState(MAPS[mapName] ?? MAPS.world);
   performance.mark('world');
-  const view = new GameView(app, assets, state);
+  const view = new GameView(app, assets, state, { v3 });
   performance.mark('view');
   // Test / check helpers: ?time=20 (hour) and ?weather=rain|storm|cloudy|clear.
   const timeParam = Number.parseFloat(params.get('time') ?? '');
@@ -247,6 +265,22 @@ async function boot() {
   deathOverlay.hidden = true;
   uiRoot.append(deathOverlay);
   const toast = new Toast(uiRoot);
+  // Graphics v3: a message moves to the low slot while the top one would cover the hero or an enemy
+  // (artV3.chooseToastSlot); both slots are measured once per message
+  /** @type {{ top: DOMRect, low: DOMRect } | null} */
+  let toastSlots = null;
+  if (v3) {
+    const show = toast.show.bind(toast);
+    toast.show = (text, opts) => {
+      show(text, opts);
+      const low = uiRoot.classList.contains('toast-low');
+      uiRoot.classList.remove('toast-low');
+      const top = toast.el.getBoundingClientRect();
+      uiRoot.classList.add('toast-low');
+      toastSlots = { top, low: toast.el.getBoundingClientRect() };
+      uiRoot.classList.toggle('toast-low', low);
+    };
+  }
   // P11.2: sound. iOS allows sound only after a touch: start it on the first one.
   const audio = new AudioEngine();
   audio.setVolumes({ bgm: settings.bgmVolume, sfx: settings.sfxVolume });
@@ -593,7 +627,9 @@ async function boot() {
       void autosave.saveNow();
     },
     onContextLost: () => pause('描画が一時的に中断されました。戻らない場合は再読み込みしてください。'),
-    onContextRestored: () => pauseOverlay.show('描画が復帰しました。'),
+    // graphics v3: the atlases' CPU-side copies were freed (v3Memory.js), so the GPU cannot be refilled
+    // from them: save, then load the page again
+    onContextRestored: () => (v3 ? void autosave.saveNow().finally(() => location.reload()) : pauseOverlay.show('描画が復帰しました。')),
     onViewportChange: () => {
       resolution = applyResolution();
     },
@@ -620,6 +656,18 @@ async function boot() {
   let lastReport = '';
   // Pixi leaves empty (null) slots for freed textures: count only the live ones.
   const textureCount = () => (renderer.texture?.managedTextures ?? []).filter(Boolean).length;
+  /** GPU texture memory (RGBA 8 bit, no mipmaps), bytes, by kind: the atlases, the chunk caches and other render textures. */
+  const gpuTextureBytes = () => {
+    const out = { total: 0, atlas: 0, render: 0, count: 0 };
+    for (const t of /** @type {any[]} */ (renderer.texture?.managedTextures ?? []).filter(Boolean)) {
+      const b = (t.pixelWidth ?? t.width) * (t.pixelHeight ?? t.height) * 4;
+      out.total += b;
+      out.count++;
+      if (t.resource && t.resource instanceof HTMLCanvasElement) out.atlas += b;
+      else if (!t.resource) out.render += b;
+    }
+    return out;
+  };
   let skipNextFrame = true;
 
   const overlay = createOverlay(
@@ -644,6 +692,7 @@ async function boot() {
         return true;
       },
       onCycleResolution() {
+        if (v3) return targetHeight; // graphics v3: the view is fixed by the v3 rule (STYLE.md 2.1)
         targetHeight = nextCandidate(targetHeight);
         settings.resolution = targetHeight;
         saveSettings(settings);
@@ -824,6 +873,18 @@ async function boot() {
       autosave.update(state, ticker.elapsedMS);
     }
     view.render(state, alpha, visualTime ?? performance.now() / 1000, ticker.elapsedMS / 1000);
+    // graphics v3: enemies see and attack only on screen (game/core/viewRect.js); never saved
+    if (v3) state.viewRect = view.cameraRect;
+    if (v3 && toastSlots && !toast.el.hidden && bossBar.hidden) {
+      const c = app.canvas.getBoundingClientRect();
+      const k = c.width / app.renderer.width;
+      const css = (/** @type {import('pixi.js').Container} */ sp) => {
+        const b = sp.getBounds();
+        return { x: c.x + b.x * k, y: c.y + b.y * k, width: b.width * k, height: b.height * k };
+      };
+      const actors = [css(view.player), ...view.enemySprites.live(state.enemies).map((/** @type {any} */ e) => css(e.sprite))];
+      uiRoot.classList.toggle('toast-low', chooseToastSlot(toastSlots.top, toastSlots.low, actors) === 'low');
+    }
     hud.update(state.player.hp, state.player.maxHp);
     const season = seasonAt(state.env.now);
     const clock = `${season.name} ${season.day}日目 ${clockText(state.env.now)} ${WEATHER_NAMES[playerWeather(state).kind]}`;
@@ -844,6 +905,8 @@ async function boot() {
       shownBoss = bossKey;
       bossBar.hidden = !boss;
       uiRoot.classList.toggle('boss-fight', !!boss); // toasts move to the bottom (styles.css)
+      // graphics v3: the arena camera keeps the hero clear of the boss bar (gameView.fightTarget)
+      if (v3 && boss) view.fightInsets.top = Math.min(0.4, bossBar.getBoundingClientRect().bottom / Math.max(1, window.innerHeight));
       if (boss) {
         bossName.textContent = boss.name;
         bossFill.style.width = `${(100 * boss.hp) / boss.maxHp}%`;
@@ -1079,15 +1142,33 @@ async function boot() {
      * A sprite's art (tests: release / revision / prototype): its PNG URL, or for a frame on a
      * packed sheet (the build) the frame's pixels as a data URL, so two sets compare by content.
      */
-    artUrl: (/** @type {string} */ key) => {
+    artUrl: async (/** @type {string} */ key) => {
       const src = artOverrides.get(key);
       if (src === undefined || typeof src === 'string') return src ?? null;
-      const c = document.createElement('canvas');
-      c.width = src.w;
-      c.height = src.h;
-      /** @type {CanvasRenderingContext2D} */ (c.getContext('2d')).drawImage(src.sheet, src.x, src.y, src.w, src.h, 0, 0, src.w, src.h);
-      return c.toDataURL();
+      if ('url' in src) return src.url;
+      const sheet = await acquireSheet(src.sheet);
+      try {
+        const c = document.createElement('canvas');
+        c.width = src.w;
+        c.height = src.h;
+        /** @type {CanvasRenderingContext2D} */ (c.getContext('2d')).drawImage(sheet, src.x, src.y, src.w, src.h, 0, 0, src.w, src.h);
+        return c.toDataURL();
+      } finally {
+        releaseSheet(src.sheet);
+      }
     },
+    /** Graphics v3: whether it is on, and the art's memory (GPU textures, CPU-side images kept), bytes. */
+    v3: () => ({
+      on: v3,
+      groups: v3Groups,
+      cpu: cpuImageBytes(artOverrides, assets),
+      gpu: gpuTextureBytes(),
+      /** the drawn hero: its texture's art density and whether it is mirrored (a left frame drawn from the right one) */
+      hero: { key: view.heroKey, density: view.player.texture.source.resolution, mirrored: view.player.scale.x < 0 },
+      viewRect: state.viewRect ?? null,
+    }),
+    /** Graphics v3: a loaded texture's art density (texture px per game px), or null. */
+    textureDensity: (/** @type {string} */ key) => (assets.hasTexture(key) ? assets.texture(key).source.resolution : null),
     /** P11.5: the art in use (density, how many real-art sprites) and the drawn hero's size in game px. */
     art: () => ({ density: artDensity, overrides: artOverrides.size, groups: artGroups, zoom: view.camera.zoom, hero: { w: view.player.texture.width, h: view.player.texture.height, k: view.heroK } }),
     /** P8: the auto tour (minutes may be fractional in tests). */

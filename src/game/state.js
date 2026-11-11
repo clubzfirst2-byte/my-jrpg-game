@@ -81,6 +81,9 @@ export const ENEMY_CORPSE_MS = 600;
  * @property {any[]} landedHits   player sword hits that landed this step
  * @property {'cook' | 'forge' | 'talk' | 'sleep' | null} nearby  something to use in reach
  * @property {import('./npc/npcs.js').Npc | null} [nearbyNpc]  P9: the villager in front
+ * @property {{ x: number, y: number, width: number, height: number } | null} [viewRect]  graphics v3 (?v3=1): the camera's
+ *   view in game px, set by the view each frame; enemies see the hero and attack only while on screen
+ *   (artV3.onScreen). Absent otherwise (and in tests): no limit. Never saved.
  * @property {number} respawns
  * @property {boolean} [pickupsStale]
  * @property {import('./puzzles/switches.js').SwitchDef[]} switches  P7

@@ -656,8 +656,11 @@ body {
    the screen is where the boss stands: messages go to the bottom, centred in the space between the
    stick side's edge and the button cluster (its widest reach is 228 px × button size from its
    edge). Only the cluster side is avoided: the toast ignores touches, so it may lie over the
-   stick side. At 734×343 with a notch and 大 buttons that leaves ~330 px (2–3 lines at most). */
-#ui.boss-fight #toast {
+   stick side. At 734×343 with a notch and 大 buttons that leaves ~330 px (2–3 lines at most).
+   Graphics v3 (?v3=1): .toast-low puts a message there too while the top one would cover the hero or
+   an enemy (main.js, artV3.chooseToastSlot). */
+#ui.boss-fight #toast,
+#ui.toast-low #toast {
   top: auto;
   bottom: calc(14px + var(--safe-bottom));
   left: calc(10px + var(--safe-left));
@@ -667,12 +670,14 @@ body {
   max-width: none;
   margin: 0 auto;
 }
-#ui.boss-fight.left-handed #toast {
+#ui.boss-fight.left-handed #toast,
+#ui.toast-low.left-handed #toast {
   left: calc(228px * var(--btn) + 10px + var(--safe-left));
   right: calc(10px + var(--safe-right));
 }
 /* (unzoomed there, so the space above is in screen px; the large text keeps its size) */
-#ui.boss-fight.text-large #toast {
+#ui.boss-fight.text-large #toast,
+#ui.toast-low.text-large #toast {
   zoom: 1;
   font-size: 17px;
 }

@@ -5,6 +5,7 @@
 //   - the P12 prototype art (src/art-proto, ?…=proto): one small JS chunk per frame
 
 import { V2_ENABLED } from '../src/view/assets/artV2.js';
+import { V3_DEFAULT } from '../src/view/assets/artV3.js';
 
 /** The fixed files outside the bundle (public/). */
 export const PRECACHE_STATIC = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'];
@@ -13,14 +14,16 @@ export const PRECACHE_STATIC = ['./', 'index.html', 'manifest.webmanifest', 'ico
  * Release art groups loaded only on demand, never kept for offline play:
  *   - the review sets npc-revision* (?npc=revision…);
  *   - a graphics v2 group (release-v2-<group>, src/art-release-v2) that is not drawn by default
- *     (artV2.js V2_ENABLED): it loads from the network when asked for (?<group>=v2).
+ *     (artV2.js V2_ENABLED): it loads from the network when asked for (?<group>=v2);
+ *   - a graphics v3 group (release-v3-<group>, src/art-release-v3) while v3 is not the default
+ *     (artV3.js V3_DEFAULT): it loads when asked for (?v3=1).
  * Everything else is kept: every v1 group (src/art-release/<group>) the game loads — terrain and
  * objects since v1.0 —, and a v2 group once it is drawn by default. A v1 group whose v2 group is drawn
  * by default (terrain since gfx W1, as the enemies' in fx-v2) STAYS kept, so ?<group>=v1 and ?v2=0
  * still show it offline; it is only no longer preloaded (preloadReleaseGroup).
  * @param {string} group
  */
-export const onDemandReleaseGroup = (group) => group.startsWith('npc-revision') || (group.startsWith('v2-') && !V2_ENABLED.includes(group.slice(3)));
+export const onDemandReleaseGroup = (group) => group.startsWith('npc-revision') || (group.startsWith('v2-') && !V2_ENABLED.includes(group.slice(3))) || (group.startsWith('v3-') && !V3_DEFAULT);
 
 /**
  * Whether the page preloads a release art group in its HTML (vite.config.js, transformIndexHtml):

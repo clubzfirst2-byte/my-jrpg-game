@@ -5,6 +5,7 @@
 //   ?hero=proto   the hero          ?npc=proto   villagers          ?enemy=proto   enemies
 //   ?proto=all    all of them
 import releaseSheets from 'virtual:release-art';
+import { V3_DENSITY } from './artV3.js';
 
 const files = /** @type {Record<string, () => Promise<string>>} */ (import.meta.glob('../../art-proto/*/*.png', { query: '?url', import: 'default' }));
 
@@ -37,11 +38,19 @@ export function requestedProtoGroups(params) {
 // server (no sheets) the frame files are loaded one by one; this glob is dropped from the build.
 // Graphics v2: src/art-release-v2/<group>/*.png, named "v2/<group>" in the game (artV2.js).
 const releaseFiles = /** @type {Record<string, () => Promise<string>>} */ (
-  import.meta.env.DEV ? import.meta.glob(['../../art-release/*/*.png', '../../art-release-v2/*/*.png'], { query: '?url', import: 'default' }) : {}
+  import.meta.env.DEV ? import.meta.glob(['../../art-release/*/*.png', '../../art-release-v2/*/*.png', '../../art-release-v3/*/*.png'], { query: '?url', import: 'default' }) : {}
 );
 
-/** The release group name of a dev-server frame path ("v2/<folder>" under art-release-v2). @param {string} path */
-const devGroupOf = (path) => (path.includes('/art-release-v2/') ? `v2/${path.split('/').at(-2)}` : /** @type {string} */ (path.split('/').at(-2)));
+/**
+ * The release group name of a dev-server frame path ("v2/<folder>" under art-release-v2, "v3/<folder>"
+ * under art-release-v3, artV3.js). @param {string} path
+ */
+const devGroupOf = (path) => {
+  const folder = /** @type {string} */ (path.split('/').at(-2));
+  if (path.includes('/art-release-v2/')) return `v2/${folder}`;
+  if (path.includes('/art-release-v3/')) return `v3/${folder}`;
+  return folder;
+};
 
 /**
  * The graphics v2 groups in this build (the folders under src/art-release-v2), without the "v2/".
@@ -56,7 +65,13 @@ export function availableV2Groups(sheets = releaseSheets) {
 /** The v1 release groups in this build (the folders under src/art-release). @param {Record<string, unknown> | null} [sheets] */
 export function availableV1Groups(sheets = releaseSheets) {
   const names = sheets ? Object.keys(sheets) : Object.keys(releaseFiles).map(devGroupOf);
-  return [...new Set(names.filter((n) => !n.startsWith('v2/')))].sort();
+  return [...new Set(names.filter((n) => !n.startsWith('v2/') && !n.startsWith('v3/')))].sort();
+}
+
+/** The graphics v3 groups in this build (the folders under src/art-release-v3), without the "v3/". @param {Record<string, unknown> | null} [sheets] */
+export function availableV3Groups(sheets = releaseSheets) {
+  const names = sheets ? Object.keys(sheets) : Object.keys(releaseFiles).map(devGroupOf);
+  return [...new Set(names.filter((n) => n.startsWith('v3/')).map((n) => n.slice(3)))].sort();
 }
 
 /** @param {string} url @returns {Promise<HTMLImageElement>} */
@@ -81,7 +96,8 @@ export async function releaseFrames(group, sheets = releaseSheets) {
     try {
       const [sheet, table] = await Promise.all([loadSheet(packed.sheet), fetch(packed.table).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Could not load ${packed.table}`))))]);
       const frames = /** @type {Record<string, { x: number, y: number, w: number, h: number }>} */ (table.frames);
-      return new Map(Object.entries(frames).map(([name, r]) => [name, { sheet, x: r.x, y: r.y, w: r.w, h: r.h }]));
+      const density = group.startsWith('v3/') ? V3_DENSITY : undefined;
+      return new Map(Object.entries(frames).map(([name, r]) => [name, density ? { sheet, x: r.x, y: r.y, w: r.w, h: r.h, density } : { sheet, x: r.x, y: r.y, w: r.w, h: r.h }]));
     } catch (err) {
       console.warn(`art: release ${group}: ${String(err)}; using the placeholders`);
       return new Map();
@@ -89,6 +105,8 @@ export async function releaseFrames(group, sheets = releaseSheets) {
   }
   const picked = Object.entries(releaseFiles).filter(([path]) => devGroupOf(path) === group);
   const entries = await Promise.all(picked.map(async ([path, load]) => [/** @type {string} */ (path.split('/').pop()).replace(/\.png$/i, ''), await load()]));
+  // v3 frames carry their density (4 art px per game px) so they are packed on an atlas of their own
+  if (group.startsWith('v3/')) return new Map(entries.map(([k, url]) => [/** @type {string} */ (k), { url: /** @type {string} */ (url), density: V3_DENSITY }]));
   return new Map(/** @type {[string, string][]} */ (entries));
 }
 

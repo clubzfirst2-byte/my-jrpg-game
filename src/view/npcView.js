@@ -7,6 +7,7 @@
 import { lerp } from '../game/core/math.js';
 import { npcAlpha } from '../game/npc/npcs.js';
 import { npcFrameKey } from './npcAnim.js';
+import { setFrame } from './spriteFrame.js';
 
 const NEAR_PX = 480;
 
@@ -52,7 +53,7 @@ export class NpcView {
         this.actors.addChild(s);
         this.sprites.set(n.id, s);
       }
-      s.texture = this.assets.texture(key);
+      setFrame(s, this.assets, key); // (graphics v3: a left frame may be its right frame mirrored)
       s.alpha = npcAlpha(state, n);
       this.keys.set(n.id, key);
       const x = lerp(n.prevX, n.x, alpha);

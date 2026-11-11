@@ -92,6 +92,7 @@ import {
 import { sourceFrames, starRingSprite } from './sourceArt.js';
 import { ICON_ANCHORS } from './iconAnchors.js';
 import { releaseTerrainEntries } from './terrainArt.js';
+import { v3RegionOf } from './artV3.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
 const TOP_LEFT = /** @type {[number, number]} */ ([0, 0]);
@@ -287,10 +288,25 @@ export function sourceEntries() {
 /**
  * @param {string} name @param {Map<string, ArtSource>} [overrides]
  * @param {(e: { key: string }) => boolean} [keep] only these entries (gfx W1: a region's own ground in a bundle of its own)
+ * @param {{ mirror?: MirrorOptions }} [opts] graphics v3 (buildPlaceholderPack)
  */
-export function buildRegionPack(name, overrides, keep) {
-  const entries = [...REGION_ENTRIES[name](), ...releaseBossEntries(name, overrides), ...releaseTerrainEntries(name, overrides)];
-  return buildPlaceholderPack(keep ? entries.filter(keep) : entries, overrides);
+export function buildRegionPack(name, overrides, keep, opts = {}) {
+  const entries = [...REGION_ENTRIES[name](), ...releaseBossEntries(name, overrides), ...releaseTerrainEntries(name, overrides), ...releaseV3RegionEntries(name, overrides)];
+  return buildPlaceholderPack(keep ? entries.filter(keep) : entries, overrides, opts);
+}
+
+/**
+ * Graphics v3 (artV3.js): the new kinds of v3 art (names with ".v3.": the plains' 4×4 grass picture, its
+ * trees, flowers and the stone house) get a slot in their region's bundle only when such art is given,
+ * so they are loaded and released with the region (STYLE.md 10.1 (1)). Ground tiles keep the 16 px grid.
+ * @param {string} region bundle name @param {Map<string, ArtSource>} [overrides] (only the names are read)
+ */
+export function releaseV3RegionEntries(region, overrides) {
+  if (!overrides?.size) return [];
+  return [...overrides.keys()]
+    .filter((k) => v3RegionOf(k) === region)
+    .sort()
+    .map((key) => (/\.v3\.\d\d$/.test(key) ? { key, rows: Array(16).fill('.'.repeat(16)), anchor: TOP_LEFT } : { key, rows: ['.'], anchor: FEET }));
 }
 
 /** Enemy release frames: enemy.<kind>.<action>.<n> (docs/art-release/enemy/frames.json on the art branch). */
@@ -426,23 +442,72 @@ function loadImage(url) {
 
 /**
  * One frame of a packed release sheet (docs/perf/release-art-packing.md): the sheet's image and
- * where the frame sits on it, in its pixels.
- * @typedef {{ sheet: CanvasImageSource, x: number, y: number, w: number, h: number }} SheetFrame
+ * where the frame sits on it, in its pixels. `density`: art px per game px when it is not ART_SCALE
+ * (graphics v3: 4, artV3.js).
+ * @typedef {{ sheet: CanvasImageSource | SheetRef, x: number, y: number, w: number, h: number, density?: number }} SheetFrame
  */
-/** Where a sprite's art comes from: its own PNG's URL, or its place on a packed sheet. @typedef {string | SheetFrame} ArtSource */
+/**
+ * Where a sprite's art comes from: its own PNG's URL, its place on a packed sheet, or (graphics v3 in
+ * the dev server) its PNG's URL with its density.
+ * @typedef {string | SheetFrame | { url: string, density: number }} ArtSource
+ */
+
+/** Art pixels per game pixel of an art source (ART_SCALE unless it says otherwise). @param {ArtSource} src */
+export const densityOf = (src) => (typeof src === 'string' ? ART_SCALE : (src.density ?? ART_SCALE));
 
 /**
  * Copies a frame off its sheet into its own canvas, pixel for pixel, so it is drawn exactly as its
- * own PNG would be. @param {SheetFrame} f @returns {HTMLCanvasElement}
+ * own PNG would be. @param {SheetFrame} f @param {CanvasImageSource} [sheet] the sheet's image (a SheetRef's, acquired)
+ * @returns {HTMLCanvasElement}
  */
-export function cutSheetFrame(f) {
+export function cutSheetFrame(f, sheet = /** @type {CanvasImageSource} */ (f.sheet instanceof SheetRef ? f.sheet.image : f.sheet)) {
   const canvas = document.createElement('canvas');
   canvas.width = f.w;
   canvas.height = f.h;
   const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(f.sheet, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+  ctx.drawImage(sheet, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
   return canvas;
+}
+
+/**
+ * Graphics v3 (memory, STYLE.md 10.1 (6)): a packed release sheet whose decoded image is kept only while
+ * a bundle is being cut from it (acquireSheet / releaseSheet), and loaded again from its URL (the
+ * browser's cache) the next time one is. It answers `src` / `naturalWidth` / `naturalHeight` like the
+ * image did (the menus' icons point into the sheet by URL: objectsArt.iconBackground).
+ */
+export class SheetRef {
+  /** @param {HTMLImageElement} image */
+  constructor(image) {
+    this.src = image.src;
+    this.naturalWidth = image.naturalWidth;
+    this.naturalHeight = image.naturalHeight;
+    /** @type {HTMLImageElement | null} */
+    this.image = image;
+    /** @type {Promise<HTMLImageElement> | null} */
+    this.loading = null;
+    this.users = 0;
+  }
+}
+
+/** The image to cut from (a SheetRef's, loaded again if it was let go; one more user). @param {CanvasImageSource | SheetRef} sheet @returns {Promise<CanvasImageSource>} */
+export async function acquireSheet(sheet) {
+  if (!(sheet instanceof SheetRef)) return sheet;
+  sheet.users++;
+  if (sheet.image) return sheet.image;
+  sheet.loading ??= loadImage(sheet.src).finally(() => {
+    sheet.loading = null;
+  });
+  const img = await sheet.loading;
+  if (sheet.users > 0) sheet.image = img;
+  return img;
+}
+
+/** One user fewer; with none left, a SheetRef lets its decoded image go. @param {CanvasImageSource | SheetRef} sheet */
+export function releaseSheet(sheet) {
+  if (!(sheet instanceof SheetRef)) return;
+  sheet.users = Math.max(0, sheet.users - 1);
+  if (sheet.users === 0) sheet.image = null;
 }
 
 /**
@@ -450,7 +515,7 @@ export function cutSheetFrame(f) {
  * A tile of the wrong size is left as the placeholder (it would not fit the grid) and reported.
  * @param {{ key: string, rows: string[], anchor: [number, number] }[]} entries
  * @param {Map<string, ArtSource>} overrides logical name → PNG URL (artOverrides.js) or sheet frame
- * @returns {Promise<{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement | HTMLCanvasElement }[]>}
+ * @returns {Promise<{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement | HTMLCanvasElement, density?: number }[]>}
  */
 export async function withOverrides(entries, overrides) {
   if (overrides.size === 0) return entries;
@@ -459,13 +524,24 @@ export async function withOverrides(entries, overrides) {
       const url = overrides.get(e.key);
       if (!url) return e;
       try {
-        const image = typeof url === 'string' ? await loadImage(url) : cutSheetFrame(url);
-        const [w, h] = [e.rows[0].length * ART_SCALE, e.rows.length * ART_SCALE];
+        let image;
+        if (typeof url === 'string') image = await loadImage(url);
+        else if ('url' in url) image = await loadImage(url.url);
+        else {
+          const sheet = await acquireSheet(url.sheet);
+          try {
+            image = cutSheetFrame(url, sheet);
+          } finally {
+            releaseSheet(url.sheet);
+          }
+        }
+        const density = densityOf(url);
+        const [w, h] = [e.rows[0].length * density, e.rows.length * density];
         if (mustKeepSize(e.anchor) && (image.width !== w || image.height !== h)) {
           console.warn(`art: ${e.key}.png must be ${w}x${h} (is ${image.width}x${image.height}); using the placeholder`);
           return e;
         }
-        return { ...e, image };
+        return density === ART_SCALE ? { ...e, image } : { ...e, image, density };
       } catch (err) {
         console.warn(`art: ${String(err)}; using the placeholder`);
         return e;
@@ -475,19 +551,67 @@ export async function withOverrides(entries, overrides) {
 }
 
 /**
+ * Graphics v3 (artV3.js, memory: STYLE.md 10.1 (3)): the pack options that mirror left-facing frames
+ * instead of keeping them. `same(left, right)` tells whether a left frame is its right frame mirrored,
+ * pixel for pixel (main.js compares on a canvas).
+ * @typedef {{ same: (left: CanvasImageSource & { width: number, height: number }, right: CanvasImageSource & { width: number, height: number }) => boolean }} MirrorOptions
+ */
+
+/**
+ * Graphics v3: which left-facing frames are drawn as their right frame mirrored (left out of the atlas):
+ * those whose right frame is in the same pack, drawn from the real art, and either finer (a v3 right
+ * frame wins over a v1 left one, so a direction never shows the old art beside the new) or the very
+ * same picture mirrored. Pure apart from `same`.
+ * @template {{ key: string, image?: any, density?: number }} E
+ * @param {E[]} all @param {MirrorOptions} mirror
+ * @returns {Map<string, string>} left key → right key
+ */
+export function mirroredFrames(all, mirror) {
+  const byKey = new Map(all.map((e) => [e.key, e]));
+  /** @type {Map<string, string>} */
+  const out = new Map();
+  for (const e of all) {
+    if (!e.image || !e.key.includes('.left.')) continue;
+    const right = byKey.get(e.key.replace('.left.', '.right.'));
+    if (!right?.image) continue;
+    const dl = e.density ?? ART_SCALE;
+    const dr = right.density ?? ART_SCALE;
+    if (dr > dl || (dr === dl && right.image.width === e.image.width && right.image.height === e.image.height && mirror.same(e.image, right.image))) out.set(e.key, right.key);
+  }
+  return out;
+}
+
+/**
  * @param {{ key: string, rows: string[], anchor: [number, number] }[]} [entries]
  * @param {Map<string, ArtSource>} [overrides] the real art (P11.5), by logical name
- * @param {{ tallestFirst?: boolean }} [opts] tallestFirst: pack the real art tallest first (gfx W1)
+ * @param {{ tallestFirst?: boolean, mirror?: MirrorOptions }} [opts] tallestFirst: pack the real art
+ *   tallest first (gfx W1); mirror: graphics v3, left frames drawn as their right frames mirrored
  * @returns {Promise<import('./assetManager.js').BuiltBundle>}
  */
-export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map(), { tallestFirst = false } = {}) {
-  const all = await withOverrides(entries, overrides);
-  // The placeholders and the real art are packed apart: the real art's atlas has 2 pixels per unit.
+export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map(), { tallestFirst = false, mirror } = {}) {
+  let all = await withOverrides(entries, overrides);
+  const mirrored = mirror ? mirroredFrames(all, mirror) : new Map();
+  if (mirrored.size) all = all.filter((e) => !mirrored.has(e.key));
+  // The placeholders and the real art are packed apart: the real art's atlas has 2 pixels per unit
+  // (graphics v3: and the v3 art's, 4, on an atlas of its own; artV3.js).
   const plain = all.filter((e) => !e.image);
-  const real = tallestFirst ? tallestFirstOrder(all.filter((e) => e.image)) : all.filter((e) => e.image);
   const packs = [packAtlas(plain, atlasSizeFor(plain), 1)];
-  if (real.length) packs.push(packAtlas(real, atlasSizeFor(real), ART_SCALE));
-  return mergePacks(packs);
+  const densities = [...new Set(all.filter((e) => e.image).map((e) => e.density ?? ART_SCALE))].sort((a, b) => a - b);
+  for (const d of densities) {
+    const of = all.filter((e) => e.image && (e.density ?? ART_SCALE) === d);
+    const real = tallestFirst ? tallestFirstOrder(of) : of;
+    packs.push(packAtlas(real, atlasSizeFor(real), d));
+  }
+  const pack = mergePacks(packs);
+  // a mirrored left frame: its right frame's texture, flipped by the view (SpriteMeta.flipX)
+  for (const [left, right] of mirrored) {
+    const t = pack.textures.get(right);
+    const m = pack.meta.get(right);
+    if (!t || !m) continue;
+    pack.textures.set(left, t);
+    pack.meta.set(left, { anchor: [1 - m.anchor[0], m.anchor[1]], flipX: true });
+  }
+  return pack;
 }
 
 /** @param {import('./assetManager.js').BuiltBundle[]} packs @returns {import('./assetManager.js').BuiltBundle} */
@@ -496,6 +620,7 @@ function mergePacks(packs) {
   return {
     textures: new Map(packs.flatMap((p) => [...p.textures])),
     meta: new Map(packs.flatMap((p) => [...p.meta])),
+    canvases: packs.flatMap((p) => p.canvases ?? []),
     destroy() {
       for (const p of packs) p.destroy();
     },
@@ -568,6 +693,7 @@ function packAtlas(entries, atlasSize, resolution) {
   return {
     textures,
     meta,
+    canvases: [{ canvas, source: base.source }],
     destroy() {
       for (const t of textures.values()) t.destroy(false);
       base.destroy(true);
