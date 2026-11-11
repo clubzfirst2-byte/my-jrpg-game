@@ -126,7 +126,7 @@ describe('hit effects: where', () => {
     fx.takeEvents({ tick: 3, enemies, events: [{ type: 'bossStun', tick: 3, id: 'root' }] });
     fx.update(0);
     expect(fx.active).toBe(fxFor({ type: 'bossStun' }).sparks + 1);
-    const ring = fx.rings.find((r) => r.s.visible);
+    const ring = fx.rings.find((r) => r.live);
     expect(ring.s.x).toBe(300);
     expect(ring.s.y).toBe(200 - fxFor({ type: 'bossStun' }).y);
     const none = new HitFx(Texture.WHITE);
@@ -359,7 +359,7 @@ describe('hit effects as pixel art', () => {
     fx.takeEvents({ tick: 1, events: [{ type: 'hitEnemy', tick: 1, x: 10, y: 10 }] });
     for (let i = 0; i < 30; i++) {
       fx.update(1 / 60);
-      for (const p of fx.sparks) if (p.s.visible) expect(p.s.alpha).toBe(1);
+      for (const p of fx.sparks) if (p.live) expect(p.s.alpha).toBe(1);
     }
   });
 });

@@ -249,7 +249,6 @@ export class WeatherView {
     // Rain (screen space).
     this.rain = new Container();
     this.rain.label = 'rain';
-    this.rain.isRenderGroup = true; // (gfx W5: its drops and splashes come and go without rebuilding the world's list)
     /** @type {{ s: Sprite, x: number, y: number, k: number }[]} */
     this.drops = [];
     /** gfx W5: splashes on the ground (made on first rain). @type {{ s: Sprite, age: number }[]} */
@@ -274,7 +273,6 @@ export class WeatherView {
     // Snow (P10.2): slow flakes that sway and drift with the wind.
     this.snow = new Container();
     this.snow.label = 'snow';
-    this.snow.isRenderGroup = true; // (gfx W5: its drops and splashes come and go without rebuilding the world's list)
     /** @type {{ s: Sprite, x: number, y: number, phase: number, speed: number }[]} */
     this.flakes = [];
     // Lightning.
@@ -555,7 +553,7 @@ export class WeatherView {
       }
     }
     if (this.fancyRain) this.updateSplashes(sw, sh, dt, density, zoom);
-    else for (const p of this.splashes) p.s.visible = false;
+    else for (const p of this.splashes) p.s.alpha = 0;
     const vx = w.windX * RAIN_WIND;
     const vy = RAIN_SPEED;
     const angle = Math.atan2(vx, vy);
@@ -595,7 +593,7 @@ export class WeatherView {
         const s = new Sprite(splashTexture(0));
         s.anchor.set(0.5, 1); // (bottom centre: the crown rises from where the drop hit)
         s.tint = 0xd8e8ff;
-        s.visible = false;
+        s.alpha = 0;
         this.rain.addChild(s);
         this.splashes.push({ s, age: RAIN.splashMs });
       }
@@ -614,8 +612,11 @@ export class WeatherView {
       const p = this.splashes[i];
       p.age += ms;
       const k = p.age / RAIN.splashMs;
-      p.s.visible = k < 1;
-      if (k >= 1) continue;
+      // (shown or not by opacity: a change of `visible` rebuilds the scene's list of things to draw)
+      if (k >= 1) {
+        p.s.alpha = 0;
+        continue;
+      }
       // two frames: a drop hitting (2 game px), then a crown opening (4 game px, its ends up)
       const fi = k < 0.45 ? 0 : 1;
       const tex = splashTexture(fi);

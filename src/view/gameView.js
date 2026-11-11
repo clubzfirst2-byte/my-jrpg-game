@@ -254,6 +254,10 @@ export class GameView {
     // sun's strength (the weather, a lightning flash) — changing it redraws nothing,
     this.shadowLayer = new Container();
     this.shadowLayer.label = 'shadows';
+    // a render group of its own: its hundreds of sprites rarely change (a chunk streamed in or out, a
+    // crate pushed), so their list of things to draw is kept between frames instead of being
+    // gathered again whenever the world's is rebuilt (a character moving rebuilds it)
+    this.shadowLayer.isRenderGroup = true;
     this.world.addChildAt(this.shadowLayer, this.world.getChildIndex(this.actors));
     /** flat-ground shadows (in their chunk's container in the shadow layer), by object @type {Map<any, { sprite: Sprite, base: Container }[]>} */
     this.bakedShadows = new Map();
@@ -302,9 +306,6 @@ export class GameView {
     this.hitFx = new HitFx(assets.texture('px'));
     this.glowLayer = new Container();
     this.glowLayer.label = 'glow';
-    // its own render group: a spark or a ring coming and going rebuilds only this small list of
-    // things to draw, not the world's (thousands of sprites)
-    this.glowLayer.isRenderGroup = true;
     this.glowLayer.addChild(this.windowLayer, this.ambientParticles.glow, this.hitFx.layer);
     app.stage.addChildAt(this.glowLayer, app.stage.getChildIndex(this.weather.overlay) + 1);
     this.setFx('', false); // (the layers as fxOn says)
@@ -1155,7 +1156,7 @@ export class GameView {
       windows: { sprites: this.windowSprites.filter((w) => !(/** @type {any} */ (w).pool)).length, lit: this.windowSprites.filter((w) => !(/** @type {any} */ (w).pool) && w.visible).length, pools: this.windowSprites.filter((w) => /** @type {any} */ (w).pool && w.alpha > 0).length, glow: this.weather.windowGlow, lights: this.weather.windowLights.length },
       particles: { showing: this.fxOn.particles ? this.ambientParticles.visible : 0, kinds: { ...this.ambientKinds }, max: this.ambientParticles.pool.length + this.ambientParticles.glowPool.length + this.ambientParticles.mistPool.length },
       hit: { active: this.fxOn.hitfx ? this.hitFx.active : 0, pool: this.hitFx.sparks.length + this.hitFx.rings.length, trail: this.slashTrail.filter((t) => t.visible && t.alpha > 0).length },
-      rain: { fancy: this.weather.fancyRain, drops: this.weather.drops.filter((d) => d.s.visible).length, splashes: this.weather.splashes.filter((p) => p.s.visible).length },
+      rain: { fancy: this.weather.fancyRain, drops: this.weather.drops.filter((d) => d.s.visible).length, splashes: this.weather.splashes.filter((p) => p.s.alpha > 0).length },
     };
   }
 

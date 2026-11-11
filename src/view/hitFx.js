@@ -108,23 +108,23 @@ export class HitFx {
   constructor(dot) {
     this.layer = new Container();
     this.layer.label = 'hit-fx';
-    /** @type {{ s: Sprite, x: number, y: number, vx: number, vy: number, age: number, life: number, warm: boolean }[]} */
+    /** @type {{ s: Sprite, live: boolean, x: number, y: number, vx: number, vy: number, age: number, life: number, warm: boolean }[]} */
     this.sparks = [];
     for (let i = 0; i < FX_POOL.sparks; i++) {
       const s = new Sprite(dot);
       s.anchor.set(0.5);
-      s.visible = false;
+      s.alpha = 0;
       this.layer.addChild(s);
-      this.sparks.push({ s, x: 0, y: 0, vx: 0, vy: 0, age: 0, life: 0, warm: false });
+      this.sparks.push({ s, live: false, x: 0, y: 0, vx: 0, vy: 0, age: 0, life: 0, warm: false });
     }
-    /** @type {{ s: Sprite, r: number, age: number, life: number, color: number, frame: number }[]} */
+    /** @type {{ s: Sprite, live: boolean, r: number, age: number, life: number, color: number, frame: number }[]} */
     this.rings = [];
     for (let i = 0; i < FX_POOL.rings; i++) {
       const s = new Sprite(Texture.WHITE);
       s.anchor.set(0.5);
-      s.visible = false;
+      s.alpha = 0;
       this.layer.addChild(s);
-      this.rings.push({ s, r: 0, age: 0, life: 0, color: 0xffffff, frame: -1 });
+      this.rings.push({ s, live: false, r: 0, age: 0, life: 0, color: 0xffffff, frame: -1 });
     }
     this.nextSpark = 0;
     this.nextRing = 0;
@@ -168,7 +168,7 @@ export class HitFx {
       p.warm = spec.color === 0xfff2b0;
       p.s.alpha = 1;
       p.s.scale.set(1);
-      p.s.visible = true;
+      p.live = true;
     }
     if (spec.ring > 0) {
       const r = this.rings[this.nextRing];
@@ -179,7 +179,7 @@ export class HitFx {
       r.life = spec.life;
       r.color = spec.ringColor;
       r.frame = -1;
-      r.s.visible = true;
+      r.live = true;
       this.ringFrame(r, 0);
     }
   }
@@ -190,10 +190,11 @@ export class HitFx {
     let active = 0;
     for (let i = 0; i < this.sparks.length; i++) {
       const p = this.sparks[i];
-      if (!p.s.visible) continue;
+      if (!p.live) continue;
       p.age += ms;
       if (p.age >= p.life) {
-        p.s.visible = false;
+        p.live = false;
+        p.s.alpha = 0;
         continue;
       }
       active++;
@@ -209,10 +210,11 @@ export class HitFx {
     }
     for (let i = 0; i < this.rings.length; i++) {
       const r = this.rings[i];
-      if (!r.s.visible) continue;
+      if (!r.live) continue;
       r.age += ms;
       if (r.age >= r.life) {
-        r.s.visible = false;
+        r.live = false;
+        r.s.alpha = 0;
         continue;
       }
       active++;
