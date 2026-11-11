@@ -254,10 +254,6 @@ export class GameView {
     // sun's strength (the weather, a lightning flash) — changing it redraws nothing,
     this.shadowLayer = new Container();
     this.shadowLayer.label = 'shadows';
-    // a render group of its own: its hundreds of sprites rarely change (a chunk streamed in or out, a
-    // crate pushed), so their list of things to draw is kept between frames instead of being
-    // gathered again whenever the world's is rebuilt (a character moving rebuilds it)
-    this.shadowLayer.isRenderGroup = true;
     this.world.addChildAt(this.shadowLayer, this.world.getChildIndex(this.actors));
     /** flat-ground shadows (in their chunk's container in the shadow layer), by object @type {Map<any, { sprite: Sprite, base: Container }[]>} */
     this.bakedShadows = new Map();
@@ -343,6 +339,10 @@ export class GameView {
     this.enemyKeys = new Map();
     /** @type {Map<number, Sprite>} */
     this.flashSprites = new Map();
+    /** the boss ring / the source's marks have something drawn (they are cleared only when needed) */
+    this.bossRingDrawn = false;
+    this.aimDrawn = false;
+    this.sourceDrawn = false;
     this.silhouettes = new SilhouetteCache(this.fxV2 ? 'rim' : 'solid'); // gfx W5: a red rim keeps the v2 art's detail
     /** Frame counts and speeds of the enemies' actions (enemyFrames.js), cleared when the loaded art changes. @type {Map<string, { n: number, fps: number }>} */
     this.enemyFrameCounts = new Map();
@@ -720,6 +720,7 @@ export class GameView {
       list.push({ sprite: sh, base: shade });
     }
     this.shadowLayer.addChild(shade);
+    this.cacheShade(shade);
     base.tint = levelTint(0, this.releaseTerrain);
     this.base.addChild(base);
     // A chunk's flat ground -> one textured quad per frame, cached over the whole chunk (see
@@ -743,6 +744,7 @@ export class GameView {
     const map = this.map;
     c.base.cacheAsTexture(false);
     c.base.destroy({ children: true });
+    if (c.shade.isCachedAsTexture) c.shade.cacheAsTexture(false);
     c.shade.destroy({ children: true }); // (its flat-ground shadows)
     for (const o of c.baked) {
       const list = this.bakedShadows.get(o);
@@ -988,6 +990,35 @@ export class GameView {
   }
 
   /**
+   * gfx W5: a chunk's flat-ground shadows drawn into one texture of their own (one texel per game px,
+   * as they are drawn), shown as one quad that batches with the ground — none of its sprites is
+   * handled per frame, and no draw call is added. Redrawn only when one of them changes (an object
+   * gone, ?fx measuring); the weather and a lightning flash are the shadow layer's opacity, so they
+   * redraw nothing. An empty chunk has no texture.
+   * @param {Container} shade
+   */
+  cacheShade(shade) {
+    if (shade.destroyed) return;
+    if (shade.isCachedAsTexture) shade.cacheAsTexture(false);
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const ch of shade.children) {
+      if (!ch.visible) continue;
+      const sp = /** @type {Sprite} */ (ch);
+      x0 = Math.min(x0, sp.x);
+      y0 = Math.min(y0, sp.y);
+      x1 = Math.max(x1, sp.x + sp.texture.width);
+      y1 = Math.max(y1, sp.y + sp.texture.height);
+    }
+    if (x0 === Infinity) return;
+    // (whole game px, so the shadows' pixels land on the texture's texels)
+    shade.boundsArea = new Rectangle(Math.floor(x0), Math.floor(y0), Math.ceil(x1) - Math.floor(x0), Math.ceil(y1) - Math.floor(y0));
+    shade.cacheAsTexture({ scaleMode: 'nearest', antialias: false, resolution: 1 });
+  }
+
+  /**
    * A shadow sprite (shadows.js: pixel steps, whole game px) at the strength of the moment; it keeps
    * its geometry so a change of weather can restrengthen it.
    * @param {import('./shadows.js').ShadowGeom} g @param {number} x @param {number} y feet, world px
@@ -1135,7 +1166,15 @@ export class GameView {
     if (this.fxV2 && name in fx) fx[/** @type {'shadows'} */ (name)] = on;
     this.shadowLayer.visible = fx.shadows;
     for (const sh of this.looseShadows) if (sh.parent !== this.shadowLayer) sh.visible = fx.shadows; // (raised ground, chests: outside the layer)
-    for (const [o, list] of this.bakedShadows) for (const b of list) b.sprite.visible = fx.shadows && !o.gone;
+    /** @type {Set<Container>} */
+    const shades = new Set();
+    for (const [o, list] of this.bakedShadows) {
+      for (const b of list) {
+        b.sprite.visible = fx.shadows && !o.gone;
+        shades.add(b.base);
+      }
+    }
+    for (const shade of shades) this.cacheShade(shade);
     this.ambientParticles.under.visible = fx.particles;
     this.ambientParticles.glow.visible = fx.particles;
     this.hitFx.layer.visible = fx.hitfx;
@@ -1348,6 +1387,7 @@ export class GameView {
             b.sprite.visible = show;
             const [dx, dy] = this.decorShift(o);
             if (g) this.reshadow(b.sprite, o.tx * ts + ts / 2 + dx, o.ty * ts + ts + dy, g, 1);
+            this.cacheShade(b.base); // (that chunk's shadow picture, redrawn: a tree burnt, a jar broken)
           }
         }
       }
@@ -1630,11 +1670,15 @@ export class GameView {
       this.bossRing = new Graphics();
       this.actors.addChild(this.bossRing);
     }
-    this.bossRing.clear();
-    for (const e of state.enemies) {
+    // (cleared and redrawn only while there is a ring to show, or once to take the last one away: a
+    // Graphics changed every frame made PixiJS rebuild the whole world's draw list every frame)
+    const slamming = (/** @type {any} */ e) => e.state === 'windup' && (e.boss ? e.pattern === 'slam' : e.kind === 'sentinel');
+    const ringWanted = state.enemies.some(slamming);
+    if (ringWanted || this.bossRingDrawn) this.bossRing.clear();
+    this.bossRingDrawn = ringWanted;
+    for (const e of ringWanted ? state.enemies : []) {
       // (v1.0: the sentinel's small slam shows its reach the same way.)
-      const slams = e.boss ? e.pattern === 'slam' : e.kind === 'sentinel';
-      if (e.state !== 'windup' || !slams) continue;
+      if (!slamming(e)) continue;
       const k = windupProgress(e);
       const r = e.boss ? BOSS_KINDS[e.bossKind].slamRadius : ENEMY_KINDS.sentinel.slamRadius;
       this.bossRing.circle(Math.round(e.x), Math.round(e.y - e.z), r).stroke({ width: 2, color: 0xd0202a, alpha: 0.6 + 0.4 * k });
@@ -1649,10 +1693,15 @@ export class GameView {
       this.sourceMarks = new Graphics();
       this.overlay.addChild(this.sourceMarks);
     }
-    this.sourceGround.clear();
-    /** @type {Graphics} */ (this.sourceMarks).clear();
-    drawSourceTelegraphs(this.sourceGround, state);
-    drawSeatLights(/** @type {Graphics} */ (this.sourceMarks), state, timeSec);
+    // (the same: only while the source is in the fight, or once after)
+    const sourceUp = state.enemies.some((/** @type {any} */ x) => x.final && x.state !== 'dead');
+    if (sourceUp || this.sourceDrawn) {
+      this.sourceGround.clear();
+      /** @type {Graphics} */ (this.sourceMarks).clear();
+      drawSourceTelegraphs(this.sourceGround, state);
+      drawSeatLights(/** @type {Graphics} */ (this.sourceMarks), state, timeSec);
+    }
+    this.sourceDrawn = sourceUp;
     this.enemySprites.sweep(seen);
 
     // Projectiles: keep one sprite per projectile.
@@ -1711,7 +1760,10 @@ export class GameView {
     }
     const aiming = p.action === 'aim';
     this.bow.visible = aiming && held !== 'bow';
-    this.aimLine.clear();
+    // (cleared only when there is something to take away: an emptied Graphics each frame made
+    // PixiJS rebuild the world's whole draw list every frame)
+    if (aiming || this.aimDrawn) this.aimLine.clear();
+    this.aimDrawn = aiming;
     if (aiming) {
       const drawn = p.actionMs >= COMBAT.bowDrawMs;
       this.bow.position.set(Math.round(sx + p.aimX * 7), Math.round(sy - 8 * this.heroK + p.aimY * 4));

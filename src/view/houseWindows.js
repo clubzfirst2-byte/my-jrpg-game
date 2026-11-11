@@ -25,11 +25,11 @@ export const HOUSE_SIZE = Object.freeze({ w: 48, h: 56 });
 export const WINDOW_GLOW = Object.freeze({
   glass: 0xffc860,
   deep: 0xd8903c,
-  light: 0xff9a40,
-  radius: 10,
+  light: 0xff7430,
+  radius: 6,
   groundY: 6,
   /** the pool of light on the ground: a stepped pixel oval (game px), orange, at this opacity at night */
-  pool: Object.freeze({ w: 14, h: 6, color: 0xffa040, alpha: 0.55 }),
+  pool: Object.freeze({ w: 22, h: 10, color: 0xffa040, alpha: 0.55 }),
 });
 
 /**

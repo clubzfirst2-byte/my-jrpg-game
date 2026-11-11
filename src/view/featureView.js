@@ -107,6 +107,7 @@ export class FeatureView {
     // Inside an area (cave) everything outside it is dark.
     this.mask = new Graphics();
     screen.addChild(this.mask);
+    this.maskDrawn = false;
 
     /** @type {{ id: string, x: number, y: number, sprite: Sprite }[]} */
     this.markers = state.landmarks.map((l) => {
@@ -128,7 +129,10 @@ export class FeatureView {
    * @param {{ x: number, y: number, width: number, height: number } | null} area world rect, inside an area
    */
   update(state, texture, origin, zoom, screenW, screenH, timeSec, area) {
-    this.mask.clear();
+    // (cleared only inside an area, or once on leaving it: an emptied Graphics each frame made
+    // PixiJS rebuild the whole scene's draw list every frame)
+    if (area || this.maskDrawn) this.mask.clear();
+    this.maskDrawn = !!area;
     if (area) {
       const x0 = Math.round((area.x - origin.x) * zoom);
       const y0 = Math.round((area.y - origin.y) * zoom);

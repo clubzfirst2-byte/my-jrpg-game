@@ -38,6 +38,7 @@ export class PuzzleView {
     actors.addChild(this.orb);
     this.ring = new Graphics();
     overlay.addChild(this.ring);
+    this.ringDrawn = false;
   }
 
   /** @param {import('../game/state.js').GameState} state @param {number} timeSec */
@@ -67,9 +68,11 @@ export class PuzzleView {
       this.orb.position.set(Math.round(o.x), Math.round(o.y - o.z + Math.sin(timeSec * 3) * 1.5));
       this.orb.zIndex = o.y + 0.5;
     }
-    // Resonance ring.
-    this.ring.clear();
+    // Resonance ring (cleared only when there is one, or once after: an emptied Graphics each frame
+    // made PixiJS rebuild the world's whole draw list every frame).
     const pl = state.pulse;
+    if (pl || this.ringDrawn) this.ring.clear();
+    this.ringDrawn = !!pl;
     if (pl) {
       const k = Math.min(1, (state.env.now - pl.startMs) / ABILITY.pulseMs);
       this.ring.circle(pl.x, pl.y, k * ABILITY.pulseRadiusTiles * ts).stroke({ width: 2, color: 0x7fe8ff, alpha: 1 - k });

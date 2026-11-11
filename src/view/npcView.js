@@ -58,7 +58,10 @@ export class NpcView {
       const x = lerp(n.prevX, n.x, alpha);
       const y = lerp(n.prevY, n.y, alpha);
       s.position.set(Math.round(x), Math.round(y - n.z));
-      s.zIndex = y;
+      // Sorted by the pixel row the feet are on (+0.5: above things standing on that row, below the
+      // next — as before against objects, whose rows are whole numbers). A sub-pixel step no longer
+      // changes it: each change re-sorts the actors and rebuilds the world's draw list (gfx W5 perf).
+      s.zIndex = Math.floor(y) + 0.5;
     }
   }
 
