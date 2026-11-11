@@ -118,3 +118,21 @@ describe('frame URLs (cut out of the sheet as PNG data: URLs)', () => {
     expect([c.width, c.height]).toEqual([0, 0]);
   });
 });
+
+describe('play sessions (the first-plays labels)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('peek reads without counting; count adds one play; no storage: 0 / 1', async () => {
+    const { peekSessions, countSession } = await import('../../src/platform/settings.js');
+    const data = new Map();
+    vi.stubGlobal('window', { localStorage: { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v) } });
+    expect(peekSessions()).toBe(0);
+    expect(peekSessions()).toBe(0);
+    expect(countSession()).toBe(1);
+    expect(countSession()).toBe(2);
+    expect(peekSessions()).toBe(2);
+    vi.stubGlobal('window', { localStorage: { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } } });
+    expect(peekSessions()).toBe(0);
+    expect(countSession()).toBe(1);
+  });
+});

@@ -669,6 +669,14 @@ body {
   left: calc(228px * var(--btn) + 10px + var(--safe-left));
   right: calc(10px + var(--safe-right));
 }
+/* W4 (inspection W-5): with large text the toast keeps its size (17 px, as zoomed before) but is not
+   zoomed itself, so the space beside the cluster is not shrunk by 1.22 (3 lines over the hero on an SE
+   with 大 buttons). */
+#ui.text-large #toast {
+  zoom: 1;
+  font-size: 17px;
+  padding: 10px 17px;
+}
 
 /* v1.0 QA4 (L-3): in a boss fight (main.js sets #ui.boss-fight while the boss bar shows) the top of
    the screen is where the boss stands: messages go to the bottom, centred in the space between the
@@ -693,6 +701,24 @@ body {
 #ui.boss-fight.text-large #toast {
   zoom: 1;
   font-size: 17px;
+}
+/* W4 (inspection W-5): while the round buttons are hidden (the dialogue box, a full-screen panel) the
+   toast has nothing to avoid: centred on the screen as before (#ui#ui: over the hand and boss-fight
+   places above). Over a panel it sits in the middle of the screen, clear of the panel's head (tabs,
+   閉じる; two rows of tabs with large text) and of the settings' foot. */
+#ui#ui.talking #toast,
+#ui#ui.panel-open #toast {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(520px, calc(100vw - 40px));
+  margin: 0;
+}
+#ui#ui.panel-open #toast {
+  top: 50%;
+  bottom: auto;
+  transform: translate(-50%, -50%);
 }
 
 #toast[data-kind='error'] {
@@ -1139,7 +1165,6 @@ body {
 
 /* Text size: conversations, messages, menus, the clock and the boss bar. */
 #ui.text-large #dialogue,
-#ui.text-large #toast,
 #ui.text-large #inv-menu,
 #ui.text-large #shop-menu,
 #ui.text-large #settings-menu,
@@ -1203,15 +1228,14 @@ body {
 /* Large text zooms these boxes × 1.22 (above): the art's sizes are divided by it (--uz), so a frame's
    edge stays its drawn width in screen px (10 art px = 10 CSS px, never 12.2). */
 #ui.ui-v2.text-large #dialogue,
-#ui.ui-v2.text-large #toast,
 #ui.ui-v2.text-large #inv-menu,
 #ui.ui-v2.text-large #shop-menu,
 #ui.ui-v2.text-large #settings-menu,
 #ui.ui-v2.text-large #use-button {
   --uz: 1.22;
 }
-#ui.ui-v2.boss-fight.text-large #toast {
-  --uz: 1;
+#ui.ui-v2.text-large #toast {
+  --uz: 1; /* (not zoomed: styles above, W-5) */
 }
 
 /* ---- text buttons on plates (btn.text.*, 9-slice 8) ---- */
@@ -1450,23 +1474,27 @@ body {
 #ui.ui-v2.ui-labels .action-button::before {
   display: none;
 }
-/* the ability button shows WHICH power is selected (灯火 / 念動 / 蔓結び / 共鳴): its name stays under the
-   icon, 12 px, when the other labels are off */
+/* the ability button shows WHICH power is selected (灯火 / 念動 / 蔓結び / 共鳴): with the other labels off it
+   still shows the name, 12 px, centred inside the ring's metal edge, and no icon. (Its icon is the same
+   for every power, so the name is what tells them apart; icon and name together do not fit inside the
+   edge: a 3-character name under a 20-px icon needs a 46-px glass at the smallest size, which has 34;
+   inspection W-2b.) The teal ring marks it as the ability button. */
 #ui.ui-v2:not(.ui-labels) #ability-button:not([hidden]) {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
-  padding: 0 0 5px;
+  padding: 0;
   font-size: 12px;
   line-height: 12px;
+  letter-spacing: -0.12em;
   color: var(--text);
   text-shadow: var(--hud-outline);
 }
-#ui.ui-v2.btn-small:not(.ui-labels) #ability-button {
-  padding-bottom: 4px;
-}
 #ui.ui-v2:not(.ui-labels) #ability-button::before {
-  transform: translateY(-6px);
+  display: none;
+}
+#ui.ui-v2.btn-small:not(.ui-labels) #ability-button {
+  letter-spacing: -0.16em; /* 蔓結び inside the 44-px ring's edge */
 }
 /* while the dialogue box is open the discs are hidden (the panel shows through them otherwise) */
 #ui.ui-v2.talking .action-button,

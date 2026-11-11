@@ -30,7 +30,7 @@ import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
 import { InputManager } from './platform/inputManager.js';
 import { installLifecycle } from './platform/lifecycle.js';
-import { countSession, loadSettings, saveSettings } from './platform/settings.js';
+import { countSession, loadSettings, peekSessions, saveSettings } from './platform/settings.js';
 import { PauseOverlay } from './ui/pauseOverlay.js';
 import { BUTTON_LABELS_ROW, SETTING_ROWS, SettingsMenu } from './ui/settingsMenu.js';
 import { HeartsHud } from './ui/hud.js';
@@ -166,7 +166,10 @@ async function boot() {
   const uiSkinLoad = uiArtGroup ? releaseFrames(uiArtGroup).then((f) => (f.size ? (installUiSkin(uiRoot, f), true) : false)).catch((err) => (console.warn(`art: v2 ui: ${String(err)}; using the v1 UI`), false)) : Promise.resolve(false);
   for (const frames of await Promise.all(artGroups.filter((g) => g !== uiArtGroup).map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
   const uiV2 = await uiSkinLoad;
-  const sessions = uiV2 ? countSession() : 1; // (the v1 UI stores nothing new)
+  // W4: plays so far, this one included. A play is counted when it starts (startGame: はじめから /
+  // つづきから), not on each page load; the title shows what the next play will be. Without the title
+  // (?map=…) the page load is the start. (The v1 UI stores nothing new.)
+  let sessions = !uiV2 ? 1 : params.get('map') === null ? peekSessions() + 1 : countSession();
   installItemIcons(artOverrides); // the menus' item icons, from the same art
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
 
@@ -381,6 +384,10 @@ async function boot() {
     input.clear();
     loop.reset();
     view.snapCamera(state);
+    if (uiV2) {
+      sessions = countSession(); // W4: one more play (the labels of the first plays)
+      applySettings();
+    }
   }
   // v1.0 (C9): a tap or a key skips the opening.
   // The tap that skips it goes no further (not to the attack button or the stick).

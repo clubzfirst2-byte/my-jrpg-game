@@ -44,8 +44,21 @@ export function saveSettings(settings) {
 const SESSIONS_KEY = 'seimyaku.sessions.v1';
 
 /**
- * W4: counts this play session (each start of the game) and returns how many there have been,
- * this one included (1 when storage is unavailable, so the first-plays help shows).
+ * W4: the play sessions counted so far (0 when there are none or storage is unavailable).
+ * @returns {number}
+ */
+export function peekSessions() {
+  try {
+    return parseInt(window.localStorage.getItem(SESSIONS_KEY) ?? '0', 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * W4: counts this play session (each start of play: はじめから / つづきから, or a debug start without
+ * the title; not each page load) and returns how many there have been, this one included (1 when
+ * storage is unavailable, so the first-plays help shows).
  * @returns {number}
  */
 export function countSession() {

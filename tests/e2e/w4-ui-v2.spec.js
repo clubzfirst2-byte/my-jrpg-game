@@ -116,7 +116,7 @@ test('?ui=v2: rings at their exact diameters (I-1) at every size and hand, icons
   await page.click('#set-buttonLabels-off');
   await done(page);
   await expect(page.locator('#ui')).not.toHaveClass(/ui-labels/);
-  for (const id of ROUND) {
+  for (const id of ROUND.filter((id) => id !== 'ability-button')) {
     const icon = await page.locator(`#${id}`).evaluate((el) => {
       const cs = getComputedStyle(el, '::before');
       return { left: cs.left, top: cs.top, w: parseFloat(cs.width), h: parseFloat(cs.height), aria: el.getAttribute('aria-label') };
@@ -125,6 +125,8 @@ test('?ui=v2: rings at their exact diameters (I-1) at every size and hand, icons
     expect(await artOf(page, `#${id}`, '::before'), id).toEqual({ w: icon.w, h: icon.h, rendering: 'pixelated' });
     expect(icon.aria, id).toBeTruthy();
   }
+  // the ability button shows the selected power's name instead of an icon (W-2b)
+  expect(await page.locator('#ability-button').evaluate((el) => getComputedStyle(el, '::before').display)).toBe('none');
   // the selected power's name stays readable on the ability button (12 px), and follows ⇄
   const ability = page.locator('#ability-button');
   const before = await ability.textContent();
@@ -369,4 +371,114 @@ test('?ui=v2 W-4: the full-screen panels are opaque and hide the HUD under them 
   await done(page);
   await expect(page.locator('#ui')).not.toHaveClass(/panel-open/);
   expect(errors).toEqual([]);
+});
+
+// ---- W4 inspection, round 3 (W-5, W-2b, plays counted) ----
+
+/** The worst distance of a label's glyph body (line width × 0.88 em, as the inspection measures) past the
+ * circle inside the ring's 5-px metal edge; ≤ 0 is inside. */
+const labelExcess = (page, id) =>
+  page.locator(`#${id}`).evaluate((el) => {
+    const b = el.getBoundingClientRect();
+    const cx = b.left + b.width / 2;
+    const cy = b.top + b.height / 2;
+    const r = b.width / 2 - 5;
+    const fs = parseFloat(getComputedStyle(el).fontSize);
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    let worst = -99;
+    for (const t of range.getClientRects()) {
+      const mid = (t.top + t.bottom) / 2;
+      for (const [x, y] of [[t.left, mid - fs * 0.44], [t.right, mid - fs * 0.44], [t.left, mid + fs * 0.44], [t.right, mid + fs * 0.44]]) worst = Math.max(worst, Math.hypot(x - cx, y - cy) - r);
+    }
+    return { worst, fs, text: el.textContent };
+  });
+
+test('?ui=v2 W-2b: with icons only, every power\'s name is inside the ability ring at every size', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('seimyaku.settings.v1', JSON.stringify({ buttonLabels: 'off' })));
+  const errors = await open(page, '&ui=v2');
+  for (const ab of ['light', 'telekinesis', 'vine', 'resonance']) await api(page, 'grantAbility', ab);
+  await expect(page.locator('#ui')).not.toHaveClass(/ui-labels/);
+  for (const size of ['btn-small', '', 'btn-large']) {
+    await page.evaluate((size) => {
+      const ui = /** @type {HTMLElement} */ (document.getElementById('ui'));
+      ui.classList.remove('btn-small', 'btn-large');
+      if (size) ui.classList.add(size);
+    }, size);
+    const seen = new Set();
+    for (let i = 0; i < 4; i++) {
+      const before = await page.locator('#ability-button').textContent();
+      const m = await labelExcess(page, 'ability-button');
+      seen.add(m.text);
+      expect(m.fs, `${m.text} ${size}`).toBeGreaterThanOrEqual(12);
+      expect(m.worst, `${m.text} ${size || 'medium'}`).toBeLessThanOrEqual(0);
+      await page.keyboard.press('KeyR');
+      await expect(page.locator('#ability-button')).not.toHaveText(/** @type {string} */ (before));
+    }
+    expect([...seen].sort()).toEqual(['共鳴', '念動', '灯火', '蔓結び'].sort());
+  }
+  expect(errors).toEqual([]);
+});
+
+for (const ui of ['v1', 'v2']) {
+  test(`?ui=${ui} W-5: the toast is centred over panels and the dialogue, clear of the panel head; in play clear of the hero`, async ({ page }) => {
+    const MSG = '星環の力「共鳴」を手に入れた！ 左の「能力」ボタンで使える';
+    await page.setViewportSize({ width: 667, height: 375 }); // iPhone SE, the tightest
+    await page.addInitScript(() => localStorage.setItem('seimyaku.settings.v1', JSON.stringify({ hand: 'left', textSize: 'large', buttonSize: 'large' })));
+    const errors = await open(page, `&ui=${ui}`);
+    const show = () =>
+      page.evaluate((msg) => {
+        const t = /** @type {HTMLElement} */ (document.getElementById('toast'));
+        t.hidden = false;
+        t.textContent = msg;
+        const r = t.getBoundingClientRect();
+        return { x: r.left, y: r.top, w: r.width, h: r.height, centre: r.left + r.width / 2 - innerWidth / 2 };
+      }, MSG);
+    const hide = () => page.evaluate(() => { /** @type {HTMLElement} */ (document.getElementById('toast')).hidden = true; });
+    const meets = (a, b) => a.x < b.x + b.width && b.x < a.x + a.w && a.y < b.y + b.height && b.y < a.y + a.h;
+    // in play: clear of the buttons, at most 4 lines, above the hero (the middle of the screen)
+    const play = await show();
+    expect(play.y + play.h, 'above the hero').toBeLessThan(165);
+    for (const id of ['ability-next', 'ability-button', 'dash-button', 'dodge-button', 'pause-button', 'bag-button']) {
+      const b = await page.locator(`#${id}`).boundingBox();
+      if (b) expect(meets(play, b), id).toBe(false);
+    }
+    await hide();
+    // over the inventory: centred, clear of the tabs and 閉じる
+    await page.click('#bag-button');
+    await expect(page.locator('#inv-menu')).toBeVisible();
+    await expect(page.locator('#ui')).toHaveClass(/panel-open/);
+    const over = await show();
+    expect(Math.abs(over.centre)).toBeLessThanOrEqual(1);
+    for (const sel of ['#inv-close', '.inv-tabs button']) {
+      for (const b of await page.locator(sel).evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: r.height }; }))) expect(meets(over, b), sel).toBe(false);
+    }
+    await hide();
+    await page.click('#inv-close');
+    // in the dialogue: centred above the box
+    await api(page, 'standBy', 'elder');
+    await expect(page.locator('#use-button')).toBeVisible();
+    await api(page, 'talkTo', 'elder');
+    await expect(page.locator('#dialogue')).toBeVisible();
+    await expect(page.locator('#ui')).toHaveClass(/talking/);
+    const talk = await show();
+    expect(Math.abs(talk.centre)).toBeLessThanOrEqual(1);
+    const box = await page.locator('#dialogue').boundingBox();
+    expect(talk.y + talk.h).toBeLessThanOrEqual(box.y);
+    expect(errors).toEqual([]);
+  });
+}
+
+test('?ui=v2: the first-plays labels count plays (はじめから / つづきから), not page loads', async ({ page }) => {
+  await page.goto('/?ui=v2');
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
+  const count = () => page.evaluate(() => localStorage.getItem('seimyaku.sessions.v1'));
+  expect(await count()).toBe(null); // the title counts nothing
+  await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
+  expect(await count()).toBe(null);
+  await expect(page.locator('#ui')).toHaveClass(/ui-labels/); // the next play is the first
+  await page.click('#title-new');
+  expect(await count()).toBe('1');
+  await expect(page.locator('#ui')).toHaveClass(/ui-labels/);
 });
