@@ -4,7 +4,7 @@ idle 4 + walk 6 frames.
 Round 1 upscaled the v1 frames; the inspection asked for a real redraw. Every part is now drawn on the
 64 x 112 grid (hdkit.py): hair as separate locks flowing from the crown, the face from a hand map
 (v1's brows and one-colour mouth), the cloak as panels with 3 large folds a side and a dark band inside
-its edge, sleeves with an elbow and a cuff, gloves with a thumb and two finger grooves, trousers and
+its edge, v1's grey gauntlets along the body (round 3), leather hands with a thumb and two finger grooves, trousers and
 boots that step. Proportions, colours (v1 ramps, outline values unchanged) and timing follow the
 approved v1 frames (src/art-release/hero/, read only).
 Writes src/art-release-v3/hero/hero.<idle|walk>.down.<n>.png
@@ -53,40 +53,44 @@ EYE_MAP = [
 
 
 def head(c, oy, lag):
-    """Hair (back mass, then locks from the crown), the face, then the features."""
-    mass = c.m_poly([(5, 17 + oy), (11, 6 + oy), (23, 1 + oy), (35, 0 + oy), (47, 3 + oy), (55, 10 + oy),
-                     (59, 21 + oy), (57, 34 + oy), (54, 45 + oy + lag), (47, 46 + oy), (47, 30 + oy), (16, 30 + oy),
-                     (16, 46 + oy), (9, 45 + oy + lag), (6, 33 + oy)])
+    """Hair (back mass, then tapered locks from the crown), the face, then the features.
+    Round 3: v1's outline (side hair ending in points just below the ears, spikes on top and out at
+    the sides, not a helmet), curved pointed locks, a flat-lit face (shade only under the bangs and
+    along the jaw)."""
+    mass = c.m_poly([(4, 17 + oy), (11, 6 + oy), (23, 1 + oy), (35, 0 + oy), (47, 3 + oy), (55, 10 + oy),
+                     (60, 21 + oy), (57, 30 + oy), (53, 40 + oy + lag), (48, 33 + oy), (47, 26 + oy), (16, 26 + oy),
+                     (15, 33 + oy), (10, 40 + oy + lag), (6, 30 + oy)])
     c.fill(mass, "hair")
     c.shade_part(mass, tones=(1, 2, 2, 3, 3), norm=True)
-    # face
     face = c.m_poly([(15, 22 + oy), (48, 22 + oy), (49, 33 + oy), (47, 40 + oy), (42, 44 + oy), (35, 46 + oy),
                      (28, 46 + oy), (21, 44 + oy), (17, 40 + oy), (15, 33 + oy)])
-    c.fill(face, "skin")
-    c.shade_part(face, tones=(2, 3, 3, 3, 4), norm=True, light=(-0.7, -0.3, 0.8))
+    c.fill(face, "skin", 3)
+    for y, x in zip(*np.nonzero(face)):  # flat light: the cheek lit, one column of shade on the right, the jaw
+        if 17 <= x <= 22 and 38 + oy <= y <= 41 + oy:
+            c.tone[y, x] = 4
+        if x >= 47 or (y >= 44 + oy) or (x >= 44 and y >= 41 + oy):
+            c.tone[y, x] = 2
     fore = c.m_poly([(15, 14 + oy), (49, 14 + oy), (49, 22 + oy), (40, 23 + oy), (31, 24 + oy), (22, 23 + oy), (15, 22 + oy)])
     c.fill(fore, "hair", 2)
-    # side locks hanging beside the face (behind the bangs)
     cr = (31, 9 + oy)
-    side = [((14, 18 + oy), (11, 45 + oy + lag), 9, 1.5), ((50, 18 + oy), (53, 45 + oy + lag), 9, -1.5)]
-    # crown locks fanning out, then the spikes, then the bangs over the forehead
-    crown = [((cr[0] - 4, cr[1] + 2), (7, 24 + oy), 13, 2.0), ((cr[0] + 4, cr[1] + 2), (57, 26 + oy), 13, -2.0),
-             ((cr[0] - 2, cr[1]), (16, 29 + oy), 12, 1.5), ((cr[0] + 2, cr[1]), (48, 29 + oy), 12, -1.5)]
-    spikes = [((26, 12 + oy), (20, -1 + oy), 10, 1.0), ((32, 11 + oy), (33, -2 + oy), 10, 0.0),
-              ((37, 12 + oy), (44, 0 + oy), 9, -1.0), ((14, 14 + oy), (2, 15 + oy), 9, 1.5),
-              ((50, 15 + oy), (61, 20 + oy), 9, -1.5)]
-    bangs = [((20, 13 + oy), (16, 29 + oy), 9, 1.0), ((27, 13 + oy), (25, 28 + oy + lag), 9, 0.8),
-             ((32, 13 + oy), (31, 26 + oy), 8, -0.3), ((38, 13 + oy), (39, 28 + oy + lag), 9, -0.8),
-             ((45, 13 + oy), (49, 29 + oy), 9, -1.0)]
+    # (root, tip, root width, bend): every lock tapers to a point and curves
+    side = [((14, 18 + oy), (9, 40 + oy + lag), 9, 2.5), ((50, 18 + oy), (54, 40 + oy + lag), 9, -2.5)]
+    crown = [((cr[0] - 4, cr[1] + 2), (6, 23 + oy), 12, 3.0), ((cr[0] + 4, cr[1] + 2), (58, 25 + oy), 12, -3.0),
+             ((cr[0] - 2, cr[1]), (15, 28 + oy), 11, 2.5), ((cr[0] + 2, cr[1]), (49, 28 + oy), 11, -2.5)]
+    spikes = [((26, 12 + oy), (20, -1 + oy), 9, 1.5), ((32, 11 + oy), (33, -2 + oy), 9, 0.5),
+              ((37, 12 + oy), (44, 0 + oy), 8, -1.5), ((14, 14 + oy), (1, 15 + oy), 8, 2.0),
+              ((50, 15 + oy), (62, 20 + oy), 8, -2.0)]
+    bangs = [((20, 13 + oy), (17, 29 + oy), 8, 2.0), ((27, 13 + oy), (24, 28 + oy + lag), 8, 1.5),
+             ((32, 13 + oy), (31, 26 + oy), 7, -0.5), ((38, 13 + oy), (40, 28 + oy + lag), 8, -1.5),
+             ((44, 13 + oy), (48, 29 + oy), 8, -2.0)]
     for root, tip, w, bend in side + crown + spikes + bangs:
         m = lock(c, root, tip, w, bend)
         c.fill(m, "hair")
         c.shade_part(m, tones=(2, 3, 3, 4, 5), norm=True, global_mask=mass, gmix=0.35)
         grooves(c, m)
-    # the bangs' shade on the forehead (2 rows under the hair)
     hairm = c.mat == c.mid("hair")
     skin = c.mat == c.mid("skin")
-    for y, x in zip(*np.nonzero(skin)):
+    for y, x in zip(*np.nonzero(skin)):  # the bangs' shade: 1-2 rows under the hair
         if y >= 2 and (hairm[y - 1, x] or hairm[y - 2, x]) and y < 34 + oy:
             c.tone[y, x] = 2
     features(c, oy)
@@ -98,22 +102,20 @@ def features(c, oy):
             for i, ch in enumerate(row):
                 if ch != ".":
                     c.dot(ex + i, 32 + oy + j, EYE[ch])
-        # lower lid: one row of skin shadow under the eye
-        for i in range(1, 7):
-            c.put(ex + i, 38 + oy, "skin", 2)
-    # brows: v1 height and angle (short, level, hair tone 1)
-    for x, y in [(14, 30), (15, 29), (16, 29), (17, 29), (15, 30), (16, 30),
-                 (40, 30), (41, 29), (42, 29), (43, 29), (44, 29), (41, 30), (42, 30), (43, 30)]:
-        c.put(x, y + oy, "hair", 1)
-    # nose, blush, mouth (one colour, wide, like v1)
-    c.put(26, 39 + oy, "skin", 1)
+    # brows on both sides, on the skin above the eyes (v1: short and level), hair tone 1
+    for x0 in (16, 38):
+        for x in range(x0, x0 + 5):
+            c.put(x, 30 + oy, "hair", 1)
+        for x in range(x0 + 1, x0 + 4):
+            c.put(x, 29 + oy, "hair", 1)
+    # nose, cheeks (2 x 1), mouth (6 x 2, one colour: v1's 3 x 1 at 2x)
     c.put(27, 39 + oy, "skin", 2)
-    for bx in (14, 42):
-        for dx in (0, 1, 2):
-            c.dot(bx + dx, 39 + oy, BLUSH)
-    for x in range(28, 32):
+    c.put(27, 40 + oy, "skin", 1)
+    for bx in (15, 43):
+        c.dot(bx, 40 + oy, BLUSH)
+        c.dot(bx + 1, 40 + oy, BLUSH)
+    for x in range(28, 34):
         c.dot(x, 42 + oy, MOUTH)
-    for x in (29, 30):
         c.dot(x, 43 + oy, MOUTH)
 
 
@@ -252,35 +254,39 @@ def leg(c, x0, top, foot_dy, near=True):
 
 
 def arm(c, side, swing, oy):
-    """side -1: the arm on the image's left. swing: -1 back .. 0 hanging .. +1 forward.
-    The sleeve leaves the cloak at the elbow; forward, the forearm bends in front of the hip."""
-    sx = 31.5 + side * 22.5  # elbow x (the sleeve leaves the cloak's side slit here)
-    ey = 62 + oy
-    if swing > 0:
-        elbow = (sx + side * 0.5, ey)
-        wrist = (sx - side * (3 + 6 * swing), ey + 9 - 2 * swing)
-    else:
+    """v1's arm: the upper arm inside the cloak, the forearm in a grey metal GAUNTLET along the body,
+    the leather hand below it. side -1: the arm on the image's left. swing: -1 back .. 0 down .. +1
+    forward. Forward, the forearm comes in front of the hip (inward, never out from the body); back, it
+    goes behind the cloak (drawn first, mostly hidden)."""
+    sx = 31.5 + side * 22.0
+    ey = 60 + oy
+    if swing > 0:  # forward: the hand to the front of the hip
+        elbow = (sx - side * 0.5, ey)
+        wrist = (sx - side * (2 + 8 * swing), ey + 11 - 1.5 * swing)
+    else:  # down / back: along the body, the hand a little back and up
         elbow = (sx, ey)
-        wrist = (sx + side * (0.5 - 2 * swing), ey + 9 + 2 * swing)
-    sleeve = capsule(c, elbow, wrist, 3.8) | c.m_ellipse(elbow[0], elbow[1] - 1, 4.2, 3.2)
-    c.fill(sleeve, "shirt")
-    c.shade_part(sleeve, tones=(1, 2, 3, 4), norm=True)
-    # a crease at the elbow and the cuff at the wrist
-    ex, ey2 = int(round(elbow[0])), int(round(elbow[1]))
-    for d in range(-2, 3):
-        c.put(ex + d, ey2 + (1 if d * side > 0 else 0), "shirt", 1)
+        wrist = (sx + side * (-0.5 * swing), ey + 11 + 2.5 * swing)
+    g = capsule(c, elbow, wrist, 3.7)
+    c.fill(g, "shirt")  # v1's gauntlet greys (#4a4640 #a8a296 #e4e0d6): metal in 3 tones + a light
+    c.shade_part(g, tones=(0, 1, 1, 2, 3), norm=True, light=(-0.9, -0.2, 0.4))
+    ex, eyy = elbow
     wx, wy = wrist
-    cuff = capsule(c, (wx - side * 0.0, wy - 2), (wx, wy), 3.4)
-    c.fill(cuff, "leather", 3)
-    c.shade_part(cuff, tones=(2, 3, 4), norm=True)
-    hand(c, "leather", (wx, wy), side if swing <= 0 else -side, tones=(1, 2, 3, 4, 5))
+    for t in (0.18, 0.62):  # two metal bands with a lit top edge
+        bx, by = ex + (wx - ex) * t, eyy + (wy - eyy) * t
+        band = c.m_line([(bx - 4, by), (bx + 4, by)], 1.2) & g
+        c.set_tone(band, 0)
+        up = c.m_line([(bx - 4, by - 1), (bx + 4, by - 1)], 1.0) & g
+        c.set_tone(up, 3)
+    c.put(int(round(ex - 2)), int(round(eyy + 2)), "shirt", 4)  # the metal's glint (2 texels)
+    c.put(int(round(ex - 2)), int(round(eyy + 3)), "shirt", 3)
+    hand(c, "leather", (wx, wy + 1), side if swing <= 0 else -side, tones=(1, 2, 3, 4, 5))
 
 
 def frame(oy=0, breath=0, sway=0, lag=0, feet=(0, 0), swing=(0.0, 0.0)):
     c = Canvas(W, H, RAMPS)
     # arms swung back go behind the cloak
     for side, s in ((-1, swing[0]), (1, swing[1])):
-        if s < -0.2:
+        if s < -0.45:
             arm(c, side, s, oy)
     # legs (the lifted one behind)
     order = sorted(((-1, feet[0]), (1, feet[1])), key=lambda f: f[1])
@@ -292,7 +298,7 @@ def frame(oy=0, breath=0, sway=0, lag=0, feet=(0, 0), swing=(0.0, 0.0)):
     cloak(c, oy, sway, breath)
     shirt(c, oy, breath)
     for side, s in ((-1, swing[0]), (1, swing[1])):
-        if s >= -0.2:
+        if s >= -0.45:
             arm(c, side, s, oy)
     head(c, oy, lag)
     despeckle(c, loose=("hair", "cloak"))
@@ -302,14 +308,15 @@ def frame(oy=0, breath=0, sway=0, lag=0, feet=(0, 0), swing=(0.0, 0.0)):
     return c
 
 
-IDLE = [dict(breath=0), dict(breath=1, lag=0), dict(breath=1, sway=0, lag=1), dict(breath=0, lag=1, sway=0)]
+IDLE = [dict(breath=0, swing=(0.0, 0.0)), dict(breath=1, lag=0, swing=(-0.15, -0.15), oy=0),
+        dict(breath=2, lag=1, swing=(-0.25, -0.25), oy=1), dict(breath=1, lag=1, swing=(-0.1, -0.1))]
 WALK = [  # left foot / right foot lift, arm swing (left, right), bob, cloak sway
     dict(feet=(0, -2), swing=(0.3, -0.3), oy=0, sway=0, lag=1),
-    dict(feet=(0, -4), swing=(0.8, -0.8), oy=2, sway=1, lag=0),
-    dict(feet=(-1, -2), swing=(0.4, -0.5), oy=1, sway=1, lag=1),
+    dict(feet=(0, -4), swing=(0.9, -0.8), oy=2, sway=1, lag=0),
+    dict(feet=(-1, -2), swing=(0.4, -0.6), oy=1, sway=1, lag=1),
     dict(feet=(-2, 0), swing=(-0.3, 0.3), oy=0, sway=0, lag=1),
-    dict(feet=(-4, 0), swing=(-0.8, 0.8), oy=2, sway=-1, lag=0),
-    dict(feet=(-2, -1), swing=(-0.5, 0.4), oy=1, sway=-1, lag=1),
+    dict(feet=(-4, 0), swing=(-0.8, 0.9), oy=2, sway=-1, lag=0),
+    dict(feet=(-2, -1), swing=(-0.6, 0.4), oy=1, sway=-1, lag=1),
 ]
 
 

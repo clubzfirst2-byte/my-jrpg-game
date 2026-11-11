@@ -6,7 +6,7 @@
   terrain/prop.v3.flowers.png      48 x 32   flowers on their own stems (pink / white / yellow)
   terrain/prop.v3.bush.png         64 x 48   bush with berries
   terrain/prop.v3.stump.png        48 x 40   mossy stump
-  terrain/plains.grass.v3.<m><r><c>.png  64 x 64  summer plains ground: 4 macro patterns m = a, b, c, d
+  terrain/plains.grass.v3.<m><r><c>.png  64 x 64  summer plains ground: 6 macro patterns m = a .. f
                                    (256 x 256 each, cut into 4 x 4 tiles r, c). Their outer edges are
                                    the same calm band, so any pattern can sit next to any other: the
                                    game picks one per 4 x 4-tile block (by a hash of the block).
@@ -29,7 +29,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import numpy as np  # noqa: E402
 
-from v3lib import ROOT, Canvas, despeckle, lift_ramp, save  # noqa: E402
+from hdkit import lock  # noqa: E402
+from v3lib import ROOT, Canvas, despeckle, erode, lift_ramp, save  # noqa: E402
 
 OUT = os.path.join(ROOT, "src", "art-release-v3", "terrain")
 
@@ -112,43 +113,54 @@ def foliage(c, mat, clumps, rng, crown_mask=None, gmix=0.5, tones=(1, 2, 3, 4, 5
 # ------------------------------------------------------------------ trees
 
 def oak():
+    """Round 3: 10 big leaf masses, each with a clear lit face and shade face (no sponge texture:
+    leaf marks only along the lit edges), the trunk showing for under a quarter of the height,
+    tapering branches seen in the gap under the crown, curved roots."""
     rng = random.Random(11)
     W, H = 160, 224
     c = Canvas(W, H, RAMPS)
     G = H - 3
-    # trunk with root flare, forking into 3 branches that enter the crown
-    trunk = c.m_poly([(70, G), (63, G - 3), (71, G - 12), (72, 160), (76, 148), (86, 148), (90, 160),
-                      (89, G - 12), (97, G - 3), (90, G)])
-    roots = c.m_poly([(54, G), (65, G - 7), (73, G - 2)]) | c.m_poly([(87, G - 2), (95, G - 7), (106, G)])
-    branches = (c.m_line([(76, 152), (66, 136), (54, 122)], 5.5) | c.m_line([(85, 152), (95, 134), (108, 118)], 5.0)
-                | c.m_line([(80, 150), (82, 132), (80, 116)], 4.5))
+    trunk = c.m_poly([(71, G), (72, 176), (74, 168), (86, 168), (88, 176), (89, G)])
+    roots = (lock(c, (73, G - 6), (56, G + 1), 8, -2, 2) | lock(c, (87, G - 6), (105, G + 1), 8, 2, 2)
+             | lock(c, (80, G - 4), (82, G + 1), 6, 0, 3))
+    branches = (lock(c, (76, 174), (52, 140), 9, 3, 2.5) | lock(c, (84, 174), (108, 140), 9, -3, 2.5)
+                | lock(c, (80, 172), (79, 128), 8, 1, 2.5))
+    clumps = [(80, 50, 24, 20), (52, 70, 22, 18), (108, 68, 22, 18), (80, 94, 30, 23), (36, 108, 22, 19),
+              (124, 106, 22, 19), (32, 144, 18, 15), (128, 146, 18, 15), (55, 148, 23, 19), (105, 150, 23, 19)]
+    crown = c.m_ellipse(80, 104, 74, 74)
+    masks = [scalloped(c, *cl, rng, 2.4) for cl in clumps]
+    # the crown's dark inside behind the masses (no holes through the crown), then the wood over it
+    back = np.zeros((H, W), bool)
+    for (cx_, cy_, rx_, ry_) in clumps:
+        back |= c.m_ellipse(cx_, cy_ + 2, rx_ + 6, ry_ + 9)
+    back &= c.m_ellipse(80, 108, 70, 64)
+    c.fill(back, "leaf", 2)
+    c.shade_part(back, tones=(1, 1, 2), norm=True)
     wood = trunk | roots | branches
     c.fill(wood, "bark")
     c.shade_part(wood, tones=(1, 2, 3, 4, 5), light=(-0.8, -0.3, 0.5), norm=True)
     bark_texture(c, trunk)
-    # crown: clumps on a rounded crown, no two shade pockets at the same height
-    clumps = []
-    cx, cy = 80, 76
-    for ring, (r, n, sz) in enumerate([(0, 1, 24), (28, 6, 21), (49, 11, 18)]):
-        for k in range(n):
-            a = 2 * math.pi * k / n + ring * 0.55 + rng.uniform(-0.22, 0.22)
-            x = cx + math.cos(a) * r * 1.10 + rng.uniform(-3, 3)
-            y = cy + math.sin(a) * r * 0.84 + rng.uniform(-3, 3)
-            if y > 116:
-                continue
-            s = sz + rng.uniform(-4, 4)
-            clumps.append((x, y, s, s * rng.uniform(0.74, 0.9)))
-    crown = c.m_ellipse(cx, cy - 2, 70, 60)
-    foliage(c, "leaf", clumps, rng, crown_mask=crown, gmix=0.55, seed=3)
-    # small clumps over the branches' ends (the branches disappear into the leaves)
-    tips = [(52, 118, 10, 8), (110, 114, 10, 8), (79, 112, 9, 7)]
-    tm = foliage(c, "leaf", tips, rng, crown_mask=crown, gmix=0.6, seed=4)
-    del tm
-    # the crown's shade on the trunk top (uneven, follows the crown's lower edge)
-    for y, x in zip(*np.nonzero(c.mat == c.mid("bark"))):
-        if y < 150 + (hsh(x, 0, 5) % 4):
+    for y, x in zip(*np.nonzero(branches & ~trunk)):  # branches inside the crown are in its shade
+        if y < 168:
             c.tone[y, x] = min(int(c.tone[y, x]), 2)
-    despeckle(c)
+    for i in sorted(range(len(clumps)), key=lambda i: clumps[i][1]):
+        m = masks[i]
+        c.fill(m, "leaf")
+        # each mass: its own clear light (top left) and shade (bottom right), a little of the crown's
+        c.shade_part(m, tones=(2, 3, 4, 5, 6), global_mask=crown, gmix=0.3, norm=True)
+        inner = m & ~erode(erode(erode(m)))
+        k = c.mid("leaf")
+        for y, x in zip(*np.nonzero(inner)):  # leaf marks along the lit edge only
+            if c.tone[y, x] >= 5 and hsh(x, y, 3) % 5 == 0 and y + 1 < H and x + 2 < W:
+                for dx, dy in ((0, 0), (1, 0), (2, 0), (1, 1)):
+                    if c.mat[y + dy, x + dx] == k:
+                        c.tone[y + dy, x + dx] = 6
+        # the mass's lower edge turns into its own shade: a 2-texel rim along the bottom only
+        cy_ = clumps[i][1]
+        for y, x in zip(*np.nonzero(m)):
+            if y > cy_ and ((y + 1 < H and not m[y + 1, x]) or (y + 2 < H and not m[y + 2, x])):
+                c.tone[y, x] = 2
+    despeckle(c, loose=("leaf",))
     c.outline()
     c.shadow_band()
     return c
@@ -159,15 +171,15 @@ def pine():
     W, H = 96, 200
     c = Canvas(W, H, RAMPS)
     G = H - 3
-    trunk = c.m_poly([(43, G), (45, 128), (51, 128), (53, G)])
-    flare = c.m_poly([(34, G), (44, G - 8), (48, G)]) | c.m_poly([(48, G), (52, G - 8), (62, G)])
+    trunk = c.m_poly([(42, G), (44, 146), (52, 146), (54, G)])
+    flare = lock(c, (44, G - 5), (33, G + 1), 7, -1.5, 2) | lock(c, (52, G - 5), (63, G + 1), 7, 1.5, 2)
     c.fill(trunk | flare, "bark")
     c.shade_part(trunk | flare, tones=(1, 2, 3, 4, 5), light=(-0.8, -0.3, 0.5), norm=True)
     bark_texture(c, trunk, period=4)
     # tiers: (bottom y, half width, centre offset, skew); each different (no stamped triangles)
-    tiers = [(16, 9, 0, 0.0), (36, 17, 1, 0.1), (57, 24, -1, -0.1), (80, 31, 2, 0.15), (104, 38, -1, -0.05),
-             (130, 44, 1, 0.1)]
-    whole = c.m_poly([(48, 3), (95, 136), (1, 136)])
+    tiers = [(18, 9, 0, 0.0), (40, 17, 1, 0.1), (64, 24, -1, -0.1), (90, 31, 2, 0.15), (118, 38, -1, -0.05),
+             (148, 44, 1, 0.1)]
+    whole = c.m_poly([(48, 3), (95, 154), (1, 154)])
     prev = None
     for i, (yb, hw, off, skew) in enumerate(tiers):
         cxi = 48 + off
@@ -237,23 +249,34 @@ def tuft():
 
 
 def flowers():
-    """Flowers on their own stems among a few leaf blades: no green base."""
+    """Round 3: each flower on a thin curved stem (1-2 texels) with 2-3 leaves, heads at different
+    heights; heads are round (r 2.5) with a 2 x 2 centre. No green base."""
     c = Canvas(48, 32, RAMPS)
-    G = 30
-    for bx, h, lean in [(-15, 8, -3), (-9, 11, -2), (-2, 9, 1), (6, 12, 2), (13, 9, 3), (17, 7, 4)]:
-        blades(c, 24 + bx, G, h, lean)
-    for (fx, fy, col, s) in [(12, 13, "pink", 3.2), (24, 8, "white", 3.4), (35, 14, "yellow", 3.0),
-                             (19, 19, "yellow", 2.6), (30, 20, "pink", 2.8), (40, 21, "white", 2.4)]:
-        for y in range(int(fy + s), G):  # stem, 2 wide
-            c.put(int(fx), y, "grass", 3)
-            c.put(int(fx) + 1, y, "grass", 2)
-        # the head: 4 petals of 2 x 2 round a 2 x 2 centre (lit petal on top, shaded ones right/below)
-        x0, y0 = int(fx) - 2, int(fy) - 2
-        for dx, dy, t in ((2, 0, 5), (0, 2, 4), (4, 2, 3), (2, 4, 3)):
-            c.fill(c.m_rect(x0 + dx, y0 + dy, x0 + dx + 1, y0 + dy + 1), col, t)
+    G = 31
+    heads = [(10, 12, "pink", 1.5), (20, 7, "white", -1.0), (31, 11, "yellow", 1.0), (16, 19, "yellow", -0.5),
+             (27, 20, "pink", 0.8), (38, 17, "white", -1.2)]
+    for i, (fx, fy, col, bend) in enumerate(heads):
+        base_x = fx - bend * 2
+        pts = []
+        for k in range(9):
+            t = k / 8
+            pts.append((base_x + bend * 2 * t + bend * 1.2 * math.sin(math.pi * t), G - (G - fy - 2) * t))
+        stem = c.m_line(pts, 2.0 if i % 2 else 1.7)
+        c.fill(stem, "grass", 3)
+        for y, x in zip(*np.nonzero(stem)):
+            if x > base_x + bend * 2 * (G - y) / max(1, G - fy):
+                c.tone[y, x] = 2
+        for j, (t, side) in enumerate(((0.25, -1), (0.5, 1), (0.7, -1))[: 2 + i % 2]):
+            sx = base_x + bend * 2 * t
+            sy = G - (G - fy - 2) * t
+            leaf = lock(c, (sx, sy), (sx + side * 5, sy - 3), 3.2, -side * 0.6, 0.4)
+            c.fill(leaf, "grass", 4 if side < 0 else 3)
+        hd = c.m_ellipse(fx + 0.5, fy + 0.5, 2.6, 2.4)
+        c.fill(hd, col)
+        c.shade_part(hd, tones=(4, 5, 5, 6), norm=True)
         ccol = "yellow" if col != "yellow" else "wood"
-        c.fill(c.m_rect(x0 + 2, y0 + 2, x0 + 3, y0 + 3), ccol, 4 if col != "yellow" else 2)
-    despeckle(c)
+        c.fill(c.m_rect(int(fx), int(fy), int(fx) + 1, int(fy) + 1), ccol, 4 if col != "yellow" else 2)
+    despeckle(c, loose=("grass",))
     c.outline()
     c.shadow_band()
     return c
@@ -342,46 +365,65 @@ def blob(n, cx, cy, rx, ry, seed):
     return d <= k
 
 
-MACROS = {  # light patches (1-2, each its own shape), seed of the dark patches
-    "a": dict(seed=7, light=[(96, 120, 34, 22, 1)]),
-    "b": dict(seed=19, light=[(168, 70, 26, 30, 2), (70, 182, 20, 14, 3)]),
-    "c": dict(seed=31, light=[(132, 166, 40, 18, 4)]),
-    "d": dict(seed=43, light=[(60, 72, 22, 26, 5), (190, 196, 28, 16, 6)]),
-}
-
-EDGE = 18  # the calm band along a pattern's outer edge (shared by all patterns)
+PATTERNS = "abcdef"  # 6 macro patterns, each 256 x 256 (4 x 4 tiles)
 
 
 @functools.lru_cache(maxsize=None)
 def macro_of(bx, by):
-    """Which pattern a 4 x 4-tile block uses: a hashed order of the 4 patterns per block, taking the
-    first that differs from the block on its left and the block above (so two blocks side by side or
-    one above the other never repeat, and there is no fixed period). Blocks off the map: none."""
-    left = macro_of(bx - 1, by) if bx > 0 else None
-    up = macro_of(bx, by - 1) if by > 0 else None
-    order = sorted("abcd", key=lambda m: hsh(bx * 7 + ord(m), by * 13 + ord(m), 91))
+    """Which pattern a 4 x 4-tile block uses: a hashed order of the 6 patterns per block, taking the
+    first that differs from the 2 blocks on the left, the block above, above-left and above-right (5
+    blocks, so one always remains): no pattern meets itself side by side, one above the other or
+    diagonally, nor 2 blocks apart in a row; there is no fixed period."""
+    near = set()
+    if bx > 0:
+        near.add(macro_of(bx - 1, by))
+    if bx > 1:
+        near.add(macro_of(bx - 2, by))
+    if by > 0:
+        near.add(macro_of(bx, by - 1))
+        near.add(macro_of(bx + 1, by - 1))
+        if bx > 0:
+            near.add(macro_of(bx - 1, by - 1))
+    order = sorted(PATTERNS, key=lambda m: hsh(bx * 7 + ord(m), by * 13 + ord(m), 91))
     for m in order:
-        if m != left and m != up:
+        if m not in near:
             return m
     return order[0]
 
 
+def blades_in(c, mask, tone, density, rng, n):
+    """Fill a patch with grass blades of `tone` (vertical strokes 2-4 texels) at `density`, not a flat
+    colour: the patch reads as thicker / thinner grass, with ragged edges, at about half the step."""
+    ys, xs = np.nonzero(mask)
+    for y, x in zip(ys, xs):
+        if (y + hsh(x, 0, n) % 4) % 3 == 0 and rng.random() < density:
+            for d in range(rng.randint(2, 4)):
+                if y - d >= 0 and mask[y - d, x]:
+                    c.tone[y - d, x] = tone
+
+
 def grass_macro(name, n=256):
-    spec = MACROS[name]
+    """One 256 x 256 pattern of summer plains grass (round 3): no big light or dark shapes. Even small
+    mottles of denser / sparser blades over the whole pattern (up to 2 texels from its edge, never
+    across it), 3-4 medium soft patches made of blades, tufts, clover and pebbles. No ground flowers
+    (flowers are props)."""
+    seed = 100 + PATTERNS.index(name) * 17
+    rng = random.Random(seed)
     c = Canvas(n, n, RAMPS)
     c.fill(np.ones((n, n), bool), "grass", 3)
-    rng = random.Random(spec["seed"] * 7 + 1)
-    v = periodic_noise(n, spec["seed"], octaves=((2, 1.0), (3, 0.6), (5, 0.35), (9, 0.18)))
-    yy, xx = np.mgrid[0:n, 0:n]
-    # fade the patches out toward the outer edge, so every pattern meets every other on base grass
-    e = np.minimum(np.minimum(xx, n - 1 - xx), np.minimum(yy, n - 1 - yy))
-    win = np.clip((e - 4) / EDGE, 0, 1)
-    jit = np.vectorize(lambda x, y: (hsh(x // 2, y // 2, spec["seed"]) % 1000) / 1000.0)(xx, yy) * 0.08 - 0.04
-    vd = 0.5 + (v - 0.5) * win + jit * win
-    c.tone[:] = np.where(vd < 0.26, 2, 3)
-    for (lx, ly, rx, ry, s) in spec["light"]:
-        c.tone[blob(n, lx, ly, rx, ry, s * 13 + spec["seed"]) & (win > 0.6)] = 4
-    # features, kept off the outer 3 texels (nothing crosses into a neighbouring pattern)
+    # medium soft patches (2-3), darker or lighter, made of blades (about half the contrast of a fill)
+    for k in range(rng.randint(3, 4)):
+        r = rng.uniform(16, 26)
+        cx, cy = rng.uniform(r + 3, n - r - 3), rng.uniform(r + 3, n - r - 3)
+        m = blob(n, cx, cy, r, r * rng.uniform(0.6, 0.9), seed + k)
+        blades_in(c, m, 2 if k % 2 == 0 else 4, 0.65, rng, seed + k)
+    # small mottles everywhere (to 2 texels from the edge): the texture is even, so no 4-tile grid
+    for k in range(70):
+        r = rng.uniform(3, 7)
+        cx, cy = rng.uniform(r + 2, n - r - 2), rng.uniform(r + 2, n - r - 2)
+        m = blob(n, cx, cy, r, r * rng.uniform(0.5, 0.9), seed * 3 + k)
+        blades_in(c, m, 2 if rng.random() < 0.6 else 4, 0.5, rng, seed * 5 + k)
+    # tufts on a jittered grid (inside the pattern)
     step = 8
     for gy in range(2, n - 4, step):
         for gx in range(1, n - 6, step):
@@ -391,35 +433,28 @@ def grass_macro(name, n=256):
                 continue
             base = int(c.tone[y, x])
             kind = rng.random()
-            if kind < 0.62:  # a tuft: 3 blades, the middle one tallest, a lit 2-texel tip
+            if kind < 0.55:  # 3 blades, the middle one tallest, a lit 2-texel tip
                 for bx, h in ((-1, 3), (0, 5), (1, 4)):
                     for d in range(h):
                         c.tone[y - d, x + bx] = min(5, base + 1) if d >= h - 2 else base
-                c.tone[y - 5, x] = 6 if base >= 3 and rng.random() < 0.4 else min(5, base + 2)
+                c.tone[y - 5, x] = min(5, base + 2)
                 c.tone[y - 4, x] = min(5, base + 2)
-                c.tone[y + 1, x - 1:x + 2] = max(1, base - 1)  # its root shade, 3 wide
-            elif kind < 0.74:  # a darker sprig, 2 wide
+                c.tone[y + 1, x - 1:x + 2] = max(1, base - 1)
+            elif kind < 0.70:  # a darker sprig, 2 wide
                 for d in range(4):
                     c.tone[y - d, x + d // 2:x + d // 2 + 2] = max(1, base - 1)
-    # clover clumps (3 leaflets of 2 x 2), pebbles (3 x 2 with a light), flowers (3 x 3, a centre)
-    for _ in range(5):
+    # clover (3 leaflets of 2 x 2) and pebbles (3 x 2), a few
+    for _ in range(3):
         x, y = rng.randint(8, n - 12), rng.randint(8, n - 12)
         for dx, dy in ((0, 0), (3, 0), (1, 2)):
             c.tone[y + dy:y + dy + 2, x + dx:x + dx + 2] = 5
         c.tone[y + 4, x + 1:x + 3] = 2
-    for _ in range(4):
+    for _ in range(2):
         x, y = rng.randint(8, n - 12), rng.randint(8, n - 12)
         for dx in range(3):
             c.dot(x + dx, y, STONE[5] if dx == 0 else STONE[4])
             c.dot(x + dx, y + 1, STONE[3] if dx < 2 else STONE[2])
         c.tone[y + 2, x:x + 3] = 2
-    for _ in range(6):
-        x, y = rng.randint(8, n - 12), rng.randint(8, n - 12)
-        col = (WHITE, YELLOW, PINK)[rng.randint(0, 2)]
-        for dx, dy, t in ((1, 0, 5), (0, 1, 4), (2, 1, 4), (1, 2, 3)):
-            c.dot(x + dx, y + dy, col[t])
-        c.dot(x + 1, y + 1, YELLOW[3] if col is not YELLOW else WOOD[3])
-        c.tone[y + 3, x:x + 3] = 2
     despeckle(c)
     return c
 
@@ -430,7 +465,7 @@ def main():
         "prop.v3.flowers.png": flowers(), "prop.v3.bush.png": bush(), "prop.v3.stump.png": stump(),
     }
     out = [save(c, os.path.join(OUT, k)) for k, c in items.items()]
-    for name in MACROS:
+    for name in PATTERNS:
         big = grass_macro(name).image()
         for r in range(4):
             for col in range(4):

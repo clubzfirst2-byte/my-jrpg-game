@@ -1,4 +1,4 @@
-"""Comparison pictures of the v3 pilot against the current art (STYLE.md 12), round 2.
+"""Comparison pictures of the v3 pilot against the current art (STYLE.md 12), rounds 2-3.
 
 Integer scales only, except the "now" pictures, which show what ships today (x2.5 / x1.5 per v1 texel).
   01_items_same_size.png        each pilot item beside the current one, the same size in the game
@@ -9,6 +9,7 @@ Integer scales only, except the "now" pictures, which show what ships today (x2.
   05_se_v3_k1.png               the scene, v3 art, SE k = 1 (1334 x 750, 20.8 x 11.7 tiles)
   06_zoom_x3_now_v3.png         round the hero, the woman and the door, device pixels x3: now | v3 (15 Pro)
   07_grass_24x12_x1.png         24 x 12 tiles of v3 ground at 1 texel = 1 px, patterns chosen by macro_of()
+  08_grass_48x24_half.png       48 x 24 tiles, shrunk to half (every other texel): the wide view
 No contact shadows are drawn in any scene (the art alone; shadows are the game's, STYLE.md 8).
 The v3-only kinds (props, the big oak, the stone house) have no v1 counterpart: the v1 scene uses the
 v1 tree, pine and house in the same places and no props.
@@ -169,6 +170,9 @@ def main(out):
     z.alpha_composite(b.resize((b.width * 3, b.height * 3), Image.NEAREST), (a.width * 3 + 30, 0))
     z.save(os.path.join(out, "06_zoom_x3_now_v3.png"), optimize=True)
     ground_only(24, 12).save(os.path.join(out, "07_grass_24x12_x1.png"), optimize=True)
+    g = ground_only(48, 24)
+    g.resize((g.width // 2, g.height // 2), Image.NEAREST).save(os.path.join(out, "08_grass_48x24_half.png"),
+                                                                  optimize=True)
     print("\n".join(sorted(os.listdir(out))))
 
 

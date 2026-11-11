@@ -28,7 +28,7 @@ RAMPS = {
     "core": ["#4a1050", "#6a1e6a", "#8e2c8e", "#b040b0", "#e070e0", "#ffc8ff"],
     "glow": ["#3a2150", "#55306f", "#62387e", "#70428e", "#80509e", "#9a70c0"],
 }
-EYE, EYE_D, EYE_W = "#e070e0", "#6a1e6a", "#ffd8ff"
+EYE, EYE_D, EYE_W, PUPIL = "#e070e0", "#b040b0", "#ffd8ff", "#3a1a44"
 POSES = [  # cx shift of the top, dome half width, top row, foot half width, bubbles phase
     dict(lean=0, rx=21.5, top=16, foot=30, ph=0),
     dict(lean=1, rx=22.5, top=17, foot=31, ph=1),
@@ -97,15 +97,17 @@ def frame(i):
         dx, dy = x + 0.5 - (cx + 1), y + 0.5 - ccy
         c.tone[y, x] = 5 if (dx < 0 and dy < 0 and dx > -2.5 and dy > -4) else 4 if (dx < 0 and dy < 0) else \
             1 if (dx >= 0 and dy >= 0 and dx + dy > 3.5) else 2 if (dx >= 0 and dy >= 0) else 3
-    # eyes: two pink eyes high on the drop (v1), each 4 x 4 with a light and a dark lower lid
-    ey = p["top"] + 10
+    # eyes: v1's form at 2x — a bright pink square (4 x 4, a 2 x 2 light in its upper left) and a
+    # dark pupil (2 x 2) under its left half
+    ey = p["top"] + 9
     for ex in (int(cx - 9), int(cx + 5)):
         for dy in range(4):
             for dx in range(4):
-                if (dx, dy) in ((0, 0), (3, 0)):
-                    continue
-                col = EYE_W if (dx, dy) in ((1, 1), (1, 0)) else (EYE_D if dy == 3 else EYE)
+                col = EYE_W if (dx < 2 and dy < 2) else (EYE_D if (dx == 3 and dy == 3) else EYE)
                 c.dot(ex + dx, ey + dy, col)
+        for dy in (4, 5):
+            for dx in (0, 1):
+                c.dot(ex + dx, ey + dy, PUPIL)
     # the shine: a curved streak just inside the upper left edge, and a 2 x 2 point
     top = p["top"]
     for y in range(top + 3, top + 15):

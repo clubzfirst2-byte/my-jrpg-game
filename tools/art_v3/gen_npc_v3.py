@@ -204,9 +204,11 @@ def body(c, oy, breath):
             c.put(x, 78 + oy, "apron", 4)  # stitches
         c.fill(c.m_rect(x0 + 8, 77 + oy, x0 + 8, 85 + oy) | c.m_rect(x0, 85 + oy, x0 + 8, 85 + oy), "apron", 2)
         c.fill(c.m_rect(x0, 78 + oy, x0, 85 + oy), "apron", 4)
-    for x0, x1 in ((27, 25), (37, 39)):  # two soft creases in the lower apron
-        cr = c.m_line([(x0, 89 + oy), (x1, 100)], 1.2) & ap
-        c.set_tone(cr, 2)
+    # one soft fold down the lower apron (a lit edge left of a shade line), no other lines
+    fold = c.m_line([(31, 88 + oy), (30, 100)], 1.4) & ap
+    c.set_tone(fold, 2)
+    lit = c.m_line([(29, 88 + oy), (28, 100)], 1.2) & ap & ~fold
+    c.set_tone(lit, 4)
     c.fill(c.m_rect(18, 100, 46, 101) & ap, "apron", 2)
     return ap
 
@@ -222,49 +224,63 @@ def arms_and_basket(c, oy, breath):
     c.put(10, 74 + oy, "skin", 1)
     c.put(12, 74 + oy, "skin", 1)
     # her left arm (viewer's right) bent: the forearm across under the basket, the hand on the handle
-    fa = capsule(c, (51, 58 + oy), (44, 66 + oy), 3.0)
+    fa = capsule(c, (51, 56 + oy), (51, 62 + oy), 3.0)  # the upper arm down to the elbow
     c.fill(fa, "skin")
     c.shade_part(fa, tones=(1, 2, 3, 4), norm=True)
+    bo = oy + 5  # the basket hangs a little lower: the hand on its handle sits below the chin
     # the basket on the forearm (its shade first, on the apron)
-    sh = c.m_ellipse(43, 72 + oy, 9, 2.5) & (c.mat == c.mid("apron"))
+    sh = c.m_ellipse(43, 72 + bo, 9, 2.5) & (c.mat == c.mid("apron"))
     c.set_tone(sh, 1)
-    bk = c.m_poly([(34, 60 + oy), (52, 60 + oy), (50, 69 + oy), (36, 69 + oy)])
+    bk = c.m_poly([(34, 60 + bo), (52, 60 + bo), (50, 69 + bo), (36, 69 + bo)])
     c.fill(bk, "wicker", 3)
     for y, x in zip(*np.nonzero(bk)):  # over-under weave: 3 x 2 blocks, rows offset
-        row = (y - 60 - oy) // 2
+        row = (y - 60 - bo) // 2
         u = ((x + (row % 2) * 2) // 3) % 2
         t = 3 if u else 2
         if x < 37:
             t += 1
         if x > 49:
             t -= 1
-        if (y - 60 - oy) % 2 == 1:
+        if (y - 60 - bo) % 2 == 1:
             t = max(1, t - 1) if u else t
         c.tone[y, x] = t
-    c.fill(c.m_rect(34, 59 + oy, 52, 60 + oy), "wicker", 4)  # the rim
-    c.fill(c.m_rect(34, 60 + oy, 52, 60 + oy), "wicker", 2)
+    c.fill(c.m_rect(34, 59 + bo, 52, 60 + bo), "wicker", 4)  # the rim
+    c.fill(c.m_rect(34, 60 + bo, 52, 60 + bo), "wicker", 2)
     # herbs heaped in it
     for (hx_, hy, r) in ((38, 57, 3.2), (43, 55.5, 3.6), (48, 57, 3.0), (41, 58, 2.6), (46, 58.5, 2.4)):
-        m = c.m_ellipse(hx_, hy + oy, r, r * 0.8)
+        m = c.m_ellipse(hx_, hy + bo, r, r * 0.8)
         c.fill(m, "herb")
         c.shade_part(m, tones=(1, 2, 3, 4, 5), norm=True)
-    c.put(44, 54 + oy, "blouse", 5)  # a small white bloom (2 x 2)
-    c.put(45, 54 + oy, "blouse", 4)
-    c.put(44, 55 + oy, "blouse", 3)
-    c.put(45, 55 + oy, "apron", 4)
-    # the handle (arc) and the hand gripping it: knuckles, two finger grooves, the thumb on top
-    for k in range(17):
-        t = k / 16
-        x = 35 + 16 * t
-        y = 59 + oy - 7 * math.sin(math.pi * t)
-        c.put(int(round(x)), int(round(y)), "wicker", 4 if t < 0.5 else 2)
-        c.put(int(round(x)), int(round(y)) + 1, "wicker", 1)
-    hd = c.m_ellipse(46, 66 + oy, 3.6, 3.0)
+    c.put(44, 54 + bo, "blouse", 5)  # a small white bloom (2 x 2)
+    c.put(45, 54 + bo, "blouse", 4)
+    c.put(44, 55 + bo, "blouse", 3)
+    c.put(45, 55 + bo, "apron", 4)
+    # the handle (arc), then the hand closed round its top: the forearm rises from the elbow, the
+    # fingers wrap over the handle (2 fingers with a groove between them), the thumb on the near side
+    up = capsule(c, (51, 56 + bo), (46.5, 53 + bo), 2.6)
+    c.fill(up, "skin")
+    c.shade_part(up, tones=(1, 2, 3, 4), norm=True)
+    hd = c.m_ellipse(43.5, 52 + bo, 3.6, 3.2)
     c.fill(hd, "skin")
-    c.shade_part(hd, tones=(1, 2, 3, 4), norm=True)
-    c.put(45, 67 + oy, "skin", 1)
-    c.put(47, 67 + oy, "skin", 1)
-    c.put(44, 64 + oy, "skin", 4)
+    c.shade_part(hd, tones=(2, 3, 4), norm=True)
+    for fx in (41, 42, 44, 45):  # 2 fingers over the handle: each 2 wide, a groove between
+        c.put(fx, 53 + bo, "skin", 3 if fx in (41, 44) else 2)
+        c.put(fx, 54 + bo, "skin", 2 if fx in (41, 44) else 1)
+    c.put(43, 53 + bo, "skin", 1)
+    c.put(43, 54 + bo, "skin", 1)
+    c.put(42, 50 + bo, "skin", 4)  # the knuckles' light
+    c.put(43, 50 + bo, "skin", 4)
+    grooves(c, hd | up, drop=2, lift=0)  # the hand's own dark edge against the blouse
+    # the handle: drawn after the hand except under the 2 fingers, so they close over it
+    fingers = c.m_rect(40, 53 + bo, 46, 54 + bo)
+    for k in range(25):
+        t = k / 24
+        x = 34 + 18 * t
+        y = 59 + bo - 6 * math.sin(math.pi * t)
+        xi, yi = int(round(x)), int(round(y))
+        for dy, tone in ((0, 4 if t < 0.5 else 3), (1, 1)):
+            if not fingers[yi + dy, xi]:
+                c.put(xi, yi + dy, "wicker", tone)
 
 
 def frame(oy=0, breath=0, blink=False, sway=0.0):

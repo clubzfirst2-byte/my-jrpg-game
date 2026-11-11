@@ -5,7 +5,8 @@ sill on the bottom row's centre (the anchor, like obj.house).
 Round 2 (inspection fixes): sized to the hero — the door is 103 texels high (the hero is 112: 92%),
 the ground-floor windows 52 high (from the hero's chest up past the head), the upper windows 32;
 no grass baked into the bottom row; the roof's right half one tone darker (the light from the left),
-tiles varying within 2 tones, the moss as thin lines under a few tile rows; ramps lifted so no texel
+tiles varying within 2 tones. Round 3: a lower roof and an upper floor 82 texels high (73% of the
+hero), upper windows 30 x 40, the door 99 (88%), no moss dots; ramps lifted so no texel
 is near-black (luma >= 36); no lone texels (despeckle).
 Detail that needs 2x: single roof tiles with a lit upper edge and a shadow lip, mortar between stones,
 wood grain on beams and planks, glass with a reflection, iron straps and rivets, a flower box.
@@ -42,9 +43,9 @@ RAMPS = {k: lift_ramp(v) for k, v in {
     "yellow": YELLOW[:6],
 }.items()}
 
-ROOF_TOP, ROOF_BOT = 20, 118
-UP_TOP, UP_BOT = 122, 176
-DOOR_X0, DOOR_X1, DOOR_TOP = 106, 149, 184
+ROOF_TOP, ROOF_BOT = 20, 94
+UP_TOP, UP_BOT = 98, 180  # the upper floor's wall: 82 texels, 73% of the hero (round 3)
+DOOR_X0, DOOR_X1, DOOR_TOP = 106, 149, 188  # the door: 99 texels, 88% of the hero
 
 
 def grain(c, mask, vertical=True, seed=0):
@@ -97,20 +98,20 @@ def roof(c, rng):
     m = c.m_poly([(3, bot), (252, bot), (214, top), (42, top)])
     c.fill(m, "roof", 3)
     mid = W / 2
-    for j, ry in enumerate(range(top, bot, 9)):
+    for j, ry in enumerate(range(top, bot, 8)):
         f = (ry - top) / (bot - top)
         xl, xr = 42 - 39 * f, 214 + 38 * f
         x = xl - (j % 2) * 7
         while x < xr:
             w = 14
-            tm = m & c.m_rect(int(x) + 1, ry, int(x + w) - 1, ry + 8)
+            tm = m & c.m_rect(int(x) + 1, ry, int(x + w) - 1, ry + 7)
             base = 4 if hsh(int(x), j, 3) % 4 == 0 else 3  # tiles vary within 2 tones
             for yy, xx in zip(*np.nonzero(tm)):
                 d = yy - ry
                 t = base
-                if d == 8:
+                if d == 7:
                     t = 1  # the lip's shadow on the row below
-                elif d == 7:
+                elif d == 6:
                     t = base - 1
                 elif d <= 1 and xx < x + 8:
                     t = min(5, base + 1)
@@ -127,10 +128,6 @@ def roof(c, rng):
         c.fill(c.m_rect(x + 2, top - 6, x + 3, top - 5), "roof", 5)
     c.fill(c.m_rect(40, top + 1, 216, top + 1), "roof", 1)
     c.fill(c.m_rect(129, top - 7, 216, top + 1) & (c.mat == c.mid("roof")) & (c.tone > 1), "roof", 3)
-    # moss: thin lines under the lip of a few tiles (the damp, lower rows)
-    for (mx, my, ln) in ((30, 108, 7), (58, 99, 5), (196, 108, 6), (226, 99, 4)):
-        for dx in range(ln):
-            c.put(mx + dx, my, "leaf", 3 if dx % 3 else 4)
     # the eaves' board
     c.fill(c.m_rect(3, bot, 252, bot + 3), "timber", 2)
     c.fill(c.m_rect(3, bot, 252, bot), "timber", 4)
@@ -252,7 +249,7 @@ def upper_floor(c):
             c.tone[y, x] = 4
         elif hsh(x // 4, y // 3, 2) % 37 == 0:
             c.tone[y, x] = 2
-    for x in (22, 76, 126, 176, 227):
+    for x in (22, 86, 150, 176, 227):
         m = c.m_rect(x, y0, x + 6, y1)
         c.fill(m, "timber", 3)
         grain(c, m, vertical=True, seed=x)
@@ -262,12 +259,12 @@ def upper_floor(c):
         c.fill(m, "timber", 3)
         grain(c, m, vertical=False, seed=y)
         bevel(c, m)
-    for (xa, xb) in ((83, 126), (183, 227)):  # braces
+    for (xa, xb) in ((150, 176),):  # a brace
         c.fill(c.m_line([(xa, y1 - 6), (xb - 1, y0 + 6)], 4.2) & wall, "timber", 3)
         c.fill(c.m_line([(xa - 1, y1 - 7), (xb - 2, y0 + 5)], 1.2) & wall, "timber", 4)
-    window(c, 40, 134, 26, 30)
-    window(c, 140, 136, 24, 26, shutters=False, box=False)
-    window(c, 192, 134, 26, 30, shutters=False)
+    window(c, 40, 114, 30, 40)
+    window(c, 112, 118, 32, 34, shutters=False, box=False)
+    window(c, 186, 114, 30, 40)
 
 
 def main():
@@ -278,8 +275,8 @@ def main():
     c.fill(c.m_rect(16, UP_BOT, 239, UP_BOT + 4), "stone", 1)  # shade under the upper floor
     upper_floor(c)
     roof(c, rng)
-    window(c, 36, 198, 40, 52)
-    window(c, 180, 198, 40, 52)
+    window(c, 36, 202, 40, 50)
+    window(c, 180, 202, 40, 50)
     front_door(c)
     for y, x in zip(*np.nonzero(c.mat != 0)):  # the whole right end in shade (light from the left)
         if x > 228 and c.tone[y, x] > 1 and y > ROOF_BOT:
