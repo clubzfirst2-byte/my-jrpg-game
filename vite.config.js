@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { packGroup, releaseGroups } from './tools/release-art-pack.mjs';
-import { precacheFiles, onDemandReleaseGroup, releaseGroupOf } from './tools/precache.mjs';
+import { precacheFiles, onDemandReleaseGroup, releaseGroupOf, v2PreloadScript } from './tools/precache.mjs';
+import { isTitleFrame } from './src/ui/uiTitleFrames.js';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
@@ -37,6 +38,9 @@ function serviceWorker() {
  * is `null` and the game loads the frame files one by one, as before.
  * @returns {import('vite').Plugin}
  */
+/** Release groups emitted frame by frame instead of on a sheet (drawn by CSS: the v2 UI). */
+const FILE_GROUPS = new Set(['v2/ui']);
+
 function releaseArt() {
   const ID = 'virtual:release-art';
   const root = fileURLToPath(new URL('./src/art-release/', import.meta.url));
@@ -57,6 +61,19 @@ function releaseArt() {
       if (!build) return 'export default null;';
       const all = [...releaseGroups(root).map((group) => ({ dir: join(root, group), name: group, file: group })), ...releaseGroups(rootV2).map((group) => ({ dir: join(rootV2, group), name: `v2/${group}`, file: `v2-${group}` }))];
       const groups = all.map(({ dir, name, file }) => {
+        if (FILE_GROUPS.has(name)) {
+          // W4: the v2 UI is drawn by CSS (9-slice border images, layered backgrounds), which cannot
+          // take a place on a sheet: each frame is its own file, as drawn (no cutting at start-up).
+          const entries = readdirSync(dir)
+            .filter((f) => f.endsWith('.png'))
+            .sort()
+            .map((f) => {
+              this.addWatchFile(join(dir, f));
+              const ref = this.emitFile({ type: 'asset', name: `release-${file}.${f}`, source: readFileSync(join(dir, f)) });
+              return `${JSON.stringify(f.slice(0, -4))}: import.meta.ROLLUP_FILE_URL_${ref}`;
+            });
+          return `  ${JSON.stringify(name)}: { files: { ${entries.join(', ')} } },`;
+        }
         const { png, table, files } = packGroup(dir);
         for (const f of files) this.addWatchFile(f);
         const sheet = this.emitFile({ type: 'asset', name: `release-${file}.png`, source: png });
@@ -73,14 +90,26 @@ function releaseArt() {
       order: 'post',
       handler(_html, ctx) {
         if (!ctx.bundle) return undefined;
-        return Object.values(ctx.bundle).flatMap((out) => {
+        /** @type {Record<string, string[]>} */
+        const v2 = {};
+        const tags = Object.values(ctx.bundle).flatMap((out) => {
           if (out.type !== 'asset') return [];
-          const group = (out.names ?? []).map(releaseGroupOf).find((g) => g !== null);
-          if (!group || onDemandReleaseGroup(group)) return [];
+          const names = out.names ?? [];
+          const group = names.map(releaseGroupOf).find((g) => g !== null);
+          if (!group) return [];
           const href = `./${out.fileName}`;
+          if (group.startsWith('v2-')) {
+            // Graphics v2: by the URL (v2PreloadScript); of the UI only what the title shows
+            const frame = /^release-v2-ui\.(.+)\.png$/.exec(names[0] ?? '')?.[1];
+            if (frame === undefined || isTitleFrame(frame)) (v2[group.slice(3)] ??= []).push(href);
+            return [];
+          }
+          if (onDemandReleaseGroup(group)) return [];
           const attrs = out.fileName.endsWith('.png') ? { rel: 'preload', as: 'image', href } : { rel: 'preload', as: 'fetch', type: 'application/json', crossorigin: 'anonymous', href };
           return [{ tag: 'link', attrs, injectTo: /** @type {const} */ ('head') }];
         });
+        if (Object.keys(v2).length) tags.push(/** @type {any} */ ({ tag: 'script', children: v2PreloadScript(v2), injectTo: 'head' }));
+        return tags;
       },
     },
   };

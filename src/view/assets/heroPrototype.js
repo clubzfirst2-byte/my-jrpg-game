@@ -71,13 +71,16 @@ function loadSheet(url) {
 
 /**
  * @param {string} group a folder of src/art-release, or "v2/<folder>" for src/art-release-v2 (artV2.js)
- * @param {Record<string, { sheet: string, table: string }> | null} [sheets] the packed groups (the build's)
+ * @param {Record<string, { sheet: string, table: string } | { files: Record<string, string> }> | null} [sheets] the packed groups (the build's;
+ *   the v2 UI as one file per frame)
  * @returns {Promise<Map<string, import('./placeholderPack.js').ArtSource>>} sprite name → PNG URL (dev),
  *   or → its place on the group's sheet (build)
  */
 export async function releaseFrames(group, sheets = releaseSheets) {
   const packed = sheets?.[group];
-  if (packed) {
+  // W4: a group built frame by frame (the v2 UI): name → file URL, nothing to cut out
+  if (packed && 'files' in packed) return new Map(Object.entries(packed.files));
+  if (packed && 'sheet' in packed) {
     try {
       const [sheet, table] = await Promise.all([loadSheet(packed.sheet), fetch(packed.table).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Could not load ${packed.table}`))))]);
       const frames = /** @type {Record<string, { x: number, y: number, w: number, h: number }>} */ (table.frames);

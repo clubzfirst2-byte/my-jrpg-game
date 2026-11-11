@@ -55,7 +55,25 @@ test('the v2 UI is the default (V2_ENABLED has ui): no switch loads it', async (
   const errors = await open(page, '');
   expect(await isV2(page)).toBe(true);
   expect(requests.some((u) => /release-v2-ui|art-release-v2\/ui/.test(u))).toBe(true);
+  // one file per frame, nothing cut out at start-up: the frames are the built files' URLs
+  expect(await page.evaluate(() => /url\("[^"]*release-v2-ui\.panel\.menu[^"]*\.png"\)/.test(document.getElementById('ui-v2-buttons')?.textContent ?? ''))).toBe(true);
+  expect(await page.evaluate(() => (document.getElementById('ui-v2-buttons')?.textContent ?? '').includes('data:image'))).toBe(false);
   expect(errors).toEqual([]);
+});
+
+test('the title shows complete: its frames are preloaded and decoded before it appears; the HUD frames load after', async ({ page }) => {
+  const requests = [];
+  page.on('request', (r) => requests.push(r.url()));
+  await page.goto('/');
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
+  await expect(page.locator('#title-screen')).toBeVisible();
+  // the logo is drawn (decoded) as soon as the title is up
+  expect(await artOf(page, '#title-screen h1')).toEqual({ w: 230, h: 64, rendering: 'pixelated' });
+  const preloads = await page.evaluate(() => [...document.querySelectorAll('link[rel=preload]')].map((l) => /** @type {HTMLLinkElement} */ (l).href).filter((h) => /release-v2-ui/.test(h)));
+  expect(preloads.length).toBe(11); // title.* (6), btn.text.* (4), panel.toast
+  expect(preloads.every((h) => /release-v2-ui\.(title\.|btn\.text\.|panel\.toast)/.test(h))).toBe(true);
+  // the rest come after, in the background (rings, hearts, panels)
+  await expect.poll(() => requests.filter((u) => /release-v2-ui\.btn\.ring\./.test(u)).length, { timeout: 15_000 }).toBeGreaterThan(0);
 });
 
 test('?ui=v1 and ?v2=0: the v1 UI, nothing of v2 loaded or stored', async ({ page }) => {
@@ -66,10 +84,8 @@ test('?ui=v1 and ?v2=0: the v1 UI, nothing of v2 loaded or stored', async ({ pag
     expect(await isV2(page), query).toBe(false);
     expect(await page.evaluate(() => !!document.getElementById('ui-v2-buttons'))).toBe(false);
     expect(await page.evaluate(() => document.documentElement.style.length)).toBe(0); // no --ui-* frames
-    // (index.html preloads the v2 UI sheet, a default group since V2_ENABLED has ui; with ?ui=v1 it is
-    // downloaded by that preload only, and never cut out or put on: no style sheet, no --ui-* frames above)
-    expect(requests.filter((u) => /release-v2-ui|art-release-v2\/ui/.test(u)).length).toBeLessThanOrEqual(2);
-    expect(requests.filter((u) => /art-release-v2\/ui\//.test(u))).toEqual([]); // no single frames either
+    // nothing of the v2 UI is fetched, not even preloaded (index.html preloads by the URL)
+    expect(requests.filter((u) => /release-v2-ui|art-release-v2\/ui/.test(u))).toEqual([]);
     expect(await page.evaluate(() => localStorage.getItem('seimyaku.sessions.v1'))).toBe(null);
     // the v1 look: text on a translucent disc with a border, SVG hearts
     const attack = await page.locator('#attack-button').evaluate((el) => ({ text: el.textContent, color: getComputedStyle(el).color, border: getComputedStyle(el).borderTopWidth, image: getComputedStyle(el).backgroundImage }));

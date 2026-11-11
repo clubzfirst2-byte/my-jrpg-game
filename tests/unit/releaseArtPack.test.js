@@ -186,6 +186,18 @@ describe('sheet frames in the game', () => {
     expect((await releaseFrames('no-such-group', { hero: { sheet: 'hero.png', table: 'hero.json' } })).size).toBe(0);
   });
 
+  it('releaseFrames gives the file URLs of a group built frame by frame (the v2 UI): nothing fetched', async () => {
+    vi.stubGlobal('fetch', async () => {
+      throw new Error('no fetch');
+    });
+    const { releaseFrames } = await import('../../src/view/assets/heroPrototype.js');
+    const frames = await releaseFrames('v2/ui', { 'v2/ui': { files: { 'panel.menu': 'https://x/a.png', 'heart.0': 'https://x/b.png' } } });
+    expect([...frames]).toEqual([
+      ['panel.menu', 'https://x/a.png'],
+      ['heart.0', 'https://x/b.png'],
+    ]);
+  });
+
   it('a sheet that cannot load leaves the placeholders (no crash)', async () => {
     vi.stubGlobal('Image', class {
       set src(_url) {

@@ -23,7 +23,7 @@ import { testHeroFrames } from './debug/testHero.js';
 import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
 import { availableV1Groups, availableV2Groups, prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
 import { resolveArtGroups, v2Name } from './view/assets/artV2.js';
-import { installUiSkin, showButtonLabels } from './ui/uiSkin.js';
+import { installUiSkin, loadOtherUiArt, loadTitleArt, showButtonLabels } from './ui/uiSkin.js';
 import { TERRAIN_GROUP, releaseTerrainEntries, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
 import { GameView } from './view/gameView.js';
@@ -161,9 +161,24 @@ async function boot() {
   const artGroups = resolveArtGroups(releaseGroups, params, { available: availableV2Groups(), v1Groups: availableV1Groups() });
   // W4: the v2 UI art (v2/ui) is not world art: it goes to the DOM UI (uiSkin.js), not the sprite packs.
   const uiArtGroup = artGroups.find((g) => g === v2Name('ui'));
-  // (its frames are cut out and encoded as soon as its sheet is in, while the world art still loads;
-  // if that fails, the v1 UI)
-  const uiSkinLoad = uiArtGroup ? releaseFrames(uiArtGroup).then((f) => (f.size ? (installUiSkin(uiRoot, f), true) : false)).catch((err) => (console.warn(`art: v2 ui: ${String(err)}; using the v1 UI`), false)) : Promise.resolve(false);
+  // (one file per frame: put on at once, nothing cut out. The title's frames, preloaded by the page,
+  // decode meanwhile and the title waits for them just before it is built; the other frames load once
+  // the title is up. If anything fails, the v1 UI.)
+  /** @type {Map<string, import('./view/assets/placeholderPack.js').ArtSource> | null} */
+  let uiFrames = null;
+  /** @type {Promise<void>} */
+  let uiTitleArt = Promise.resolve();
+  const uiSkinLoad = uiArtGroup
+    ? releaseFrames(uiArtGroup)
+        .then((f) => {
+          if (!f.size) return false;
+          installUiSkin(uiRoot, f);
+          uiFrames = f;
+          if (params.get('map') === null) uiTitleArt = loadTitleArt(f);
+          return true;
+        })
+        .catch((err) => (console.warn(`art: v2 ui: ${String(err)}; using the v1 UI`), false))
+    : Promise.resolve(false);
   for (const frames of await Promise.all(artGroups.filter((g) => g !== uiArtGroup).map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
   const uiV2 = await uiSkinLoad;
   // W4: plays so far, this one included. A play is counted when it starts (startGame: はじめから /
@@ -356,6 +371,8 @@ async function boot() {
       newer: 'この保存データは新しいバージョンで作られています。ページを再読み込みしてください（データは消しません）。',
       error: loaded.status === 'error' ? failureMessage(loaded.reason) : '',
     };
+    await uiTitleArt; // W4: the v2 title's frames decoded (they load alongside everything above)
+    performance.mark('titleArt');
     title = new TitleScreen(uiRoot, {
       title: GAME_TITLE,
       hasSave: loaded.status === 'ok',
@@ -363,7 +380,9 @@ async function boot() {
       onNew: () => startGame(false),
       onContinue: () => startGame(true),
     });
+    performance.mark('title');
   }
+  if (uiFrames) loadOtherUiArt(uiFrames); // W4: the HUD's and menus' frames, now that the title is up
   /** @param {boolean} fromSave */
   function startGame(fromSave) {
     if (fromSave && loaded.status === 'ok') {

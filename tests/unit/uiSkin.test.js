@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { BUTTON_SCALE, HUD_BUTTONS, buttonBox, cssVar, frameUrls, hudButtonCss, showButtonLabels, LABEL_SESSIONS } from '../../src/ui/uiSkin.js';
+import { BUTTON_SCALE, HUD_BUTTONS, buttonBox, cssVar, frameUrls, hudButtonCss, loadOtherUiArt, loadTitleArt, showButtonLabels, LABEL_SESSIONS } from '../../src/ui/uiSkin.js';
 import { BUTTON_LABELS_ROW, SETTING_ROWS } from '../../src/ui/settingsMenu.js';
 
 // Graphics v2, W4: the v2 UI's round buttons are drawn rings at their exact diameters (inspection
@@ -134,5 +134,43 @@ describe('play sessions (the first-plays labels)', () => {
     vi.stubGlobal('window', { localStorage: { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } } });
     expect(peekSessions()).toBe(0);
     expect(countSession()).toBe(1);
+  });
+});
+
+describe('loading the v2 UI art (one file per frame)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('the title frames (resolves when they are decoded); the others separately, once the title is up', async () => {
+    const started = [];
+    vi.stubGlobal('Image', class {
+      set src(url) {
+        started.push(url);
+      }
+      decode() {
+        return Promise.resolve();
+      }
+    });
+    const frames = new Map([
+      ['btn.ring.gold.78.idle', 'ring.png'],
+      ['title.logo', 'logo.png'],
+      ['btn.text.idle', 'plate.png'],
+      ['heart.4', 'heart.png'],
+      ['panel.toast', 'toast.png'],
+    ]);
+    await loadTitleArt(frames);
+    expect(started).toEqual(['logo.png', 'plate.png', 'toast.png']); // only the title's
+    loadOtherUiArt(frames);
+    expect(started).toHaveLength(3); // the others wait for an idle moment, not the title's first frames
+    await vi.waitFor(() => expect(started).toEqual(['logo.png', 'plate.png', 'toast.png', 'ring.png', 'heart.png']));
+  });
+
+  it('a frame that fails to decode does not stop the title', async () => {
+    vi.stubGlobal('Image', class {
+      set src(_url) {}
+      decode() {
+        return Promise.reject(new Error('broken'));
+      }
+    });
+    await expect(loadTitleArt(new Map([['title.logo', 'x.png']]))).resolves.toBeUndefined();
   });
 });

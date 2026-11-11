@@ -21,8 +21,12 @@ export const PRECACHE_STATIC = ['./', 'index.html', 'manifest.webmanifest', 'ico
  */
 export const onDemandReleaseGroup = (group) => group.startsWith('npc-revision') || (group.startsWith('v2-') && !V2_ENABLED.includes(group.slice(3)));
 
-/** The release art group of an emitted sheet / frame table (release-<group>.png|json), or null. @param {string} name */
-export const releaseGroupOf = (name) => /^release-(.+)\.(png|json)$/.exec(name)?.[1] ?? null;
+/**
+ * The release art group of an emitted sheet / frame table (release-<group>.png|json), or of a frame
+ * emitted on its own (release-<group>.<frame>.png: the v2 UI, vite.config.js), or null. Group names
+ * have no dots. @param {string} name
+ */
+export const releaseGroupOf = (name) => /^release-([^.]+)(?:\..+)?\.(png|json)$/.exec(name)?.[1] ?? null;
 
 /**
  * @param {Record<string, { type: 'chunk' | 'asset', fileName: string, name?: string, names?: string[], moduleIds?: string[] }>} bundle
@@ -45,4 +49,18 @@ export function precacheFiles(bundle) {
     })
     .map(([file]) => file);
   return [...new Set([...PRECACHE_STATIC, ...keep])];
+}
+
+/**
+ * The page's preloads of the Graphics v2 groups, decided by the URL as the game decides (artV2.js
+ * artVersion): a group's files are preloaded only when it will be drawn (?v2=0, ?<group>=v1 → not).
+ * An inline script, so it runs while the HTML is read, before the game's JS.
+ * @param {Record<string, string[]>} hrefs v2 group (folder name) → files to preload
+ * @param {readonly string[]} [enabled] the groups drawn by default
+ * @returns {string}
+ */
+export function v2PreloadScript(hrefs, enabled = V2_ENABLED) {
+  return `(function(){var q=new URLSearchParams(location.search),E=${JSON.stringify(enabled)},G=${JSON.stringify(hrefs)};
+for(var g in G){var a=q.get(g);if(!(a==='v2'||(a!=='v1'&&q.get('v2')!=='0'&&E.indexOf(g)>=0)))continue;
+G[g].forEach(function(h){var l=document.createElement('link');l.rel='preload';if(/\\.json$/.test(h)){l.as='fetch';l.type='application/json';l.crossOrigin='anonymous';}else{l.as='image';}l.href=h;document.head.appendChild(l);});}})();`;
 }

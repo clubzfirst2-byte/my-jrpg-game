@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { precacheFiles, onDemandReleaseGroup, releaseGroupOf, PRECACHE_STATIC } from '../../tools/precache.mjs';
+import { precacheFiles, onDemandReleaseGroup, releaseGroupOf, v2PreloadScript, PRECACHE_STATIC } from '../../tools/precache.mjs';
 
 /** @param {string} fileName @param {string[]} moduleIds */
 const chunk = (fileName, moduleIds) => [fileName, { type: 'chunk', fileName, moduleIds }];
@@ -49,4 +49,31 @@ describe('service worker precache list (perf v1)', () => {
     expect(['hero', 'npc', 'enemy', 'terrain', 'objects'].some(onDemandReleaseGroup)).toBe(false);
     expect(['npc-revision', 'npc-revision-b2', 'npc-revision-b3'].every(onDemandReleaseGroup)).toBe(true);
   });
+
+  it('names the group of a v2 UI frame emitted on its own (release-v2-ui.<frame>.png), and keeps it offline', () => {
+    expect(releaseGroupOf('release-v2-ui.panel.menu.png')).toBe('v2-ui');
+    expect(releaseGroupOf('release-v2-ui.btn.ring.gold.66.idle.png')).toBe('v2-ui');
+    expect(releaseGroupOf('release-v2-terrain.png')).toBe('v2-terrain');
+    const bundle = { 'assets/release-v2-ui.panel.menu-x.png': { type: 'asset', fileName: 'assets/release-v2-ui.panel.menu-x.png', names: ['release-v2-ui.panel.menu.png'] } };
+    expect(precacheFiles(/** @type {any} */ (bundle))).toContain('assets/release-v2-ui.panel.menu-x.png');
+  });
 });
+
+describe('the v2 preloads follow the URL (index.html)', () => {
+  /** Runs the page's script for a query; returns the preloaded hrefs. */
+  const run = (query, enabled = ['ui']) => {
+    const added = [];
+    const doc = { createElement: () => ({}), head: { appendChild: (l) => added.push(l) } };
+    new Function('location', 'document', v2PreloadScript({ ui: ['./a.png', './b.json'], terrain: ['./t.png'] }, enabled))({ search: query }, doc);
+    return added.map((l) => `${l.href} ${l.as}`);
+  };
+  it('the default groups unless ?v2=0 / ?<group>=v1; others only when asked for', () => {
+    expect(run('')).toEqual(['./a.png image', './b.json fetch']);
+    expect(run('?ui=v1')).toEqual([]);
+    expect(run('?v2=0')).toEqual([]);
+    expect(run('?v2=0&ui=v2')).toEqual(['./a.png image', './b.json fetch']);
+    expect(run('?terrain=v2')).toEqual(['./a.png image', './b.json fetch', './t.png image']);
+    expect(run('', [])).toEqual([]);
+  });
+});
+

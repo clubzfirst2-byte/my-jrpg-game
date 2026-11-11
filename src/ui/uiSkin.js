@@ -6,12 +6,14 @@
 // ?ui=v1 / ?v2=0 keep the v1 UI). The art's specs: docs/art-release-v2/ui/NAMES.md and manifest.json.
 //
 // How the art reaches CSS: every frame becomes a custom property on <html>, `--ui-<name with dots as
-// dashes>: url(...)` (e.g. --ui-panel-menu). In the dev server a frame is its own PNG; in the build
-// it is a place on the packed sheet, cut out once into a data URL.
+// dashes>: url(...)` (e.g. --ui-panel-menu). Each frame is its own PNG, in the dev server and in the
+// build (vite.config.js), so nothing is cut out at start-up; the title waits only for its own frames
+// (loadUiArt). (A frame given as a place on a sheet is still cut out, frameUrls.)
 //
 // The round buttons' CSS is generated here from the manifest's table, so each diameter is EXACTLY a
 // drawn ring (inspection I-1: no 66.3 px) and every position and icon offset is a whole CSS px.
 import manifest from '../art-release-v2/ui/manifest.json';
+import { isTitleFrame } from './uiTitleFrames.js';
 
 /** @typedef {'small' | 'medium' | 'large'} ButtonSize */
 
@@ -138,6 +140,50 @@ export function installUiSkin(root, frames) {
   document.head.append(style);
   root.classList.add('ui-v2');
   document.documentElement.classList.add('ui-v2');
+}
+
+/** The frames' images while they load (kept, so the loads are not dropped). @type {HTMLImageElement[]} */
+const loading = [];
+
+/** Starts loading one frame's image (kept in `loading`). @param {string} url */
+function load(url) {
+  const img = new Image();
+  img.decoding = 'async';
+  img.src = url;
+  loading.push(img);
+  return img;
+}
+
+/**
+ * Loads the title's frames (the page preloads them, vite.config.js) and resolves once they are decoded,
+ * so the title shows complete. Never rejects.
+ * @param {Map<string, import('../view/assets/placeholderPack.js').ArtSource>} frames
+ * @returns {Promise<void>}
+ */
+export function loadTitleArt(frames) {
+  const title = [...frames].filter(([name, src]) => typeof src === 'string' && isTitleFrame(name));
+  return Promise.all(title.map(([, url]) => load(/** @type {string} */ (url)).decode().catch(() => {}))).then(() => {});
+}
+
+/**
+ * Starts loading the other frames (HUD, menus), in the background, once the title is up (or the game
+ * starts without it), so they do not compete with the start-up and are in before they are needed.
+ * @param {Map<string, import('../view/assets/placeholderPack.js').ArtSource>} frames
+ */
+export function loadOtherUiArt(frames) {
+  const rest = [...frames].filter(([name, src]) => typeof src === 'string' && !isTitleFrame(name)).map(([, src]) => /** @type {string} */ (src));
+  // when the page is idle (not during the title's first frames), a few at a time
+  const step = () => {
+    for (const url of rest.splice(0, 12)) load(url);
+    if (rest.length) later(step);
+  };
+  later(step);
+}
+
+/** Runs `fn` when the main thread is idle (or after a short wait where that is not offered). @param {() => void} fn */
+function later(fn) {
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout: 2000 });
+  else setTimeout(fn, 50);
 }
 
 /** How many play sessions show the text labels on the round buttons (setting 「はじめだけ」). */
