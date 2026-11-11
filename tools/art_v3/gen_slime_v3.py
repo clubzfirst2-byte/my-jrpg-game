@@ -1,11 +1,12 @@
-"""v3 pilot: the slime at hero-level detail (64 x 56, density 4), idle 4 frames.
+"""v3 pilot (round 2): the slime at hero-level detail (64 x 56, density 4), idle 4 frames.
 
-New drawing on the 2x grid (not a remaster: STYLE.md 5.3 asks enemies to reach the hero's detail).
-Same design as v1 (enemy.slime: a violet jelly dome with a magenta crystal core and two glowing eyes),
-new: the outline is the jelly's own tone 0 (not near-black, STYLE.md 3.3), the jelly has depth (the
-lower half darker, a glow halo round the core), bubbles drifting up, a curved shine, side drips and a
-seep line on the ground. Idle: a 4-step wobble (wide-low, settle, tall-narrow, settle) with the
-bubbles rising 1 texel a frame.
+Back to the v1 design (enemy.slime: a tall violet drop whose foot spreads on the ground, a magenta
+crystal core, two pink eyes) and v1's darker values (it must stand apart from the grass by brightness,
+not only by hue). New on the 2x grid: the body is shaded as a round drop (curved bands, no straight
+line inside), a bounce light along the foot, the foot spreading into lips on the ground, a curved
+shine, bubbles, the core glowing through the jelly. Idle: 4 different frames (settle, swell to the
+right, rise, lean left) with the bubbles and the shine moving.
+Outline: the jelly's own tone 0 #2e1a3e (not near-black, STYLE.md 3.3).
 Writes src/art-release-v3/enemy/enemy.slime.idle.<n>.png
 Run: python3 tools/art_v3/gen_slime_v3.py
 """
@@ -17,116 +18,122 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import numpy as np  # noqa: E402
 
-from v3lib import ROOT, Canvas, save  # noqa: E402
+from v3lib import ROOT, Canvas, despeckle, save  # noqa: E402
 
 OUT = os.path.join(ROOT, "src", "art-release-v3", "enemy")
 W, H = 64, 56
-G = 53  # ground row (feet line), 3 texels above the bottom for the seep
+G = 54  # the foot's bottom row
 RAMPS = {
-    "jelly": ["#2e1a3e", "#40245a", "#55306f", "#6e4490", "#9a70c0", "#c8a4e8"],
-    "deep": ["#2e1a3e", "#2e1a3e", "#36204c", "#40245a", "#4a2a62", "#55306f"],
+    "jelly": ["#2e1a3e", "#3a2150", "#47295f", "#573271", "#6e4490", "#9a70c0", "#c4a0e4"],
     "core": ["#4a1050", "#6a1e6a", "#8e2c8e", "#b040b0", "#e070e0", "#ffc8ff"],
-    "glow": ["#4a2a62", "#7a4aa0", "#8a58b0", "#a070c8", "#c090e0", "#e0b8f4"],
+    "glow": ["#3a2150", "#55306f", "#62387e", "#70428e", "#80509e", "#9a70c0"],
 }
-EYE = "#ffd8ff"
-EYE_D = "#e070e0"
-POSES = [  # rx, ry, lean
-    (29.0, 17.0, 0),
-    (28.0, 18.0, 0),
-    (27.0, 19.0, 0),
-    (28.0, 18.0, 0),
+EYE, EYE_D, EYE_W = "#e070e0", "#6a1e6a", "#ffd8ff"
+POSES = [  # cx shift of the top, dome half width, top row, foot half width, bubbles phase
+    dict(lean=0, rx=21.5, top=16, foot=30, ph=0),
+    dict(lean=1, rx=22.5, top=17, foot=31, ph=1),
+    dict(lean=0, rx=21.0, top=14, foot=29, ph=2),
+    dict(lean=-1, rx=21.5, top=16, foot=30.5, ph=3),
 ]
-BUBBLES = [(17, 36, 2.2), (45, 38, 1.6), (22, 42, 1.2)]
 
 
-def body_mask(c, rx, ry, cx=32.0):
-    """A dome wider at the bottom: an ellipse on top, flattened and widened toward the ground."""
+def body_mask(c, lean, rx, top, foot):
+    """A drop: a round top, straight-ish sides, and a foot that spreads into lips on the ground."""
     yy, xx = np.mgrid[0:H, 0:W]
-    top = G - 2 * ry + 4
-    cy = G - ry + 2
-    t = np.clip((yy + 0.5 - top) / (G - top), 0, 1)  # 0 at the top, 1 at the ground
-    rxx = rx * (0.80 + 0.24 * t ** 1.6)
-    m = ((xx + 0.5 - cx) / rxx) ** 2 + ((yy + 0.5 - cy) / ry) ** 2 <= 1
-    m &= yy < G
+    cx = 31.5
+    m = np.zeros((H, W), bool)
+    for y in range(top, G + 1):
+        t = (y - top) / (G - top)
+        sx = cx + lean * (1 - t)
+        if t < 0.50:  # the round top
+            u = t / 0.50
+            hw = rx * np.sqrt(max(0.0, 1 - (1 - u) ** 2))
+        elif t < 0.80:  # the sides, widening a little
+            hw = rx + (t - 0.50) / 0.30 * 2.5
+        else:  # the foot: spreads fast (concave) into the lips
+            u = (t - 0.80) / 0.20
+            hw = rx + 2.5 + (foot - rx - 2.5) * u ** 1.8
+        if hw >= 3:
+            m[y] |= np.abs(xx[y] + 0.5 - sx) <= hw
     return m
 
 
 def frame(i):
-    rx, ry, _ = POSES[i]
+    p = POSES[i]
     c = Canvas(W, H, RAMPS)
-    body = body_mask(c, rx, ry)
+    body = body_mask(c, p["lean"], p["rx"], p["top"], p["foot"])
     c.fill(body, "jelly")
-    c.shade_part(body, tones=(1, 2, 3, 3, 4, 4))
-    ys, xs = np.nonzero(body)
-    top, cx = ys.min(), 32
-    hgt = G - top
-    # depth: the lower third is the deep jelly (a darker material inside the same outline)
-    yy, xx = np.mgrid[0:H, 0:W]
-    lower = body & (yy >= G - hgt * 0.36) & (((xx + 0.5 - cx) / (rx * 0.95)) ** 2 + ((yy + 0.5 - (G + 2)) / (hgt * 0.46)) ** 2 <= 1)
-    c.fill(lower, "deep")
-    c.shade_part(lower, tones=(2, 3, 4, 5), light=(-0.6, -0.4, 0.7))
-    # the core: a glow halo, then the crystal (diamond), lit from the inside
-    ccy = G - hgt * 0.42
-    halo = c.m_ellipse(cx + 1, ccy, 8.0, 7.5) & body & ~lower
+    # a round drop lit from the top left: curved bands from a normal over the whole body (no rows)
+    hgt = G - p["top"]
+    cx0 = 31.5 + p["lean"] * 0.5
+    for y, x in zip(*np.nonzero(body)):
+        row = np.nonzero(body[y])[0]
+        hw = max(1.0, (row.max() - row.min() + 1) / 2)
+        nx = (x + 0.5 - (row.min() + hw)) / hw
+        ny = (y + 0.5 - (p["top"] + hgt * 0.55)) / (hgt * 0.62)
+        v = 0.55 - 0.42 * nx - 0.38 * ny - 0.18 * (nx * nx + ny * ny)
+        c.tone[y, x] = 1 if v < 0.12 else 2 if v < 0.42 else 3 if v < 0.72 else 4
+    cx = 31.5 + p["lean"] * 0.5
+    # bounce light along the foot: the 2 rows above the bottom edge, inside, one tone up (curved, it
+    # follows the silhouette), and the lips' lit tops
+    for x in range(W):
+        ys = np.nonzero(body[:, x])[0]
+        if not len(ys):
+            continue
+        yb = ys.max()
+        for d in (1, 2):
+            if body[yb - d, x] and abs(x + 0.5 - cx) < p["foot"] - 3:
+                c.tone[yb - d, x] = min(5, int(c.tone[yb - d, x]) + (1 if d == 2 else 0))
+        if abs(x + 0.5 - cx) > p["rx"] + 3:  # the lips
+            c.tone[ys.min(), x] = 5 if x < cx else 4
+    # the core glowing through the jelly (a soft halo, then the crystal with 4 facets)
+    ccy = G - 15
+    halo = c.m_ellipse(cx + 1, ccy, 7.5, 6.5) & body
     c.fill(halo, "glow")
-    c.shade_part(halo, tones=(0, 1, 1, 2, 3), light=(0.0, 0.0, 1.0))
-    cry = c.m_poly([(cx + 1, ccy - 7), (cx + 6, ccy), (cx + 1, ccy + 6), (cx - 4, ccy)])
+    c.shade_part(halo, tones=(1, 2, 3, 4), light=(0.0, 0.0, 1.0), norm=True)
+    cry = c.m_poly([(cx + 1, ccy - 6), (cx + 5.5, ccy), (cx + 1, ccy + 5.5), (cx - 3.5, ccy)])
     c.fill(cry, "core")
-    # facets: left upper bright, right lower dark, a hot centre
     for y, x in zip(*np.nonzero(cry)):
         dx, dy = x + 0.5 - (cx + 1), y + 0.5 - ccy
-        t = 3
-        if dx < 0 and dy < 0:
-            t = 5 if (dx > -2 and dy > -4) else 4
-        elif dx >= 0 and dy >= 0:
-            t = 1 if dx + dy > 4 else 2
-        elif dx < 0:
-            t = 3
-        else:
-            t = 4 if dx + (-dy) < 3 else 3
-        c.tone[y, x] = t
-    # bubbles rising (1 texel a frame), each a ring of tone 4 with a tone-5 point
-    for bx, by, r in BUBBLES:
-        y0 = by - i
-        m = c.m_ellipse(bx, y0, r, r) & body & ~cry & ~halo & ~lower
-        ring = m & ~c.m_ellipse(bx, y0, r - 1, r - 1) if r > 1.4 else m
-        c.set_tone(ring, 4)
-        c.put(int(bx - r / 2), int(y0 - r / 2), "jelly", 5)
-    # the shine: a curved streak on the top left and a point
-    for k in range(9):
-        a = 2.35 + k * 0.11
-        x = cx + np.cos(a) * rx * 0.62
-        y = G - hgt * 0.55 + np.sin(a) * -hgt * 0.42
-        for w in (0, 1):
-            xx_, yy_ = int(round(x + w)), int(round(y))
-            if body[yy_, xx_]:
-                c.put(xx_, yy_, "jelly", 5 if 2 <= k <= 6 else 4)
-    c.put(int(cx - rx * 0.20), int(top + 3), "jelly", 5)
-    c.put(int(cx - rx * 0.20) + 1, int(top + 3), "jelly", 5)
-    # eyes: two glowing slits above the core
-    ey = int(round(G - hgt * 0.70))
-    for ex in (cx - 11, cx + 7):
-        for dx in range(5):
-            c.dot(ex + dx, ey, EYE_D if dx in (0, 4) else EYE)
-            c.dot(ex + dx, ey + 1, EYE_D if dx in (0, 4) else EYE)
-        for dx in (1, 2, 3):
-            c.dot(ex + dx, ey - 1, "#40245a")
-            c.dot(ex + dx, ey + 2, EYE_D)
-    # side drips (jelly running down), shift with the wobble
-    for sx, ln in ((cx - rx * 0.70, 5 + (i % 2)), (cx + rx * 0.74, 6 - (i % 2))):
-        x = int(round(sx))
-        for d in range(ln):
-            y = G - 6 + d
-            if 0 <= y < G and body[y, x]:
-                c.put(x, y, "deep", 1 if d < ln - 1 else 5)
+        c.tone[y, x] = 5 if (dx < 0 and dy < 0 and dx > -2.5 and dy > -4) else 4 if (dx < 0 and dy < 0) else \
+            1 if (dx >= 0 and dy >= 0 and dx + dy > 3.5) else 2 if (dx >= 0 and dy >= 0) else 3
+    # eyes: two pink eyes high on the drop (v1), each 4 x 4 with a light and a dark lower lid
+    ey = p["top"] + 10
+    for ex in (int(cx - 9), int(cx + 5)):
+        for dy in range(4):
+            for dx in range(4):
+                if (dx, dy) in ((0, 0), (3, 0)):
+                    continue
+                col = EYE_W if (dx, dy) in ((1, 1), (1, 0)) else (EYE_D if dy == 3 else EYE)
+                c.dot(ex + dx, ey + dy, col)
+    # the shine: a curved streak just inside the upper left edge, and a 2 x 2 point
+    top = p["top"]
+    for y in range(top + 3, top + 15):
+        xs = np.nonzero(body[y])[0]
+        if not len(xs):
+            continue
+        x = xs.min() + 3 + max(0, (top + 6 - y)) // 2
+        c.put(x, y, "jelly", 6 if top + 5 <= y <= top + 11 else 5)
+        c.put(x + 1, y, "jelly", 5)
+    sx, sy = int(cx - 6), top + 3
+    for dx, dy in ((0, 0), (1, 0), (0, 1), (1, 1)):
+        c.put(sx + dx, sy + dy, "jelly", 6 if (dx, dy) != (1, 1) else 5)
+    # bubbles drifting up: small 4 x 4 rings (tone 5) with a lit point, only in the jelly
+    ring = [".##.", "#..#", "#..#", ".##."]
+    for k, (bx, by) in enumerate(((cx - 15, 40), (cx + 12, 36), (cx - 8, 47))):
+        y0 = int(by - ((p["ph"] + k) % 4) * 2)
+        x0 = int(bx)
+        if not all(body[y0 + j, x0 + i] for j in range(4) for i in range(4)):
+            continue
+        if (halo | cry)[y0:y0 + 4, x0:x0 + 4].any():
+            continue
+        for j, r_ in enumerate(ring):
+            for i, ch in enumerate(r_):
+                if ch == "#":
+                    c.put(x0 + i, y0 + j, "jelly", 5)
+        c.put(x0 + 1, y0 + 1, "jelly", 6)
+    despeckle(c)
     c.outline()
-    # the seep on the ground: one row of deep jelly just under the body, a little wider each wobble
-    ys2 = np.nonzero(body[G - 1])[0]
-    if len(ys2):
-        for x in range(ys2.min() - 2, ys2.max() + 3):
-            if 0 <= x < W:
-                c.put(x, G, "deep", 3 if (x + i) % 5 else 4)
-                c.put(x, G + 1, "jelly", 0)
     c.shadow_band()
     return c
 
