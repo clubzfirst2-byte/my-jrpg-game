@@ -47,14 +47,15 @@ export const hasV2Pair = (group, groups) => (group.startsWith('v2-') ? groups.ha
  *   - a v2 group with no v1 counterpart (the UI): its files when it is drawn as v2, else nothing;
  *   - files marked `title` (the v2 UI's title frames) only on a page that shows the title: none with
  *     ?map= (main.js withTitle, uiSkin loadTitleArt), where they would be an unused preload.
- * An inline script, so it runs while the HTML is read, before the game's JS.
+ * An inline script, so it runs while the HTML is read, before the game's JS. (It sets the links'
+ * attributes; without setAttribute, in the unit tests' stand-in document, their properties.)
  * @param {Record<string, { v1?: string[], v2?: string[], title?: boolean }>} groups hrefs by group (folder name) and side
  * @param {readonly string[]} [enabled] the groups drawn by default
  * @returns {string}
  */
 export function preloadScript(groups, enabled = V2_ENABLED) {
   return `(function(){var p=new URLSearchParams(location.search),E=${JSON.stringify(enabled)},G=${JSON.stringify(groups)};
-function add(h){var l=document.createElement('link');l.rel='preload';if(/\\.json$/.test(h)){l.as='fetch';l.type='application/json';l.crossOrigin='anonymous';}else{l.as='image';}l.href=h;document.head.appendChild(l);}
+function add(h){var l=document.createElement('link'),a=/\\.json$/.test(h)?{rel:'preload',as:'fetch',type:'application/json',crossorigin:'anonymous',href:h}:{rel:'preload',as:'image',href:h};for(var k in a){if(l.setAttribute)l.setAttribute(k,a[k]);else l[k]=a[k];}document.head.appendChild(l);}
 for(var g in G){var q=p.get(g),f=G[g];if(f.title&&p.get('map')!==null)continue;if(f.v1&&(p.get('hd')==='0'||q==='placeholder'||q==='proto'||(p.get('proto')==='all'&&q!=='release')))continue;
 var v2=q==='v2'||(q!=='v1'&&p.get('v2')!=='0'&&E.indexOf(g)>=0);(f[v2?'v2':'v1']||[]).forEach(add);}})();`;
 }
