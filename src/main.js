@@ -852,7 +852,12 @@ async function boot() {
     // The ability button shows the selected 星環 power (hidden until the first one is learned).
     const abilityLabel = state.progress.ability ? ABILITY_NAMES[state.progress.ability] : '';
     if (abilityButton.textContent !== abilityLabel) {
-      abilityButton.textContent = abilityLabel;
+      // W4 (R-8): a 3-character name (蔓結び) may break into 蔓 / 結び on the smallest v2 ring (styles.css);
+      // each part is kept whole, and the v1 UI keeps it on one line (white-space: nowrap there).
+      if (abilityLabel.length === 3) {
+        const part = (/** @type {string} */ t) => Object.assign(document.createElement('span'), { textContent: t });
+        abilityButton.replaceChildren(part(abilityLabel.slice(0, 1)), document.createElement('wbr'), part(abilityLabel.slice(1)));
+      } else abilityButton.textContent = abilityLabel;
       if (abilityLabel) abilityButton.setAttribute('aria-label', abilityLabel); // W4: the v2 UI shows an icon
     }
     // W4 (v2 UI): the round buttons are hidden while the dialogue box is open (styles.css).

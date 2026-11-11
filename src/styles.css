@@ -704,9 +704,10 @@ body {
 }
 /* W4 (inspection W-5): while the round buttons are hidden (the dialogue box, a full-screen panel) the
    toast has nothing to avoid: centred on the screen as before (#ui#ui: over the hand and boss-fight
-   places above). Over a panel it sits in the middle of the screen, clear of the panel's head (tabs,
+   places above). The dialogue only in v2: the v1 UI keeps its round buttons during the dialogue, so
+   there the toast keeps clear of them (inspection W-5b). Over a panel it sits in the middle of the screen, clear of the panel's head (tabs,
    閉じる; two rows of tabs with large text) and of the settings' foot. */
-#ui#ui.talking #toast,
+#ui#ui.ui-v2.talking #toast,
 #ui#ui.panel-open #toast {
   left: 50%;
   right: auto;
@@ -1493,8 +1494,19 @@ body {
 #ui.ui-v2:not(.ui-labels) #ability-button::before {
   display: none;
 }
+/* R-8: on the smallest ring 蔓結び breaks at its <wbr> into 蔓 / 結び (main.js) rather than being squeezed onto
+   one line; the 2-character names stay on one line */
 #ui.ui-v2.btn-small:not(.ui-labels) #ability-button {
-  letter-spacing: -0.16em; /* 蔓結び inside the 44-px ring's edge */
+  flex-wrap: wrap; /* (the parts are flex items: they wrap, not the text) */
+  align-content: center;
+  padding: 0 8px;
+  white-space: normal;
+  text-align: center;
+  letter-spacing: 0;
+  line-height: 13px;
+}
+#ui.ui-v2 #ability-button span {
+  white-space: nowrap;
 }
 /* while the dialogue box is open the discs are hidden (the panel shows through them otherwise) */
 #ui.ui-v2.talking .action-button,

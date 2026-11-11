@@ -12,11 +12,11 @@
 // Pure (no Vite / PixiJS imports): tools/precache.mjs reads V2_ENABLED too.
 
 /**
- * The v2 groups that passed inspection and are drawn by default. Starts empty; the director adds a
- * group once its art is approved.
+ * The v2 groups that passed inspection and are drawn by default; the director adds a group once its
+ * art is approved. ui: the W4 UI (title, buttons, menus), after the wiring inspections (round 3).
  * @type {readonly string[]}
  */
-export const V2_ENABLED = Object.freeze([]);
+export const V2_ENABLED = Object.freeze(['ui']);
 
 /** The name a v2 group has in the game (releaseFrames, the build's sheet table). @param {string} group */
 export const v2Name = (group) => `v2/${group}`;

@@ -49,15 +49,27 @@ const artOf = (page, sel, pseudo = null) =>
     [sel, pseudo],
   );
 
-test('?ui=v1, ?v2=0 and no switch: the v1 UI, nothing of v2 loaded or stored', async ({ page }) => {
-  for (const query of ['', '&ui=v1', '&v2=0']) {
+test('the v2 UI is the default (V2_ENABLED has ui): no switch loads it', async ({ page }) => {
+  const requests = [];
+  page.on('request', (r) => requests.push(r.url()));
+  const errors = await open(page, '');
+  expect(await isV2(page)).toBe(true);
+  expect(requests.some((u) => /release-v2-ui|art-release-v2\/ui/.test(u))).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('?ui=v1 and ?v2=0: the v1 UI, nothing of v2 loaded or stored', async ({ page }) => {
+  for (const query of ['&ui=v1', '&v2=0']) {
     const requests = [];
     page.on('request', (r) => requests.push(r.url()));
     const errors = await open(page, query);
     expect(await isV2(page), query).toBe(false);
     expect(await page.evaluate(() => !!document.getElementById('ui-v2-buttons'))).toBe(false);
     expect(await page.evaluate(() => document.documentElement.style.length)).toBe(0); // no --ui-* frames
-    expect(requests.filter((u) => /release-v2-ui|art-release-v2\/ui/.test(u))).toEqual([]);
+    // (index.html preloads the v2 UI sheet, a default group since V2_ENABLED has ui; with ?ui=v1 it is
+    // downloaded by that preload only, and never cut out or put on: no style sheet, no --ui-* frames above)
+    expect(requests.filter((u) => /release-v2-ui|art-release-v2\/ui/.test(u)).length).toBeLessThanOrEqual(2);
+    expect(requests.filter((u) => /art-release-v2\/ui\//.test(u))).toEqual([]); // no single frames either
     expect(await page.evaluate(() => localStorage.getItem('seimyaku.sessions.v1'))).toBe(null);
     // the v1 look: text on a translucent disc with a border, SVG hearts
     const attack = await page.locator('#attack-button').evaluate((el) => ({ text: el.textContent, color: getComputedStyle(el).color, border: getComputedStyle(el).borderTopWidth, image: getComputedStyle(el).backgroundImage }));
@@ -421,7 +433,7 @@ test('?ui=v2 W-2b: with icons only, every power\'s name is inside the ability ri
 });
 
 for (const ui of ['v1', 'v2']) {
-  test(`?ui=${ui} W-5: the toast is centred over panels and the dialogue, clear of the panel head; in play clear of the hero`, async ({ page }) => {
+  test(`?ui=${ui} W-5: the toast is centred over panels (and the v2 dialogue), clear of the panel head; in play clear of the hero`, async ({ page }) => {
     const MSG = '星環の力「共鳴」を手に入れた！ 左の「能力」ボタンで使える';
     await page.setViewportSize({ width: 667, height: 375 }); // iPhone SE, the tightest
     await page.addInitScript(() => localStorage.setItem('seimyaku.settings.v1', JSON.stringify({ hand: 'left', textSize: 'large', buttonSize: 'large' })));
@@ -455,7 +467,12 @@ for (const ui of ['v1', 'v2']) {
     }
     await hide();
     await page.click('#inv-close');
-    // in the dialogue: centred above the box
+    // in the dialogue (v2, where the round buttons are hidden then): centred above the box. The v1 UI
+    // keeps its buttons in the dialogue, so there the toast stays clear of them (W-5b, below).
+    if (ui === 'v1') {
+      expect(errors).toEqual([]);
+      return;
+    }
     await api(page, 'standBy', 'elder');
     await expect(page.locator('#use-button')).toBeVisible();
     await api(page, 'talkTo', 'elder');
@@ -482,3 +499,45 @@ test('?ui=v2: the first-plays labels count plays (はじめから / つづきか
   expect(await count()).toBe('1');
   await expect(page.locator('#ui')).toHaveClass(/ui-labels/);
 });
+
+// ---- W4 inspection, round 4 (W-5b): the v1 UI keeps its round buttons in the dialogue ----
+const V1_CASES = {
+  v1: {},
+  v1L: { hand: 'left', textSize: 'large' },
+  v1bt: { buttonSize: 'large', textSize: 'large' },
+  v1Lbt: { hand: 'left', buttonSize: 'large', textSize: 'large' },
+};
+for (const [name, set] of Object.entries(V1_CASES)) {
+  test(`?ui=v1 W-5b (${name}): in the dialogue the toast keeps clear of ⇄ and the round buttons, SE and 15 Pro`, async ({ page }) => {
+    await page.addInitScript((s) => localStorage.setItem('seimyaku.settings.v1', JSON.stringify(s)), set);
+    for (const vp of [{ width: 667, height: 375 }, { width: 852, height: 393 }]) {
+      await page.setViewportSize(vp);
+      const errors = await open(page, '&ui=v1');
+      await api(page, 'grantAbility', 'light');
+      await api(page, 'grantAbility', 'resonance');
+      await api(page, 'standBy', 'elder');
+      await expect(page.locator('#use-button')).toBeVisible();
+      await api(page, 'talkTo', 'elder');
+      await expect(page.locator('#dialogue')).toBeVisible();
+      await expect(page.locator('#ui')).toHaveClass(/talking/);
+      await expect(page.locator('#ability-next')).toBeVisible(); // v1: the buttons stay in the dialogue
+      const hits = await page.evaluate(() => {
+        const t = /** @type {HTMLElement} */ (document.getElementById('toast'));
+        t.hidden = false;
+        t.textContent = '星環の力「共鳴」を手に入れた！ 左の「能力」ボタンで使える';
+        const a = t.getBoundingClientRect();
+        const out = [];
+        for (const el of document.querySelectorAll('#ui .action-button, #ui #ability-next')) {
+          if (/** @type {HTMLElement} */ (el).hidden) continue;
+          const b = el.getBoundingClientRect();
+          const area = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+          if (area > 0) out.push(`${el.id} ${area.toFixed(0)} px²`);
+        }
+        t.hidden = true;
+        return out;
+      });
+      expect(hits, `${vp.width}×${vp.height}`).toEqual([]);
+      expect(errors).toEqual([]);
+    }
+  });
+}
