@@ -1231,6 +1231,14 @@ export class GameView {
     v.y = o.y;
     v.w = this.app.screen.width / this.camera.zoom;
     v.h = this.app.screen.height / this.camera.zoom;
+    // A chunk's flat-ground shadows are drawn only while the chunk is near the view: the hidden ones
+    // are not gathered when the world's draw list is rebuilt (a fight in a forest rebuilds it often,
+    // with hundreds of tree shadows in the chunks around); this changes only at a chunk border.
+    const span = CHUNK * this.map.tileSize;
+    for (const c of this.chunks.values()) {
+      const near = c.cx * span < v.x + v.w + 64 && (c.cx + 1) * span > v.x - 64 && c.cy * span < v.y + v.h + 96 && (c.cy + 1) * span > v.y - 64;
+      if (c.shade.visible !== near) c.shade.visible = near;
+    }
     // Shadows under the villagers and the enemies on screen (one per character, kept; see charShadow).
     this.charShadowN = 0;
     const frame = ++this.charShadowFrame;
