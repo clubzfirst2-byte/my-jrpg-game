@@ -56,8 +56,10 @@ def hsh(x, y, s=0):
 def ramps_for(season):
     sp = SEASONS[season]
     g = lift_ramp(sp["grass"])
-    # the sunny grass: tones 4-6 a little toward yellow-green, a little brighter
-    sunny = [shift(c, dh=-14, ds=1.05, dv=1.05) for c in g]
+    # the sunny grass: a little brighter and turned toward YELLOW in every season (round 5): summer's
+    # green turns down the hue circle (to yellow-green), autumn's orange turns up it (to yellow)
+    dh = {"summer": -14, "autumn": 14, "winter": 0}[season]
+    sunny = [shift(c, dh=dh, ds=1.05, dv=1.05) for c in g]
     return {"grass": g, "sunny": sunny, "earth": lift_ramp(sp["earth"])}
 
 
@@ -151,13 +153,13 @@ def base_pattern(name, season, n=256):
         cx, cy = rng.uniform(r + 3, n - r - 3), rng.uniform(r + 3, n - r - 3)
         m = blob(n, cx, cy, r, r * rng.uniform(0.6, 0.9), seed + k)
         blades_in(c, m, "grass", 2 if k % 2 == 0 else 4, 0.6, rng, seed + k)
-    for k in range(70):  # small mottles everywhere (to 2 texels from the edge)
+    for k in range(300):  # small mottles everywhere (to 2 texels from the edge); round 5: 70 -> 300
         r = rng.uniform(3, 7)
         cx, cy = rng.uniform(r + 2, n - r - 2), rng.uniform(r + 2, n - r - 2)
         m = blob(n, cx, cy, r, r * rng.uniform(0.5, 0.9), seed * 3 + k)
         blades_in(c, m, "grass", 2 if rng.random() < 0.6 else 4, 0.5, rng, seed * 5 + k)
     # grass marks: 3 kinds, uneven spacing (dart throwing), kept 6 texels inside the pattern
-    for (x, y) in scatter(rng, n, 300, 9, 7):
+    for (x, y) in scatter(rng, n, 420, 8, 7):
         mark(c, x, y, rng.choices((0, 1, 2), weights=(5, 3, 2))[0], int(c.tone[int(y), int(x)]), rng)
     despeckle(c)
     return c
@@ -209,31 +211,136 @@ def flow_key(tx, ty):
     return kind, bits
 
 
-def flow_tile(season, kind, bits, variant):
-    """One flow tile: blades whose density follows the 4 corners (bilinear), 0.75 at a full corner."""
-    c = Canvas(64, 64, ramps_for(season))
-    rng = random.Random(hash((kind, bits, variant)) & 0xFFFF)
+def _tile_noise(seed, n=64):
+    """Smooth noise with whole periods over the tile (it repeats every 64 texels, so the same field
+    meets itself across every tile edge)."""
+    rng = random.Random(seed)
+    yy, xx = np.mgrid[0:n, 0:n] / n * 2 * math.pi
+    v = np.zeros((n, n))
+    for f, a in ((1, 1.0), (2, 0.6), (3, 0.35)):
+        for _ in range(2):
+            kx, ky = rng.randint(-f, f), rng.randint(-f, f)
+            if kx == 0 and ky == 0:
+                kx = f
+            v += a * np.sin(kx * xx + ky * yy + rng.uniform(0, 6.28))
+    return v / np.abs(v).max()
+
+
+def flow_field(bits, variant):
+    """Round 5: the corners' bilinear blend plus noise, so a patch's outline is a free curve (not the
+    45-degree / square / diamond shapes of the tile geometry). The edge noise is the same in every
+    flow tile (it joins), the inner noise is the variant's own and 0 on the tile's edges."""
     w = [int(b) for b in bits]  # TL, TR, BR, BL
     yy, xx = np.mgrid[0:64, 0:64]
     u, v = (xx + 0.5) / 64, (yy + 0.5) / 64
-    d = (w[0] * (1 - u) * (1 - v) + w[1] * u * (1 - v) + w[2] * u * v + w[3] * (1 - u) * v)
-    # ragged: the density wobbles with a fixed 3 x 3-texel scatter, so the patch edge is not a diagonal
-    jit = np.vectorize(lambda x, y: (hsh(x // 3, y // 3, variant * 7 + len(bits)) % 1000) / 1000.0)(xx, yy)
-    d = np.clip(d * (0.55 + 0.9 * jit) - 0.08, 0, 1)
-    d = d * d * (3 - 2 * d) * 0.55
+    f = w[0] * (1 - u) * (1 - v) + w[1] * u * (1 - v) + w[2] * u * v + w[3] * (1 - u) * v
+    inner = np.sin(np.pi * u) * np.sin(np.pi * v)
+    return f + 0.22 * _tile_noise(901) + 0.38 * inner * _tile_noise(1000 + variant * 37 + int(bits, 2))
+
+
+def flow_tile(season, kind, bits, variant):
+    """Round 5 (the 1a inspection): marks in BUNDLES (2-3 blades) over about 22% of a full patch,
+    placed by dart throwing over the tile AND 5 rows below it (so the bottom row is as covered as the
+    middle), inside a patch whose edge is a free curve (flow_field). Winter: wind-swept drift strokes
+    instead of blades. Seeds are fixed numbers (the same files every run)."""
+    c = Canvas(64, 64, ramps_for(season))
+    seed = hsh(int(bits, 2), variant, 3 if kind == "d" else 4) & 0xFFFFFF
+    rng = random.Random(seed)
+    F = flow_field(bits, variant)
     mat = "grass" if kind == "d" else "sunny"
     k = c.mid(mat)
-    for y in range(64):
-        for x in range(64):
-            if hsh(x, y, variant + 3) % 3 or rng.random() >= d[y, x]:
-                continue
-            t = (1 if rng.random() < 0.35 * d[y, x] / 0.55 else 2) if kind == "d" else \
-                (5 if rng.random() < 0.4 * d[y, x] / 0.55 else 4)
-            for dd in range(rng.randint(2, 4)):
-                if y - dd >= 0:
-                    c.mat[y - dd, x] = k
-                    c.tone[y - dd, x] = t
+
+    def inside(x, y):
+        xi, yi = min(63, max(0, int(x))), min(63, max(0, int(y)))
+        val = F[yi, xi]
+        return val > 0.5 or (val > 0.38 and rng.random() < 0.35)
+
+    pts = []
+    tries = 0
+    while len(pts) < 110 and tries < 6000:  # dart throwing, spacing >= 4.5
+        tries += 1
+        x, y = rng.uniform(-3, 65), rng.uniform(0, 69)
+        if all((x - a) ** 2 + (y - b) ** 2 >= 20 for a, b in pts):
+            pts.append((x, y))
+    for (x, y) in pts:
+        if not inside(x, min(y, 63.0)):
+            continue
+        if season == "winter":  # a drift stroke: 3-5 wide, 1-2 rows, a lit or a shaded one
+            ln = rng.randint(3, 5)
+            for i in range(ln):
+                for j in range(1 + (i > 0 and i < ln - 1)):
+                    X, Y = int(x) + i, int(y) - j
+                    if 0 <= X < 64 and 0 <= Y < 64:
+                        c.mat[Y, X] = k
+                        c.tone[Y, X] = (2 if j == 0 else 1) if kind == "d" else (6 if j == 0 else 5)
+            continue
+        nb = rng.choice((2, 3))
+        lean = rng.choice((-1, 0, 1))
+        for bi in range(nb):  # the bundle: blades 1 apart, the middle one tallest
+            h = rng.randint(3, 5) + (1 if bi == 1 else 0)
+            for d in range(h):
+                X = int(x) + bi + (lean if d >= h - 2 else 0)
+                Y = int(y) - d
+                if 0 <= X < 64 and 0 <= Y < 64:
+                    c.mat[Y, X] = k
+                    if kind == "d":
+                        c.tone[Y, X] = 1 if d < 2 else 2
+                    else:
+                        c.tone[Y, X] = 5 if d >= h - 2 else 4
+    _balance(c, F > 0.5, k, kind, season, rng)
+    despeckle(c, loose=(mat,))
     return c
+
+
+def _balance(c, inside, k, kind, season, rng, tol=0.08):
+    """Round 5: even out the cover so no row and no column of the patch is thinner or thicker than
+    the patch as a whole (the 64-px grid of the 1a inspection came from a thin bottom row). Thin
+    rows / columns get blade texels added next to existing ones (a blade grows by one), thick ones
+    lose blade tips."""
+    def tone_for(y, x):
+        if season == "winter":
+            return 2 if kind == "d" else 6
+        return 2 if kind == "d" else 4
+    cov = (c.mat == k) & inside
+    t = cov.sum() / max(1, inside.sum())
+    for _ in range(8):
+        for axis in (0, 1):
+            for i in range(64):
+                line_in = inside[i, :] if axis == 0 else inside[:, i]
+                n = line_in.sum()
+                if n < 12:
+                    continue
+                line = (c.mat[i, :] == k) if axis == 0 else (c.mat[:, i] == k)
+                have = (line & line_in).sum()
+                want = t * n
+                idx = [j for j in range(64) if line_in[j]]
+                rng.shuffle(idx)
+                if have < want * (1 - tol):
+                    need = int(want - have)
+                    for j in idx:
+                        if need <= 0:
+                            break
+                        y, x = (i, j) if axis == 0 else (j, i)
+                        if c.mat[y, x] == k:
+                            continue
+                        near = any(0 <= y + dy < 64 and 0 <= x + dx < 64 and c.mat[y + dy, x + dx] == k
+                                   for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0)))
+                        if near or rng.random() < 0.2:
+                            c.mat[y, x] = k
+                            c.tone[y, x] = tone_for(y, x)
+                            need -= 1
+                elif have > want * (1 + tol):
+                    extra = int(have - want)
+                    for j in idx:
+                        if extra <= 0:
+                            break
+                        y, x = (i, j) if axis == 0 else (j, i)
+                        if c.mat[y, x] != k:
+                            continue
+                        top = y == 0 or c.mat[y - 1, x] != k  # a blade's tip
+                        if top:
+                            c.mat[y, x] = 0
+                            extra -= 1
 
 
 def write(season):
@@ -368,6 +475,20 @@ def edge_overlay(season, mask, variant):
         grow[:, 1:] |= prev[:, :-1]
         grow[:, :-1] |= prev[:, 1:]
         do[grow & (do == 9)] = step
+    if season == "winter":  # a snow drift's rounded lip: no blades; a soft blue shade under it
+        for y in range(64):
+            for x in range(64):
+                if inside[y, x] and d[y, x] <= 2:
+                    gx, gy = T.gradient(mask, (x + 0.5) / 2 - 0.5, (y + 0.5) / 2 - 0.5)
+                    lit = (gx + gy) > 0.05
+                    c.tone[y, x] = (6 if d[y, x] == 1 else 5) if lit else (3 if d[y, x] == 1 else 4)
+                elif not inside[y, x] and do[y, x] == 1 and 2 <= x < 62 and 2 <= y < 62:
+                    gx, gy = T.gradient(mask, (x + 0.5) / 2 - 0.5, (y + 0.5) / 2 - 0.5)
+                    if gy < -0.05:  # the drift lies above: its shade falls on the lower ground
+                        c.mat[y, x] = k
+                        c.tone[y, x] = 2
+        _fill_holes(c)
+        return c
     # blades over the border (not on the 2 outer rows / columns, so neighbouring tiles join)
     rng = random.Random(mask * 31 + variant * 7 + sum(map(ord, season)))
     for y in range(3, 61):
@@ -390,7 +511,28 @@ def edge_overlay(season, mask, variant):
                 yy += step
                 if i == h // 2:
                     xx += lean
+    _fill_holes(c)
     return c
+
+
+def _fill_holes(c):
+    """Round 5 (v2 round 8 rule): a transparent pocket that does not reach the tile's edge (between
+    the turf edge and blade roots) is filled with the turf's shade tone."""
+    n = c.h
+    empty = c.mat == 0
+    reach = np.zeros_like(empty)
+    stack = [(x, y) for y in range(n) for x in range(n) if empty[y, x] and (x in (0, n - 1) or y in (0, n - 1))]
+    for x, y in stack:
+        reach[y, x] = True
+    while stack:
+        x, y = stack.pop()
+        for a, b in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if 0 <= a < n and 0 <= b < n and empty[b, a] and not reach[b, a]:
+                reach[b, a] = True
+                stack.append((a, b))
+    holes = empty & ~reach
+    c.mat[holes] = c.mid("grass")
+    c.tone[holes] = 2
 
 
 def write_edges(season):
