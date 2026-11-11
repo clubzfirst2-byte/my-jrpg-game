@@ -115,3 +115,26 @@ describe('v1.0 enemies: placeholders and release-art slots', async () => {
     expect(REGION_ENTRIES['region:forest']().some((e) => e.key === 'enemy.boss_root.0')).toBe(true);
   });
 });
+
+describe('splitForAtlas: at most 2048×1024 per real-art atlas (gfx v2 integration)', async () => {
+  const { atlasSizeFor, splitForAtlas } = await import('../../src/view/assets/placeholderPack.js');
+  const img = (/** @type {number} */ w, /** @type {number} */ h) => ({ rows: ['.'], image: { width: w, height: h } });
+  it('entries that fit stay one atlas, the same as before', () => {
+    const fit = Array.from({ length: 676 }, () => img(48, 56));
+    expect(splitForAtlas(fit)).toEqual([fit]);
+    const small = Array.from({ length: 21 }, () => img(48, 56));
+    expect(splitForAtlas(small)).toEqual([small]);
+  });
+  it('a little over 2048×1024: the first 2048×1024 and a small second atlas, not one 2048×2048', () => {
+    const tall = Array.from({ length: 676 }, () => img(48, 56));
+    const short = Array.from({ length: 400 }, () => img(32, 16)); // 7 shelves of 17 px: 968 + 119 > 1024
+    const all = [...tall, ...short];
+    expect(atlasSizeFor(all)).toEqual({ width: 2048, height: 2048 });
+    const parts = splitForAtlas(all);
+    expect(parts.length).toBe(2);
+    expect(parts.flat()).toEqual(all);
+    expect(atlasSizeFor(parts[0])).toEqual({ width: 2048, height: 1024 });
+    const rest = atlasSizeFor(parts[1]);
+    expect(rest.width * rest.height).toBeLessThanOrEqual(2048 * 64);
+  });
+});

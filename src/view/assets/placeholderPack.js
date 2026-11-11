@@ -400,6 +400,45 @@ export function atlasSizeFor(entries) {
   throw new Error('Too many sprites for one atlas');
 }
 
+/** The largest atlas of the real art before the rest goes to a second atlas (perf v1: 2048×1024). */
+export const ATLAS_MAX = /** @type {const} */ ({ width: 2048, height: 1024 });
+
+/**
+ * gfx v2 integration: the entries in atlases of at most 2048×1024. Entries that fit (atlasSizeFor at most
+ * that) are one atlas, exactly as before. Otherwise, rather than a 2048×2048 atlas (8 MB more, half of it
+ * empty), the first entries that fill 2048×1024 with the same shelf packing are one atlas, and the rest
+ * (with tallestFirst: the shortest pieces) go on to the next, sized to fit them. (Ground v2 + enemy v2:
+ * 19 rows over 1024 in one atlas.)
+ * @template {{ rows: string[], image?: { width: number, height: number } }} E
+ * @param {E[]} entries @returns {E[][]}
+ */
+export function splitForAtlas(entries) {
+  const size = atlasSizeFor(entries);
+  if (size.width < ATLAS_MAX.width || size.height <= ATLAS_MAX.height) return [entries];
+  let x = 0;
+  let y = 0;
+  let shelf = 0;
+  let n = 0;
+  for (const e of entries) {
+    const { w, h } = sizeOf(e);
+    let nx = x;
+    let ny = y;
+    let ns = shelf;
+    if (nx + w > ATLAS_MAX.width) {
+      nx = 0;
+      ny += ns + 1;
+      ns = 0;
+    }
+    if (ny + h > ATLAS_MAX.height) break;
+    x = nx + w + 1;
+    y = ny;
+    shelf = Math.max(ns, h);
+    n++;
+  }
+  if (n === 0) throw new Error('Too many sprites for one atlas');
+  return [entries.slice(0, n), ...splitForAtlas(entries.slice(n))];
+}
+
 /**
  * P11.5 standard: the real art (src/art) has 2 art pixels per game pixel — tiles 32×32, characters
  * 32×56 (docs/ART.md). It is shown at half its pixel size, so it covers the same ground as the
@@ -486,7 +525,7 @@ export async function buildPlaceholderPack(entries = placeholderEntries(), overr
   const plain = all.filter((e) => !e.image);
   const real = tallestFirst ? tallestFirstOrder(all.filter((e) => e.image)) : all.filter((e) => e.image);
   const packs = [packAtlas(plain, atlasSizeFor(plain), 1)];
-  if (real.length) packs.push(packAtlas(real, atlasSizeFor(real), ART_SCALE));
+  if (real.length) for (const part of splitForAtlas(real)) packs.push(packAtlas(part, atlasSizeFor(part), ART_SCALE));
   return mergePacks(packs);
 }
 
