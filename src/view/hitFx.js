@@ -4,7 +4,9 @@
 // a 1-game-px circle drawn on the game's pixel grid, in 4 frames (small → full size), white turning
 // yellow; the sparks are 2×2 then 1×1 game px, white → yellow → orange, fully opaque until they go
 // out (a faded spark over grass read as a flower dot). Pooled: a fixed number of sprites made once,
-// reused; nothing is allocated per frame. Drawn above the light map so the sparks read at night too
+// reused; nothing is allocated per frame; a sprite not in use is hidden, so it is not gathered when
+// the scene's draw list is rebuilt (it changes only around a blow, when the fight rebuilds that list
+// anyway). Drawn above the light map so the sparks read at night too
 // (they sit on the struck body, so drawing them over a tree in front costs nothing).
 import { Container, Sprite, Texture } from 'pixi.js';
 import { atlasFrame, whiteRGBA } from './pixelAtlas.js';
@@ -113,7 +115,7 @@ export class HitFx {
     for (let i = 0; i < FX_POOL.sparks; i++) {
       const s = new Sprite(dot);
       s.anchor.set(0.5);
-      s.alpha = 0;
+      s.visible = false;
       this.layer.addChild(s);
       this.sparks.push({ s, live: false, x: 0, y: 0, vx: 0, vy: 0, age: 0, life: 0, warm: false });
     }
@@ -122,7 +124,7 @@ export class HitFx {
     for (let i = 0; i < FX_POOL.rings; i++) {
       const s = new Sprite(Texture.WHITE);
       s.anchor.set(0.5);
-      s.alpha = 0;
+      s.visible = false;
       this.layer.addChild(s);
       this.rings.push({ s, live: false, r: 0, age: 0, life: 0, color: 0xffffff, frame: -1 });
     }
@@ -168,6 +170,7 @@ export class HitFx {
       p.warm = spec.color === 0xfff2b0;
       p.s.alpha = 1;
       p.s.scale.set(1);
+      p.s.visible = true;
       p.live = true;
     }
     if (spec.ring > 0) {
@@ -179,6 +182,7 @@ export class HitFx {
       r.life = spec.life;
       r.color = spec.ringColor;
       r.frame = -1;
+      r.s.visible = true;
       r.live = true;
       this.ringFrame(r, 0);
     }
@@ -194,7 +198,7 @@ export class HitFx {
       p.age += ms;
       if (p.age >= p.life) {
         p.live = false;
-        p.s.alpha = 0;
+        p.s.visible = false;
         continue;
       }
       active++;
@@ -214,7 +218,7 @@ export class HitFx {
       r.age += ms;
       if (r.age >= r.life) {
         r.live = false;
-        r.s.alpha = 0;
+        r.s.visible = false;
         continue;
       }
       active++;

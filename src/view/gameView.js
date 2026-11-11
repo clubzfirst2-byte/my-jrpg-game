@@ -359,11 +359,9 @@ export class GameView {
     this.bow.visible = false;
     this.actors.addChild(this.slash, this.shield, this.bow);
     // gfx W5: the slash leaves two fading after-images (the last two frames' places).
-    // (shown or not by their opacity: a change of `visible` rebuilds the world's list of things to draw)
     this.slashTrail = [this.makeSprite('fx.slash'), this.makeSprite('fx.slash')];
     for (const t of this.slashTrail) {
-      t.alpha = 0;
-      t.visible = this.fxV2;
+      t.visible = false;
       this.actors.addChild(t);
     }
     /** the slash's last two places: x, y, rotation, zIndex, shown (1/0) */
@@ -1155,7 +1153,7 @@ export class GameView {
       shadows: { baked, loose, characters: this.charShadowN },
       windows: { sprites: this.windowSprites.filter((w) => !(/** @type {any} */ (w).pool)).length, lit: this.windowSprites.filter((w) => !(/** @type {any} */ (w).pool) && w.visible).length, pools: this.windowSprites.filter((w) => /** @type {any} */ (w).pool && w.alpha > 0).length, glow: this.weather.windowGlow, lights: this.weather.windowLights.length },
       particles: { showing: this.fxOn.particles ? this.ambientParticles.visible : 0, kinds: { ...this.ambientKinds }, max: this.ambientParticles.pool.length + this.ambientParticles.glowPool.length + this.ambientParticles.mistPool.length },
-      hit: { active: this.fxOn.hitfx ? this.hitFx.active : 0, pool: this.hitFx.sparks.length + this.hitFx.rings.length, trail: this.slashTrail.filter((t) => t.visible && t.alpha > 0).length },
+      hit: { active: this.fxOn.hitfx ? this.hitFx.active : 0, pool: this.hitFx.sparks.length + this.hitFx.rings.length, trail: this.slashTrail.filter((t) => t.visible).length },
       rain: { fancy: this.weather.fancyRain, drops: this.weather.drops.filter((d) => d.s.visible).length, splashes: this.weather.splashes.filter((p) => p.s.alpha > 0).length },
     };
   }
@@ -1202,8 +1200,7 @@ export class GameView {
     const v = this.viewRect;
     if (spr.x < v.x - 32 || spr.x > v.x + v.w + 32 || spr.y < v.y - 16 || spr.y > v.y + v.h + 48) return;
     // each character keeps its own shadow sprite: its place in the sorted actors changes only when
-    // the character moves, and a shadow shown or not is its opacity, never `visible` (a change of
-    // `visible` rebuilds the whole world's list of things to draw)
+    // the character moves; one not used this frame is hidden (and not gathered for drawing)
     let s = this.charShadowOf.get(spr);
     if (!s) {
       s = new Sprite();
@@ -1212,6 +1209,7 @@ export class GameView {
       this.charShadowOf.set(spr, s);
     }
     /** @type {any} */ (s).seen = this.charShadowFrame;
+    s.visible = true;
     this.charShadowN++;
     const g = characterShadow(Math.abs(spr.width));
     placeShadow(s, spr.x, spr.y, g, this.shadowStrength * spr.alpha);
@@ -1244,7 +1242,7 @@ export class GameView {
       if (owner.destroyed) {
         sh.destroy();
         this.charShadowOf.delete(owner);
-      } else if (/** @type {any} */ (sh).seen !== frame) sh.alpha = 0;
+      } else if (/** @type {any} */ (sh).seen !== frame) sh.visible = false;
     }
 
     // Lit windows: on at dusk, by the ambient light; their light goes into the light map.
@@ -1696,8 +1694,9 @@ export class GameView {
       const t = this.slashTrail[k];
       const j = k * 5;
       const on = hist[j + 4] === 1 && this.fxOn.hitfx && this.fxV2;
-      t.alpha = on ? (k === 0 ? 0.45 : 0.2) : 0;
+      t.visible = on; // (hidden between swings: not gathered when the world's draw list is rebuilt)
       if (on) {
+        t.alpha = k === 0 ? 0.45 : 0.2;
         t.position.set(hist[j], hist[j + 1]);
         t.rotation = hist[j + 2];
         t.zIndex = hist[j + 3];

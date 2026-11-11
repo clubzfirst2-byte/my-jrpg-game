@@ -83,8 +83,16 @@ export function objectShadow(type, w, h) {
  */
 export function characterShadow(w) {
   const sw = Math.max(8, Math.round(w * 0.8));
-  return { dx: Math.round(sw * 0.1), dy: 1, w: sw, h: Math.max(3, Math.round(sw * 0.36)), alpha: SHADOW.character, shape: 'oval' };
+  // (one object per size, kept: asked for every character every frame)
+  let g = charGeoms.get(sw);
+  if (!g) {
+    g = Object.freeze({ dx: Math.round(sw * 0.1), dy: 1, w: sw, h: Math.max(3, Math.round(sw * 0.36)), alpha: SHADOW.character, shape: /** @type {const} */ ('oval') });
+    charGeoms.set(sw, g);
+  }
+  return g;
 }
+/** @type {Map<number, ShadowGeom>} */
+const charGeoms = new Map();
 
 /**
  * The shadow's pixels: one byte per game px, the step of darkness (0 none, 1 outermost .. 3 core).
@@ -157,10 +165,15 @@ export function shadowTexture(g) {
  * @param {ShadowGeom} g @param {number} [strength] 0..1, the weather's (weatherShadow)
  */
 export function placeShadow(s, x, y, g, strength = 1) {
-  const tex = shadowTexture(g);
-  if (s.texture !== tex) s.texture = tex;
-  s.anchor.set(0, 0);
-  s.scale.set(1);
+  // (its texture looked up only when the shape or size changes: this runs for every character every frame)
+  const t = /** @type {any} */ (s);
+  if (t.shadowOf !== g) {
+    t.shadowOf = g;
+    const tex = shadowTexture(g);
+    if (s.texture !== tex) s.texture = tex;
+    s.anchor.set(0, 0);
+    s.scale.set(1);
+  }
   s.position.set(Math.round(x + g.dx - g.w / 2), Math.round(y + g.dy - g.h / 2));
   s.alpha = g.alpha * strength;
 }
