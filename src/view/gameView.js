@@ -35,8 +35,8 @@ import { openingView } from '../game/story/story.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
 import { SilhouetteCache, placeFlash, RIM_FLASH } from './flashOverlay.js';
 import { EnemySlots } from './enemySlots.js';
-import { objectShadow, characterShadow, placeShadow, weatherShadow, SHADOW } from './shadows.js';
-import { PANE_AREA, windowGlow, hasWindows, paneImageFromTable, windowLightSpots } from './houseWindows.js';
+import { objectShadow, characterShadow, placeShadow, weatherShadow, shadowTexture, SHADOW } from './shadows.js';
+import { PANE_AREA, WINDOW_GLOW, windowGlow, hasWindows, paneImageFromTable, windowLightSpots } from './houseWindows.js';
 import { AmbientParticles, ambientKinds, mistTextures } from './ambientParticles.js';
 import { HitFx } from './hitFx.js';
 import { isDark, hourOf } from '../game/env/weather.js';
@@ -261,9 +261,11 @@ export class GameView {
     /** effect groups on (setFx, for measuring) */
     const on = this.fxV2;
     this.fxOn = { shadows: on, particles: on, hitfx: on, windows: on, rain: on };
-    /** villagers' and enemies' shadows, pooled @type {Sprite[]} */
-    this.charShadows = [];
+    /** villagers' and enemies' shadows: one per character sprite, kept @type {Map<Sprite, Sprite>} */
+    this.charShadowOf = new Map();
+    /** characters' shadows placed this frame (fxDebug), and the frame's number */
     this.charShadowN = 0;
+    this.charShadowFrame = 0;
     this.placeCharShadow = (/** @type {Sprite} */ spr, /** @type {number} */ z) => this.charShadow(spr, z);
     this.npcShadowFn = (/** @type {Sprite} */ spr) => this.charShadow(spr, spr.zIndex);
     this.enemyShadowFn = (/** @type {{ owner: any, sprite: Sprite }} */ slot) => {
@@ -276,22 +278,33 @@ export class GameView {
     this.windowSprites = [];
     /** world px of each lit window's pool of light on the ground (null until the house art is known) @type {{ x: number, y: number }[] | null} */
     this.windowLights = null;
+    this.lastWindowGlow = 1;
     /** the lit glass per house texture @type {Map<Texture, { tex: Texture, scale: number } | null>} */
     this.paneTextures = new Map();
     /** lit glass, above the light map (in the glow layer) */
     this.windowLayer = new Container();
     this.windowLayer.label = 'windows';
+    /** the windows' pools of light on the ground (under the actors, over the shadows) */
+    this.poolLayer = new Container();
+    this.poolLayer.label = 'window-pools';
+    this.world.addChildAt(this.poolLayer, this.world.getChildIndex(this.actors));
     // ambient particles: lit like the world (in it, over the actors) and glowing (over the light map),
     this.ambientParticles = new AmbientParticles(assets.texture('px'), mistTextures());
     this.world.addChild(this.ambientParticles.under);
     this.ambientKinds = ambientKinds({ region: null, season: 'summer', dark: false, day: true, weather: 'clear', indoor: true, nearWater: false, snowGround: false });
     this.ambientCheckAt = -1;
+    /** the ambient particles move every other frame (time gathered here) */
+    this.ambientDt = 0;
+    this.ambientFrame = 0;
     this.viewRect = { x: 0, y: 0, w: 0, h: 0 };
     this.nearWaterFn = (/** @type {number} */ x, /** @type {number} */ y) => this.nearWater(x, y, 2);
     // and hit effects (hitFx.js). The glowing layers follow the world's camera (applyCamera).
     this.hitFx = new HitFx(assets.texture('px'));
     this.glowLayer = new Container();
     this.glowLayer.label = 'glow';
+    // its own render group: a spark or a ring coming and going rebuilds only this small list of
+    // things to draw, not the world's (thousands of sprites)
+    this.glowLayer.isRenderGroup = true;
     this.glowLayer.addChild(this.windowLayer, this.ambientParticles.glow, this.hitFx.layer);
     app.stage.addChildAt(this.glowLayer, app.stage.getChildIndex(this.weather.overlay) + 1);
     this.setFx('', false); // (the layers as fxOn says)
@@ -345,9 +358,11 @@ export class GameView {
     this.bow.visible = false;
     this.actors.addChild(this.slash, this.shield, this.bow);
     // gfx W5: the slash leaves two fading after-images (the last two frames' places).
+    // (shown or not by their opacity: a change of `visible` rebuilds the world's list of things to draw)
     this.slashTrail = [this.makeSprite('fx.slash'), this.makeSprite('fx.slash')];
     for (const t of this.slashTrail) {
-      t.visible = false;
+      t.alpha = 0;
+      t.visible = this.fxV2;
       this.actors.addChild(t);
     }
     /** the slash's last two places: x, y, rotation, zIndex, shown (1/0) */
@@ -1045,6 +1060,19 @@ export class GameView {
       this.windowLayer.addChild(p);
       this.windowSprites.push(p);
       windows = [p];
+      // and the orange pools on the ground in front of the windows (under whoever stands there)
+      const P = WINDOW_GLOW.pool;
+      for (const spot of windowLightSpots(x, feetY - z)) {
+        const pool = new Sprite(shadowTexture({ shape: 'oval', w: P.w, h: P.h }));
+        pool.tint = P.color;
+        pool.position.set(Math.round(spot.x - P.w / 2), Math.round(spot.y - P.h / 2));
+        pool.alpha = 0;
+        /** @type {any} */ (pool).house = s;
+        /** @type {any} */ (pool).pool = true;
+        this.poolLayer.addChild(pool);
+        this.windowSprites.push(pool);
+        windows.push(pool);
+      }
     }
     this.objectSprites.set(o, { o, sprite: s, occluder, shadow, shadowType: o.type, shadowGone: !!o.gone, windows });
   }
@@ -1124,9 +1152,9 @@ export class GameView {
       version: this.fxV2 ? 'v2' : 'v1',
       on: { ...this.fxOn },
       shadows: { baked, loose, characters: this.charShadowN },
-      windows: { sprites: this.windowSprites.length, lit: this.windowSprites.filter((w) => w.visible).length, glow: this.weather.windowGlow, lights: this.weather.windowLights.length },
+      windows: { sprites: this.windowSprites.filter((w) => !(/** @type {any} */ (w).pool)).length, lit: this.windowSprites.filter((w) => !(/** @type {any} */ (w).pool) && w.visible).length, pools: this.windowSprites.filter((w) => /** @type {any} */ (w).pool && w.alpha > 0).length, glow: this.weather.windowGlow, lights: this.weather.windowLights.length },
       particles: { showing: this.fxOn.particles ? this.ambientParticles.visible : 0, kinds: { ...this.ambientKinds }, max: this.ambientParticles.pool.length + this.ambientParticles.glowPool.length + this.ambientParticles.mistPool.length },
-      hit: { active: this.fxOn.hitfx ? this.hitFx.active : 0, pool: this.hitFx.sparks.length + this.hitFx.rings.length, trail: this.slashTrail.filter((t) => t.visible).length },
+      hit: { active: this.fxOn.hitfx ? this.hitFx.active : 0, pool: this.hitFx.sparks.length + this.hitFx.rings.length, trail: this.slashTrail.filter((t) => t.visible && t.alpha > 0).length },
       rain: { fancy: this.weather.fancyRain, drops: this.weather.drops.filter((d) => d.s.visible).length, splashes: this.weather.splashes.filter((p) => p.s.visible).length },
     };
   }
@@ -1167,20 +1195,26 @@ export class GameView {
 
   /** A pooled shadow under a villager / enemy sprite (feet at its position). @param {Sprite} spr @param {number} zIndex */
   charShadow(spr, zIndex) {
-    if (!spr.visible || spr.alpha <= 0.05) return;
+    if (!spr.visible || spr.alpha <= 0.05 || spr.destroyed) return;
     if (this.shadowStrength <= 0) return; // (a lightning flash)
-    let s = this.charShadows[this.charShadowN];
+    // off screen: nothing to place (its shadow keeps its old place, at no opacity)
+    const v = this.viewRect;
+    if (spr.x < v.x - 32 || spr.x > v.x + v.w + 32 || spr.y < v.y - 16 || spr.y > v.y + v.h + 48) return;
+    // each character keeps its own shadow sprite: its place in the sorted actors changes only when
+    // the character moves, and a shadow shown or not is its opacity, never `visible` (a change of
+    // `visible` rebuilds the whole world's list of things to draw)
+    let s = this.charShadowOf.get(spr);
     if (!s) {
       s = new Sprite();
       s.tint = SHADOW.color;
       this.actors.addChild(s);
-      this.charShadows.push(s);
+      this.charShadowOf.set(spr, s);
     }
+    /** @type {any} */ (s).seen = this.charShadowFrame;
     this.charShadowN++;
     const g = characterShadow(Math.abs(spr.width));
     placeShadow(s, spr.x, spr.y, g, this.shadowStrength * spr.alpha);
     s.zIndex = zIndex - 0.003;
-    s.visible = true;
   }
 
   /**
@@ -1191,13 +1225,26 @@ export class GameView {
     if (!this.fxV2) return; // (?fx=v1: none of them)
     // The sun's shadows: softer under clouds, rain and snow, gone in a lightning flash; indoors as they are.
     this.setShadowStrength(this.boundsArea ? 1 : weatherShadow(this.weather.kind, this.weather.flashing));
-    // Shadows under the villagers and the enemies (pooled; the extras hidden).
+    // Where the view is (world px), for what is on screen.
+    const o = this.camera.origin();
+    const v = this.viewRect;
+    v.x = o.x;
+    v.y = o.y;
+    v.w = this.app.screen.width / this.camera.zoom;
+    v.h = this.app.screen.height / this.camera.zoom;
+    // Shadows under the villagers and the enemies on screen (one per character, kept; see charShadow).
     this.charShadowN = 0;
+    const frame = ++this.charShadowFrame;
     if (this.fxOn.shadows) {
       this.npcs.sprites.forEach(this.npcShadowFn);
       this.enemySprites.slots.forEach(this.enemyShadowFn);
     }
-    for (let i = this.charShadowN; i < this.charShadows.length; i++) this.charShadows[i].visible = false;
+    for (const [owner, sh] of this.charShadowOf) {
+      if (owner.destroyed) {
+        sh.destroy();
+        this.charShadowOf.delete(owner);
+      } else if (/** @type {any} */ (sh).seen !== frame) sh.alpha = 0;
+    }
 
     // Lit windows: on at dusk, by the ambient light; their light goes into the light map.
     const amb = this.weather.ambient;
@@ -1216,20 +1263,19 @@ export class GameView {
       this.weather.windowLights = lights;
     }
     this.weather.windowGlow = glow;
-    for (let i = 0; i < this.windowSprites.length; i++) {
+    // (by day nothing to do once they are out)
+    const windowsOut = glow <= 0.01 && this.lastWindowGlow <= 0.01;
+    this.lastWindowGlow = glow;
+    for (let i = 0; !windowsOut && i < this.windowSprites.length; i++) {
       const w = this.windowSprites[i];
       const house = /** @type {any} */ (w).house;
-      w.visible = glow > 0.01 && house.visible;
-      w.alpha = glow * house.alpha;
+      const pool = /** @type {any} */ (w).pool;
+      if (!pool) w.visible = glow > 0.01 && house.visible;
+      // (a pool is shown by its opacity: it sits in the world, where `visible` would rebuild its draw list)
+      w.alpha = pool ? (house.visible ? glow * WINDOW_GLOW.pool.alpha : 0) : glow * house.alpha;
     }
 
-    // Ambient particles: which kinds, re-decided twice a second (and where the view is, each frame).
-    const o = this.camera.origin();
-    const v = this.viewRect;
-    v.x = o.x;
-    v.y = o.y;
-    v.w = this.app.screen.width / this.camera.zoom;
-    v.h = this.app.screen.height / this.camera.zoom;
+    // Ambient particles: which kinds, re-decided twice a second.
     if (timeSec - this.ambientCheckAt > 0.5 || timeSec < this.ambientCheckAt) {
       this.ambientCheckAt = timeSec;
       const ts = this.map.tileSize;
@@ -1249,7 +1295,12 @@ export class GameView {
         snowGround: region === 'mountains',
       });
     }
-    this.ambientParticles.update(this.ambientKinds, v, this.nearWaterFn, timeSec, Math.min(0.1, dtSec));
+    // (they drift slowly: moved every other frame, with the time of both)
+    this.ambientDt += dtSec;
+    if ((this.ambientFrame++ & 1) === 0) {
+      this.ambientParticles.update(this.ambientKinds, v, this.nearWaterFn, timeSec, Math.min(0.1, this.ambientDt));
+      this.ambientDt = 0;
+    }
 
     // Hit effects for this frame's events.
     this.hitFx.takeEvents(state);
@@ -1634,12 +1685,12 @@ export class GameView {
     for (let k = 0; k < 2; k++) {
       const t = this.slashTrail[k];
       const j = k * 5;
-      t.visible = hist[j + 4] === 1 && this.fxOn.hitfx;
-      if (t.visible) {
+      const on = hist[j + 4] === 1 && this.fxOn.hitfx && this.fxV2;
+      t.alpha = on ? (k === 0 ? 0.45 : 0.2) : 0;
+      if (on) {
         t.position.set(hist[j], hist[j + 1]);
         t.rotation = hist[j + 2];
         t.zIndex = hist[j + 3];
-        t.alpha = k === 0 ? 0.45 : 0.2;
       }
     }
     hist.copyWithin(5, 0, 5);

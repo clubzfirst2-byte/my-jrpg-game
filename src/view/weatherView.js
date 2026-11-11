@@ -18,6 +18,7 @@ import { BOSS_KINDS } from '../game/entities/bosses.js';
 import { FINAL_BOSS } from '../game/entities/finalBoss.js';
 import { openingView } from '../game/story/story.js';
 import { WINDOW_GLOW } from './houseWindows.js';
+import { atlasFrame, whiteRGBA } from './pixelAtlas.js';
 
 /**
  * gfx W5 rain: two layers of streaks (far: short, faint, slower; near: long, brighter, faster), small
@@ -35,11 +36,28 @@ export const RAIN = Object.freeze({
   /** splashes a second per 100×100 screen px at full density */
   splashRate: 3.2,
   splashMs: 220,
-  /** a splash, in game px: a 2-px drop, then a 4-px ring opening, on the game's pixel grid */
-  splash: Object.freeze([Object.freeze({ w: 2, h: 1, alpha: 0.85 }), Object.freeze({ w: 4, h: 1, alpha: 0.55 })]),
+  /**
+   * a splash, in game px, on the game's pixel grid: a 2-px drop, then a crown — 4 px wide, its two
+   * ends 1 px up (rows top to bottom; # a pixel)
+   */
+  splash: Object.freeze([Object.freeze({ rows: Object.freeze(['##']), alpha: 0.85 }), Object.freeze({ rows: Object.freeze(['#..#', '.##.']), alpha: 0.7 })]),
   /** the sky while it rains (multiplied into the ambient light) */
   sky: { r: 0.86, g: 0.9, b: 1 },
 });
+
+/** A splash frame's texture (white, one texel per game px, on the effects' atlas). @param {number} f */
+export function splashTexture(f) {
+  const rows = RAIN.splash[f].rows;
+  const w = rows[0].length;
+  const h = rows.length;
+  return atlasFrame(`splash:${f}`, w, h, () => {
+    const a = new Uint8ClampedArray(w * h);
+    rows.forEach((row, y) => {
+      for (let x = 0; x < w; x++) if (row[x] === '#') a[y * w + x] = 255;
+    });
+    return whiteRGBA(a, w * h);
+  });
+}
 
 /** The look of the i-th rain drop. @param {number} i @param {boolean} fancy false: the one layer before W5 */
 export const rainLayer = (i, fancy) => (!fancy ? RAIN.v1 : i % RAIN.nearEvery === 0 ? RAIN.near : RAIN.far);
@@ -231,6 +249,7 @@ export class WeatherView {
     // Rain (screen space).
     this.rain = new Container();
     this.rain.label = 'rain';
+    this.rain.isRenderGroup = true; // (gfx W5: its drops and splashes come and go without rebuilding the world's list)
     /** @type {{ s: Sprite, x: number, y: number, k: number }[]} */
     this.drops = [];
     /** gfx W5: splashes on the ground (made on first rain). @type {{ s: Sprite, age: number }[]} */
@@ -255,6 +274,7 @@ export class WeatherView {
     // Snow (P10.2): slow flakes that sway and drift with the wind.
     this.snow = new Container();
     this.snow.label = 'snow';
+    this.snow.isRenderGroup = true; // (gfx W5: its drops and splashes come and go without rebuilding the world's list)
     /** @type {{ s: Sprite, x: number, y: number, phase: number, speed: number }[]} */
     this.flakes = [];
     // Lightning.
@@ -572,8 +592,8 @@ export class WeatherView {
   updateSplashes(sw, sh, dt, density, zoom) {
     if (this.splashes.length === 0) {
       for (let i = 0; i < RAIN.splashes; i++) {
-        const s = this.makeSprite('px');
-        s.anchor.set(0.5);
+        const s = new Sprite(splashTexture(0));
+        s.anchor.set(0.5, 1); // (bottom centre: the crown rises from where the drop hit)
         s.tint = 0xd8e8ff;
         s.visible = false;
         this.rain.addChild(s);
@@ -596,11 +616,12 @@ export class WeatherView {
       const k = p.age / RAIN.splashMs;
       p.s.visible = k < 1;
       if (k >= 1) continue;
-      // two frames: a drop hitting (2 game px), then a flat ring opening (4 game px)
-      const f = RAIN.splash[k < 0.45 ? 0 : 1];
-      p.s.width = f.w * zoom;
-      p.s.height = f.h * zoom;
-      p.s.alpha = f.alpha;
+      // two frames: a drop hitting (2 game px), then a crown opening (4 game px, its ends up)
+      const fi = k < 0.45 ? 0 : 1;
+      const tex = splashTexture(fi);
+      if (p.s.texture !== tex) p.s.texture = tex;
+      p.s.scale.set(zoom);
+      p.s.alpha = RAIN.splash[fi].alpha;
     }
   }
 

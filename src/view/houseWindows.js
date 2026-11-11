@@ -19,9 +19,18 @@ export const HOUSE_SIZE = Object.freeze({ w: 48, h: 56 });
 
 /**
  * The glass's warm colours (lit, and the darker glass at the panes' edges), and the light on the
- * ground in front of each window (radius in world px, its centre this far below the house's feet).
+ * ground in front of each window (radius in world px, its centre this far below the house's feet),
+ * with an orange pixel pool drawn there so it reads as lamp light, not a green smudge on the grass.
  */
-export const WINDOW_GLOW = Object.freeze({ glass: 0xffc860, deep: 0xd8903c, light: 0xffb860, radius: 10, groundY: 6 });
+export const WINDOW_GLOW = Object.freeze({
+  glass: 0xffc860,
+  deep: 0xd8903c,
+  light: 0xff9a40,
+  radius: 10,
+  groundY: 6,
+  /** the pool of light on the ground: a stepped pixel oval (game px), orange, at this opacity at night */
+  pool: Object.freeze({ w: 14, h: 6, color: 0xffa040, alpha: 0.55 }),
+});
 
 /**
  * How lit the windows are (0 by day .. 1 at night) for an ambient colour: they come on at dusk.

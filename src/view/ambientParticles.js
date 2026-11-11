@@ -6,6 +6,7 @@
 // follow the world's camera transform). Fireflies glow: they are drawn above the light map; the rest
 // are lit like the world. Which kinds show is pure (unit-tested).
 import { Container, Sprite, Texture } from 'pixi.js';
+import { atlasFrame, whiteRGBA } from './pixelAtlas.js';
 
 export const AMBIENT = Object.freeze({
   /** pool size per layer (the most of each layer on screen) */
@@ -76,25 +77,18 @@ export function mistBand(w, h) {
   return out;
 }
 
-/** The mist band textures (white; one texel per game px, nearest-neighbour), made once. @returns {Texture[]} */
+/** The mist band textures (white; one texel per game px, nearest-neighbour, on the effects' atlas). @returns {Texture[]} */
 export function mistTextures() {
   if (typeof document === 'undefined') return [Texture.WHITE];
-  return MIST_BANDS.map(({ w, h }) => {
-    const m = mistBand(w, h);
-    const c = document.createElement('canvas');
-    c.width = w;
-    c.height = h;
-    const g = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
-    const img = g.createImageData(w, h);
-    for (let i = 0; i < m.length; i++) {
-      img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = 255;
-      img.data[i * 4 + 3] = Math.round(MIST_STEPS[m[i]] * 255);
-    }
-    g.putImageData(img, 0, 0);
-    const t = Texture.from(c);
-    t.source.scaleMode = 'nearest';
-    return t;
-  });
+  return MIST_BANDS.map(({ w, h }) =>
+    atlasFrame(`mist:${w}x${h}`, w, h, () => {
+      const m = mistBand(w, h);
+      return whiteRGBA(
+        Array.from(m, (v) => Math.round(MIST_STEPS[v] * 255)),
+        m.length,
+      );
+    }),
+  );
 }
 const LEAF_K = 1;
 const MOTE_K = 2;
@@ -129,7 +123,7 @@ export class AmbientParticles {
       const s = new Sprite(dot);
       s.anchor.set(0.5);
       s.visible = false;
-      s.blendMode = 'add';
+      // (normal blending: they batch with the lit windows and the sparks in one draw)
       this.glow.addChild(s);
       this.glowPool.push({ s, kind: 0, x: 0, y: 0, vx: 0, vy: 0, phase: 0, age: 0, life: 0 });
     }

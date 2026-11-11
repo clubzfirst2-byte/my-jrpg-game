@@ -7,6 +7,7 @@
 // reused; nothing is allocated per frame. Drawn above the light map so the sparks read at night too
 // (they sit on the struck body, so drawing them over a tree in front costs nothing).
 import { Container, Sprite, Texture } from 'pixi.js';
+import { atlasFrame, whiteRGBA } from './pixelAtlas.js';
 
 /**
  * What each game event shows. sparks: how many; speed px/s; ring: final radius (0 = none);
@@ -29,15 +30,23 @@ export const fxFor = (ev) => HIT_FX[ev.type] ?? null;
 const bossOf = (state, id) => state.enemies?.find((en) => en.bossId === id) ?? null;
 
 /**
- * The ring's frames: its radius as a share of the full radius, and its colour (the white ring of a
- * blow turns yellow; a coloured one — parry, defeat — keeps its colour) and opacity.
+ * The ring's frames: its radius as a share of the full radius, its colour (the white ring of a blow
+ * turns a light yellow; a coloured one — parry, defeat — keeps its colour), fully opaque so it reads
+ * on grass and on a dirt path alike; the last frame is a dotted ring (every other pixel) as it goes out.
  */
 export const RING_FRAMES = Object.freeze([
-  Object.freeze({ r: 0.4, warm: 0xffffff, alpha: 1 }),
-  Object.freeze({ r: 0.65, warm: 0xfff6b0, alpha: 1 }),
-  Object.freeze({ r: 0.85, warm: 0xffe070, alpha: 0.9 }),
-  Object.freeze({ r: 1, warm: 0xffc840, alpha: 0.6 }),
+  Object.freeze({ r: 0.4, warm: 0xffffff, alpha: 1, dotted: false }),
+  Object.freeze({ r: 0.65, warm: 0xfffbd8, alpha: 1, dotted: false }),
+  Object.freeze({ r: 0.85, warm: 0xfff27a, alpha: 1, dotted: false }),
+  Object.freeze({ r: 1, warm: 0xfff27a, alpha: 1, dotted: true }),
 ]);
+
+/**
+ * The ring's pixels in order around it (from the right, clockwise on screen), so a dotted ring can
+ * keep every other one. Pure.
+ * @param {number} r
+ */
+export const ringPixelsInOrder = (r) => ringPixels(r).sort((a, b) => Math.atan2(a[1], a[0]) - Math.atan2(b[1], b[0]));
 /** A spark's colour as it burns out (by its age, 0..1): white, yellow, orange — never faded. */
 export const SPARK_STEPS = Object.freeze([
   Object.freeze({ until: 0.35, color: 0xffffff, size: 1 }),
@@ -79,23 +88,16 @@ export function ringPixels(r) {
   return out;
 }
 
-/** @type {Map<number, Texture>} */
-const ringTextures = new Map();
-/** A white 1-game-px ring of radius r (texture size 2r+1 game px, nearest-neighbour). @param {number} r */
-function ringTexture(r) {
-  const had = ringTextures.get(r);
-  if (had) return had;
-  if (typeof document === 'undefined') return Texture.WHITE;
+/** A white 1-game-px ring of radius r (2r+1 game px square, on the effects' atlas); dotted: every other pixel. @param {number} r @param {boolean} [dotted] */
+function ringTexture(r, dotted = false) {
   const n = 2 * r + 1;
-  const c = document.createElement('canvas');
-  c.width = c.height = n;
-  const g = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
-  g.fillStyle = '#ffffff';
-  for (const [x, y] of ringPixels(r)) g.fillRect(x + r, y + r, 1, 1);
-  const t = Texture.from(c);
-  t.source.scaleMode = 'nearest';
-  ringTextures.set(r, t);
-  return t;
+  return atlasFrame(`ring:${r}${dotted ? ':dot' : ''}`, n, n, () => {
+    const a = new Uint8ClampedArray(n * n);
+    ringPixelsInOrder(r).forEach(([x, y], i) => {
+      if (!dotted || i % 2 === 0) a[(y + r) * n + x + r] = 255;
+    });
+    return whiteRGBA(a, n * n);
+  });
 }
 
 /** Pool sizes (the most on screen at once). */
@@ -228,7 +230,7 @@ export class HitFx {
     r.frame = f;
     const F = RING_FRAMES[f];
     const rad = Math.max(2, Math.round(r.r * F.r));
-    r.s.texture = ringTexture(rad);
+    r.s.texture = ringTexture(rad, F.dotted);
     r.s.scale.set(1);
     if (r.s.texture === Texture.WHITE) r.s.scale.set((2 * rad + 1) / Texture.WHITE.width);
     // a blow's white ring warms to yellow; a coloured one (parry, defeat) keeps its colour

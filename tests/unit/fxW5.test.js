@@ -5,9 +5,10 @@ import { HOUSE_WINDOWS, HOUSE_SIZE, PANE_AREA, WINDOW_GLOW, HOUSE_GLASS, windowG
 import { readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 import { ambientKinds, AmbientParticles, AMBIENT, MIST_DAWN, MIST_ALPHA, MIST_BANDS, mistBand } from '../../src/view/ambientParticles.js';
-import { HitFx, fxFor, FX_POOL, RING_FRAMES, SPARK_STEPS, ringPixels, sparkStep } from '../../src/view/hitFx.js';
+import { HitFx, fxFor, FX_POOL, RING_FRAMES, SPARK_STEPS, ringPixels, ringPixelsInOrder, sparkStep } from '../../src/view/hitFx.js';
+import { packShelf, ATLAS_SIZE } from '../../src/view/pixelAtlas.js';
 import { rimAlpha, RIM_FLASH } from '../../src/view/flashOverlay.js';
-import { RAIN, rainLayer } from '../../src/view/weatherView.js';
+import { RAIN, rainLayer, splashTexture } from '../../src/view/weatherView.js';
 import { fxVersion } from '../../src/view/fxSwitch.js';
 import { ambientAt, CLOCK } from '../../src/game/env/weather.js';
 
@@ -438,5 +439,59 @@ describe('lit windows: the glass table matches the house art', () => {
     expect(fromTable.glass).toBeGreaterThan(100);
     expect([...fromTable.data]).toEqual([...fromArt.data]);
     for (const t of HOUSE_GLASS) for (const row of t) expect(row).toMatch(/^[.gd]{14}$/);
+  });
+});
+
+// --- inspection round 2 (finishing): rings on dirt, crown splashes, orange pools, one atlas ---
+
+describe('finishing touches', () => {
+  it('the ring stays fully opaque in every frame; the last is dotted (every other pixel, around it)', () => {
+    for (const f of RING_FRAMES) expect(f.alpha).toBe(1);
+    expect(RING_FRAMES.map((f) => f.dotted)).toEqual([false, false, false, true]);
+    const r = 9;
+    const all = ringPixels(r);
+    const ordered = ringPixelsInOrder(r);
+    expect(ordered).toHaveLength(all.length);
+    // neighbours in the order are next to each other on the ring (so every other one is a dotted line)
+    for (let i = 1; i < ordered.length; i++) {
+      const [ax, ay] = ordered[i - 1];
+      const [bx, by] = ordered[i];
+      expect(Math.max(Math.abs(ax - bx), Math.abs(ay - by))).toBeLessThanOrEqual(1);
+    }
+    // the late frames are light on brown dirt (well brighter than a path's ~110 luminance)
+    const lum = (c) => 0.299 * ((c >> 16) & 255) + 0.587 * ((c >> 8) & 255) + 0.114 * (c & 255);
+    for (const f of RING_FRAMES) expect(lum(f.warm)).toBeGreaterThan(200);
+  });
+  it('a splash: a 2-px drop, then a crown 4 px wide with its ends 1 px up', () => {
+    expect(RAIN.splash[0].rows).toEqual(['##']);
+    expect(RAIN.splash[1].rows).toEqual(['#..#', '.##.']);
+    expect(splashTexture(1)).toBe(Texture.WHITE); // (no canvas in unit tests)
+  });
+  it('the window pools are orange (red well over green)', () => {
+    const c = WINDOW_GLOW.pool.color;
+    expect((c >> 16) & 255).toBeGreaterThan(((c >> 8) & 255) * 1.2);
+    expect((WINDOW_GLOW.light >> 16) & 255).toBeGreaterThan(((WINDOW_GLOW.light >> 8) & 255) * 1.2);
+  });
+  it('the effects atlas packs frames in shelves without overlap, and says when it is full', () => {
+    const at = { x: 0, y: 0, shelf: 0 };
+    const boxes = [];
+    for (let i = 0; i < 200; i++) {
+      const w = 8 + (i * 7) % 60;
+      const h = 4 + (i * 5) % 40;
+      const spot = packShelf(at, w, h);
+      if (!spot) break;
+      boxes.push({ ...spot, w, h });
+      expect(spot.x + w).toBeLessThanOrEqual(ATLAS_SIZE);
+      expect(spot.y + h).toBeLessThanOrEqual(ATLAS_SIZE);
+    }
+    expect(boxes.length).toBeGreaterThan(50);
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i];
+        const b = boxes[j];
+        expect(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y).toBe(true);
+      }
+    }
+    expect(packShelf({ x: 0, y: 0, shelf: 0 }, ATLAS_SIZE + 1, 4)).toBe(null);
   });
 });

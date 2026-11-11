@@ -17,7 +17,7 @@
 // - characters (villagers, enemies) and the island's chests / stones: small pooled sprites sorted
 //   with them.
 // The geometry and the masks are pure (unit-tested); the textures need a canvas.
-import { Texture } from 'pixi.js';
+import { atlasFrame, whiteRGBA } from './pixelAtlas.js';
 
 /** Objects that lie flat (no shadow). */
 const FLAT = new Set(['mat', 'stairs', 'door', 'plate', 'sensor', 'vine', 'pit']);
@@ -133,33 +133,21 @@ export function shadowMask(g) {
   return { w, h, data };
 }
 
-/** @type {Map<string, Texture>} */
-const textures = new Map();
 /**
- * The shared texture of a shadow's shape and size (white, the steps in its alpha; tinted
- * SHADOW.color where drawn): one texel per game px, nearest-neighbour.
+ * The shared texture frame of a shadow's shape and size (white, the steps in its alpha; tinted
+ * SHADOW.color where drawn): one texel per game px, nearest-neighbour, on the effects' atlas.
  * @param {{ w: number, h: number, shape: 'oval' | 'house' }} g
  */
 export function shadowTexture(g) {
-  const key = `${g.shape}:${Math.round(g.w)}x${Math.round(g.h)}`;
-  const had = textures.get(key);
-  if (had && !had.destroyed) return had;
-  const m = shadowMask(g);
-  if (typeof document === 'undefined') return Texture.WHITE; // (unit tests: no canvas)
-  const c = document.createElement('canvas');
-  c.width = m.w;
-  c.height = m.h;
-  const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
-  const img = ctx.createImageData(m.w, m.h);
-  for (let i = 0; i < m.data.length; i++) {
-    img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = 255;
-    img.data[i * 4 + 3] = Math.round(SHADOW.steps[m.data[i]] * 255);
-  }
-  ctx.putImageData(img, 0, 0);
-  const t = Texture.from(c);
-  t.source.scaleMode = 'nearest';
-  textures.set(key, t);
-  return t;
+  const w = Math.max(1, Math.round(g.w));
+  const h = Math.max(1, Math.round(g.h));
+  return atlasFrame(`shadow:${g.shape}:${w}x${h}`, w, h, () => {
+    const m = shadowMask(g);
+    return whiteRGBA(
+      Array.from(m.data, (v) => Math.round(SHADOW.steps[v] * 255)),
+      m.data.length,
+    );
+  });
 }
 
 /**

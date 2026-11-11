@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { packGroup, releaseGroups } from './tools/release-art-pack.mjs';
-import { precacheFiles, preloadReleaseGroup, releaseGroupOf } from './tools/precache.mjs';
+import { precacheFiles, hasV2Pair, preloadReleaseGroup, preloadSwitchScript, releaseGroupOf } from './tools/precache.mjs';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
@@ -73,14 +73,28 @@ function releaseArt() {
       order: 'post',
       handler(_html, ctx) {
         if (!ctx.bundle) return undefined;
-        return Object.values(ctx.bundle).flatMap((out) => {
+        const assets = Object.values(ctx.bundle).flatMap((out) => {
           if (out.type !== 'asset') return [];
           const group = (out.names ?? []).map(releaseGroupOf).find((g) => g !== null);
-          if (!group || !preloadReleaseGroup(group)) return []; // (only what normal play draws: precache.mjs)
-          const href = `./${out.fileName}`;
-          const attrs = out.fileName.endsWith('.png') ? { rel: 'preload', as: 'image', href } : { rel: 'preload', as: 'fetch', type: 'application/json', crossorigin: 'anonymous', href };
-          return [{ tag: 'link', attrs, injectTo: /** @type {const} */ ('head') }];
+          return group ? [{ group, href: `./${out.fileName}`, png: out.fileName.endsWith('.png') }] : [];
         });
+        const groups = new Set(assets.map((a) => a.group));
+        // gfx v2: a group with a v2 counterpart (the enemies) is preloaded by a script that reads the
+        // URL (only the one drawn: an unused preload is a console warning); the others as before
+        /** @type {Record<string, any>} */
+        const pairs = {};
+        for (const a of assets) {
+          if (!hasV2Pair(a.group, groups)) continue;
+          const g = a.group.replace(/^v2-/, '');
+          const side = a.group.startsWith('v2-') ? 'v2' : 'v1';
+          ((pairs[g] ??= {})[side] ??= {})[a.png ? 'png' : 'json'] = a.href;
+        }
+        /** @type {import('vite').HtmlTagDescriptor[]} */
+        const tags = assets
+          .filter((a) => preloadReleaseGroup(a.group, groups))
+          .map((a) => ({ tag: 'link', attrs: a.png ? { rel: 'preload', as: 'image', href: a.href } : { rel: 'preload', as: 'fetch', type: 'application/json', crossorigin: 'anonymous', href: a.href }, injectTo: /** @type {const} */ ('head') }));
+        if (Object.keys(pairs).length) tags.push({ tag: 'script', children: preloadSwitchScript(pairs), injectTo: /** @type {const} */ ('head') });
+        return tags;
       },
     },
   };

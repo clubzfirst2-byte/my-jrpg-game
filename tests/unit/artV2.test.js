@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync } from 'node:fs';
 import { V2_ENABLED, artVersion, resolveArtGroups, parseGroupName, v2Name } from '../../src/view/assets/artV2.js';
-import { onDemandReleaseGroup, preloadReleaseGroup, precacheFiles, releaseGroupOf } from '../../tools/precache.mjs';
+import { hasV2Pair, onDemandReleaseGroup, preloadReleaseGroup, preloadSwitchScript, precacheFiles, releaseGroupOf } from '../../tools/precache.mjs';
 
 // Graphics v2 infrastructure (src/view/assets/artV2.js): src/art-release-v2/<group> drawn instead of
 // src/art-release/<group> when present and enabled; ?v2=0 and ?<group>=v1|v2 to compare.
@@ -47,13 +47,34 @@ describe('graphics v2 art groups', () => {
     expect(resolveArtGroups(['hero', 'terrain'], p(''), { available: ['terrain'] })).toEqual(['hero', 'terrain']);
   });
 
-  it('preload: only what normal play draws — the enabled v2 group, not the v1 group it replaces (kept offline)', () => {
-    expect(preloadReleaseGroup('v2-enemy')).toBe(true);
-    expect(preloadReleaseGroup('enemy')).toBe(false); // (an unused preload is a console warning)
-    expect(onDemandReleaseGroup('enemy')).toBe(false); // still precached: ?v2=0 / ?enemy=v1 work offline
-    for (const g of ['hero', 'npc', 'terrain', 'objects']) expect(preloadReleaseGroup(g)).toBe(!V2_ENABLED.includes(g));
-    expect(preloadReleaseGroup('v2-terrain')).toBe(V2_ENABLED.includes('terrain'));
-    expect(preloadReleaseGroup('npc-revision-b2')).toBe(false);
+  it('preload: a v1 / v2 pair is not preloaded statically (the page script picks one); the rest as before', () => {
+    const groups = new Set(['hero', 'npc', 'terrain', 'objects', 'enemy', 'v2-enemy', 'npc-revision-b2']);
+    expect(hasV2Pair('enemy', groups)).toBe(true);
+    expect(hasV2Pair('v2-enemy', groups)).toBe(true);
+    expect(hasV2Pair('hero', groups)).toBe(false);
+    expect(preloadReleaseGroup('enemy', groups)).toBe(false);
+    expect(preloadReleaseGroup('v2-enemy', groups)).toBe(false);
+    for (const g of ['hero', 'npc', 'terrain', 'objects']) expect(preloadReleaseGroup(g, groups)).toBe(true);
+    expect(preloadReleaseGroup('npc-revision-b2', groups)).toBe(false);
+    expect(onDemandReleaseGroup('enemy')).toBe(false); // both stay precached: the switches work offline
+    expect(onDemandReleaseGroup('v2-enemy')).toBe(!V2_ENABLED.includes('enemy'));
+  });
+
+  it('the page script preloads only the sheet that will be drawn', () => {
+    const pairs = { enemy: { v1: { png: 'e1.png', json: 'e1.json' }, v2: { png: 'e2.png', json: 'e2.json' } } };
+    const run = (search) => {
+      const links = [];
+      const el = () => ({ attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } });
+      const document = { createElement: el, head: { appendChild: (l) => links.push(l.attrs.href) } };
+      new Function('location', 'document', 'URLSearchParams', preloadSwitchScript(pairs))({ search }, document, URLSearchParams);
+      return links;
+    };
+    expect(run('')).toEqual(V2_ENABLED.includes('enemy') ? ['e2.png', 'e2.json'] : ['e1.png', 'e1.json']);
+    expect(run('?v2=0')).toEqual(['e1.png', 'e1.json']);
+    expect(run('?enemy=v1')).toEqual(['e1.png', 'e1.json']);
+    expect(run('?v2=0&enemy=v2')).toEqual(['e2.png', 'e2.json']);
+    expect(run('?enemy=placeholder')).toEqual([]);
+    expect(run('?hd=0')).toEqual([]);
   });
 
   it('names: "v2/<group>" in the game, release-v2-<group>.png|json when built', () => {

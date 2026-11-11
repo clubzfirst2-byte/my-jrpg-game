@@ -120,3 +120,21 @@ for (const q of ['fx=v1', 'v2=0']) {
     expect(errors).toEqual([]);
   });
 }
+
+for (const q of ['', 'v2=0', 'enemy=v1']) {
+  test(`${q ? `?${q}` : 'default'}: only the enemy sheet that is drawn is preloaded (no unused-preload warning)`, async ({ page }) => {
+    const warnings = [];
+    page.on('console', (m) => {
+      if (m.type() === 'warning' && /preload/i.test(m.text())) warnings.push(m.text());
+    });
+    await page.goto(`/?map=world&time=10${q ? `&${q}` : ''}`);
+    await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 40_000 });
+    const groups = (await api(page, 'art')).groups;
+    const preloaded = await page.evaluate(() => [...document.querySelectorAll('link[rel=preload]')].map((l) => l.getAttribute('href')));
+    const v2 = groups.includes('v2/enemy');
+    expect(preloaded.some((h) => h.includes('release-v2-enemy'))).toBe(v2);
+    expect(preloaded.some((h) => /release-enemy-/.test(h))).toBe(!v2);
+    await page.waitForTimeout(5000); // (the browser warns a few seconds after the load event)
+    expect(warnings).toEqual([]);
+  });
+}
