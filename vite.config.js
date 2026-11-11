@@ -102,12 +102,14 @@ function releaseArt() {
         // Graphics v2 (gfx W1 terrain, W4 UI, W3 enemies): a v2 group, and the v1 group it replaces, are
         // preloaded by ONE script that reads the URL as the game does (only the art drawn: an unused
         // preload is a console warning); of the UI only what the title shows. The others as before.
-        /** @type {Record<string, { v1?: string[], v2?: string[] }>} */
+        /** @type {Record<string, { v1?: string[], v2?: string[], title?: boolean }>} */
         const switched = {};
         for (const a of [...assets].sort((x, y) => Number(y.png) - Number(x.png))) {
           if (a.group.startsWith('v2-')) {
             if (a.frame !== undefined && !isTitleFrame(a.frame)) continue;
-            ((switched[a.group.slice(3)] ??= {}).v2 ??= []).push(a.href);
+            const g = (switched[a.group.slice(3)] ??= {});
+            (g.v2 ??= []).push(a.href);
+            if (a.frame !== undefined) g.title = true; // the title's frames: only on a page with the title (not ?map=)
           } else if (hasV2Pair(a.group, groups)) ((switched[a.group] ??= {}).v1 ??= []).push(a.href);
         }
         /** @type {import('vite').HtmlTagDescriptor[]} */

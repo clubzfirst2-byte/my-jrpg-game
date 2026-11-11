@@ -115,6 +115,15 @@ describe('one preload script for every v2 group, one rule (index.html)', () => {
     expect(run('?proto=all')).toEqual(['./u.png']);
     expect(run('?proto=all&terrain=release')).toEqual(['./t2.png', './t2.json', './u.png']);
   });
+  it('the title frames (the v2 UI) only on a page that shows the title: not with ?map=', () => {
+    const added = [];
+    const doc = { createElement: () => ({}), head: { appendChild: (/** @type {any} */ l) => added.push(l.href) } };
+    const script = preloadScript({ terrain: { v1: ['./t1.png'], v2: ['./t2.png'] }, ui: { v2: ['./u.png'], title: true } }, ['terrain', 'ui']);
+    new Function('location', 'document', script)({ search: '?map=world' }, doc);
+    expect(added).toEqual(['./t2.png']);
+    new Function('location', 'document', script)({ search: '' }, doc);
+    expect(added).toEqual(['./t2.png', './t2.png', './u.png']);
+  });
   it('the v2 sheet groups are never preloaded by the HTML itself', () => {
     const groups = new Set(['terrain', 'v2-terrain', 'v2-ui', 'hero']);
     expect(['terrain', 'v2-terrain', 'v2-ui'].some((g) => preloadReleaseGroup(g, groups))).toBe(false);
