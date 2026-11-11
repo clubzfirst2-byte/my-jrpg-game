@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync } from 'node:fs';
 import { GameView, CHUNK } from '../../src/view/gameView.js';
 import { createGameState, MAPS } from '../../src/game/state.js';
-import { Ground } from '../../src/game/world/tilemap.js';
+import { Ground, Shape, southEdgeHeight } from '../../src/game/world/tilemap.js';
 import { regionAt } from '../../src/game/world/world.js';
 import { inSeason } from '../../src/game/env/weather.js';
 import { REGION_ENTRIES, SEASON_ENTRIES, placeholderEntries } from '../../src/view/assets/placeholderPack.js';
-import { GROUND_RUIN_BUNDLE, releaseTerrainEntries, v2BundleParts } from '../../src/view/assets/terrainArt.js';
+import { GROUND_RUIN_BUNDLE, ISLAND_EDGES_BUNDLE, ISLAND_STEPS_BUNDLE, releaseTerrainEntries, v2BundleParts } from '../../src/view/assets/terrainArt.js';
 import { MACRO_GROUNDS, MACRO_NAMES, macroPlacement, tileScheme } from '../../src/view/groundV2.js';
 
 // gfx W1 round 3: the whole world map, chunk by chunk, through the same code that draws the v2 ground
@@ -19,7 +19,7 @@ const overrides = new Map([...ART].map((k) => [k, `${k}.png`]));
 const keysOf = (/** @type {{ key: string }[]} */ es) => es.map((e) => e.key);
 const BASE = new Set([...keysOf(placeholderEntries()), ...keysOf(releaseTerrainEntries('placeholder', overrides)), ...keysOf(releaseTerrainEntries('common:ground', overrides))]);
 const BUNDLE = new Map([
-  [GROUND_RUIN_BUNDLE, new Set(keysOf(releaseTerrainEntries(GROUND_RUIN_BUNDLE, overrides)))],
+  ...[GROUND_RUIN_BUNDLE, ISLAND_EDGES_BUNDLE, ISLAND_STEPS_BUNDLE].map((n) => [n, new Set(keysOf(releaseTerrainEntries(n, overrides)))]),
   // (with the v2 ground, as main.js registers them: a region's own ground, and each seasonal
   // ground's autumn / winter art, are bundles of their own — terrainArt.v2BundleParts)
   ...Object.entries({ ...REGION_ENTRIES, ...SEASON_ENTRIES }).flatMap(([n, make]) => {
@@ -67,6 +67,7 @@ describe('ground v2 on the world map: no key is ever missing', () => {
       const unloaded = new Set();
       const drawn = new Set();
       let ruinShore = 0;
+      let steps = 0;
       for (let cy = 0; cy * CHUNK < map.height; cy++) {
         for (let cx = 0; cx * CHUNK < map.width; cx++) {
           const bundles = v.chunkBundles(cx, cy);
@@ -81,7 +82,21 @@ describe('ground v2 on the world map: no key is ever missing', () => {
           for (let y = cy * CHUNK; y < Math.min(map.height, (cy + 1) * CHUNK); y++) {
             for (let x = cx * CHUNK; x < Math.min(map.width, (cx + 1) * CHUNK); x++) {
               const c = v.groundClassAt(x, y);
-              if (map.elev[y * map.width + x] > 0 && c && c !== 'water') keys.push(v.seasonal(v.surfaceKey(x, y)));
+              const h = map.elev[y * map.width + x];
+              if (h > 0 && c && c !== 'water') keys.push(v.seasonal(v.surfaceKey(x, y)));
+              // the step pieces (NAMES.md 2b), as buildChunk asks for them
+              if (h > 0 && map.shape[y * map.width + x] !== Shape.RAMP_N) {
+                const lower = (nx, ny) => nx >= 0 && ny >= 0 && nx < map.width && ny < map.height && map.elev[ny * map.width + nx] < h;
+                const north = y > 0 && southEdgeHeight(map, x, y - 1) < h;
+                const step = v.stepPieces(x, y, h, north, lower(x + 1, y), lower(x - 1, y));
+                for (const k of step?.rims ?? []) keys.push(v.seasonal(k));
+                if (lower(x + 1, y)) {
+                  const shade = v.stepShadeKey(x, y);
+                  if (shade) keys.push(v.seasonal(shade));
+                  if (shade) steps++;
+                }
+                if (step?.rims.length) steps++;
+              }
             }
           }
           for (const k of keys) {
@@ -97,7 +112,8 @@ describe('ground v2 on the world map: no key is ever missing', () => {
       expect([...unloaded]).toEqual([]);
       // a border loads the neighbour's ground, not all of its art: the mountains' south row of chunks (y 64-95) meets the forest at y = 96
       const border = v.chunkBundles(5, 2);
-      expect(border).toEqual(expect.arrayContaining(['region:mountains', 'ground:mountains', 'ground:forest']));
+      expect(border).toEqual(expect.arrayContaining(['region:mountains', 'ground:forest']));
+      expect(border).not.toContain('ground:mountains'); // (the mountains' ground stays in its region's bundle)
       expect(border).not.toContain('region:forest');
       // a season's ground art only where that ground is: none in the mountains' heart (snow has no seasons), the plains' in the plains
       if (season !== 'summer') {
@@ -129,6 +145,12 @@ describe('ground v2 on the world map: no key is ever missing', () => {
       // the ruin floor (C) never gets a picture
       expect(any(/^tile\.ruin\.macro/)).toBe(false);
       expect(drawn.size).toBeGreaterThan(500);
+      // rounds 7-8: steps drawn with their rims and shadows, edge variants 2 / 3, dunes
+      expect(steps).toBeGreaterThan(100);
+      expect(any(/\.step\.[1-7]\.[01]$/)).toBe(true);
+      expect(any(/\.step\.shade\.[01]$/)).toBe(true);
+      expect(any(/\.edge\.\d+\.[23]$/)).toBe(true);
+      expect(any(/^desert\.sand\.dune[1-6]\.[0-3]$/)).toBe(true);
     });
   }
 });

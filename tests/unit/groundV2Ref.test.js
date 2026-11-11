@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { GameView, CHUNK } from '../../src/view/gameView.js';
 import { Ground, Shape } from '../../src/game/world/tilemap.js';
-import { PREFIX, SEASONAL, landKey } from '../../src/view/groundV2.js';
+import { PREFIX, SEASONAL, deepMap, landKey } from '../../src/view/groundV2.js';
 
 // gfx W1 round 5: on the same maps, the engine draws exactly what the reference renderer draws.
 // tests/fixtures/ground_v2_ref.json is written by tools/ground_v2_ref_fixture.py, which runs
@@ -26,6 +26,9 @@ function view(rows, season) {
   Object.assign(v, { map, regions: [], season, v2Tiles: new Map(), sandUnderTrees: new Set(), deepWater: null, seasonKeySet: new Set(), v2Missing: new Set(), assets: { hasTexture: (k) => ART.has(k) } });
   v.groundClassAt = (x, y) => CLASS[rows[y][x]] ?? null;
   v.surfaceKey = () => 'tile.wood'; // (the cells without v2 art: not compared)
+  // the reference's deep water (NAMES.md 3); the engine shapes its deep areas further (deepMapShaped, inspection R2)
+  const deep = deepMap(W, H, (x, y) => rows[y][x] === '~');
+  v.deepAt = (x, y) => deep[y * W + x] === 1;
   return v;
 }
 
@@ -91,7 +94,7 @@ describe('ground v2 round 5: the engine draws what render_ref.py draws', () => {
     });
   }
 
-  it('the fixture covers every ground, all 8 pictures, the ruin floor by the water, deep water and winter', () => {
+  it('the fixture covers every ground, all 8 pictures, dunes, edge variants 0-3, the ruin floor by the water, deep water and winter', () => {
     const all = REF.flatMap((r) => Object.values(r.draws).flatMap((s) => s.split('|')));
     for (const g of ['grass', 'plains', 'lake', 'moss', 'snow', 'sand', 'dsand', 'path']) expect(all.some((k) => k.startsWith(`g2.${g}.macro`)), g).toBe(true);
     for (const m of ['macro', 'macro2', 'macro3', 'macro4', 'macro5', 'macro6', 'macro7', 'macro8']) expect(all.some((k) => k.startsWith(`g2.grass.${m}.`)), m).toBe(true);
@@ -99,5 +102,8 @@ describe('ground v2 round 5: the engine draws what render_ref.py draws', () => {
     expect(all.some((k) => /^g2\.ruin\.e\d+\.\d+$/.test(k))).toBe(true);
     expect(all.some((k) => k.startsWith('g2.water.deep.0'))).toBe(true);
     expect(all.some((k) => k.startsWith('winter.g2.grass.macro'))).toBe(true);
+    // round 7-8: edge variants 2 / 3 by the side states, the desert's dunes
+    expect(all.filter((k) => /\.e\d+\.[23]$/.test(k)).length).toBeGreaterThan(100);
+    expect(all.some((k) => /^g2\.dsand\.dune[1-6]\.[0-3]$/.test(k))).toBe(true);
   });
 });

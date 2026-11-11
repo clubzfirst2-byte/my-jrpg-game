@@ -21,6 +21,30 @@ export const PRECACHE_STATIC = ['./', 'index.html', 'manifest.webmanifest', 'ico
  */
 export const onDemandReleaseGroup = (group) => group.startsWith('npc-revision') || (group.startsWith('v2-') && !V2_ENABLED.includes(group.slice(3)));
 
+/**
+ * Whether the page preloads a release art group in its HTML (vite.config.js, transformIndexHtml):
+ * the groups normal play draws. A group that has a v2 counterpart is not preloaded statically: which
+ * of the two is drawn depends on the URL (?<group>=v1|v2, ?v2=0: artV2.js), so the page chooses with a
+ * small script (preloadSwitchScript) — an unused preload is a console warning and a wasted download on
+ * the phone. Both stay in the precache list as before (onDemandReleaseGroup), so a switch works offline.
+ * @param {string} group @param {Set<string>} groups every release group in the build
+ */
+export const preloadReleaseGroup = (group, groups) => !onDemandReleaseGroup(group) && !hasV2Pair(group, groups);
+
+/** Whether a group is one of a v1 / v2 pair in the build ("terrain" with "v2-terrain"). @param {string} group @param {Set<string>} groups */
+export const hasV2Pair = (group, groups) => (group.startsWith('v2-') ? groups.has(group.slice(3)) : groups.has(`v2-${group}`));
+
+/**
+ * The page's script that preloads, for each v1 / v2 pair, the sheet and frame table that will be drawn
+ * (the rule of artV2.artVersion: ?<group>=v1|v2, then ?v2=0, then V2_ENABLED; the terrain: none with
+ * ?terrain=placeholder or ?hd=0, terrainArt.wantsTerrainArt).
+ * @param {Record<string, { v1: { png: string, json: string }, v2: { png: string, json: string } }>} pairs hrefs by group
+ */
+export function preloadSwitchScript(pairs) {
+  const data = JSON.stringify({ pairs, enabled: V2_ENABLED });
+  return `(function(){var d=${data},p=new URLSearchParams(location.search);function add(a){var l=document.createElement('link');for(var k in a)l.setAttribute(k,a[k]);document.head.appendChild(l);}for(var g in d.pairs){var q=p.get(g);if(g==='terrain'&&(q==='placeholder'||p.get('hd')==='0'))continue;var v2=q==='v2'||(q!=='v1'&&p.get('v2')!=='0'&&d.enabled.indexOf(g)>=0);var f=d.pairs[g][v2?'v2':'v1'];if(!v2&&!f)continue;if(!f)continue;add({rel:'preload',as:'image',href:f.png});add({rel:'preload',as:'fetch',type:'application/json',crossorigin:'anonymous',href:f.json});}})();`;
+}
+
 /** The release art group of an emitted sheet / frame table (release-<group>.png|json), or null. @param {string} name */
 export const releaseGroupOf = (name) => /^release-(.+)\.(png|json)$/.exec(name)?.[1] ?? null;
 

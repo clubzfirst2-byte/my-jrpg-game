@@ -41,9 +41,14 @@ test('?terrain=v2: shore foam and deep water on the beach, 4 water frames, the g
   expect(e.keys.some((k) => k.startsWith('tile.water.foam.'))).toBe(true);
   expect(e.keys.some((k) => k.startsWith('tile.water.deep'))).toBe(true);
   expect(e.keys.some((k) => /^tile\.(shore|bank)/.test(k))).toBe(false); // the v1.1 water edges are replaced
-  // 4 frames, all of them shown
+  // 4 frames, all of them shown — from the shared water atlas: no chunk cache is redrawn by the water
+  const w0 = (await api(page, 'terrainEdges')).water;
   const seen = new Set();
   await expect.poll(async () => seen.add((await api(page, 'terrainEdges')).frame).size, { timeout: 6_000, intervals: [60] }).toBe(4);
+  const w1 = (await api(page, 'terrainEdges')).water;
+  expect(w1.redraws - w0.redraws).toBe(0);
+  expect(w1.atlasRenders - w0.atlasRenders).toBeGreaterThanOrEqual(3);
+  expect(w1.meshes).toBeGreaterThan(0);
   // no atlas beside the base one for the ground; the regions load theirs as before
   const s = await api(page, 'stream');
   expect(s.bundleNames).not.toContain('common:ground');
@@ -58,11 +63,11 @@ test('?terrain=v2: shore foam and deep water on the beach, 4 water frames, the g
   // the ruin floor's 66 tiles are in the base atlas too (round 3): still one 2048×1024 atlas
   await visit(page, 104, 29);
   expect((await api(page, 'textureList')).filter((t) => t.endsWith(':2048x1024')).length).toBe(1);
-  // (with the URL switch the page's preload of the v1 terrain sheet goes unused: a browser note, not the game's)
-  expect(problems.filter((p) => !p.includes('was preloaded using link preload'))).toEqual([]);
+  // the page preloads only the terrain sheet it draws (?terrain=v2: the v2 one): no browser note either
+  expect(problems).toEqual([]);
 });
 
-test('?terrain=v1 and the default keep the v1.1 ground; v2 costs no more than 1 MB of images in the same place', async ({ page, browser }) => {
+test('?terrain=v1 and the default keep the v1.1 ground; v2 stays within the 35 MB image guide in the same place (at most 2 MB more)', async ({ page, browser }) => {
   const mb = {};
   for (const q of ['&terrain=v1', '']) {
     const p = q ? page : await (await browser.newContext({ viewport: page.viewportSize() ?? undefined })).newPage();
@@ -80,7 +85,10 @@ test('?terrain=v1 and the default keep the v1.1 ground; v2 costs no more than 1 
   await open(other, '&terrain=v2');
   await visit(other, 49, 69);
   mb.v2 = await textureMb(other);
-  expect(mb.v2 - mb.v1, JSON.stringify(mb)).toBeLessThanOrEqual(1);
+  // (round 8 art: the island grounds' edge variants 2 / 3 and step pieces, 2 × 512 × 256, do not fit in
+  // the base atlas; the guide is 35 MB of images: perf v1)
+  expect(mb.v2, JSON.stringify(mb)).toBeLessThanOrEqual(35);
+  expect(mb.v2 - mb.v1, JSON.stringify(mb)).toBeLessThanOrEqual(2);
   await other.context().close();
 });
 
@@ -93,7 +101,7 @@ for (const season of ['autumn', 'winter']) {
       await visit(page, x, y);
       expect((await api(page, 'terrainEdges')).missing, `at ${x},${y}`).toEqual([]);
     }
-    expect(problems.filter((p) => !p.includes('was preloaded using link preload'))).toEqual([]);
+    expect(problems).toEqual([]);
   });
 }
 

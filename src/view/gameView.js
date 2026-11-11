@@ -9,6 +9,7 @@
 // That one rule puts a character behind a cliff when north of it, on top of it when standing on it,
 // and in front of it when south of it.
 import { Container, Graphics, Rectangle, Sprite, Texture, TexturePool } from 'pixi.js';
+import { WaterAtlas, waterQuads } from './waterLayer.js';
 import { chunkRange, CHUNK_KEEP_MARGIN_TILES, CHUNK_LOAD_MARGIN_TILES } from './chunkRange.js';
 import { Ground, Shape, LEVEL_PX, inBounds, northEdgeHeight, southEdgeHeight } from '../game/world/tilemap.js';
 import { lerp } from '../game/core/math.js';
@@ -30,8 +31,8 @@ import { seasonAt } from '../game/env/weather.js';
 import { SEASON_ENTRIES, seasonKeys, SOURCE_BUNDLE, SOURCE_REGIONS } from './assets/placeholderPack.js';
 import { HeroAnimator } from './heroAnim.js';
 import { DECOR_TYPES, decorOffset, macroQuarter, patchVariant, placementEnabled } from './placement.js';
-import { CORNERS, MACRO_NAMES, PREFIX, PRIORITY, SEASONAL, WATER_FRAMES, WATER_FRAME_SEC as WATER_FRAME_SEC_V2, calmNumber, deepMap, displayLayers, edgeVariantOf, groundClass, landKey, macroPlacement, quarterOfCorner, ruinCellTile, ruinTile, tileScheme } from './groundV2.js';
-import { GROUND_RUIN_BUNDLE, GROUND_V2_KEY, groundBundleOf, seasonGroundBundleOf, faceMaterial, faceVariant, groundCacheResolution, groundVariant, indoorLight, levelBrightness, releaseSeasonKeys, usesReleaseTerrain, waterAround, waterEdgePieces } from './assets/terrainArt.js';
+import { CORNERS, MACRO_NAMES, STEP_NAMES, PREFIX, PRIORITY, SEASONAL, WATER_FRAMES, WATER_FRAME_SEC as WATER_FRAME_SEC_V2, calmNumber, deepMapShaped, displayLayers, edgeVariantOf, groundClass, landKey, macroPlacement, quarterOfCorner, ruinCellTile, ruinTile, tileScheme } from './groundV2.js';
+import { GROUND_RUIN_BUNDLE, GROUND_V2_KEY, ISLAND_EDGES_BUNDLE, ISLAND_STEPS_BUNDLE, detailBundleOf, groundBundleOf, seasonGroundBundleOf, faceMaterial, faceVariant, groundCacheResolution, groundVariant, indoorLight, levelBrightness, releaseSeasonKeys, usesReleaseTerrain, waterAround, waterEdgePieces } from './assets/terrainArt.js';
 import { openingView } from '../game/story/story.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
 import { SilhouetteCache, placeFlash } from './flashOverlay.js';
@@ -39,6 +40,9 @@ import { EnemySlots } from './enemySlots.js';
 
 /** Chunk size in tiles (P8). */
 export const CHUNK = 32;
+
+/** The quarter of a display tile's texture over its corner k (NW, NE, SW, SE). */
+const TILE_QUARTER = /** @type {const} */ (['nw', 'ne', 'sw', 'se']);
 
 /** gfx W1: the ground classes whose art is in their region's bundle (groundV2.groundClass). */
 const REGION_GROUNDS = new Set(['plains', 'lake', 'moss', 'snow', 'dsand']);
@@ -68,6 +72,7 @@ export function chunkCacheArea(cx, cy, ts) {
  * @typedef {import('../game/world/world.js').RegionInfo} RegionInfo
  * @typedef {{ cx: number, cy: number, base: Container, rows: Map<number, Container>, water: Sprite[],
  *   edges: { sprite: Sprite, key: string }[], waterFrame: number,
+ *   waterMesh: import('pixi.js').Mesh | null, waterKeys: string[],
  *   extents: Map<number, { x0: number, x1: number, y0: number, y1: number }[]>, bundles: string[] }} Chunk
  */
 
@@ -223,6 +228,13 @@ export class GameView {
     this.envGround = new Container();
     this.envGround.label = 'env-ground';
     this.world.addChildAt(this.envGround, 1);
+    // gfx W1: the v2 water, a layer of its own under the cached ground (waterLayer.js): one mesh per
+    // chunk over a shared water atlas, so a water frame redraws no chunk cache.
+    this.waterLayer = new Container();
+    this.waterLayer.label = 'water';
+    this.world.addChildAt(this.waterLayer, 0);
+    /** @type {WaterAtlas | null} */
+    this.waterAtlas = null;
     this.env = new EnvView(
       (key) => this.makeSprite(key),
       (key) => this.assets.texture(key),
@@ -372,13 +384,19 @@ export class GameView {
     // v1.1: the release terrain's own season keys (autumn forest and mountains, the lips of the cliff
     // variants), where the season's bundle has them.
     if (this.releaseTerrain) for (const k of releaseSeasonKeys(want)) if (this.assets.hasTexture(`${want}.${k}`)) this.seasonKeySet.add(k);
-    // gfx W1: the v2 ground's season keys (32 calm tiles, the 8 pictures' pieces, edges of the 4 seasonal grounds);
+    // gfx W1: the v2 ground's season keys (32 calm tiles, the 8 pictures' pieces, the step pieces, edges of the 4 seasonal grounds);
     // the mountains' snow has no v2 seasons, so its ground and its edges stay as they are.
     if (this.groundV2 && want) {
       for (const k of [...this.seasonKeySet]) if (k.startsWith('mountains.snow.')) this.seasonKeySet.delete(k);
       for (const cls of SEASONAL) {
         const p = /** @type {any} */ (PREFIX)[cls];
-        const names = [...Array.from({ length: 32 }, (_, n) => String(n)), ...MACRO_NAMES.flatMap((m) => [0, 1, 2, 3].map((q) => `${m}.${q}`)), ...Array.from({ length: 14 }, (_, m) => [0, 1].map((v) => `edge.${m + 1}.${v}`)).flat()];
+        const names = [
+          ...Array.from({ length: 32 }, (_, n) => String(n)),
+          ...MACRO_NAMES.flatMap((m) => [0, 1, 2, 3].map((q) => `${m}.${q}`)),
+          // round 7: 4 edge variants (masks 6 / 9: 2), the step pieces
+          ...Array.from({ length: 14 }, (_, m) => (m + 1 === 6 || m + 1 === 9 ? [0, 1] : [0, 1, 2, 3]).map((v) => `edge.${m + 1}.${v}`)).flat(),
+          ...STEP_NAMES,
+        ];
         // (each seasonal ground's season art is a bundle of its own, loaded by the chunks that have it)
         const apart = bundle !== null && this.assets.builders.has(seasonGroundBundleOf(bundle, cls));
         for (const n of names) {
@@ -517,7 +535,8 @@ export class GameView {
   /** W1: the deep-water map, computed on first use. */
   deepAt(/** @type {number} */ x, /** @type {number} */ y) {
     const map = this.map;
-    if (!this.deepWater) this.deepWater = deepMap(map.width, map.height, (cx, cy) => map.ground[cy * map.width + cx] === Ground.WATER);
+    // (inspection R2: the deep areas' border wanders and their corners are round: groundV2.deepMapShaped)
+    if (!this.deepWater) this.deepWater = deepMapShaped(map.width, map.height, (cx, cy) => map.ground[cy * map.width + cx] === Ground.WATER, hash);
     return this.deepWater[y * map.width + x] === 1;
   }
 
@@ -638,26 +657,28 @@ export class GameView {
    * into it (its cache area clips the overhang), so chunk borders join. A display tile blends only when
    * its 4 corners are flat ground with v2 art; otherwise each flat corner shows its quarter of its own
    * cell's tile (raised cells are drawn by their rows, and the cliff faces separate them).
-   * @param {Container} base @param {{ sprite: Sprite, key: string }[]} edges @param {number} cx @param {number} cy
+   * The land is drawn into the chunk's cache (base); the water pieces are returned for its water mesh.
+   * @param {Container} base @param {number} cx @param {number} cy
    */
-  buildGroundV2(base, edges, cx, cy) {
-    const frame = Math.max(0, this.waterFrame);
+  buildGroundV2(base, cx, cy) {
+    /** @type {{ key: string, x: number, y: number, quarter: string | null }[]} */
+    const water = [];
     for (const p of this.groundPiecesV2(cx, cy)) {
-      let tex = null;
+      // (the water goes to the chunk's water mesh, under the cache: buildChunk)
       if (p.anim) {
-        if (this.assets.hasTexture(`${p.key}.0`)) tex = this.edgeTexture(p.quarter ? `${p.key}#${p.quarter}` : p.key, frame);
-        else this.v2Missing.add(`${p.key}.0`);
-      } else {
-        tex = this.v2Texture(p.key);
-        if (tex && p.quarter) tex = this.quarterTexture(tex, p.quarter);
+        water.push(p);
+        continue;
       }
+      let tex = this.v2Texture(p.key);
+      if (tex && p.quarter) tex = this.quarterTexture(tex, p.quarter);
       if (!tex) continue;
       const s = new Sprite(tex);
       s.position.set(p.x, p.y);
       base.addChild(s);
-      if (p.anim) edges.push({ sprite: s, key: p.quarter ? `${p.key}#${p.quarter}` : p.key });
     }
+    return water;
   }
+
 
   /**
    * W1: what buildGroundV2 draws for a chunk, bottom first: each piece's key (season not applied;
@@ -703,26 +724,51 @@ export class GameView {
    */
   groundPiecesInto(out, cx, cy, j1, i1, clampX, clampY, flat, half, ts) {
     const map = this.map;
+    const classAt = (/** @type {number} */ x, /** @type {number} */ y) => this.groundClassAt(clampX(x), clampY(y));
     for (let j = cy * CHUNK - 1; j <= j1; j++) {
       for (let i = cx * CHUNK - 1; i <= i1; i++) {
         const px = i * ts + half;
         const py = j * ts + half;
         const cells = CORNERS.map(([dx, dy]) => [clampX(i + dx), clampY(j + dy)]);
         const cls = cells.map(([x, y]) => this.groundClassAt(x, y));
-        if (cells.every(([x, y]) => flat(x, y)) && cls.every((c) => c !== null)) {
-          const layers = displayLayers({
-            cls: /** @type {string[]} */ (cls),
+        const allFlat = cells.every(([x, y]) => flat(x, y));
+        /** @param {string[]} c the 4 corners' classes @param {boolean} pictures */
+        const layersOf = (c, pictures) =>
+          displayLayers({
+            cls: c,
             deep: cells.map(([x, y]) => this.deepAt(x, y)),
             waterVariant: hash(i, j) % 2,
-            edgeVariant: (c) => edgeVariantOf(c, i, j, hash),
-            // round 2: the edge-matched tile, or a macro piece where a block is placed
-            pick: (c) => String(this.wangAt(i, j, c)),
+            // round 7: the edge variant by the states of the sides the border crosses
+            edgeVariant: (t, m) => edgeVariantOf(t, m, i, j, hash, classAt),
+            pick: (t) => String(this.wangAt(i, j, t)),
+            // a picture piece where a picture is placed
             macro: () => {
-              const m = this.macroAt(i, j);
-              return m && this.v2Has(landKey(/** @type {string} */ (cls[0]), m.name)) ? m.name : null;
+              const m = pictures ? this.macroAt(i, j) : null;
+              return m && this.v2Has(landKey(c[0], m.name)) ? m.name : null;
             },
           });
-          for (const l of layers) out.push({ key: l.key, anim: l.anim, x: px, y: py, quarter: null });
+        if (allFlat && cls.every((c) => c !== null)) {
+          for (const l of layersOf(/** @type {string[]} */ (cls), true)) out.push({ key: l.key, anim: l.anim, x: px, y: py, quarter: null });
+          continue;
+        }
+        // W1 (inspection fix): a border between grounds next to a cell with no v2 art (a wall): those
+        // corners take the ground of the corner beside them, and the blended tile is drawn over the
+        // other corners' quarters only — the border runs on to the wall instead of stopping square
+        const real = cls.filter((c) => c !== null);
+        if (allFlat && real.length && new Set(real).size > 1) {
+          const sub = cls.map((c, k) => c ?? cls[k ^ 1] ?? cls[k ^ 2] ?? cls[k ^ 3]);
+          const layers = layersOf(/** @type {string[]} */ (sub), false);
+          CORNERS.forEach(([dx, dy], k) => {
+            const x = i + dx;
+            const y = j + dy;
+            if (!inBounds(map, x, y)) return;
+            if (cls[k] === null) {
+              const own = this.cellKeyV2(x, y);
+              out.push({ key: own.key, anim: own.anim, x: px + dx * half, y: py + dy * half, quarter: quarterOfCorner(k) });
+              return;
+            }
+            for (const l of layers) out.push({ key: l.key, anim: l.anim, x: px + dx * half, y: py + dy * half, quarter: TILE_QUARTER[k] });
+          });
           continue;
         }
         // cannot blend: each flat corner inside the map shows its own cell's quarter
@@ -736,6 +782,7 @@ export class GameView {
       }
     }
   }
+
 
   /**
    * The texture of a water-edge piece at a water frame. "<key>#<corner>" (QA4 L-1) is that corner's
@@ -781,9 +828,10 @@ export class GameView {
       .filter((r) => r.bundle && r.tx < x0 + CHUNK && r.tx + r.tw > x0 && r.ty < y0 + CHUNK && r.ty + r.th > y0)
       .map((r) => /** @type {string} */ (r.bundle));
     if (this.groundV2) {
-      // gfx W1: a region's own ground is a bundle of its own (terrainArt.REGION_GROUND_PREFIX), and on the
-      // dual grid a chunk's display tiles reach one cell out of it: the next region's ground too where a
-      // cell of that ring has it (only its ground, not the rest of its art)
+      // gfx W1: a region's own ground is apart (terrainArt.SPLIT_REGION_GROUND: "ground:" its calm tiles,
+      // edges and step shadows; "detail:" its pictures, dunes and step rims), and on the dual grid a
+      // chunk's display tiles reach one cell out of it: the next region's ground too where a cell of that
+      // ring has it (only "ground:", not the rest of its art)
       const ground = (/** @type {string} */ r) => {
         const g = groundBundleOf(r);
         return g && this.assets.builders.has(g) ? g : r;
@@ -791,6 +839,9 @@ export class GameView {
       for (const r of [...list]) {
         const g = ground(r);
         if (g !== r && !list.includes(g)) list.push(g);
+        // (its pictures, dunes and step rims: only the region's own chunks)
+        const d = detailBundleOf(r);
+        if (d && this.assets.builders.has(d) && !list.includes(d)) list.push(d);
       }
       for (const r of this.ringBundles(cx, cy)) {
         const g = ground(r);
@@ -798,6 +849,10 @@ export class GameView {
       }
       // round 3: the ruin floor's edges over water, only where the ruin floor meets water
       if (this.assets.builders.has(GROUND_RUIN_BUNDLE) && this.chunkHasRuinShore(cx, cy)) list.push(GROUND_RUIN_BUNDLE);
+      // rounds 7-8: the island grounds' edge variants 2 / 3 and the step pieces, only where they are drawn
+      const needs = this.chunkIslandNeeds(cx, cy);
+      if (needs.edges && this.assets.builders.has(ISLAND_EDGES_BUNDLE)) list.push(ISLAND_EDGES_BUNDLE);
+      if (needs.steps && this.assets.builders.has(ISLAND_STEPS_BUNDLE)) list.push(ISLAND_STEPS_BUNDLE);
     }
     // P10.2: and the season's look (gfx W1: the season's art of each seasonal ground the chunk has, apart).
     if (!this.seasonBundle) return list;
@@ -859,6 +914,97 @@ export class GameView {
         }
       }
       out = [...set];
+      this.v2Tiles.set(key, out);
+    }
+    return out;
+  }
+
+  /**
+   * W1 (NAMES.md 2b): the step rims of a raised cell — "<prefix>.step.<mask>.<v>" (mask N 1 + E 2 + W 4
+   * of the lower sides, v = hash(tx + 5, ty + 9) % 2) and the inner corners "<prefix>.step.inner.<ne|nw>"
+   * (north and east / west not lower, the NE / NW cell lower) — or null when its ground has no v2 art
+   * (then the 1-px lines are drawn, as in v1). Keys without the season (v2Texture adds it).
+   * @param {number} tx @param {number} ty @param {number} h its height
+   * @param {boolean} lowerNorth @param {boolean} lowerEast @param {boolean} lowerWest
+   * @returns {{ rims: string[] } | null}
+   */
+  stepPieces(tx, ty, h, lowerNorth, lowerEast, lowerWest) {
+    const cls = this.groundClassAt(tx, ty);
+    if (!cls || cls === 'water') return null;
+    const map = this.map;
+    const p = /** @type {Record<string, string>} */ (PREFIX)[cls];
+    const rims = [];
+    const mask = (lowerNorth ? 1 : 0) + (lowerEast ? 2 : 0) + (lowerWest ? 4 : 0);
+    if (mask) rims.push(`${p}.step.${mask}.${hash(tx + 5, ty + 9) % 2}`);
+    const lowerAt = (/** @type {number} */ x, /** @type {number} */ y) => inBounds(map, x, y) && map.elev[y * map.width + x] < h;
+    if (!lowerNorth && !lowerEast && lowerAt(tx + 1, ty - 1)) rims.push(`${p}.step.inner.ne`);
+    if (!lowerNorth && !lowerWest && lowerAt(tx - 1, ty - 1)) rims.push(`${p}.step.inner.nw`);
+    return { rims };
+  }
+
+  /**
+   * W1 (NAMES.md 2b): the shadow a raised cell casts on the lower cell east of it,
+   * "<prefix of the lower cell>.step.shade.<v>" (v = hash(tx + 6, ty + 9) % 2), or null when that cell is
+   * water or has no v2 art (then the translucent strip, as in v1). @param {number} tx @param {number} ty
+   */
+  stepShadeKey(tx, ty) {
+    const east = this.groundClassAt(tx + 1, ty);
+    if (!east || east === 'water') return null;
+    return `${/** @type {Record<string, string>} */ (PREFIX)[east]}.step.shade.${hash(tx + 6, ty + 9) % 2}`;
+  }
+
+  /**
+   * W1 2b: draws a row's step shadows after all the surfaces of the row — in a container of their own,
+   * sorted just after every chunk's row container of that row (a slightly lower raised cell to the east,
+   * even in the next chunk, does not hide them), kept with the chunk's rows.
+   * @param {Map<number, Sprite[]>} shades @param {number} ty @param {Map<number, Container>} rows @param {number} cx
+   */
+  flushShades(shades, ty, rows, cx) {
+    const list = shades.get(ty);
+    if (!list) return;
+    const c = new Container();
+    c.label = `step-shades-${ty}-${cx}`;
+    c.zIndex = ty * this.map.tileSize + 0.002 + cx * 1e-5;
+    for (const sh of list) c.addChild(sh);
+    this.actors.addChild(c);
+    rows.set(ty + 0.5, c);
+    shades.delete(ty);
+  }
+
+  /**
+   * W1 rounds 7-8: whether a chunk draws an island ground's edge overlay (island grass, sand or path over
+   * a lower ground or water in one of its display tiles) and step pieces (a raised island ground or
+   * ruin cell with a lower north / east / west neighbour, or such a lower east cell's shadow). Fixed
+   * for the map. @param {number} cx @param {number} cy @returns {{ edges: boolean, steps: boolean }}
+   */
+  chunkIslandNeeds(cx, cy) {
+    const key = `n${cx},${cy}`;
+    let out = this.v2Tiles.get(key);
+    if (out === undefined) {
+      const map = this.map;
+      const ISLAND = ['grass', 'sand', 'path'];
+      const clsAt = (/** @type {number} */ x, /** @type {number} */ y) => this.groundClassAt(Math.max(0, Math.min(map.width - 1, x)), Math.max(0, Math.min(map.height - 1, y)));
+      let edges = false;
+      for (let j = cy * CHUNK - 1; j < (cy + 1) * CHUNK && !edges; j++) {
+        for (let i = cx * CHUNK - 1; i < (cx + 1) * CHUNK && !edges; i++) {
+          const cs = CORNERS.map(([dx, dy]) => clsAt(i + dx, j + dy));
+          const rank = (/** @type {string | null} */ c) => (c === 'water' ? -1 : c === null ? 99 : PRIORITY.indexOf(c));
+          const low = Math.min(...cs.filter((c) => c !== null).map(rank));
+          edges = cs.some((c) => c !== null && ISLAND.includes(c) && rank(c) > low);
+        }
+      }
+      let steps = false;
+      const stepGround = (/** @type {string | null} */ c) => c !== null && (ISLAND.includes(c) || c === 'ruin');
+      for (let y = cy * CHUNK; y < Math.min(map.height, (cy + 1) * CHUNK) && !steps; y++) {
+        for (let x = cx * CHUNK; x < Math.min(map.width, (cx + 1) * CHUNK) && !steps; x++) {
+          const h = map.elev[y * map.width + x];
+          if (h === 0) continue;
+          const lower = (/** @type {number} */ nx, /** @type {number} */ ny) => inBounds(map, nx, ny) && map.elev[ny * map.width + nx] < h;
+          if (stepGround(this.groundClassAt(x, y)) && (lower(x + 1, y) || lower(x - 1, y) || lower(x, y - 1) || lower(x + 1, y - 1) || lower(x - 1, y - 1))) steps = true;
+          if (lower(x + 1, y) && stepGround(this.groundClassAt(x + 1, y))) steps = true;
+        }
+      }
+      out = { edges, steps };
       this.v2Tiles.set(key, out);
     }
     return out;
@@ -940,8 +1086,11 @@ export class GameView {
     const y1 = Math.min(map.height, (cy + 1) * CHUNK);
     // gfx W1: the v2 ground draws the flat ground on the dual grid (the cell loop below then draws
     // only the raised rows and ramps, as before).
-    if (this.groundV2) this.buildGroundV2(base, edges, cx, cy);
+    const waterPieces = this.groundV2 ? this.buildGroundV2(base, cx, cy) : [];
+    /** gfx W1 2b: the step shadows of each row, drawn after all its surfaces. @type {Map<number, Sprite[]>} */
+    const shades = new Map();
     for (let ty = cy * CHUNK; ty < y1; ty++) {
+      if (ty > cy * CHUNK) this.flushShades(shades, ty - 1, rows, cx);
       for (let tx = cx * CHUNK; tx < x1; tx++) {
         const i = ty * map.width + tx;
         const h = map.elev[i];
@@ -994,16 +1143,44 @@ export class GameView {
           const lowerEast = inBounds(map, tx + 1, ty) && map.elev[i + 1] < h;
           const lowerWest = inBounds(map, tx - 1, ty) && map.elev[i - 1] < h;
           const lowerNorth = inBounds(map, tx, ty - 1) && southEdgeHeight(map, tx, ty - 1) < h;
+          // gfx W1 (NAMES.md 2b, rounds 7-8): with the v2 ground, a ground with v2 art draws its step
+          // rim (and inner corners) right after its surface instead of the 1-px lines, and its shadow
+          // on the lower east cell after all the surfaces of the row (shades, flushShades)
+          const step = this.groundV2 ? this.stepPieces(tx, ty, h, lowerNorth, lowerEast, lowerWest) : null;
+          if (step) {
+            const at = row.getChildIndex(surface) + 1;
+            let n = 0;
+            for (const key of step.rims) {
+              const tex = this.v2Texture(key);
+              if (!tex) continue;
+              const r = new Sprite(tex);
+              r.position.set(x, top);
+              r.tint = surface.tint;
+              row.addChildAt(r, at + n++);
+            }
+          } else {
+            if (lowerEast) row.addChild(this.edge(x + ts - EDGE_PX, top, EDGE_PX, ts));
+            if (lowerWest) row.addChild(this.edge(x, top, EDGE_PX, ts));
+            if (lowerNorth) row.addChild(this.edge(x, top, ts, EDGE_PX));
+          }
           if (lowerEast) {
-            row.addChild(this.edge(x + ts - EDGE_PX, top, EDGE_PX, ts));
             // Light comes from the upper left: cast a shadow onto the lower ground to the east.
             const eastH = map.elev[i + 1];
-            const shade = this.edge(x + ts, ty * ts - eastH, CLIFF_SHADOW_PX, ts);
-            shade.alpha = CLIFF_SHADOW_ALPHA;
-            row.addChild(shade);
+            const shadeKey = this.groundV2 ? this.stepShadeKey(tx, ty) : null;
+            const tex = shadeKey ? this.v2Texture(shadeKey) : null;
+            if (tex) {
+              const sh = new Sprite(tex);
+              sh.position.set(x + ts, ty * ts - eastH);
+              sh.tint = levelTint(eastH, this.releaseTerrain);
+              const list = shades.get(ty) ?? [];
+              list.push(sh);
+              shades.set(ty, list);
+            } else {
+              const shade = this.edge(x + ts, ty * ts - eastH, CLIFF_SHADOW_PX, ts);
+              shade.alpha = CLIFF_SHADOW_ALPHA;
+              row.addChild(shade);
+            }
           }
-          if (lowerWest) row.addChild(this.edge(x, top, EDGE_PX, ts));
-          if (lowerNorth) row.addChild(this.edge(x, top, ts, EDGE_PX));
         }
 
         const list = extents.get(ty) ?? [];
@@ -1011,6 +1188,7 @@ export class GameView {
         extents.set(ty, list);
       }
     }
+    this.flushShades(shades, y1 - 1, rows, cx);
     base.tint = levelTint(0, this.releaseTerrain);
     this.base.addChild(base);
     // A chunk's flat ground -> one textured quad per frame, cached over the whole chunk (see
@@ -1019,6 +1197,23 @@ export class GameView {
     const area = chunkCacheArea(cx, cy, ts);
     base.boundsArea = new Rectangle(area.x, area.y, area.width, area.height);
     base.cacheAsTexture({ scaleMode: 'nearest', antialias: false, resolution: groundCacheResolution(this.releaseTerrain) });
+    // gfx W1: the v2 water under it, one mesh over the shared water atlas (its frames redraw no cache)
+    let waterMesh = null;
+    /** @type {string[]} */
+    let waterKeys = [];
+    if (this.groundV2 && waterPieces.length) {
+      const atlas = this.ensureWaterAtlas();
+      const quads = waterQuads(waterPieces, area);
+      for (const k of quads.skipped) this.v2Missing.add(`${k}.0`);
+      for (const k of new Set(quads.keys.map((q) => q.split('#')[0]))) if (!this.assets.hasTexture(`${k}.0`)) this.v2Missing.add(`${k}.0`);
+      waterKeys = quads.keys;
+      if (quads.indices.length) {
+        waterMesh = atlas.mesh(quads);
+        waterMesh.tint = base.tint;
+        waterMesh.label = `water-${cx},${cy}`;
+        this.waterLayer.addChild(waterMesh);
+      }
+    }
 
     // Objects standing in this chunk now.
     for (const o of map.objects) {
@@ -1026,7 +1221,7 @@ export class GameView {
       this.addObjectSprite(o);
     }
     this.chunkStats.built++;
-    return { cx, cy, base, rows, water, edges, extents, bundles: this.chunkBundles(cx, cy), waterFrame: this.waterFrame };
+    return { cx, cy, base, rows, water, edges, extents, bundles: this.chunkBundles(cx, cy), waterFrame: this.waterFrame, waterMesh, waterKeys };
   }
 
   /** @param {Chunk} c */
@@ -1034,6 +1229,11 @@ export class GameView {
     const map = this.map;
     c.base.cacheAsTexture(false);
     c.base.destroy({ children: true });
+    if (c.waterMesh) {
+      const g = c.waterMesh.geometry;
+      c.waterMesh.destroy();
+      g.destroy();
+    }
     for (const r of c.rows.values()) r.destroy({ children: true });
     const inChunk = (/** @type {number} */ tx, /** @type {number} */ ty) => Math.floor(tx / CHUNK) === c.cx && Math.floor(ty / CHUNK) === c.cy;
     for (const [o, e] of this.objectSprites) {
@@ -1666,6 +1866,15 @@ export class GameView {
     }
   }
 
+  /** gfx W1: the shared water atlas of the v2 water (made on first use, at the current frame). */
+  ensureWaterAtlas() {
+    if (!this.waterAtlas) {
+      this.waterAtlas = new WaterAtlas(this.app.renderer, (k) => (this.assets.hasTexture(k) ? this.assets.texture(k) : null));
+      this.waterAtlas.setFrame(Math.max(0, this.waterFrame));
+    }
+    return this.waterAtlas;
+  }
+
   /** @param {number} timeSec */
   animateWater(timeSec) {
     // gfx W1: the v2 water has 4 frames of 0.28 s; v1 2 frames of 0.6 s.
@@ -1677,6 +1886,11 @@ export class GameView {
       return;
     }
     this.waterFrame = frame;
+    // gfx W1: the v2 water is drawn from the shared water atlas: one small redraw, no chunk cache
+    if (this.groundV2) {
+      this.waterAtlas?.setFrame(frame);
+      return;
+    }
     for (const c of this.chunks.values()) {
       // (a chunk can have edge pieces of water in the next chunk, and no water of its own)
       if (c.water.length === 0 && c.edges.length === 0) continue;

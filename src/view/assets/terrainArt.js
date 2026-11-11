@@ -127,8 +127,16 @@ const TOP_LEFT = /** @type {[number, number]} */ ([0, 0]);
 const EDGE = '(?:\\d+|inner\\.(?:ne|se|sw|nw))\\.[01]';
 const PART = '(?:top|mid)(?:-base)?\\.(?:4|8)';
 const LIP = 'top(?:-base)?\\.(?:4|8)';
-/** Ground v2 pieces: the pictures' 2×2 pieces (macro, macro2 … macro8) and transition edges. */
-const V2_PIECE = '(?:macro[2-8]?\\.[0-3]|edge\\.\\d+\\.[01])';
+/**
+ * Ground v2 pieces: the pictures' 2×2 pieces (macro, macro2 … macro8; the desert's dunes dune1-6),
+ * transition edges (4 variants, round 7) and the one-level step pieces (round 7-8: rims, shadow,
+ * inner corners).
+ */
+const STEP = 'step\\.(?:[1-7]\\.[01]|shade\\.[01]|inner\\.n[ew])';
+const V2_PIECE = `(?:macro[2-8]?\\.[0-3]|dune[1-6]\\.[0-3]|edge\\.\\d+\\.[0-3]|${STEP})`;
+/** gfx W1 rounds 7-8: the island grounds' edge variants 2 / 3, and the island grounds' and the ruin floor's step pieces. */
+export const ISLAND_EDGES_BUNDLE = 'common:edges';
+export const ISLAND_STEPS_BUNDLE = 'common:steps';
 /** v1.1 keys → the bundle that holds them ('placeholder' = the base bundle, a region's, a season's). */
 const V11_KEYS = /** @type {[RegExp, string][]} */ ([
   [new RegExp(`^tile\\.(?:shore|bank)\\.${EDGE}$`), 'placeholder'],
@@ -150,6 +158,10 @@ const V11_KEYS = /** @type {[RegExp, string][]} */ ([
   // (loaded with the chunks where the ruin floor meets water), the regions' and
   // the seasons' in theirs. Keys the v1 bundles already hold (tile.grass.0-2, plains.grass.0-3,
   // tile.water.0/1, ...) are not repeated.
+  // (rounds 7-8: the island grounds' edge variants 2 / 3 and their step pieces do not fit in the base
+  // atlas: 2 bundles of 512 × 256, loaded by the chunks that draw them — gameView.chunkBundles)
+  [/^tile\.(?:grass|sand|path)\.edge\.\d+\.[23]$/, ISLAND_EDGES_BUNDLE],
+  [new RegExp(`^tile\\.(?:grass|sand|path|ruin)\\.${STEP}$`), ISLAND_STEPS_BUNDLE],
   [new RegExp(`^tile\\.(?:grass\\.(?:[3-9]|\\d\\d)|(?:sand|path|ruin)\\.(?:[1-9]|\\d\\d))$`), 'common:ground'],
   [new RegExp(`^tile\\.(?:grass|sand|path)\\.${V2_PIECE}$`), 'common:ground'],
   [/^tile\.water\.(?:[2-3]|v1\.[0-3]|deep(?:\.v1)?\.[0-3]|deep\.edge\.\d+\.[0-3]|foam\.\d+\.[0-3])$/, 'common:ground'],
@@ -165,10 +177,11 @@ const V11_KEYS = /** @type {[RegExp, string][]} */ ([
 ]);
 
 /**
- * gfx W1: with the v2 ground, each region's own ground (its grass, moss, snow or desert sand: 32 calm
- * tiles, 8 pictures, edges, the v1 keys too; 512 × 256) is a bundle of its own, "ground:<region>", apart
- * from the rest of the region's art: loaded with the region, and alone by the chunks whose display tiles
- * reach one cell into that region. The region's own atlas keeps its v1 size (gameView.chunkBundles).
+ * gfx W1: with the v2 ground, a region's own ground (its grass, moss, snow or desert sand: 32 calm
+ * tiles, 8 pictures, edges, the v1 keys too; 512 × 256) can be a bundle of its own, "ground:<region>",
+ * apart from the rest of the region's art (SPLIT_REGION_GROUND): loaded with the region, and alone by the
+ * chunks whose display tiles reach one cell into that region. The region's own atlas keeps its v1 size
+ * (gameView.chunkBundles).
  */
 export const REGION_GROUND_PREFIX = Object.freeze({
   'region:plains': 'plains.grass',
@@ -178,13 +191,31 @@ export const REGION_GROUND_PREFIX = Object.freeze({
   'region:desert': 'desert.sand',
 });
 
-/** The ground bundle of a region bundle ("region:plains" → "ground:plains"), or null. @param {string} region */
-export const groundBundleOf = (region) => (region in REGION_GROUND_PREFIX ? `ground:${region.slice('region:'.length)}` : null);
+/**
+ * The regions whose own ground is apart, in 2 bundles: "ground:<region>" (its calm tiles, edges and step
+ * shadows: all a chunk next to the region can need) and "detail:<region>" (its pictures, dunes, step
+ * rims and inner corners: only the region's own chunks). The lake's and the mountains' fit in the free
+ * room of their region's atlas (1024 × 512 either way: their bosses' frames), so they stay in it —
+ * apart they would cost more wherever the region is (memory guide 35 MB at the mountains).
+ */
+export const SPLIT_REGION_GROUND = Object.freeze(['region:plains', 'region:forest', 'region:desert']);
+
+/** The ground bundle of a region bundle ("region:plains" → "ground:plains"), or null when its ground stays in it. @param {string} region */
+export const groundBundleOf = (region) => (SPLIT_REGION_GROUND.includes(region) ? `ground:${region.slice('region:'.length)}` : null);
+
+/** The detail bundle of a region bundle ("region:plains" → "detail:plains"), or null. @param {string} region */
+export const detailBundleOf = (region) => (SPLIT_REGION_GROUND.includes(region) ? `detail:${region.slice('region:'.length)}` : null);
 
 /** Whether a key is the region's own ground (REGION_GROUND_PREFIX). @param {string} region @param {string} key */
 export function isRegionGround(region, key) {
   const p = /** @type {Record<string, string>} */ (REGION_GROUND_PREFIX)[region];
   return !!p && (key === p || key.startsWith(`${p}.`));
+}
+
+/** A region ground key's part: "detail" (pictures, dunes, step rims / inner corners), "ground" (the rest), or null. @param {string} region @param {string} key @returns {'ground' | 'detail' | null} */
+export function regionGroundPart(region, key) {
+  if (!isRegionGround(region, key)) return null;
+  return /\.(?:macro\d?|dune\d)\.\d$|\.step\.(?:[1-7]\.\d|inner\.n[ew])$/.test(key) ? 'detail' : 'ground';
 }
 
 /**
@@ -208,15 +239,17 @@ export function seasonGroundOf(season, key) {
 
 /**
  * gfx W1: with the v2 ground, the bundles a region or season bundle is registered as — [name, keep a
- * key?] — or null when it stays whole: a region as itself and "ground:"; autumn / winter as
+ * key?] — or null when it stays whole: a region as itself, "ground:" and "detail:"; autumn / winter as
  * themselves and one bundle per seasonal ground. @param {string} name @returns {[string, (key: string) => boolean][] | null}
  */
 export function v2BundleParts(name) {
   const ground = groundBundleOf(name);
-  if (ground) {
+  const detail = detailBundleOf(name);
+  if (ground && detail) {
     return [
-      [name, (k) => !isRegionGround(name, k)],
-      [ground, (k) => isRegionGround(name, k)],
+      [name, (k) => regionGroundPart(name, k) === null],
+      [ground, (k) => regionGroundPart(name, k) === 'ground'],
+      [detail, (k) => regionGroundPart(name, k) === 'detail'],
     ];
   }
   const season = /^season:(autumn|winter)$/.exec(name)?.[1];
@@ -376,9 +409,11 @@ export function terrainDebugApi(assets, view) {
     },
     /** v1.1: the water-edge pieces in the built chunks (texture names as drawn now) and the water's frame. */
     terrainEdges: () => {
-      const chunks = /** @type {{ edges?: { sprite: { texture: { label?: string } }, key: string }[] }[]} */ ([...(view?.chunks?.values() ?? [])]);
-      const edges = chunks.flatMap((c) => c.edges ?? []);
-      return { count: edges.length, keys: [...new Set(edges.map((e) => e.key))].sort(), frame: view?.waterFrame ?? -1, fallbacks: view?.edgeStats?.fallbacks ?? 0, groundV2: !!view?.groundV2, water: { ...(view?.waterStats ?? {}) }, missing: [...(view?.v2Missing ?? [])] };
+      const chunks = /** @type {{ edges?: { sprite: { texture: { label?: string } }, key: string }[], waterKeys?: string[] }[]} */ ([...(view?.chunks?.values() ?? [])]);
+      // (gfx W1: the v2 water is in the chunks' water meshes, waterKeys, drawn from the shared water atlas)
+      const keys = [...chunks.flatMap((c) => c.edges ?? []).map((e) => e.key), ...chunks.flatMap((c) => c.waterKeys ?? [])];
+      const water = { ...(view?.waterStats ?? {}), atlasRenders: view?.waterAtlas?.renders ?? 0, meshes: view?.waterLayer?.children?.length ?? 0 };
+      return { count: keys.length, keys: [...new Set(keys)].sort(), frame: view?.waterFrame ?? -1, fallbacks: view?.edgeStats?.fallbacks ?? 0, groundV2: !!view?.groundV2, water, missing: [...(view?.v2Missing ?? [])] };
     },
   };
 }

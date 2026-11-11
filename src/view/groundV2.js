@@ -120,16 +120,71 @@ export function deepMap(width, height, isWater) {
 }
 
 /**
+ * Deep water, shaped (inspection R2; the engine's, not render_ref's): a water cell is deep when its
+ * distance to the nearest land cell (Euclidean, in cells; outside the map is not land) is more than a
+ * threshold of 2 + 1.6 × a smooth noise (2-cell lattice) ± 0.7 by a hash per cell (2.0 … 4.3) — so the
+ * deep area's border steps in and out every few cells along a straight shore and its corners are round,
+ * not a copy of the shore 2 cells out (world map: longest straight run along cell edges 43 → 11 cells) —
+ * and, as deepMap, only where such cells form a 2×2 area. The shallow band is always 2+ cells wide.
+ * @param {number} width @param {number} height @param {(x: number, y: number) => boolean} isWater
+ * @param {(a: number, b: number) => number} hash
+ * @returns {Uint8Array} 1 = deep
+ */
+export function deepMapShaped(width, height, isWater, hash) {
+  const R = 5;
+  const land = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) land[y * width + x] = isWater(x, y) ? 0 : 1;
+  const deep = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (land[y * width + x]) continue;
+      const t = Math.max(2, 2 + 1.6 * smoothNoise(x, y, 2, 4441, 9157, hash) + 1.4 * ((hash(x + 811, y + 277) % 1024) / 1023 - 0.5));
+      let near = Infinity;
+      for (let dy = -R; dy <= R && near > t * t; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= height) continue;
+        for (let dx = -R; dx <= R; dx++) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= width || !land[ny * width + nx]) continue;
+          near = Math.min(near, dx * dx + dy * dy);
+        }
+      }
+      deep[y * width + x] = near > t * t ? 1 : 0;
+    }
+  }
+  return keep2x2(width, height, deep);
+}
+
+/** Keeps a deep cell only if one of the 4 blocks of 2×2 cells containing it is all deep. @param {number} width @param {number} height @param {Uint8Array} deep */
+function keep2x2(width, height, deep) {
+  const at = (/** @type {number} */ x, /** @type {number} */ y) => x >= 0 && y >= 0 && x < width && y < height && deep[y * width + x] === 1;
+  const kept = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!at(x, y)) continue;
+      for (const [ox, oy] of [[0, 0], [-1, 0], [0, -1], [-1, -1]]) {
+        if (at(x + ox, y + oy) && at(x + ox + 1, y + oy) && at(x + ox, y + oy + 1) && at(x + ox + 1, y + oy + 1)) {
+          kept[y * width + x] = 1;
+          break;
+        }
+      }
+    }
+  }
+  return kept;
+}
+
+/**
  * @typedef {{ key: string, anim: boolean }} Layer
  *   anim: an animated water key without its frame ("<key>.<f>" is drawn, f = 0..3)
  */
 
 /**
  * The layers of one display tile (bottom first).
- * @param {{ cls: string[], deep: boolean[], waterVariant: number, edgeVariant: (cls: string) => number,
+ * @param {{ cls: string[], deep: boolean[], waterVariant: number, edgeVariant: (cls: string, mask: number) => number,
  *   pick: (cls: string) => string, macro: () => string | null }} t
  *   cls / deep: the 4 corners (NW, NE, SW, SE); pick = the base name for a full land tile (a variant);
- *   edgeVariant = the variant of a land's edge overlay (0 / 1; the ruin floor: its row phase);
+ *   edgeVariant = the variant of a land's edge overlay of a mask (round 7: 0-3 by the side states; masks
+ *   6 / 9: 0 / 1; the ruin floor: its row phase);
  *   macro = a macro piece name ("macro.<q>") when the 4 corners are one land and the block is chosen
  * @returns {Layer[]}
  */
@@ -155,7 +210,7 @@ export function displayLayers({ cls, deep, waterVariant, edgeVariant, pick, macr
   for (const t of [...new Set(land)].sort((a, b) => rank(a) - rank(b))) {
     if (t === lowest) continue;
     const mask = cls.reduce((m, c, k) => (c !== 'water' && rank(c) >= rank(t) ? m | CORNERS[k][2] : m), 0);
-    out.push({ key: mask === 15 ? landKey(t, '0') : landKey(t, `edge.${mask}.${edgeVariant(t)}`), anim: false });
+    out.push({ key: mask === 15 ? landKey(t, '0') : landKey(t, `edge.${mask}.${edgeVariant(t, mask)}`), anim: false });
   }
   return out;
 }
@@ -180,6 +235,9 @@ export const quarterOfCorner = (k) => /** @type {const} */ (['se', 'sw', 'ne', '
 
 /** The grounds with pictures (A; render_ref.BUSY_MACRO). */
 export const MACRO_GROUNDS = Object.freeze(['grass', 'plains', 'lake', 'moss', 'path', 'snow', 'sand', 'dsand']);
+
+/** The names of a ground's step pieces (NAMES.md 2b): rims "step.<mask>.<v>" (mask N 1 + E 2 + W 4), the shadow, the inner corners. */
+export const STEP_NAMES = Object.freeze([...[1, 2, 3, 4, 5, 6, 7].flatMap((m) => [`step.${m}.0`, `step.${m}.1`]), 'step.shade.0', 'step.shade.1', 'step.inner.ne', 'step.inner.nw']);
 
 /** The names of the 8 pictures: picture m is "macro" (m = 0) or "macro<m+1>". */
 export const MACRO_NAMES = Object.freeze(['macro', 'macro2', 'macro3', 'macro4', 'macro5', 'macro6', 'macro7', 'macro8']);
@@ -291,8 +349,53 @@ export const ruinTile = (i, j, hash) => ruinIndex(ruinRow(j), ruinSymbol(i, hash
  */
 export const ruinCellTile = (x, y, hash) => ruinIndex((((10 * y + 6) % 11) + 11) % 11, ruinSymbol(x, hash), ruinSymbol(x + 1, hash));
 
-/** The variant of a land's edge overlay on display tile (i, j): the ruin's row phase, else 0 / 1. @param {string} cls @param {number} i @param {number} j @param {(a: number, b: number) => number} hash */
-export const edgeVariantOf = (cls, i, j, hash) => (cls === 'ruin' ? ruinRow(j) : hash(i + 7, j) % 2);
+/** The mask of terrain t on display tile (i, j): its corners whose ground is land of priority ≥ t's. @param {string} t @param {number} i @param {number} j @param {(x: number, y: number) => string | null} classAt */
+export function maskOf(t, i, j, classAt) {
+  const r = PRIORITY.indexOf(t);
+  let m = 0;
+  for (const [dx, dy, bit] of CORNERS) {
+    const c = classAt(i + dx, j + dy);
+    if (c && PRIORITY.indexOf(c) >= r && PRIORITY.indexOf(c) >= 0) m |= bit;
+  }
+  return m;
+}
+
+/** The sides of a display tile a mask's border crosses, in the order N, E, S, W (transitions.crossing_sides). @param {number} m @returns {('N' | 'E' | 'S' | 'W')[]} */
+export function crossingSides(m) {
+  const [nw, ne, sw, se] = [1, 2, 4, 8].map((b) => (m & b) !== 0);
+  return /** @type {('N' | 'E' | 'S' | 'W')[]} */ (['N', 'E', 'S', 'W'].filter((_, k) => [nw !== ne, ne !== se, sw !== se, nw !== sw][k]));
+}
+
+/** A side of display tile (i, j): its edge's hash arguments, its two end cells, the display tile across it. */
+const SIDE = Object.freeze({
+  N: (/** @type {number} */ i, /** @type {number} */ j) => ({ h: [2 * i + 1, 2 * j], ends: [[i, j], [i + 1, j]], across: [i, j - 1] }),
+  E: (/** @type {number} */ i, /** @type {number} */ j) => ({ h: [2 * i + 2, 2 * j + 1], ends: [[i + 1, j], [i + 1, j + 1]], across: [i + 1, j] }),
+  S: (/** @type {number} */ i, /** @type {number} */ j) => ({ h: [2 * i + 1, 2 * j + 2], ends: [[i, j + 1], [i + 1, j + 1]], across: [i, j + 1] }),
+  W: (/** @type {number} */ i, /** @type {number} */ j) => ({ h: [2 * i, 2 * j + 1], ends: [[i, j], [i, j + 1]], across: [i - 1, j] }),
+});
+
+/**
+ * The variant of terrain t's edge overlay (mask m) on display tile (i, j) (NAMES.md 2, step 3; round 7,
+ * render_ref.edge_variant): the ruin floor its row phase; masks 6 / 9 hash(i + 7, j) % 2; else
+ * sA + 2·sB over the 2 sides the border crosses (N, E, S, W order), a side's state being
+ * (its edge's hash >> 4) & 1, or 0 when one of its end cells is water or the display tile across it
+ * (or this one) has mask 6 / 9 for t — so the tiles on both sides of a side agree.
+ * @param {string} t @param {number} m @param {number} i @param {number} j @param {Hash} hash
+ * @param {(x: number, y: number) => string | null} classAt a cell's ground class (clamped to the map, as the display grid's corners)
+ */
+export function edgeVariantOf(t, m, i, j, hash, classAt) {
+  if (t === 'ruin') return ruinRow(j);
+  if (m === 6 || m === 9) return hash(i + 7, j) % 2;
+  const state = (/** @type {'N' | 'E' | 'S' | 'W'} */ sd) => {
+    const { h, ends, across } = SIDE[sd](i, j);
+    if (ends.some(([x, y]) => classAt(x, y) === 'water')) return 0;
+    const ma = maskOf(t, across[0], across[1], classAt);
+    if (ma === 6 || ma === 9 || maskOf(t, i, j, classAt) === 6 || maskOf(t, i, j, classAt) === 9) return 0;
+    return (hash(h[0], h[1]) >>> 4) & 1;
+  };
+  const [a, b] = crossingSides(m);
+  return state(a) + 2 * state(b);
+}
 
 // --- A: picture placement (NAMES.md section 1 A, steps 1-5; render_ref.macro_blocks) ---
 // The one place the rule lives: macroPlacement and the helpers below it. hash values are unsigned 32-bit.
@@ -361,12 +464,26 @@ export function blockPicture(a, b, hash, memo = new Map()) {
 }
 
 /**
+ * A step 4b (round 8): the desert's dune of block (a, b), 1-6, or 0: one dune block per cell of 4 × 3
+ * blocks, its shape from the cell's place in a 3 × 2 pattern of cells, turned by a hash per pattern.
+ * @param {number} a @param {number} b @param {Hash} hash
+ */
+export function blockDune(a, b, hash) {
+  const sa = Math.floor(a / 4);
+  const sb = Math.floor(b / 3);
+  const hs = hash(sa + 77, sb + 31);
+  if (a !== 4 * sa + (hs % 4) || b !== 3 * sb + ((hs >>> 2) % 3)) return 0;
+  return 1 + ((pmod(sa, 3) + 3 * pmod(sb, 2) + hash(Math.floor(sa / 3) + 13, Math.floor(sb / 2) + 29)) % 6);
+}
+
+/**
  * A: the picture piece of display tile (i, j), or null (NAMES.md section 1 A). A picture of block
  * (a, b ≥ 0) has its NW tile at (3a + ox, 3b + oy), ox / oy 0-2 (blockOffsets), so tile (i, j) can hold
  * the picture of its own block or of the block left of / above / left-above it (offset 2); pictures
- * never overlap. Drawn when the block has one (blockHasPicture), it stays on the map (i0 + 2 < width,
- * j0 + 2 < height) and the 9 map cells under it (i0 … i0+2, j0 … j0+2) are one flat ground with
- * pictures (MACRO_GROUNDS). Its 4 display tiles are "<name>.<q>", q = 0 NW, 1 NE, 2 SW, 3 SE.
+ * never overlap. Drawn when it stays on the map (i0 + 2 < width, j0 + 2 < height), the 9 map cells
+ * under it (i0 … i0+2, j0 … j0+2) are one flat ground with pictures (MACRO_GROUNDS; flat: one height,
+ * round 8 step 5), and the block has one (blockHasPicture) — or, on desert sand, is its cell's dune
+ * block (blockDune, step 4b: "dune<k>" instead of the picture). Its 4 display tiles are "<name>.<q>", q = 0 NW, 1 NE, 2 SW, 3 SE.
  * @param {number} i @param {number} j
  * @param {{ uniformBlock: (i: number, j: number, k: number) => string | null, hash: Hash, width: number, height: number, pictures?: Map<number, number> }} ctx
  *   uniformBlock(i, j, k): the one flat land ground of the (k+1)×(k+1) cells from (i, j), or null; width / height: the map's, in cells;
@@ -382,10 +499,14 @@ export function macroPlacement(i, j, { uniformBlock, hash, width, height, pictur
     const i0 = 3 * a + ox;
     const j0 = 3 * b + oy;
     if (i < i0 || i > i0 + 1 || j < j0 || j > j0 + 1) continue;
-    if (!blockHasPicture(a, b, hash) || i0 + 2 >= width || j0 + 2 >= height) continue;
+    if (i0 + 2 >= width || j0 + 2 >= height) continue;
     const g = uniformBlock(i0, j0, 2);
     if (g === null || !MACRO_GROUNDS.includes(g)) continue;
-    return { name: `${MACRO_NAMES[blockPicture(a, b, hash, pictures)]}.${i - i0 + (j - j0) * 2}`, block: `${i0},${j0}` };
+    // step 4b: the desert's dune block shows its dune, picture or not
+    const dune = g === 'dsand' ? blockDune(a, b, hash) : 0;
+    if (!dune && !blockHasPicture(a, b, hash)) continue;
+    const name = dune ? `dune${dune}` : MACRO_NAMES[blockPicture(a, b, hash, pictures)];
+    return { name: `${name}.${i - i0 + (j - j0) * 2}`, block: `${i0},${j0}` };
   }
   return null;
 }
