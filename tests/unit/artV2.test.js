@@ -1,20 +1,32 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync } from 'node:fs';
 import { V2_ENABLED, artVersion, resolveArtGroups, parseGroupName, v2Name } from '../../src/view/assets/artV2.js';
-import { onDemandReleaseGroup, precacheFiles, releaseGroupOf } from '../../tools/precache.mjs';
+import { hasV2Pair, onDemandReleaseGroup, preloadReleaseGroup, preloadSwitchScript, precacheFiles, releaseGroupOf } from '../../tools/precache.mjs';
 
 // Graphics v2 infrastructure (src/view/assets/artV2.js): src/art-release-v2/<group> drawn instead of
 // src/art-release/<group> when present and enabled; ?v2=0 and ?<group>=v1|v2 to compare.
 const p = (q) => new URLSearchParams(q);
 
 describe('graphics v2 art groups', () => {
-  it('a group is enabled only after its art passes inspection: the terrain (ground v2, gfx W1) and the ui (the W4 UI)', () => {
-    expect(V2_ENABLED).toEqual(['terrain', 'ui']);
+  it('a group is enabled only after its art passes inspection: the enemies (d900394), the terrain (ground v2, gfx W1) and the ui (the W4 UI)', () => {
+    expect(V2_ENABLED).toEqual(['enemy', 'terrain', 'ui']);
+    // the enabled groups' art is really there (the enemies with their frame table)
+    for (const g of V2_ENABLED) expect(existsSync(`src/art-release-v2/${g}`)).toBe(true);
+    expect(existsSync('src/art-release-v2/enemy/frames.json')).toBe(true);
     // ?ui=v1 and ?v2=0 still give the v1 UI
     const opts = { available: ['ui'] };
     expect(artVersion('ui', p(''), opts)).toBe('v2');
     expect(artVersion('ui', p('ui=v1'), opts)).toBe('v1');
     expect(artVersion('ui', p('v2=0'), opts)).toBe('v1');
+  });
+
+  it('the enemies: v2 by default, v1 with ?v2=0 or ?enemy=v1', () => {
+    const opts = { available: ['enemy'] };
+    expect(artVersion('enemy', p(''), opts)).toBe('v2');
+    expect(artVersion('enemy', p('v2=0'), opts)).toBe('v1');
+    expect(artVersion('enemy', p('enemy=v1'), opts)).toBe('v1');
+    expect(resolveArtGroups(['hero', 'enemy'], p(''), { ...opts, v1Groups: ['hero', 'enemy'] })).toEqual(['hero', 'v2/enemy']);
+    expect(resolveArtGroups(['hero', 'enemy'], p('v2=0'), { ...opts, v1Groups: ['hero', 'enemy'] })).toEqual(['hero', 'enemy']);
   });
 
   it('a v2 group is drawn when present and enabled; ?v2=0 turns every group back to v1; ?<group>= wins', () => {
@@ -43,6 +55,38 @@ describe('graphics v2 art groups', () => {
     expect(resolveArtGroups(['hero', 'terrain'], p('v2=0'), { available: ['terrain'] })).toEqual(['hero', 'terrain']);
     // nothing enabled: exactly the v1 groups
     expect(resolveArtGroups(['hero', 'terrain'], p(''), { available: ['terrain'], enabled: [] })).toEqual(['hero', 'terrain']);
+    // a group whose v2 art is not enabled: exactly the v1 group (fx-v2's check, with the list given)
+    expect(resolveArtGroups(['hero', 'terrain'], p(''), { available: ['terrain'], enabled: ['enemy'] })).toEqual(['hero', 'terrain']);
+  });
+
+  it('preload: a v1 / v2 pair is not preloaded statically (the page script picks one); the rest as before', () => {
+    const groups = new Set(['hero', 'npc', 'terrain', 'objects', 'enemy', 'v2-enemy', 'npc-revision-b2']);
+    expect(hasV2Pair('enemy', groups)).toBe(true);
+    expect(hasV2Pair('v2-enemy', groups)).toBe(true);
+    expect(hasV2Pair('hero', groups)).toBe(false);
+    expect(preloadReleaseGroup('enemy', groups)).toBe(false);
+    expect(preloadReleaseGroup('v2-enemy', groups)).toBe(false);
+    for (const g of ['hero', 'npc', 'terrain', 'objects']) expect(preloadReleaseGroup(g, groups)).toBe(true);
+    expect(preloadReleaseGroup('npc-revision-b2', groups)).toBe(false);
+    expect(onDemandReleaseGroup('enemy')).toBe(false); // both stay precached: the switches work offline
+    expect(onDemandReleaseGroup('v2-enemy')).toBe(!V2_ENABLED.includes('enemy'));
+  });
+
+  it('the page script preloads only the sheet that will be drawn', () => {
+    const pairs = { enemy: { v1: { png: 'e1.png', json: 'e1.json' }, v2: { png: 'e2.png', json: 'e2.json' } } };
+    const run = (search) => {
+      const links = [];
+      const el = () => ({ attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } });
+      const document = { createElement: el, head: { appendChild: (l) => links.push(l.attrs.href) } };
+      new Function('location', 'document', 'URLSearchParams', preloadSwitchScript(pairs))({ search }, document, URLSearchParams);
+      return links;
+    };
+    expect(run('')).toEqual(V2_ENABLED.includes('enemy') ? ['e2.png', 'e2.json'] : ['e1.png', 'e1.json']);
+    expect(run('?v2=0')).toEqual(['e1.png', 'e1.json']);
+    expect(run('?enemy=v1')).toEqual(['e1.png', 'e1.json']);
+    expect(run('?v2=0&enemy=v2')).toEqual(['e2.png', 'e2.json']);
+    expect(run('?enemy=placeholder')).toEqual([]);
+    expect(run('?hd=0')).toEqual([]);
   });
 
   it('names: "v2/<group>" in the game, release-v2-<group>.png|json when built', () => {

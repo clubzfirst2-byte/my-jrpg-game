@@ -62,6 +62,7 @@ test('chunk borders look exactly the same as the whole map drawn at once', async
   await api(page, 'teleport', 60, 30); // near the corner of 4 chunks (x 64, y 32), with cliffs
   await api(page, 'pause');
   await api(page, 'setVisualTime', 100); // the same instant of every animation in both pages
+  await api(page, 'fx', 'particles', false); // (gfx W5: the drifting motes are placed at random; the seams are what is compared)
   const hideHud = (p) => p.evaluate(() => (document.getElementById('ui').style.visibility = 'hidden')); // the clock ticks
   await hideHud(page);
   await page.waitForTimeout(300);
@@ -74,6 +75,7 @@ test('chunk borders look exactly the same as the whole map drawn at once', async
   await api(other, 'teleport', 60, 30);
   await api(other, 'pause');
   await api(other, 'setVisualTime', 100);
+  await api(other, 'fx', 'particles', false);
   await hideHud(other);
   await other.waitForTimeout(300);
   const whole = await other.locator('#game-canvas').screenshot();

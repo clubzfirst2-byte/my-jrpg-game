@@ -2,7 +2,9 @@
 // Draws the island features (P3.5): chests, checkpoint stones, campfires with smoke, cave openings,
 // and edge markers pointing at discovered landmarks that are off-screen. Reads state only.
 import { Graphics } from 'pixi.js';
+import { objectShadow } from './shadows.js';
 /** @typedef {import('pixi.js').Sprite} Sprite @typedef {import('pixi.js').Container} Container */
+/** @typedef {(g: import('./shadows.js').ShadowGeom, x: number, y: number) => Sprite} ShadowMaker */
 
 const SMOKE_PUFFS = 7;
 const SMOKE_RISE_PX = 40;
@@ -10,14 +12,27 @@ const SMOKE_PERIOD_SEC = 3.5;
 const MARKER_MARGIN = 10;
 const FIRE_FPS = 6;
 
+/**
+ * gfx W5: a shadow under a feature (chest, record stone), sorted just under it.
+ * @param {ShadowMaker | undefined} make @param {Container} actors @param {string} type @param {Sprite} s @param {number} zIndex
+ */
+function castShadow(make, actors, type, s, zIndex) {
+  const g = make ? objectShadow(type, s.width, s.height) : null;
+  if (!make || !g) return;
+  const sh = make(g, s.x, s.y);
+  sh.zIndex = zIndex;
+  actors.addChild(sh);
+}
+
 export class FeatureView {
   /**
    * @param {(key: string) => Sprite} makeSprite
    * @param {Container} actors   Y-sorted layer
    * @param {Container} screen   screen-space layer (markers)
    * @param {import('../game/state.js').GameState} state
+   * @param {ShadowMaker} [makeShadow] gfx W5: makes a cast shadow (shadows.js; none with ?fx=v1)
    */
-  constructor(makeSprite, actors, screen, state) {
+  constructor(makeSprite, actors, screen, state, makeShadow) {
     this.makeSprite = makeSprite;
     const map = state.map;
     const ts = map.tileSize;
@@ -31,6 +46,7 @@ export class FeatureView {
       s.position.set(f.x, f.y - f.z - 1);
       s.zIndex = f.y - 1;
       actors.addChild(s);
+      castShadow(makeShadow, actors, 'chest', s, f.y - 1.01);
       return { id: c.id, sprite: s };
     });
 
@@ -41,6 +57,7 @@ export class FeatureView {
       s.position.set(f.x, f.y - f.z - 3);
       s.zIndex = f.y - 3;
       actors.addChild(s);
+      castShadow(makeShadow, actors, 'checkpoint', s, f.y - 3.01);
       return { id: c.id, sprite: s };
     });
 
@@ -90,6 +107,7 @@ export class FeatureView {
     // Inside an area (cave) everything outside it is dark.
     this.mask = new Graphics();
     screen.addChild(this.mask);
+    this.maskDrawn = false;
 
     /** @type {{ id: string, x: number, y: number, sprite: Sprite }[]} */
     this.markers = state.landmarks.map((l) => {
@@ -111,7 +129,10 @@ export class FeatureView {
    * @param {{ x: number, y: number, width: number, height: number } | null} area world rect, inside an area
    */
   update(state, texture, origin, zoom, screenW, screenH, timeSec, area) {
-    this.mask.clear();
+    // (cleared only inside an area, or once on leaving it: an emptied Graphics each frame made
+    // PixiJS rebuild the whole scene's draw list every frame)
+    if (area || this.maskDrawn) this.mask.clear();
+    this.maskDrawn = !!area;
     if (area) {
       const x0 = Math.round((area.x - origin.x) * zoom);
       const y0 = Math.round((area.y - origin.y) * zoom);

@@ -13,16 +13,16 @@
 // Warning flash (docs/art-direction/ART_STYLE_GUIDE.md 5.4 B, approved for v1.0): during a wind-up
 // the sprite's shape is covered with red #ff3a3a at 50%, pulsing faster as the attack nears. It is
 // laid OVER the art rather than multiplied into it, so it shows on dark bodies too.
-import { BOSS_PARRY_STUN_MS } from '../game/entities/bosses.js';
+import { BOSS_PARRY_STUN_MS, BOSS_KINDS } from '../game/entities/bosses.js';
 import { ENEMY_KINDS } from '../game/entities/enemies.js';
 import { ENEMY_CORPSE_MS } from '../game/state.js';
+import { actionInfo, loopFrame, onceFrame, spreadFrame } from './enemyFrames.js';
 
-/** Frame timings (docs/art-release/enemy/PRODUCTION.md 2.3). */
+// gfx W3: frame counts and speeds per action come from the art's frames.json (enemyFrames.js) —
+// v1 (2–4 frames) or v2 (4–8) — so nothing here assumes how many frames an action has.
+
+/** Spans the game gives some actions (the frame count and speed of every action: enemyFrames.js). */
 export const ENEMY_ANIM = Object.freeze({
-  idleMs: 400,
-  moveMs: 140,
-  attackMs: 120,
-  hurtMs: 200,
   /** a defeated enemy is removed ENEMY_CORPSE_MS after it falls: its defeat frames play over this
    *  first part of that time (then the last frame stays and fades out) */
   defeatPlayMs: ENEMY_CORPSE_MS * 0.6,
@@ -30,9 +30,18 @@ export const ENEMY_ANIM = Object.freeze({
   fadeFromMs: ENEMY_CORPSE_MS * 0.6,
   /** the archer's shot pose lasts this long after the orb leaves */
   shotPoseMs: 240,
-  /** placeholder: 2 frames at this rate while moving */
+  /** placeholder (enemy.<kind>.<0|1>, standing / moving): moving alternates at this rate */
   placeholderFps: 6,
 });
+
+/** How long the attack itself lasts before its recovery (so the attack frames run on through it). @param {any} e */
+export function attackMs(e) {
+  if (e.boss) {
+    const k = /** @type {any} */ (BOSS_KINDS)[e.bossKind];
+    return e.pattern === 'charge' ? (k?.chargeMs ?? 0) : e.pattern === 'slam' ? 200 : 0;
+  }
+  return /** @type {any} */ (ENEMY_KINDS)[e.kind]?.activeMs ?? 0;
+}
 
 /** The wind-up warning: colour and strength of the overlay. */
 export const WARNING_FLASH = Object.freeze({ color: 0xff3a3a, alpha: 0.5 });
@@ -40,15 +49,10 @@ export const WARNING_FLASH = Object.freeze({ color: 0xff3a3a, alpha: 0.5 });
 /**
  * How many frames an action has (0 when there is none). With `counts`, each answer is remembered
  * (the caller clears it when the loaded art changes), so nothing is recounted every frame.
- * @param {string} base @param {(key: string) => boolean} has @param {Map<string, number>} [counts]
+ * @param {string} base @param {(key: string) => boolean} has @param {Map<string, { n: number, fps: number }>} [counts]
  */
 export function frameCount(base, has, counts) {
-  const known = counts?.get(base);
-  if (known !== undefined) return known;
-  let n = 0;
-  while (n < 16 && has(`${base}.${n}`)) n++;
-  counts?.set(base, n);
-  return n;
+  return actionInfo(base, has, counts).n;
 }
 
 /** How opaque a defeated enemy is, `ms` after it fell: solid while its defeat frames play, then fading out. @param {number} ms */
@@ -73,8 +77,8 @@ export function enemyAction(e, moving) {
     case 'attack':
       return { action: `attack${suffix}`, ms: e.t, loop: false };
     case 'recover':
-      // The follow-through pose (the attack's last frame) while it recovers.
-      return { action: `attack${suffix}`, ms: Infinity, loop: false };
+      // The attack runs on through the recovery (a long swing finishes), then holds its last frame.
+      return { action: `attack${suffix}`, ms: attackMs(e) + e.t, loop: false };
     case 'stun':
       // A core knocked off balance by a parry staggers; any other stun is a flinch.
       if (e.boss && e.stunMs >= BOSS_PARRY_STUN_MS) return { action: 'stagger', ms: e.t, loop: true };
@@ -87,7 +91,6 @@ export function enemyAction(e, moving) {
   return { action: e.boss && e.phase === 2 ? 'idle2' : 'idle', ms: -1, loop: true };
 }
 
-const PER_FRAME = /** @type {Record<string, number>} */ ({ hurt: ENEMY_ANIM.hurtMs, stagger: ENEMY_ANIM.hurtMs });
 
 /**
  * The sprite key for an enemy this frame.
@@ -95,30 +98,27 @@ const PER_FRAME = /** @type {Record<string, number>} */ ({ hurt: ENEMY_ANIM.hurt
  * @param {number} timeSec real time (looping animations)
  * @param {boolean} moving whether it moved this step
  * @param {(key: string) => boolean} has whether a texture is loaded
- * @param {Map<string, number>} [counts] remembered frame counts (frameCount)
+ * @param {Map<string, { n: number, fps: number }>} [counts] remembered frame counts and speeds (enemyFrames.js actionInfo)
  * @returns {string}
  */
 export function enemyFrameKey(e, timeSec, moving, has, counts) {
   const base = `enemy.${e.kind}`;
-  if (frameCount(`${base}.idle`, has, counts) > 0) {
+  if (actionInfo(`${base}.idle`, has, counts).n > 0) {
     const a = enemyAction(e, moving);
     let name = a.action;
-    let n = frameCount(`${base}.${name}`, has, counts);
-    if (n === 0 && name === 'idle2') {
+    let info = actionInfo(`${base}.${name}`, has, counts);
+    if (info.n === 0 && name === 'idle2') {
       name = 'idle';
-      n = frameCount(`${base}.idle`, has, counts);
+      info = actionInfo(`${base}.idle`, has, counts);
     }
-    if (n > 0) {
-      if ('progress' in a) return `${base}.${name}.${Math.min(n - 1, Math.floor(a.progress * n))}`;
-      if (a.ms < 0) {
-        // Looping by real time; each enemy at its own offset so a group does not move in step.
-        const per = name === 'move' ? ENEMY_ANIM.moveMs : ENEMY_ANIM.idleMs;
-        return `${base}.${name}.${Math.floor((timeSec * 1000) / per + (e.id % 7) * 0.37) % n}`;
-      }
-      // (the defeat frames are spread over the time before the body is removed)
-      const per = name === 'defeat' ? ENEMY_ANIM.defeatPlayMs / n : (PER_FRAME[name] ?? ENEMY_ANIM.attackMs);
-      const f = Math.floor(a.ms / per);
-      return `${base}.${name}.${a.loop ? f % n : Math.min(n - 1, f)}`;
+    if (info.n > 0) {
+      if ('progress' in a) return `${base}.${name}.${spreadFrame(a.progress, info.n)}`;
+      // Looping by real time; each enemy at its own offset so a group does not move in step.
+      if (a.ms < 0) return `${base}.${name}.${loopFrame(timeSec, info, (e.id % 7) * 0.37)}`;
+      // The defeat frames are spread over the time before the body is removed.
+      if (name === 'defeat') return `${base}.${name}.${spreadFrame(a.ms / ENEMY_ANIM.defeatPlayMs, info.n)}`;
+      if (a.loop) return `${base}.${name}.${loopFrame(a.ms / 1000, info)}`;
+      return `${base}.${name}.${onceFrame(a.ms, info)}`;
     }
     return `${base}.idle.0`;
   }

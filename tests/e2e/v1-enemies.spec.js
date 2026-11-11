@@ -27,7 +27,7 @@ test('the sentinel winds up under a 50% red overlay (the sprite itself is not ti
   // Wait for the DRAWN frame (the view lags the game state by up to a frame): the overlay is up.
   await expect
     .poll(async () => (await api(page, 'enemyView'))[0]?.flash ?? 0, { timeout: 8000, intervals: [20] })
-    .toBeCloseTo(0.5);
+    .toBeGreaterThanOrEqual(0.5); // (0.5 solid; gfx W5: 0.9 on a rim overlay that is faint inside)
   expect((await api(page, 'enemies')).find((e) => e.kind === 'sentinel').state).toBe('windup');
   const view = (await api(page, 'enemyView'))[0];
   expect(view.flashColor).toBe(RED);
@@ -99,7 +99,7 @@ test('the placeholder enemies still flash with the overlay (?hd=0, no release ar
   await api(page, 'spawnEnemy', 'beast', 9, 26);
   await expect
     .poll(async () => (await api(page, 'enemyView'))[0]?.flash ?? 0, { timeout: 8000, intervals: [20] })
-    .toBeCloseTo(0.5);
+    .toBeGreaterThanOrEqual(0.5); // (0.5 solid; gfx W5: 0.9 on a rim overlay that is faint inside)
   const v = (await api(page, 'enemyView'))[0];
   expect(v.key).toMatch(/^enemy\.beast\.[01]$/);
   expect(v.flashColor).toBe(RED);

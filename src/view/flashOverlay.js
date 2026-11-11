@@ -10,14 +10,44 @@
 // opaque pixel turned white) and cached; only frames that are on screen during a wind-up ever get
 // one (a few dozen at most, each the size of one sprite). A silhouette whose source texture was
 // destroyed (its region's art released) is destroyed with it.
+//
+// gfx W5 ('rim', the default with the graphics v2 effects; ?fx=v1 keeps the solid one): the overlay
+// is strong on the outline (one game px wide) and faint inside, so the red pulse still reads while the
+// art's inner detail (the v2 enemies' shading and patterns) stays visible.
 import { Rectangle, Sprite, Texture } from 'pixi.js';
 import { WARNING_FLASH } from './enemyAnim.js';
 
-/** Solid-white copies of sprite frames, made on demand. */
+/** gfx W5 rim overlay: the outline's and the inside's opacity in the silhouette, and the overlay's. */
+export const RIM_FLASH = Object.freeze({ edge: 1, inside: 0.3, alpha: 0.9 });
+
+/**
+ * The rim silhouette's opacity per pixel (0..255): RIM_FLASH.edge on the outline — an opaque pixel
+ * within `r` px (one game px) of a transparent one or the frame's edge — RIM_FLASH.inside within the
+ * body, 0 outside. Pure.
+ * @param {ArrayLike<number>} alpha the frame's alpha, row by row @param {number} w @param {number} h @param {number} r
+ * @returns {Uint8ClampedArray}
+ */
+export function rimAlpha(alpha, w, h, r) {
+  const out = new Uint8ClampedArray(w * h);
+  const clear = (/** @type {number} */ x, /** @type {number} */ y) => x < 0 || y < 0 || x >= w || y >= h || alpha[y * w + x] < 128;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (alpha[y * w + x] < 128) continue;
+      let edge = false;
+      for (let d = 1; d <= r && !edge; d++) edge = clear(x - d, y) || clear(x + d, y) || clear(x, y - d) || clear(x, y + d);
+      out[y * w + x] = Math.round(255 * (edge ? RIM_FLASH.edge : RIM_FLASH.inside));
+    }
+  }
+  return out;
+}
+
+/** Solid-white copies of sprite frames (or, 'rim', strong outlines over a faint body), made on demand. */
 export class SilhouetteCache {
-  constructor() {
+  /** @param {'solid' | 'rim'} [mode] */
+  constructor(mode = 'solid') {
     /** @type {Map<Texture, Texture>} */
     this.map = new Map();
+    this.mode = mode;
   }
 
   /** @param {Texture} tex */
@@ -25,7 +55,7 @@ export class SilhouetteCache {
     const hit = this.map.get(tex);
     if (hit) return hit;
     this.prune();
-    const made = makeSilhouette(tex);
+    const made = makeSilhouette(tex, this.mode);
     this.map.set(tex, made);
     return made;
   }
@@ -44,8 +74,8 @@ export class SilhouetteCache {
   }
 }
 
-/** @param {Texture} tex @returns {Texture} */
-function makeSilhouette(tex) {
+/** @param {Texture} tex @param {'solid' | 'rim'} mode @returns {Texture} */
+function makeSilhouette(tex, mode) {
   const src = tex.source;
   const res = src.resolution || 1;
   const img = /** @type {any} */ (src.resource);
@@ -62,6 +92,25 @@ function makeSilhouette(tex) {
   ctx.globalCompositeOperation = 'source-in';
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
+  if (mode === 'rim') {
+    // The same as rimAlpha, by compositing (no pixel read-back, which is slow): the body shrunk by
+    // one game px (the silhouette kept only where its copies shifted by r px all four ways are
+    // opaque), faded out of the silhouette to RIM_FLASH.inside.
+    const r = Math.max(1, Math.round(res));
+    const inner = document.createElement('canvas');
+    inner.width = w;
+    inner.height = h;
+    const ic = inner.getContext('2d');
+    if (ic) {
+      ic.drawImage(canvas, 0, 0);
+      ic.globalCompositeOperation = 'destination-in';
+      for (const [dx, dy] of [[r, 0], [-r, 0], [0, r], [0, -r]]) ic.drawImage(canvas, dx, dy);
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.globalAlpha = RIM_FLASH.edge - RIM_FLASH.inside;
+      ctx.drawImage(inner, 0, 0);
+      ctx.globalAlpha = 1;
+    }
+  }
   // Same set-up as the atlases (placeholderPack.js): the frame is measured in game pixels.
   const source = Texture.from(canvas, true).source;
   source.scaleMode = 'nearest';

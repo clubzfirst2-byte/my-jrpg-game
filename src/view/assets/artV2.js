@@ -12,12 +12,14 @@
 // Pure (no Vite / PixiJS imports): tools/precache.mjs reads V2_ENABLED too.
 
 /**
- * The v2 groups that passed inspection and are drawn by default; the director adds a group once its
- * art is approved. terrain: the ground v2 (gfx W1), after the inspections of its wiring. ui: the W4 UI
- * (title, buttons, menus), after the wiring inspections (round 3).
+ * The v2 groups that passed inspection and are drawn by default (the director adds a group once its
+ * art is approved).
+ * - enemy: gfx/w3-enemy-art d900394, passed independent inspection (2026-11-10); fx-v2 wiring
+ * - terrain: the ground v2 (gfx W1), after the inspections of its wiring
+ * - ui: the W4 UI (title, buttons, menus), after the wiring inspections (round 3)
  * @type {readonly string[]}
  */
-export const V2_ENABLED = Object.freeze(['terrain', 'ui']);
+export const V2_ENABLED = Object.freeze(['enemy', 'terrain', 'ui']);
 
 /** The name a v2 group has in the game (releaseFrames, the build's sheet table). @param {string} group */
 export const v2Name = (group) => `v2/${group}`;

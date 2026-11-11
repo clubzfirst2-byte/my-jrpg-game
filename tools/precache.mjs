@@ -47,6 +47,7 @@ export const hasV2Pair = (group, groups) => (group.startsWith('v2-') ? groups.ha
  *   - a v2 group with no v1 counterpart (the UI): its files when it is drawn as v2, else nothing;
  *   - files marked `title` (the v2 UI's title frames) only on a page that shows the title: none with
  *     ?map= (main.js withTitle, uiSkin loadTitleArt), where they would be an unused preload.
+ * The enemies (fx-v2) are a v1 / v2 pair like the terrain.
  * An inline script, so it runs while the HTML is read, before the game's JS. (It sets the links'
  * attributes; without setAttribute, in the unit tests' stand-in document, their properties.)
  * @param {Record<string, { v1?: string[], v2?: string[], title?: boolean }>} groups hrefs by group (folder name) and side

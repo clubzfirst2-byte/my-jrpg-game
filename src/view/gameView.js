@@ -35,8 +35,13 @@ import { CORNERS, MACRO_NAMES, STEP_NAMES, PREFIX, PRIORITY, SEASONAL, WATER_FRA
 import { GROUND_RUIN_BUNDLE, GROUND_V2_KEY, ISLAND_EDGES_BUNDLE, ISLAND_STEPS_BUNDLE, detailBundleOf, groundBundleOf, seasonGroundBundleOf, faceMaterial, faceVariant, groundCacheResolution, groundVariant, indoorLight, levelBrightness, releaseSeasonKeys, usesReleaseTerrain, waterAround, waterEdgePieces } from './assets/terrainArt.js';
 import { openingView } from '../game/story/story.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
-import { SilhouetteCache, placeFlash } from './flashOverlay.js';
+import { SilhouetteCache, placeFlash, RIM_FLASH } from './flashOverlay.js';
 import { EnemySlots } from './enemySlots.js';
+import { objectShadow, characterShadow, placeShadow, weatherShadow, shadowTexture, SHADOW } from './shadows.js';
+import { PANE_AREA, WINDOW_GLOW, windowGlow, hasWindows, paneImageFromTable, windowLightSpots } from './houseWindows.js';
+import { AmbientParticles, ambientKinds, mistTextures } from './ambientParticles.js';
+import { HitFx } from './hitFx.js';
+import { isDark, hourOf } from '../game/env/weather.js';
 
 /** Chunk size in tiles (P8). */
 export const CHUNK = 32;
@@ -73,10 +78,13 @@ export function chunkCacheArea(cx, cy, ts) {
  * @typedef {{ cx: number, cy: number, base: Container, rows: Map<number, Container>, water: Sprite[],
  *   edges: { sprite: Sprite, key: string }[], waterFrame: number,
  *   waterMesh: import('pixi.js').Mesh | null, waterKeys: string[],
- *   extents: Map<number, { x0: number, x1: number, y0: number, y1: number }[]>, bundles: string[] }} Chunk
+ *   extents: Map<number, { x0: number, x1: number, y0: number, y1: number }[]>, baked: any[], shade: Container, bundles: string[] }} Chunk
+ * @typedef {{ o: any, sprite: Sprite, occluder: Occluder | null, shadow?: Sprite | null, shadowType?: string, shadowGone?: boolean, windows?: Sprite[] | null }} ObjectEntry
  */
 
 const WALK_FPS = 8;
+/** gfx W5: enemies drawn without a cast shadow (the storm lord's art stands in its own puddle). */
+const NO_SHADOW_KINDS = new Set(['boss_storm']);
 const WALK_CYCLE = [1, 0, 2, 0];
 const WATER_FRAME_SEC = 0.6;
 const EDGE_COLOR = 0x1a1c2c;
@@ -115,9 +123,12 @@ export class GameView {
    * @param {import('pixi.js').Application} app
    * @param {import('./assets/assetManager.js').AssetManager} assets
    * @param {import('../game/state.js').GameState} state
+   * @param {{ fx?: 'v1' | 'v2' }} [opts] gfx W5: fx 'v1' = the look before the effects (fxSwitch.js)
    */
-  constructor(app, assets, state) {
+  constructor(app, assets, state, opts = {}) {
     this.app = app;
+    /** gfx W5: the light / shadow / effects drawn (fxSwitch.js); false = the look before them (?fx=v1). */
+    this.fxV2 = opts.fx !== 'v1';
     this.assets = assets;
     /** v1.0: the terrain is drawn from its release art (its brightness and variants, terrainArt.js). */
     this.releaseTerrain = usesReleaseTerrain(assets);
@@ -157,7 +168,7 @@ export class GameView {
     // P8: the terrain and objects are built in chunks around the camera and freed behind it.
     /** @type {Map<string, Chunk>} */
     this.chunks = new Map();
-    /** @type {Map<any, { o: any, sprite: Sprite, occluder: Occluder | null }>} object -> its sprite (loaded chunks only) */
+    /** @type {Map<any, ObjectEntry>} object -> its sprite (loaded chunks only) */
     this.objectSprites = new Map();
     /** @type {RegionInfo[]} */
     this.regions = state.regions ?? [];
@@ -223,7 +234,12 @@ export class GameView {
     this.screenLayer = new Container();
     this.screenLayer.label = 'screen';
     app.stage.addChild(this.screenLayer);
-    this.features = new FeatureView((key) => this.makeSprite(key), this.actors, this.screenLayer, state);
+    /** gfx W5: the sun's shadows' strength now (shadows.weatherShadow: the weather, a lightning flash) */
+    this.shadowStrength = 1;
+    /** every loose object shadow (crates, raised ground, chests, stones) @type {Set<Sprite>} */
+    this.looseShadows = new Set();
+    // gfx W5: the chests' and record stones' shadows (shadows.js)
+    this.features = new FeatureView((key) => this.makeSprite(key), this.actors, this.screenLayer, state, this.fxV2 ? (g, x, y) => this.looseShadow(g, x, y) : undefined);
     // Environment (P4): ash / wet ground goes between the cached ground and the actors.
     this.envGround = new Container();
     this.envGround.label = 'env-ground';
@@ -270,6 +286,64 @@ export class GameView {
     this.weather.crystalLight = crystalLightColor(assets.texture('obj.crystal'));
     this.weather.attach(app.stage, app.stage.getChildIndex(this.world) + 1);
     this.weather.indoorAmbient = indoorLight(this.releaseTerrain);
+    // gfx W5 — light, shadow and effects (all pooled or cached; nothing allocated per frame):
+    // cast shadows on the ground, under everything that stands: one layer whose opacity is the
+    // sun's strength (the weather, a lightning flash) — changing it redraws nothing,
+    this.shadowLayer = new Container();
+    this.shadowLayer.label = 'shadows';
+    this.world.addChildAt(this.shadowLayer, this.world.getChildIndex(this.actors));
+    /** flat-ground shadows (in their chunk's container in the shadow layer), by object @type {Map<any, { sprite: Sprite, base: Container }[]>} */
+    this.bakedShadows = new Map();
+
+    /** effect groups on (setFx, for measuring) */
+    const on = this.fxV2;
+    this.fxOn = { shadows: on, particles: on, hitfx: on, windows: on, rain: on };
+    /** villagers' and enemies' shadows: one per character sprite, kept @type {Map<Sprite, Sprite>} */
+    this.charShadowOf = new Map();
+    /** characters' shadows placed this frame (fxDebug), and the frame's number */
+    this.charShadowN = 0;
+    this.charShadowFrame = 0;
+    this.placeCharShadow = (/** @type {Sprite} */ spr, /** @type {number} */ z) => this.charShadow(spr, z);
+    this.npcShadowFn = (/** @type {Sprite} */ spr) => this.charShadow(spr, spr.zIndex);
+    this.enemyShadowFn = (/** @type {{ owner: any, sprite: Sprite }} */ slot) => {
+      // (the source has its own arena light; the storm lord stands in a puddle of its own art, and a
+      // shadow on the grass under it would lift the puddle off the ground)
+      if (!slot.owner.final && !NO_SHADOW_KINDS.has(slot.owner.kind)) this.charShadow(slot.sprite, slot.sprite.zIndex);
+    };
+    // lit windows (houseWindows.js),
+    /** @type {Sprite[]} */
+    this.windowSprites = [];
+    /** world px of each lit window's pool of light on the ground (null until the house art is known) @type {{ x: number, y: number }[] | null} */
+    this.windowLights = null;
+    this.lastWindowGlow = 1;
+    /** the lit glass per house texture @type {Map<Texture, { tex: Texture, scale: number } | null>} */
+    this.paneTextures = new Map();
+    /** lit glass, above the light map (in the glow layer) */
+    this.windowLayer = new Container();
+    this.windowLayer.label = 'windows';
+    /** the windows' pools of light on the ground (under the actors, over the shadows) */
+    this.poolLayer = new Container();
+    this.poolLayer.label = 'window-pools';
+    this.world.addChildAt(this.poolLayer, this.world.getChildIndex(this.actors));
+    // ambient particles: lit like the world (in it, over the actors) and glowing (over the light map),
+    this.ambientParticles = new AmbientParticles(assets.texture('px'), mistTextures());
+    this.world.addChild(this.ambientParticles.under);
+    this.ambientKinds = ambientKinds({ region: null, season: 'summer', dark: false, day: true, weather: 'clear', indoor: true, nearWater: false, snowGround: false });
+    this.ambientCheckAt = -1;
+    /** the ambient particles move every other frame (time gathered here) */
+    this.ambientDt = 0;
+    this.ambientFrame = 0;
+    this.viewRect = { x: 0, y: 0, w: 0, h: 0 };
+    this.nearWaterFn = (/** @type {number} */ x, /** @type {number} */ y) => this.nearWater(x, y, 2);
+    // and hit effects (hitFx.js). The glowing layers follow the world's camera (applyCamera).
+    this.hitFx = new HitFx(assets.texture('px'));
+    this.glowLayer = new Container();
+    this.glowLayer.label = 'glow';
+    this.glowLayer.addChild(this.windowLayer, this.ambientParticles.glow, this.hitFx.layer);
+    app.stage.addChildAt(this.glowLayer, app.stage.getChildIndex(this.weather.overlay) + 1);
+    this.setFx('', false); // (the layers as fxOn says)
+    /** capturing a still: the hit effects stop where they are */
+    this.fxHold = false;
     // (v1.0 attack warnings stay in the world, sorted with their enemy, so trees in front hide them;
     // at night the light map lights each winding-up enemy instead: weatherView.js warningLights.)
 
@@ -302,8 +376,12 @@ export class GameView {
     this.enemyKeys = new Map();
     /** @type {Map<number, Sprite>} */
     this.flashSprites = new Map();
-    this.silhouettes = new SilhouetteCache();
-    /** Frame counts of the enemies' release actions, cleared when the loaded art changes. @type {Map<string, number>} */
+    /** the boss ring / the source's marks have something drawn (they are cleared only when needed) */
+    this.bossRingDrawn = false;
+    this.aimDrawn = false;
+    this.sourceDrawn = false;
+    this.silhouettes = new SilhouetteCache(this.fxV2 ? 'rim' : 'solid'); // gfx W5: a red rim keeps the v2 art's detail
+    /** Frame counts and speeds of the enemies' actions (enemyFrames.js), cleared when the loaded art changes. @type {Map<string, { n: number, fps: number }>} */
     this.enemyFrameCounts = new Map();
     this.enemyFrameCountsAt = -1;
     /** @param {string} k */
@@ -317,6 +395,14 @@ export class GameView {
     this.bow = this.makeSprite('fx.bow');
     this.bow.visible = false;
     this.actors.addChild(this.slash, this.shield, this.bow);
+    // gfx W5: the slash leaves two fading after-images (the last two frames' places).
+    this.slashTrail = [this.makeSprite('fx.slash'), this.makeSprite('fx.slash')];
+    for (const t of this.slashTrail) {
+      t.visible = false;
+      this.actors.addChild(t);
+    }
+    /** the slash's last two places: x, y, rotation, zIndex, shown (1/0) */
+    this.slashHist = new Float64Array(10);
     this.aimLine = new Graphics();
     this.overlay.addChild(this.aimLine);
     // Screen-space tint for slow motion (perfect dodge / bullet time).
@@ -1192,6 +1278,29 @@ export class GameView {
       }
     }
     this.flushShades(shades, y1 - 1, rows, cx);
+    // gfx W5: the shadows of the objects on flat ground: small pixel sprites in this chunk's own
+    // container in the shadow layer (they batch into one draw with the rest; the layer's opacity is
+    // the weather's, so a lightning flash or a change of weather costs nothing — baking them into the
+    // ground cache meant redrawing every chunk's cache, about a second a time on the software renderer).
+    /** @type {any[]} */
+    const baked = [];
+    const shade = new Container();
+    shade.label = `shadows-${cx}-${cy}`;
+    for (const o of map.objects) {
+      if (o.tx < cx * CHUNK || o.tx >= x1 || o.ty < cy * CHUNK || o.ty >= y1) continue;
+      if (o.type === 'crate' || map.elev[o.ty * map.width + o.tx] > 0) continue;
+      const sh = this.bakedShadowSprite(o);
+      if (!sh) continue;
+      shade.addChild(sh);
+      baked.push(o);
+      let list = this.bakedShadows.get(o);
+      if (!list) {
+        list = [];
+        this.bakedShadows.set(o, list);
+      }
+      list.push({ sprite: sh, base: shade });
+    }
+    this.shadowLayer.addChild(shade);
     base.tint = levelTint(0, this.releaseTerrain);
     this.base.addChild(base);
     // A chunk's flat ground -> one textured quad per frame, cached over the whole chunk (see
@@ -1218,13 +1327,13 @@ export class GameView {
       }
     }
 
-    // Objects standing in this chunk now.
+    // Objects standing in this chunk now (shadows on raised ground go in their terrain row).
     for (const o of map.objects) {
       if (o.tx < cx * CHUNK || o.tx >= x1 || o.ty < cy * CHUNK || o.ty >= y1 || this.objectSprites.has(o)) continue;
-      this.addObjectSprite(o);
+      this.addObjectSprite(o, rowContainer);
     }
     this.chunkStats.built++;
-    return { cx, cy, base, rows, water, edges, extents, bundles: this.chunkBundles(cx, cy), waterFrame: this.waterFrame, waterMesh, waterKeys };
+    return { cx, cy, base, rows, water, edges, extents, baked, shade, bundles: this.chunkBundles(cx, cy), waterFrame: this.waterFrame, waterMesh, waterKeys };
   }
 
   /** @param {Chunk} c */
@@ -1237,12 +1346,28 @@ export class GameView {
       c.waterMesh.destroy();
       g.destroy();
     }
+    c.shade.destroy({ children: true }); // (its flat-ground shadows)
+    for (const o of c.baked) {
+      const list = this.bakedShadows.get(o);
+      if (!list) continue;
+      const left = list.filter((b) => b.base !== c.shade);
+      if (left.length) this.bakedShadows.set(o, left);
+      else this.bakedShadows.delete(o);
+    }
     for (const r of c.rows.values()) r.destroy({ children: true });
     const inChunk = (/** @type {number} */ tx, /** @type {number} */ ty) => Math.floor(tx / CHUNK) === c.cx && Math.floor(ty / CHUNK) === c.cy;
     for (const [o, e] of this.objectSprites) {
       const home = this.chunks.get(this.chunkKey(Math.floor(o.tx / CHUNK), Math.floor(o.ty / CHUNK)));
       if (inChunk(o.tx, o.ty) || !home || home === c) {
         e.sprite.destroy();
+        if (e.shadow && !e.shadow.destroyed) {
+          this.looseShadows.delete(e.shadow);
+          e.shadow.destroy();
+        }
+        for (const w of e.windows ?? []) {
+          w.destroy();
+          this.windowSprites.splice(this.windowSprites.indexOf(w), 1);
+        }
         this.objectSprites.delete(o);
       }
     }
@@ -1454,14 +1579,54 @@ export class GameView {
     return `obj.${o.type}`;
   }
 
-  /** @param {any} o */
-  addObjectSprite(o) {
+  /**
+   * A flat-ground object's shadow for a chunk's ground cache (null: none, or its art is not loaded).
+   * @param {any} o
+   */
+  bakedShadowSprite(o) {
+    const key = this.seasonal(this.objectKey(o, 0));
+    if (!this.fxV2 || !this.assets.hasTexture(key)) return null;
+    const tex = this.assets.texture(key);
+    const g = objectShadow(o.type, tex.width, tex.height);
+    if (!g) return null;
+    const ts = this.map.tileSize;
+    const [dx, dy] = this.decorShift(o); // (W2: under the object where it is drawn)
+    const sh = this.makeShadow(g, o.tx * ts + ts / 2 + dx, o.ty * ts + ts + dy, 1);
+    sh.visible = !o.gone && this.fxOn.shadows;
+    return sh;
+  }
+
+  /**
+   * A shadow sprite (shadows.js: pixel steps, whole game px) at the strength of the moment; it keeps
+   * its geometry so a change of weather can restrengthen it.
+   * @param {import('./shadows.js').ShadowGeom} g @param {number} x @param {number} y feet, world px
+   * @param {number} [strength] its own strength (1 for the shadow layer's, whose opacity is the weather's)
+   */
+  makeShadow(g, x, y, strength = this.shadowStrength) {
+    const sh = new Sprite();
+    sh.tint = SHADOW.color;
+    sh.label = 'shadow';
+    placeShadow(sh, x, y, g, strength);
+    /** @type {any} */ (sh).shadowG = g;
+    return sh;
+  }
+
+  /** W2: an object's draw offset from its tile (decorative objects outdoors; [0, 0] otherwise). @param {any} o @returns {[number, number]} */
+  decorShift(o) {
+    return this.placement && DECOR_TYPES.includes(o.type) && outdoorAt(this.outdoors, o.tx, o.ty) ? decorOffset(o.tx, o.ty) : [0, 0];
+  }
+
+  /**
+   * @param {any} o
+   * @param {(ty: number) => Container} [rowOf] the chunk's terrain row for raised ground
+   */
+  addObjectSprite(o, rowOf) {
     const map = this.map;
     const ts = map.tileSize;
     const s = this.makeSprite(this.objectKey(o, 0));
     // W2: decorative objects outdoors are drawn a little off-centre, in clusters (placement.decorOffset);
     // only the drawing: collision and saves stay keyed to the tile. dy <= 0, so it still sorts by its tile.
-    const [dx, dy] = this.placement && DECOR_TYPES.includes(o.type) && outdoorAt(this.outdoors, o.tx, o.ty) ? decorOffset(o.tx, o.ty) : [0, 0];
+    const [dx, dy] = this.decorShift(o);
     const x = o.tx * ts + ts / 2 + dx;
     const feetY = o.ty * ts + ts + dy;
     const z = map.elev[o.ty * map.width + o.tx];
@@ -1477,7 +1642,287 @@ export class GameView {
       const w = s.width / 2;
       occluder = { sprite: s, x0: x - w, x1: x + w, y0: feetY - z - s.height, y1: feetY - z, key: feetY };
     }
-    this.objectSprites.set(o, { o, sprite: s, occluder });
+    // gfx W5: its soft shadow, leaning to the lower right (shadows.js). On flat ground it is baked
+    // into the chunk's ground (bakedShadowSprite); a moving crate's is loose in the shadow layer and
+    // one on raised ground goes in its terrain row.
+    /** @type {Sprite | null} */
+    let shadow = null;
+    const g = this.fxV2 && (o.type === 'crate' || (z > 0 && rowOf)) ? objectShadow(o.type, Math.abs(s.width), s.height) : null;
+    if (g) {
+      const inLayer = o.type === 'crate' || !rowOf; // (in the shadow layer, whose opacity is the weather's)
+      shadow = this.makeShadow(g, x, feetY - z, inLayer ? 1 : this.shadowStrength);
+      this.looseShadows.add(shadow);
+      shadow.visible = !o.gone && this.fxOn.shadows;
+      if (inLayer) this.shadowLayer.addChild(shadow);
+      else rowOf(o.ty).addChild(shadow);
+    }
+    // gfx W5: a lived-in house lights its windows at night (houseWindows.js).
+    /** @type {Sprite[] | null} */
+    let windows = null;
+    const panes = this.fxV2 && o.type === 'house' && hasWindows(s.texture) ? this.paneTexture(s.texture) : null;
+    if (panes) {
+      // only the glass, recoloured from the house's own pixels, drawn above the light map (it shines)
+      const p = new Sprite(panes.tex);
+      p.scale.set(1 / panes.scale);
+      p.position.set(x + PANE_AREA.x, feetY - z + PANE_AREA.y);
+      p.visible = false;
+      /** @type {any} */ (p).house = s; // (it fades with the house when the player walks behind it)
+      this.windowLayer.addChild(p);
+      this.windowSprites.push(p);
+      windows = [p];
+      // and the orange pools on the ground in front of the windows (under whoever stands there)
+      const P = WINDOW_GLOW.pool;
+      for (const spot of windowLightSpots(x, feetY - z)) {
+        const pool = new Sprite(shadowTexture({ shape: 'oval', w: P.w, h: P.h }));
+        pool.tint = P.color;
+        pool.position.set(Math.round(spot.x - P.w / 2), Math.round(spot.y - P.h / 2));
+        pool.alpha = 0;
+        /** @type {any} */ (pool).house = s;
+        /** @type {any} */ (pool).pool = true;
+        this.poolLayer.addChild(pool);
+        this.windowSprites.push(pool);
+        windows.push(pool);
+      }
+    }
+    this.objectSprites.set(o, { o, sprite: s, occluder, shadow, shadowType: o.type, shadowGone: !!o.gone, windows });
+  }
+
+  /**
+   * gfx W5: the lit glass of a house texture (houseWindows.HOUSE_GLASS, read off the release house's
+   * art), made once per texture; null when there is none.
+   * @param {Texture} tex @returns {{ tex: Texture, scale: number } | null}
+   */
+  paneTexture(tex) {
+    const had = this.paneTextures.get(tex);
+    if (had !== undefined) return had;
+    /** @type {{ tex: Texture, scale: number } | null} */
+    let out = null;
+    try {
+      // the glass of the release house, from the table read off its art (no pixel read-back)
+      const img = paneImageFromTable();
+      const scale = img.scale;
+      if (img.glass > 0) {
+        const c = document.createElement('canvas');
+        c.width = img.w;
+        c.height = img.h;
+        const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
+        const id = ctx.createImageData(img.w, img.h);
+        id.data.set(img.data);
+        ctx.putImageData(id, 0, 0);
+        const t = Texture.from(c);
+        t.source.scaleMode = 'nearest';
+        out = { tex: t, scale };
+      }
+    } catch (err) {
+      console.warn(`gfx: house windows: ${String(err)}`);
+    }
+    this.paneTextures.set(tex, out);
+    return out;
+  }
+
+  /** Whether there is water within r tiles of a world point (fireflies). @param {number} x @param {number} y @param {number} r */
+  nearWater(x, y, r) {
+    const map = this.map;
+    const tx = Math.floor(x / map.tileSize);
+    const ty = Math.floor(y / map.tileSize);
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const X = tx + dx;
+        const Y = ty + dy;
+        if (X >= 0 && Y >= 0 && X < map.width && Y < map.height && map.ground[Y * map.width + X] === Ground.WATER) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * gfx W5 (measuring): switches an effect group off / on. Returns what is on.
+   * @param {string} name shadows | particles | hitfx | windows | rain @param {boolean} on
+   */
+  setFx(name, on) {
+    const fx = this.fxOn;
+    if (this.fxV2 && name in fx) fx[/** @type {'shadows'} */ (name)] = on;
+    this.shadowLayer.visible = fx.shadows;
+    for (const sh of this.looseShadows) if (sh.parent !== this.shadowLayer) sh.visible = fx.shadows; // (raised ground, chests: outside the layer)
+    for (const [o, list] of this.bakedShadows) for (const b of list) b.sprite.visible = fx.shadows && !o.gone;
+    this.ambientParticles.under.visible = fx.particles;
+    this.ambientParticles.glow.visible = fx.particles;
+    this.hitFx.layer.visible = fx.hitfx;
+    this.weather.fancyRain = fx.rain;
+    return { ...fx };
+  }
+
+  /** gfx W5 (tests, measuring): the version drawn, the groups on, and what is showing now. */
+  fxDebug() {
+    let baked = 0;
+    for (const list of this.bakedShadows.values()) for (const b of list) if (b.sprite.visible) baked++;
+    let loose = 0;
+    for (const e of this.objectSprites.values()) if (e.shadow?.visible) loose++;
+    return {
+      version: this.fxV2 ? 'v2' : 'v1',
+      on: { ...this.fxOn },
+      shadows: { baked, loose, characters: this.charShadowN },
+      windows: { sprites: this.windowSprites.filter((w) => !(/** @type {any} */ (w).pool)).length, lit: this.windowSprites.filter((w) => !(/** @type {any} */ (w).pool) && w.visible).length, pools: this.windowSprites.filter((w) => /** @type {any} */ (w).pool && w.alpha > 0).length, glow: this.weather.windowGlow, lights: this.weather.windowLights.length },
+      particles: { showing: this.fxOn.particles ? this.ambientParticles.visible : 0, kinds: { ...this.ambientKinds }, max: this.ambientParticles.pool.length + this.ambientParticles.glowPool.length + this.ambientParticles.mistPool.length },
+      hit: { active: this.fxOn.hitfx ? this.hitFx.active : 0, pool: this.hitFx.sparks.length + this.hitFx.rings.length, trail: this.slashTrail.filter((t) => t.visible).length },
+      rain: { fancy: this.weather.fancyRain, drops: this.weather.drops.filter((d) => d.s.visible).length, splashes: this.weather.splashes.filter((p) => p.s.alpha > 0).length },
+    };
+  }
+
+  /** A loose shadow (restrengthened with the weather). @param {import('./shadows.js').ShadowGeom} g @param {number} x @param {number} y */
+  looseShadow(g, x, y) {
+    const sh = this.makeShadow(g, x, y);
+    this.looseShadows.add(sh);
+    return sh;
+  }
+
+  /**
+   * Moves / reshapes an object's shadow (keeping its geometry for restrengthening).
+   * @param {Sprite} sh @param {number} x @param {number} y @param {import('./shadows.js').ShadowGeom | null} g
+   * @param {number} [strength] (1 in the shadow layer, whose opacity carries the weather's)
+   */
+  reshadow(sh, x, y, g, strength = sh.parent === this.shadowLayer ? 1 : this.shadowStrength) {
+    if (!g) return;
+    /** @type {any} */ (sh).shadowG = g;
+    placeShadow(sh, x, y, g, strength);
+  }
+
+  /**
+   * gfx W5: the sun's shadows at a new strength (the weather turned; a lightning flash came or went).
+   * The shadow layer's opacity carries it; the few shadows outside it (on raised ground, under the
+   * chests and stones) are restrengthened one by one.
+   * @param {number} k 0..1
+   */
+  setShadowStrength(k) {
+    if (k === this.shadowStrength) return;
+    this.shadowStrength = k;
+    this.shadowLayer.alpha = k;
+    for (const sh of this.looseShadows) {
+      const g = /** @type {any} */ (sh).shadowG;
+      if (g && sh.parent !== this.shadowLayer) sh.alpha = g.alpha * k;
+    }
+  }
+
+  /** A pooled shadow under a villager / enemy sprite (feet at its position). @param {Sprite} spr @param {number} zIndex */
+  charShadow(spr, zIndex) {
+    if (!spr.visible || spr.alpha <= 0.05 || spr.destroyed) return;
+    if (this.shadowStrength <= 0) return; // (a lightning flash)
+    // off screen: nothing to place (its shadow keeps its old place, at no opacity)
+    const v = this.viewRect;
+    if (spr.x < v.x - 32 || spr.x > v.x + v.w + 32 || spr.y < v.y - 16 || spr.y > v.y + v.h + 48) return;
+    // each character keeps its own shadow sprite: its place in the sorted actors changes only when
+    // the character moves; one not used this frame is hidden (and not gathered for drawing)
+    let s = this.charShadowOf.get(spr);
+    if (!s) {
+      s = new Sprite();
+      s.tint = SHADOW.color;
+      this.actors.addChild(s);
+      this.charShadowOf.set(spr, s);
+    }
+    /** @type {any} */ (s).seen = this.charShadowFrame;
+    s.visible = true;
+    this.charShadowN++;
+    const g = characterShadow(Math.abs(spr.width));
+    placeShadow(s, spr.x, spr.y, g, this.shadowStrength * spr.alpha);
+    s.zIndex = zIndex - 0.003;
+  }
+
+  /**
+   * gfx W5, per frame: villagers' and enemies' shadows, lit windows, ambient particles and hit effects.
+   * @param {import('../game/state.js').GameState} state @param {number} timeSec @param {number} dtSec
+   */
+  updateEffects(state, timeSec, dtSec) {
+    if (!this.fxV2) return; // (?fx=v1: none of them)
+    // The sun's shadows: softer under clouds, rain and snow, gone in a lightning flash; indoors as they are.
+    this.setShadowStrength(this.boundsArea ? 1 : weatherShadow(this.weather.kind, this.weather.flashing));
+    // Where the view is (world px), for what is on screen.
+    const o = this.camera.origin();
+    const v = this.viewRect;
+    v.x = o.x;
+    v.y = o.y;
+    v.w = this.app.screen.width / this.camera.zoom;
+    v.h = this.app.screen.height / this.camera.zoom;
+    // A chunk's flat-ground shadows are drawn only while the chunk is near the view: the hidden ones
+    // are not gathered when the world's draw list is rebuilt (a fight in a forest rebuilds it often,
+    // with hundreds of tree shadows in the chunks around); this changes only at a chunk border.
+    const span = CHUNK * this.map.tileSize;
+    for (const c of this.chunks.values()) {
+      const near = c.cx * span < v.x + v.w + 64 && (c.cx + 1) * span > v.x - 64 && c.cy * span < v.y + v.h + 96 && (c.cy + 1) * span > v.y - 64;
+      if (c.shade.visible !== near) c.shade.visible = near;
+    }
+    // Shadows under the villagers and the enemies on screen (one per character, kept; see charShadow).
+    this.charShadowN = 0;
+    const frame = ++this.charShadowFrame;
+    if (this.fxOn.shadows) {
+      this.npcs.sprites.forEach(this.npcShadowFn);
+      this.enemySprites.slots.forEach(this.enemyShadowFn);
+    }
+    for (const [owner, sh] of this.charShadowOf) {
+      if (owner.destroyed) {
+        sh.destroy();
+        this.charShadowOf.delete(owner);
+      } else if (/** @type {any} */ (sh).seen !== frame) sh.visible = false;
+    }
+
+    // Lit windows: on at dusk, by the ambient light; their light goes into the light map.
+    const amb = this.weather.ambient;
+    const glow = this.boundsArea || !this.fxOn.windows ? 0 : windowGlow(amb);
+    if (this.windowLights === null && this.assets.hasTexture('obj.house')) {
+      const lights = [];
+      if (hasWindows(this.assets.texture('obj.house'))) {
+        const ts = this.map.tileSize;
+        for (const o of this.map.objects) {
+          if (o.type !== 'house') continue;
+          const fy = o.ty * ts + ts - this.map.elev[o.ty * this.map.width + o.tx];
+          lights.push(...windowLightSpots(o.tx * ts + ts / 2, fy));
+        }
+      }
+      this.windowLights = lights;
+      this.weather.windowLights = lights;
+    }
+    this.weather.windowGlow = glow;
+    // (by day nothing to do once they are out)
+    const windowsOut = glow <= 0.01 && this.lastWindowGlow <= 0.01;
+    this.lastWindowGlow = glow;
+    for (let i = 0; !windowsOut && i < this.windowSprites.length; i++) {
+      const w = this.windowSprites[i];
+      const house = /** @type {any} */ (w).house;
+      const pool = /** @type {any} */ (w).pool;
+      if (!pool) w.visible = glow > 0.01 && house.visible;
+      // (a pool is shown by its opacity: it sits in the world, where `visible` would rebuild its draw list)
+      w.alpha = pool ? (house.visible ? glow * WINDOW_GLOW.pool.alpha : 0) : glow * house.alpha;
+    }
+
+    // Ambient particles: which kinds, re-decided twice a second.
+    if (timeSec - this.ambientCheckAt > 0.5 || timeSec < this.ambientCheckAt) {
+      this.ambientCheckAt = timeSec;
+      const ts = this.map.tileSize;
+      const region = regionAt(this.regions, Math.floor(state.player.x / ts), Math.floor(state.player.y / ts))?.id ?? null;
+      const lum = 0.299 * amb.r + 0.587 * amb.g + 0.114 * amb.b;
+      const cx = v.x + v.w / 2;
+      const cy = v.y + v.h / 2;
+      this.ambientKinds = ambientKinds({
+        region,
+        season: this.season ?? 'summer',
+        dark: isDark(amb),
+        hour: hourOf(state.env.now),
+        day: lum > 0.95,
+        weather: this.weather.kind,
+        indoor: !!this.boundsArea,
+        nearWater: this.nearWater(cx, cy, Math.ceil(Math.max(v.w, v.h) / 2 / ts)),
+        snowGround: region === 'mountains',
+      });
+    }
+    // (they drift slowly: moved every other frame, with the time of both)
+    this.ambientDt += dtSec;
+    if ((this.ambientFrame++ & 1) === 0) {
+      this.ambientParticles.update(this.ambientKinds, v, this.nearWaterFn, timeSec, Math.min(0.1, this.ambientDt));
+      this.ambientDt = 0;
+    }
+
+    // Hit effects for this frame's events.
+    this.hitFx.takeEvents(state);
+    this.hitFx.update(this.fxHold ? 0 : Math.min(0.1, dtSec));
   }
 
   /** Objects changed by the environment (burnt, broken, opened, powered). @param {number} timeSec */
@@ -1501,6 +1946,28 @@ export class GameView {
         sprite.alpha = 1;
       }
       sprite.texture = this.assets.texture(this.seasonal(this.objectKey(o, timeSec)));
+      // gfx W5: the shadow follows (a crate sliding; a tree burnt to a stump; a jar broken).
+      const sh = e.shadow;
+      if (sh && o.type === 'crate' && o.movedAt !== undefined && now - o.movedAt < 250) this.reshadow(sh, sprite.x, sprite.y, objectShadow('crate', sprite.width, sprite.height));
+      if (o.type !== e.shadowType || !!o.gone !== e.shadowGone) {
+        e.shadowType = o.type;
+        e.shadowGone = !!o.gone;
+        const g = objectShadow(o.type, Math.abs(sprite.width), sprite.height);
+        const show = !o.gone && !!g && this.fxOn.shadows;
+        if (sh) {
+          sh.visible = show;
+          if (g) this.reshadow(sh, sprite.x, sprite.y, g);
+        }
+        // on flat ground (in the shadow layer)
+        const baked = this.bakedShadows.get(o);
+        if (baked) {
+          for (const b of baked) {
+            b.sprite.visible = show;
+            const [dx, dy] = this.decorShift(o);
+            if (g) this.reshadow(b.sprite, o.tx * ts + ts / 2 + dx, o.ty * ts + ts + dy, g, 1);
+          }
+        }
+      }
     }
   }
 
@@ -1612,6 +2079,7 @@ export class GameView {
     this.weather.update(state, o, this.camera.zoom, this.boundsArea ? areaAt(state, state.player.x, state.player.y) : null, timeSec, dtSec);
     this.items.update(state, timeSec);
     this.npcs.update(state, alpha, { x, y }, timeSec);
+    this.updateEffects(state, timeSec, dtSec);
     this.puzzles.update(state, timeSec);
     this.features.update(
       state,
@@ -1649,6 +2117,8 @@ export class GameView {
     const zoom = this.camera.zoom;
     this.world.scale.set(zoom);
     this.world.position.set(-o.x * zoom, -o.y * zoom);
+    this.glowLayer.scale.set(zoom);
+    this.glowLayer.position.set(-o.x * zoom, -o.y * zoom);
   }
 
   /**
@@ -1744,7 +2214,7 @@ export class GameView {
       if (e.final && !this.assets.hasTexture('enemy.boss_source.idle.0')) continue;
       seen.add(e.id);
       // v1.0: the source has a frame for each action (front-facing: never flipped).
-      const sourceKey = e.final ? sourceFrameKey(e, timeSec, (k) => this.assets.hasTexture(k)) : null;
+      const sourceKey = e.final ? sourceFrameKey(e, timeSec, this.hasTexture, this.enemyFrameCounts) : null;
       let spr = this.enemySprites.get(e); // (a sprite another enemy left under this id is dropped)
       if (!spr) {
         spr = this.makeSprite(sourceKey ?? `enemy.${e.kind}.0`);
@@ -1767,7 +2237,8 @@ export class GameView {
       spr.alpha = e.state === 'dead' ? (e.final ? Math.max(0, 1 - e.t / FINAL_BOSS.defeatMs) : defeatAlpha(e.t)) : 1;
       // Telegraph (v1.0, ART_STYLE_GUIDE 5.4 B): the wind-up pulses under a 50% red overlay, faster
       // as the attack nears — laid over the art, so it shows on dark bodies too (flashOverlay.js).
-      const flash = warningFlashAlpha(e, timeSec, windupProgress(e));
+      const pulse = warningFlashAlpha(e, timeSec, windupProgress(e));
+      const flash = pulse > 0 && this.fxV2 ? RIM_FLASH.alpha : pulse; // (gfx W5: the rim overlay)
       const overlay = placeFlash(spr, this.flashSprites.get(e.id) ?? null, flash, this.silhouettes, this.actors);
       if (overlay) this.flashSprites.set(e.id, overlay);
     }
@@ -1776,11 +2247,15 @@ export class GameView {
       this.bossRing = new Graphics();
       this.actors.addChild(this.bossRing);
     }
-    this.bossRing.clear();
-    for (const e of state.enemies) {
+    // (cleared and redrawn only while there is a ring to show, or once to take the last one away: a
+    // Graphics changed every frame made PixiJS rebuild the whole world's draw list every frame)
+    const slamming = (/** @type {any} */ e) => e.state === 'windup' && (e.boss ? e.pattern === 'slam' : e.kind === 'sentinel');
+    const ringWanted = state.enemies.some(slamming);
+    if (ringWanted || this.bossRingDrawn) this.bossRing.clear();
+    this.bossRingDrawn = ringWanted;
+    for (const e of ringWanted ? state.enemies : []) {
       // (v1.0: the sentinel's small slam shows its reach the same way.)
-      const slams = e.boss ? e.pattern === 'slam' : e.kind === 'sentinel';
-      if (e.state !== 'windup' || !slams) continue;
+      if (!slamming(e)) continue;
       const k = windupProgress(e);
       const r = e.boss ? BOSS_KINDS[e.bossKind].slamRadius : ENEMY_KINDS.sentinel.slamRadius;
       this.bossRing.circle(Math.round(e.x), Math.round(e.y - e.z), r).stroke({ width: 2, color: 0xd0202a, alpha: 0.6 + 0.4 * k });
@@ -1795,10 +2270,15 @@ export class GameView {
       this.sourceMarks = new Graphics();
       this.overlay.addChild(this.sourceMarks);
     }
-    this.sourceGround.clear();
-    /** @type {Graphics} */ (this.sourceMarks).clear();
-    drawSourceTelegraphs(this.sourceGround, state);
-    drawSeatLights(/** @type {Graphics} */ (this.sourceMarks), state, timeSec);
+    // (the same: only while the source is in the fight, or once after)
+    const sourceUp = state.enemies.some((/** @type {any} */ x) => x.final && x.state !== 'dead');
+    if (sourceUp || this.sourceDrawn) {
+      this.sourceGround.clear();
+      /** @type {Graphics} */ (this.sourceMarks).clear();
+      drawSourceTelegraphs(this.sourceGround, state);
+      drawSeatLights(/** @type {Graphics} */ (this.sourceMarks), state, timeSec);
+    }
+    this.sourceDrawn = sourceUp;
     this.enemySprites.sweep(seen);
 
     // Projectiles: keep one sprite per projectile.
@@ -1827,6 +2307,26 @@ export class GameView {
       this.slash.alpha = p.comboIndex === 2 ? 1 : 0.85;
       this.slash.zIndex = py + 0.01;
     }
+    // gfx W5: two after-images where the slash was the last two frames (fading out after it ends).
+    const hist = this.slashHist;
+    for (let k = 0; k < 2; k++) {
+      const t = this.slashTrail[k];
+      const j = k * 5;
+      const on = hist[j + 4] === 1 && this.fxOn.hitfx && this.fxV2;
+      t.visible = on; // (hidden between swings: not gathered when the world's draw list is rebuilt)
+      if (on) {
+        t.alpha = k === 0 ? 0.45 : 0.2;
+        t.position.set(hist[j], hist[j + 1]);
+        t.rotation = hist[j + 2];
+        t.zIndex = hist[j + 3];
+      }
+    }
+    hist.copyWithin(5, 0, 5);
+    hist[0] = this.slash.x;
+    hist[1] = this.slash.y;
+    hist[2] = this.slash.rotation;
+    hist[3] = this.slash.zIndex - 0.001;
+    hist[4] = this.slash.visible ? 1 : 0;
 
     // Shield in front while guarding; bow and aim line while aiming.
     // The release hero holds his own shield and bow in his guard / bow frames: no second one on top.
@@ -1838,7 +2338,10 @@ export class GameView {
     }
     const aiming = p.action === 'aim';
     this.bow.visible = aiming && held !== 'bow';
-    this.aimLine.clear();
+    // (cleared only when there is something to take away: an emptied Graphics each frame made
+    // PixiJS rebuild the world's whole draw list every frame)
+    if (aiming || this.aimDrawn) this.aimLine.clear();
+    this.aimDrawn = aiming;
     if (aiming) {
       const drawn = p.actionMs >= COMBAT.bowDrawMs;
       this.bow.position.set(Math.round(sx + p.aimX * 7), Math.round(sy - 8 * this.heroK + p.aimY * 4));

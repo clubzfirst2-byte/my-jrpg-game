@@ -12,6 +12,7 @@ import { createOverlay } from './debug/overlay.js';
 import { createRenderer, resizeRenderer } from './view/renderer.js';
 import { RESOLUTION_CANDIDATES, DEFAULT_TARGET_HEIGHT, nextCandidate } from './view/resolution.js';
 import { AssetManager } from './view/assets/assetManager.js';
+import { tableForArt, useEnemyFrameTable } from './view/enemyFrames.js';
 import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES, placeholderEntries, releaseHeroEntries, releaseNpcEntries, releaseEnemyEntries, SOURCE_BUNDLE, sourceEntries } from './view/assets/placeholderPack.js';
 import { finalBossDebugApi, finalBossToast } from './debug/finalBossDebug.js';
 import { storyDebugApi } from './debug/storyDebug.js';
@@ -27,6 +28,7 @@ import { installUiSkin, loadOtherUiArt, loadTitleArt, showButtonLabels } from '.
 import { GROUND_RUIN_BUNDLE, ISLAND_EDGES_BUNDLE, ISLAND_STEPS_BUNDLE, TERRAIN_GROUP, releaseTerrainEntries, v2BundleParts, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
 import { GameView } from './view/gameView.js';
+import { fxVersion } from './view/fxSwitch.js';
 import { Bench } from './view/bench.js';
 import { InputManager } from './platform/inputManager.js';
 import { installLifecycle } from './platform/lifecycle.js';
@@ -180,6 +182,9 @@ async function boot() {
         .catch((err) => (console.warn(`art: v2 ui: ${String(err)}; using the v1 UI`), false))
     : Promise.resolve(false);
   for (const frames of await Promise.all(artGroups.filter((g) => g !== uiArtGroup).map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
+  //   gfx W3: the enemies' frame counts and speeds come from their art's frames.json — the table of
+  //   the enemy art that was just loaded (v1, or v2 from src/art-release-v2/enemy; enemyFrames.js)
+  useEnemyFrameTable(tableForArt((k) => artOverrides.has(k)));
   const uiV2 = await uiSkinLoad;
   // W4: plays so far, this one included. A play is counted when it starts (startGame: はじめから /
   // つづきから), not on each page load; the title shows what the next play will be. Without the title
@@ -241,7 +246,8 @@ async function boot() {
   const mapName = /** @type {keyof typeof MAPS} */ (mapParam ?? 'world');
   const state = createGameState(MAPS[mapName] ?? MAPS.world);
   performance.mark('world');
-  const view = new GameView(app, assets, state);
+  // gfx W5: light, shadow and effects — on, or the look before them with ?fx=v1 / ?v2=0 (fxSwitch.js)
+  const view = new GameView(app, assets, state, { fx: fxVersion(params) });
   performance.mark('view');
   // Test / check helpers: ?time=20 (hour) and ?weather=rain|storm|cloudy|clear.
   const timeParam = Number.parseFloat(params.get('time') ?? '');
@@ -917,6 +923,8 @@ async function boot() {
   // Read-only hook for automated E2E tests.
   const api = {
     summary: () => stats.summary(),
+    /** Starts the frame statistics afresh (measuring one setting after another). */
+    resetStats: () => stats.reset(),
     sprites: () => bench.count,
     setSprites: (/** @type {number} */ n) => bench.setCount(n),
     drawCalls: () => lastDraws,
@@ -984,6 +992,14 @@ async function boot() {
     deathMs: () => state.deathMs,
     /** v1.0: each enemy on screen: frame drawn, size in game px, wind-up overlay strength and colour. */
     enemyView: () => view.enemyDebug(state),
+    /** gfx W5: switch an effect group off / on (measuring its cost): shadows, particles, hitfx, windows, rain. */
+    fx: (/** @type {string} */ name, /** @type {boolean} */ on) => view.setFx(name, on),
+    /** gfx W5: what the effects draw now (version, groups on, sprites showing). */
+    fxInfo: () => view.fxDebug(),
+    /** gfx W5 (capturing a still): hold the hit effects where they are / let them go on. */
+    fxHold: (/** @type {boolean} */ on) => {
+      view.fxHold = on;
+    },
     /** Recent game events (last 64): lets tests observe short actions without racing them. */
     events: () => state.events.map((e) => e.type),
     /** Test helper: set stamina (e.g. to check drowning without waiting). */

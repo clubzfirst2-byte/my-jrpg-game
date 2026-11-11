@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { enemyFrameKey, enemyAction, frameCount, warningFlashAlpha, defeatAlpha, WARNING_FLASH, ENEMY_ANIM } from '../../src/view/enemyAnim.js';
+import { V1_FPS } from '../../src/view/enemyFrames.js';
 import { createEnemy, ENEMY_KINDS, windupProgress, updateEnemy } from '../../src/game/entities/enemies.js';
 import { createGameState, ENEMY_CORPSE_MS } from '../../src/game/state.js';
 import { BOSS_PARRY_STUN_MS } from '../../src/game/entities/bosses.js';
@@ -17,7 +18,7 @@ const release = (kind, actions) => {
 };
 const placeholderOnly = (kind) => (k) => k === `enemy.${kind}.0` || k === `enemy.${kind}.1`;
 const enemy = (kind, over = {}) => Object.assign(createEnemy(kind, 0, 0, 0, 1), over);
-const boss = (over = {}) => ({ id: 1000, boss: true, kind: 'boss_root', state: 'idle', t: 0, phase: 1, pattern: null, windupMs: 800, stunMs: 0, ...over });
+const boss = (over = {}) => ({ id: 1000, boss: true, kind: 'boss_root', bossKind: 'root', state: 'idle', t: 0, phase: 1, pattern: null, windupMs: 800, stunMs: 0, ...over });
 
 describe('frames without release art (placeholder)', () => {
   it('stands on .0 and alternates .0/.1 while moving, as before v1.0', () => {
@@ -55,7 +56,7 @@ describe('frames with release art (enemy.<kind>.<action>.<n>)', () => {
 
   it('attack plays release then follow-through, and recovery holds the follow-through', () => {
     expect(enemyFrameKey(enemy('slime', { state: 'attack', t: 0 }), 0, true, has)).toBe('enemy.slime.attack.0');
-    expect(enemyFrameKey(enemy('slime', { state: 'attack', t: ENEMY_ANIM.attackMs + 1 }), 0, true, has)).toBe('enemy.slime.attack.1');
+    expect(enemyFrameKey(enemy('slime', { state: 'attack', t: 1000 / V1_FPS.attack + 1 }), 0, true, has)).toBe('enemy.slime.attack.1');
     expect(enemyFrameKey(enemy('slime', { state: 'recover', t: 10 }), 0, false, has)).toBe('enemy.slime.attack.1');
   });
 
@@ -122,7 +123,7 @@ describe('frames with release art (enemy.<kind>.<action>.<n>)', () => {
     const first = lookups;
     for (let i = 0; i < 100; i++) enemyFrameKey(enemy('slime'), i / 10, true, counting, counts);
     expect(lookups).toBe(first);
-    expect(counts.get('enemy.slime.move')).toBe(4);
+    expect(counts.get('enemy.slime.move').n).toBe(4);
     counts.clear();
     enemyFrameKey(enemy('slime'), 0, true, counting, counts);
     expect(lookups).toBe(first * 2);
