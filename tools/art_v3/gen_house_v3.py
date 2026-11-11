@@ -101,9 +101,9 @@ def roof(c, rng):
     for j, ry in enumerate(range(top, bot, 8)):
         f = (ry - top) / (bot - top)
         xl, xr = 42 - 39 * f, 214 + 38 * f
-        x = xl - (j % 2) * 7
+        x = xl - rng.randint(0, 12)  # each row starts at its own offset (no grid)
         while x < xr:
-            w = 14
+            w = rng.choice((12, 13, 14, 14, 15, 16))
             tm = m & c.m_rect(int(x) + 1, ry, int(x + w) - 1, ry + 7)
             base = 4 if hsh(int(x), j, 3) % 4 == 0 else 3  # tiles vary within 2 tones
             for yy, xx in zip(*np.nonzero(tm)):
@@ -267,10 +267,26 @@ def upper_floor(c):
     window(c, 186, 114, 30, 40)
 
 
+def side_wall(c, rng):
+    """Depth (round 4): the right side of the house seen at a slant, a 10-texel strip in shade next
+    to each floor (stones below, plaster with a corner post above), under the roof's overhang."""
+    up = c.m_poly([(234, UP_TOP), (244, UP_TOP + 5), (244, UP_BOT), (234, UP_BOT)])
+    c.fill(up, "plaster", 1)
+    c.fill(up & c.m_rect(241, 0, 244, H - 1), "timber", 1)
+    c.fill(up & c.m_rect(0, UP_BOT - 5, W - 1, UP_BOT), "timber", 1)
+    lo = c.m_poly([(240, UP_BOT), (250, UP_BOT + 4), (250, G), (240, G)])
+    c.fill(lo, "stone", 2)
+    for y in range(UP_BOT, G, 12):
+        c.fill(c.m_rect(240, y, 250, y) & lo, "stone", 1)
+        xs = 244 + (y // 12 % 2) * 3
+        c.fill(c.m_rect(xs, y, xs, min(G, y + 11)) & lo, "stone", 1)
+
+
 def main():
     rng = random.Random(42)
     c = Canvas(W, H, RAMPS)
     chimney(c)
+    side_wall(c, rng)
     stones(c, 16, UP_BOT, 239, G, rng)
     c.fill(c.m_rect(16, UP_BOT, 239, UP_BOT + 4), "stone", 1)  # shade under the upper floor
     upper_floor(c)

@@ -74,16 +74,12 @@ def frame(i):
         v = 0.55 - 0.42 * nx - 0.38 * ny - 0.18 * (nx * nx + ny * ny)
         c.tone[y, x] = 1 if v < 0.12 else 2 if v < 0.42 else 3 if v < 0.72 else 4
     cx = 31.5 + p["lean"] * 0.5
-    # bounce light along the foot: the 2 rows above the bottom edge, inside, one tone up (curved, it
-    # follows the silhouette), and the lips' lit tops
+    # the foot: no straight band — the lips spreading on the ground get a lit top (curved, they
+    # follow the silhouette), and the jelly just above the ground seeps a little darker
     for x in range(W):
         ys = np.nonzero(body[:, x])[0]
         if not len(ys):
             continue
-        yb = ys.max()
-        for d in (1, 2):
-            if body[yb - d, x] and abs(x + 0.5 - cx) < p["foot"] - 3:
-                c.tone[yb - d, x] = min(5, int(c.tone[yb - d, x]) + (1 if d == 2 else 0))
         if abs(x + 0.5 - cx) > p["rx"] + 3:  # the lips
             c.tone[ys.min(), x] = 5 if x < cx else 4
     # the core glowing through the jelly (a soft halo, then the crystal with 4 facets)
@@ -120,20 +116,19 @@ def frame(i):
     sx, sy = int(cx - 6), top + 3
     for dx, dy in ((0, 0), (1, 0), (0, 1), (1, 1)):
         c.put(sx + dx, sy + dy, "jelly", 6 if (dx, dy) != (1, 1) else 5)
-    # bubbles drifting up: small 4 x 4 rings (tone 5) with a lit point, only in the jelly
-    ring = [".##.", "#..#", "#..#", ".##."]
+    # bubbles drifting up: a lit point (2 x 2) with its shade under-right (2 x 1), not rings
     for k, (bx, by) in enumerate(((cx - 15, 40), (cx + 12, 36), (cx - 8, 47))):
         y0 = int(by - ((p["ph"] + k) % 4) * 2)
         x0 = int(bx)
-        if not all(body[y0 + j, x0 + i] for j in range(4) for i in range(4)):
+        if not all(body[y0 + j, x0 + i] for j in range(3) for i in range(3)):
             continue
-        if (halo | cry)[y0:y0 + 4, x0:x0 + 4].any():
+        if (halo | cry)[y0:y0 + 3, x0:x0 + 3].any():
             continue
-        for j, r_ in enumerate(ring):
-            for i, ch in enumerate(r_):
-                if ch == "#":
-                    c.put(x0 + i, y0 + j, "jelly", 5)
-        c.put(x0 + 1, y0 + 1, "jelly", 6)
+        for dx, dy in ((0, 0), (1, 0), (0, 1)):
+            c.put(x0 + dx, y0 + dy, "jelly", 6)
+        c.put(x0 + 1, y0 + 1, "jelly", 5)
+        c.put(x0 + 1, y0 + 2, "jelly", 1)
+        c.put(x0 + 2, y0 + 2, "jelly", 1)
     despeckle(c)
     c.outline()
     c.shadow_band()

@@ -32,7 +32,7 @@ def lock(c, root, tip, w, bend=0.0, tipw=0.0):
     return c.m_poly(left + right[::-1])
 
 
-def grooves(c, mask, drop=2, lift=1):
+def grooves(c, mask, drop=2, lift=1, sides=False):
     """Edges of a part inside a mass of the same material: the right/bottom edge sinks (a groove
     between locks or folds), the left/top edge lifts (the lit rim)."""
     inner = erode(mask)
@@ -44,6 +44,8 @@ def grooves(c, mask, drop=2, lift=1):
         down = y + 1 >= c.h or not mask[y + 1, x]
         left = x == 0 or not mask[y, x - 1]
         up = y == 0 or not mask[y - 1, x]
+        if sides:  # only the side edges (locks flowing down: no horizontal grooves across the crown)
+            down = up = False
         if right or down:
             c.tone[y, x] = max(1, t - drop)
         elif (left or up) and lift:
@@ -97,3 +99,38 @@ def hand(c, mat, wrist, side, open_=0, tones=(1, 2, 3, 4, 5), far=False):
     c.put(int(wx - 1), int(wy + 2), mat, tones[-2])
     if far:
         c.set_tone(m | thumb, tones[1])
+
+
+# a hanging gloved hand, seen from the front (8 x 10): o edge, s shade, b base, l light, g finger
+# groove, t thumb (lit), k knuckle light. Drawn for the hand on the image's left (thumb on its right,
+# toward the body); mirrored for the other hand (the tones stay lit from the left).
+HAND_MAP = [
+    ".sbbbbs.",
+    "sbkkbbbs",
+    "sbbbbbbt",
+    "sbbbbbtt",
+    "sbbbbbtt",
+    "sbgbgbts",
+    "sbgbgbs.",
+    "sbgbgbs.",
+    ".sgsgs..",
+    "..ss....",
+]
+
+
+def hand_stamp(c, mat, wrist, side, tones=(1, 2, 3, 4, 5)):
+    """The gloved hand from HAND_MAP, its top centre at the wrist. side -1: image left (thumb right)."""
+    tm = {"o": tones[0], "s": tones[1], "b": tones[2], "l": tones[3], "g": tones[0], "t": tones[3],
+          "k": tones[4]}
+    wx, wy = wrist
+    x0 = int(round(wx - 4))
+    y0 = int(round(wy))
+    for j, row in enumerate(HAND_MAP):
+        r = row if side < 0 else row[::-1]
+        for i, ch in enumerate(r):
+            if ch == ".":
+                continue
+            t = tm[ch]
+            if side > 0 and ch == "t":
+                t = tones[2]  # the thumb on the far side of the light
+            c.put(x0 + i, y0 + j, mat, t)

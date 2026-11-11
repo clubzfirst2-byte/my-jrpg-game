@@ -8,14 +8,16 @@ Integer scales only, except the "now" pictures, which show what ships today (x2.
   04_se_now.png                 the scene, current art, current SE view (1334 x 750, 27.8 x 15.6 tiles)
   05_se_v3_k1.png               the scene, v3 art, SE k = 1 (1334 x 750, 20.8 x 11.7 tiles)
   06_zoom_x3_now_v3.png         round the hero, the woman and the door, device pixels x3: now | v3 (15 Pro)
-  07_grass_24x12_x1.png         24 x 12 tiles of v3 ground at 1 texel = 1 px, patterns chosen by macro_of()
+  07_grass_24x12_x1.png         24 x 12 tiles of v3 ground at 1 texel = 1 px, both ground layers (gen_ground_v3.ground_tile)
   08_grass_48x24_half.png       48 x 24 tiles, shrunk to half (every other texel): the wide view
+  09_hero_face_v1_x24_v3_x12.png the hero's face: v1 x24 | v3 idle 0 x12 | v3 walk 1 x12 (the same size)
 No contact shadows are drawn in any scene (the art alone; shadows are the game's, STYLE.md 8).
 The v3-only kinds (props, the big oak, the stone house) have no v1 counterpart: the v1 scene uses the
 v1 tree, pine and house in the same places and no props.
 Run: python3 tools/art_v3/compare_v3.py <out dir>
 """
 
+import functools
 import os
 import sys
 
@@ -23,7 +25,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from PIL import Image, ImageDraw  # noqa: E402
 
-from gen_nature_v3 import hsh, macro_of  # noqa: E402
+from gen_ground_v3 import ground_tile  # noqa: E402
+from gen_nature_v3 import hsh  # noqa: E402
 from v3lib import ROOT  # noqa: E402
 
 V1 = os.path.join(ROOT, "src", "art-release")
@@ -32,6 +35,7 @@ V3 = os.path.join(ROOT, "src", "art-release-v3")
 BG = (40, 44, 52, 255)
 
 
+@functools.lru_cache(maxsize=None)
 def ld(*p):
     return Image.open(os.path.join(*p)).convert("RGBA")
 
@@ -44,7 +48,7 @@ PAIRS = [  # label, v1 image, v3 image
     ("tree -> oak (new size)", ld(V1, "terrain", "obj.tree.png"), ld(V3, "terrain", "obj.v3.oak.png")),
     ("pine", ld(V1, "terrain", "forest.pine.png"), ld(V3, "terrain", "obj.v3.pine.png")),
     ("house -> stone house (new kind)", ld(V1, "objects", "obj.house.png"), ld(V3, "objects", "obj.v3.house_stone.png")),
-    ("grass tile (v2 ground)", ld(V1T, "plains.grass.0.png"), ld(V3, "terrain", "plains.grass.v3.a11.png")),
+    ("grass tile (v2 ground)", ld(V1T, "plains.grass.0.png"), ground_tile(1, 1)),
     ("tuft (new)", None, ld(V3, "terrain", "prop.v3.tuft.png")),
     ("flowers (new)", None, ld(V3, "terrain", "prop.v3.flowers.png")),
     ("bush (new)", None, ld(V3, "terrain", "prop.v3.bush.png")),
@@ -117,7 +121,7 @@ def scene(density):
             if d == 2:
                 t = ld(V1T, f"plains.grass.{hsh(tx, ty, 5) % 32}.png")
             else:
-                t = ld(V3, "terrain", f"plains.grass.v3.{macro_of(tx // 4, ty // 4)}{ty % 4}{tx % 4}.png")
+                t = ground_tile(tx, ty, load=ld)
             img.alpha_composite(t, (tx * 16 * d, ty * 16 * d))
     art = V1ART if d == 2 else V3ART
     for kind, x, y in sorted(OBJECTS, key=lambda o: o[2]):
@@ -141,8 +145,7 @@ def ground_only(tw, th):
     g = Image.new("RGBA", (tw * 64, th * 64))
     for ty in range(th):
         for tx in range(tw):
-            g.alpha_composite(ld(V3, "terrain", f"plains.grass.v3.{macro_of(tx // 4, ty // 4)}{ty % 4}{tx % 4}.png"),
-                              (tx * 64, ty * 64))
+            g.alpha_composite(ground_tile(tx, ty, load=ld), (tx * 64, ty * 64))
     return g
 
 
@@ -170,6 +173,16 @@ def main(out):
     z.alpha_composite(b.resize((b.width * 3, b.height * 3), Image.NEAREST), (a.width * 3 + 30, 0))
     z.save(os.path.join(out, "06_zoom_x3_now_v3.png"), optimize=True)
     ground_only(24, 12).save(os.path.join(out, "07_grass_24x12_x1.png"), optimize=True)
+    # the hero's face: v1 (x24) beside v3 (x12), the same size; idle 0 and walk 1
+    faces = [ld(V1, "hero", "hero.idle.down.0.png").crop((2, 0, 30, 24)).resize((28 * 24, 24 * 24), Image.NEAREST)]
+    for n in ("idle.down.0", "walk.down.1"):
+        faces.append(ld(V3, "hero", f"hero.{n}.png").crop((4, 0, 60, 48)).resize((56 * 12, 48 * 12), Image.NEAREST))
+    f = Image.new("RGBA", (sum(i.width for i in faces) + 40, max(i.height for i in faces)), BG)
+    x = 0
+    for i in faces:
+        f.alpha_composite(i, (x, 0))
+        x += i.width + 20
+    f.save(os.path.join(out, "09_hero_face_v1_x24_v3_x12.png"), optimize=True)
     g = ground_only(48, 24)
     g.resize((g.width // 2, g.height // 2), Image.NEAREST).save(os.path.join(out, "08_grass_48x24_half.png"),
                                                                   optimize=True)

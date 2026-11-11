@@ -19,7 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import numpy as np  # noqa: E402
 
-from hdkit import capsule, edge_band, grooves, hand, lock  # noqa: E402
+from hdkit import capsule, edge_band, grooves, hand, hand_stamp, lock  # noqa: E402
 from v3lib import ROOT, Canvas, despeckle, erode, hx, ramp6, save  # noqa: E402
 
 OUT = os.path.join(ROOT, "src", "art-release-v3", "hero")
@@ -38,17 +38,27 @@ V1 = {
     "gem": ["#0e2a60", "#1a5cb8", "#2a8de2", "#78c8ff", "#e0f6ff"],
 }
 RAMPS = {k: ramp6(v) for k, v in V1.items()}
-EYE = {"L": "#24223a", "D": "#1a3c86", "I": "#2a78d0", "B": "#4ea2ec", "K": "#13285e", "W": "#f0fbff"}
+EYE = {"L": "#24223a", "D": "#1a3c86", "I": "#2a78d0", "B": "#4ea2ec", "K": "#13285e", "W": "#f0fbff",
+       "G": "#d8cfc6"}
 MOUTH, BLUSH = "#a8584e", "#f0a888"
 
 # hand map of one eye (8 x 6): the v1 eye (flat lash, iris below, shine on the right) at 2x detail
-EYE_MAP = [
+EYE_L = [  # the image-left eye (v1 at 2x): a thick upper lid slanting down to the outer corner, the
+    # iris below it with v1's shine box (white + light grey) on the right
+    "..LLLLLL",
     "LLLLLLLL",
-    "LDDDDWWL",
-    ".DDKKWW.",
-    ".DIKKIB.",
-    ".DIIIBB.",
-    "..IBBB..",
+    "LDDDDWWG",
+    ".DIIIWWG",
+    ".DIKKI..",
+    "..DIIB..",
+]
+EYE_R = [  # the image-right eye: the lid slants down to the outer (right) corner
+    "LLLLLL..",
+    "LLLLLLLL",
+    ".DDDDWWG",
+    ".DIIIWWG",
+    ".DIKKI..",
+    "..DIIB..",
 ]
 
 
@@ -64,12 +74,10 @@ def head(c, oy, lag):
     c.shade_part(mass, tones=(1, 2, 2, 3, 3), norm=True)
     face = c.m_poly([(15, 22 + oy), (48, 22 + oy), (49, 33 + oy), (47, 40 + oy), (42, 44 + oy), (35, 46 + oy),
                      (28, 46 + oy), (21, 44 + oy), (17, 40 + oy), (15, 33 + oy)])
-    c.fill(face, "skin", 3)
-    for y, x in zip(*np.nonzero(face)):  # flat light: the cheek lit, one column of shade on the right, the jaw
-        if 17 <= x <= 22 and 38 + oy <= y <= 41 + oy:
-            c.tone[y, x] = 4
-        if x >= 47 or (y >= 44 + oy) or (x >= 44 and y >= 41 + oy):
-            c.tone[y, x] = 2
+    c.fill(face, "skin", 4)  # v1's skin: the face #ffdcbc, its shade #f2c49b (round 4)
+    for y, x in zip(*np.nonzero(face)):  # shade: one column on the right and the jaw only
+        if x >= 47 or (y >= 44 + oy) or (x >= 45 and y >= 41 + oy):
+            c.tone[y, x] = 3
     fore = c.m_poly([(15, 14 + oy), (49, 14 + oy), (49, 22 + oy), (40, 23 + oy), (31, 24 + oy), (22, 23 + oy), (15, 22 + oy)])
     c.fill(fore, "hair", 2)
     cr = (31, 9 + oy)
@@ -87,33 +95,31 @@ def head(c, oy, lag):
         m = lock(c, root, tip, w, bend)
         c.fill(m, "hair")
         c.shade_part(m, tones=(2, 3, 3, 4, 5), norm=True, global_mask=mass, gmix=0.35)
-        grooves(c, m)
+        grooves(c, m, drop=1, sides=True)
     hairm = c.mat == c.mid("hair")
     skin = c.mat == c.mid("skin")
     for y, x in zip(*np.nonzero(skin)):  # the bangs' shade: 1-2 rows under the hair
         if y >= 2 and (hairm[y - 1, x] or hairm[y - 2, x]) and y < 34 + oy:
-            c.tone[y, x] = 2
+            c.tone[y, x] = 3
     features(c, oy)
 
 
 def features(c, oy):
-    for ex in (14, 36):
-        for j, row in enumerate(EYE_MAP):
+    """v1's expression at 2x: narrow eyes under a thick slanted lid, short brows close above them
+    sloping down to the outer side, a nose, cheeks inside the face under the eyes, a 6 x 2 mouth."""
+    for ex, rows in ((14, EYE_L), (36, EYE_R)):
+        for j, row in enumerate(rows):
             for i, ch in enumerate(row):
                 if ch != ".":
                     c.dot(ex + i, 32 + oy + j, EYE[ch])
-    # brows on both sides, on the skin above the eyes (v1: short and level), hair tone 1
-    for x0 in (16, 38):
-        for x in range(x0, x0 + 5):
-            c.put(x, 30 + oy, "hair", 1)
-        for x in range(x0 + 1, x0 + 4):
-            c.put(x, 29 + oy, "hair", 1)
-    # nose, cheeks (2 x 1), mouth (6 x 2, one colour: v1's 3 x 1 at 2x)
-    c.put(27, 39 + oy, "skin", 2)
-    c.put(27, 40 + oy, "skin", 1)
-    for bx in (15, 43):
-        c.dot(bx, 40 + oy, BLUSH)
-        c.dot(bx + 1, 40 + oy, BLUSH)
+    for x, y in ((17, 29), (18, 29), (19, 29), (20, 29), (15, 30), (16, 30), (17, 30), (14, 31), (15, 31),
+                 (37, 29), (38, 29), (39, 29), (40, 29), (40, 30), (41, 30), (42, 30), (42, 31), (43, 31)):
+        c.put(x, y + oy, "hair", 1)
+    for x, y in ((27, 38), (28, 38), (27, 39), (28, 39)):  # nose: v1's dot at 2x (2 x 2 of shade)
+        c.put(x, y + oy, "skin", 2)
+    for bx in (18, 41):  # cheeks: inside the face, under the eyes' outer corners
+        c.dot(bx, 39 + oy, BLUSH)
+        c.dot(bx + 1, 39 + oy, BLUSH)
     for x in range(28, 34):
         c.dot(x, 42 + oy, MOUTH)
         c.dot(x, 43 + oy, MOUTH)
@@ -279,7 +285,7 @@ def arm(c, side, swing, oy):
         c.set_tone(up, 3)
     c.put(int(round(ex - 2)), int(round(eyy + 2)), "shirt", 4)  # the metal's glint (2 texels)
     c.put(int(round(ex - 2)), int(round(eyy + 3)), "shirt", 3)
-    hand(c, "leather", (wx, wy + 1), side if swing <= 0 else -side, tones=(1, 2, 3, 4, 5))
+    hand_stamp(c, "leather", (wx, wy + 1), side if swing <= 0 else -side, tones=(1, 2, 3, 4, 5))
 
 
 def frame(oy=0, breath=0, sway=0, lag=0, feet=(0, 0), swing=(0.0, 0.0)):
