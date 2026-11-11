@@ -720,7 +720,6 @@ export class GameView {
       list.push({ sprite: sh, base: shade });
     }
     this.shadowLayer.addChild(shade);
-    this.cacheShade(shade);
     base.tint = levelTint(0, this.releaseTerrain);
     this.base.addChild(base);
     // A chunk's flat ground -> one textured quad per frame, cached over the whole chunk (see
@@ -744,7 +743,6 @@ export class GameView {
     const map = this.map;
     c.base.cacheAsTexture(false);
     c.base.destroy({ children: true });
-    if (c.shade.isCachedAsTexture) c.shade.cacheAsTexture(false);
     c.shade.destroy({ children: true }); // (its flat-ground shadows)
     for (const o of c.baked) {
       const list = this.bakedShadows.get(o);
@@ -990,35 +988,6 @@ export class GameView {
   }
 
   /**
-   * gfx W5: a chunk's flat-ground shadows drawn into one texture of their own (one texel per game px,
-   * as they are drawn), shown as one quad that batches with the ground — none of its sprites is
-   * handled per frame, and no draw call is added. Redrawn only when one of them changes (an object
-   * gone, ?fx measuring); the weather and a lightning flash are the shadow layer's opacity, so they
-   * redraw nothing. An empty chunk has no texture.
-   * @param {Container} shade
-   */
-  cacheShade(shade) {
-    if (shade.destroyed) return;
-    if (shade.isCachedAsTexture) shade.cacheAsTexture(false);
-    let x0 = Infinity;
-    let y0 = Infinity;
-    let x1 = -Infinity;
-    let y1 = -Infinity;
-    for (const ch of shade.children) {
-      if (!ch.visible) continue;
-      const sp = /** @type {Sprite} */ (ch);
-      x0 = Math.min(x0, sp.x);
-      y0 = Math.min(y0, sp.y);
-      x1 = Math.max(x1, sp.x + sp.texture.width);
-      y1 = Math.max(y1, sp.y + sp.texture.height);
-    }
-    if (x0 === Infinity) return;
-    // (whole game px, so the shadows' pixels land on the texture's texels)
-    shade.boundsArea = new Rectangle(Math.floor(x0), Math.floor(y0), Math.ceil(x1) - Math.floor(x0), Math.ceil(y1) - Math.floor(y0));
-    shade.cacheAsTexture({ scaleMode: 'nearest', antialias: false, resolution: 1 });
-  }
-
-  /**
    * A shadow sprite (shadows.js: pixel steps, whole game px) at the strength of the moment; it keeps
    * its geometry so a change of weather can restrengthen it.
    * @param {import('./shadows.js').ShadowGeom} g @param {number} x @param {number} y feet, world px
@@ -1166,15 +1135,7 @@ export class GameView {
     if (this.fxV2 && name in fx) fx[/** @type {'shadows'} */ (name)] = on;
     this.shadowLayer.visible = fx.shadows;
     for (const sh of this.looseShadows) if (sh.parent !== this.shadowLayer) sh.visible = fx.shadows; // (raised ground, chests: outside the layer)
-    /** @type {Set<Container>} */
-    const shades = new Set();
-    for (const [o, list] of this.bakedShadows) {
-      for (const b of list) {
-        b.sprite.visible = fx.shadows && !o.gone;
-        shades.add(b.base);
-      }
-    }
-    for (const shade of shades) this.cacheShade(shade);
+    for (const [o, list] of this.bakedShadows) for (const b of list) b.sprite.visible = fx.shadows && !o.gone;
     this.ambientParticles.under.visible = fx.particles;
     this.ambientParticles.glow.visible = fx.particles;
     this.hitFx.layer.visible = fx.hitfx;
@@ -1387,7 +1348,6 @@ export class GameView {
             b.sprite.visible = show;
             const [dx, dy] = this.decorShift(o);
             if (g) this.reshadow(b.sprite, o.tx * ts + ts / 2 + dx, o.ty * ts + ts + dy, g, 1);
-            this.cacheShade(b.base); // (that chunk's shadow picture, redrawn: a tree burnt, a jar broken)
           }
         }
       }
