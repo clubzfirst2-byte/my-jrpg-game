@@ -183,6 +183,8 @@ def flow_value(cx, cy):
 
 @functools.lru_cache(maxsize=None)
 def flow_corner(cx, cy):
+    # (The game also returns "m" for a corner any of whose 4 cells is not this ground, so the flow
+    # fades out before a transition tile; flow tiles are drawn only on full tiles of this ground.)
     """The flow state of a world tile corner: 'd' (thick, dark), 'l' (thin, light) or 'm' (none).
     A corner next to (4 neighbours) the opposite state becomes 'm', so no tile mixes d and l."""
     def raw(x, y):
@@ -265,12 +267,140 @@ def ground_tile(tx, ty, season="summer", load=None):
     return t
 
 
-def main(which):
+def main(which, edges=True):
     seasons = list(SEASONS) if which == "all" else [which]
     n = 0
     for s in seasons:
         n += len(write(s))
+        if edges:
+            n += len(write_edges(s))
     print(f"{n} files")
+
+
+
+# ------------------------------------------------------------------ transitions (production order 1)
+# The v2 dual-grid scheme (docs/art-release-v2/terrain/NAMES.md 2): the overlay
+# <season.>plains.grass.v3.edge.<mask>.<v>.png is drawn over the lower terrain's tile; mask = the
+# corners that are plains grass (NW 1, NE 2, SW 4, SE 8), v = the side-state variant (0-3; masks 6 / 9:
+# 0-1). The border is v2's own curve (tools/terrain_v2/transitions.field) sampled at 2x, so v3 edges
+# join v2 ones and the engine's variant rule stays the same.
+
+def _v2_transitions():
+    sys.path.append(os.path.join(ROOT, "tools", "terrain_v2"))
+    import transitions  # noqa: E402
+    return transitions
+
+
+def edge_inside(mask, variant):
+    """(field, inside, dist-to-inside, near-the-edge) at 64 x 64, from the v2 field at 2x."""
+    T = _v2_transitions()
+    n = 64
+    F = np.zeros((n, n))
+    for y in range(n):
+        for x in range(n):
+            F[y, x] = T.field(mask, (x + 0.5) / 2 - 0.5, (y + 0.5) / 2 - 0.5, variant)
+    raw = F > 0.5
+    # drop islands / fill holes that do not reach the tile's edge (as v2 round 8)
+    inside = raw.copy()
+    for want in (True, False):
+        seen = np.zeros((n, n), bool)
+        for y in range(n):
+            for x in range(n):
+                if raw[y, x] != want or seen[y, x]:
+                    continue
+                comp, stack = [], [(x, y)]
+                seen[y, x] = True
+                while stack:
+                    p, q = stack.pop()
+                    comp.append((p, q))
+                    for a, b in ((p + 1, q), (p - 1, q), (p, q + 1), (p, q - 1)):
+                        if 0 <= a < n and 0 <= b < n and not seen[b, a] and raw[b, a] == want:
+                            seen[b, a] = True
+                            stack.append((a, b))
+                if not any(p in (0, n - 1) or q in (0, n - 1) for p, q in comp):
+                    for p, q in comp:
+                        inside[q, p] = not want
+    return F, inside
+
+
+def edge_overlay(season, mask, variant):
+    """Plains grass over a lower ground: the grass texture inside the border, a turf edge (lit on
+    the sides facing up / left, shaded on the others, 2-3 texels), and grass blades (2-7 texels,
+    uneven, some leaning) growing over the border onto the lower ground."""
+    T = _v2_transitions()
+    F, inside = edge_inside(mask, variant)
+    c = Canvas(64, 64, ramps_for(season))
+    k = c.mid("grass")
+    # inside: the calm base grass (tone 3) with grass marks, like the base patterns' quiet parts
+    c.mat[inside] = k
+    c.tone[inside] = 3
+    rng0 = random.Random(mask * 13 + variant)
+    for (x, y) in scatter(rng0, 64, 30, 9, 6):
+        if inside[int(y), int(x)] and inside[int(y) - 5, int(x)] and inside[int(y) + 1, int(x)]:
+            mark(c, x, y, rng0.choices((0, 1, 2), weights=(5, 3, 2))[0], 3, rng0)
+    # the turf edge band: inside texels within 3 of the outside
+    outside = ~inside
+    d = np.full((64, 64), 9)
+    d[outside] = 0
+    for step in range(1, 4):
+        grow = np.zeros_like(outside)
+        prev = d < step
+        grow[1:, :] |= prev[:-1, :]
+        grow[:-1, :] |= prev[1:, :]
+        grow[:, 1:] |= prev[:, :-1]
+        grow[:, :-1] |= prev[:, 1:]
+        d[grow & (d == 9)] = step
+    for y in range(64):
+        for x in range(64):
+            if not inside[y, x] or d[y, x] > 3:
+                continue
+            gx, gy = T.gradient(mask, (x + 0.5) / 2 - 0.5, (y + 0.5) / 2 - 0.5)
+            lit = (gx + gy) > 0.05
+            c.tone[y, x] = (4 if d[y, x] == 1 else 3) if lit else (1 if d[y, x] == 1 else 2)
+    # distance of the outside texels to the grass (the blades grow only right at the border)
+    do = np.full((64, 64), 9)
+    do[inside] = 0
+    for step in range(1, 4):
+        prev = do < step
+        grow = np.zeros_like(prev)
+        grow[1:, :] |= prev[:-1, :]
+        grow[:-1, :] |= prev[1:, :]
+        grow[:, 1:] |= prev[:, :-1]
+        grow[:, :-1] |= prev[:, 1:]
+        do[grow & (do == 9)] = step
+    # blades over the border (not on the 2 outer rows / columns, so neighbouring tiles join)
+    rng = random.Random(mask * 31 + variant * 7 + sum(map(ord, season)))
+    for y in range(3, 61):
+        for x in range(3, 61):
+            if inside[y, x] or do[y, x] > 1:
+                continue
+            if rng.random() > 0.45:
+                continue
+            gx, gy = T.gradient(mask, (x + 0.5) / 2 - 0.5, (y + 0.5) / 2 - 0.5)
+            step = -1 if gy >= 0 else 1  # turf below: the blades rise; turf above: they hang
+            h = rng.randint(2, 7)
+            lean = rng.choice((-1, 0, 0, 1))
+            xx, yy = x, y
+            for i in range(h):
+                if not (2 <= xx < 62 and 2 <= yy < 62):
+                    break
+                tip = i >= h - 2
+                c.mat[yy, xx] = k
+                c.tone[yy, xx] = (5 if tip else 4) if step < 0 else (2 if tip else 3)
+                yy += step
+                if i == h // 2:
+                    xx += lean
+    return c
+
+
+def write_edges(season):
+    pre = SEASONS[season]["prefix"]
+    out = []
+    for mask in range(1, 15):
+        for v in range(2 if mask in (6, 9) else 4):
+            out.append(save(edge_overlay(season, mask, v),
+                            os.path.join(OUT, f"{pre}plains.grass.v3.edge.{mask}.{v}.png")))
+    return out
 
 
 if __name__ == "__main__":
