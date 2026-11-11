@@ -1,4 +1,5 @@
-"""Reference renderer for ground v2 (what the engine should do; used for the review images).
+"""Reference renderer for ground v2 (what the engine should do; used for the review images). The flat ground
+only; the raised cells, cliff faces and the step pieces of NAMES.md 2b / 2c: render_steps.py (round 10).
 
 Input: a grid of ground classes, one character per map cell:
   g island grass, p plains grass, l lake grass, m forest moss, n mountain snow, s island sand,

@@ -115,5 +115,126 @@ def step_tiles(mat):
     """{internal suffix: canvas}: step<mask>.<v>, stepshade.<v>, stepinner.<ne|nw> (round 8)."""
     out = {f"step{m}.{v}": step_overlay(mat, m, v) for m in range(1, 8) for v in (0, 1)}
     out.update({f"stepinner.{k}": inner_corner(mat, k) for k in ("ne", "nw")})
+    out.update(step2_tiles(mat))  # round 10
     out.update({f"stepshade.{v}": shade_overlay(mat, v) for v in (0, 1)})
+    return out
+
+
+# ------------------------------------------------------------------------------------------------------
+# Round 10: step2 — the step line moved off the cell's edges (NAMES.md 2c).
+#
+# The visible step is the rim line; it now runs INSIDE the high cell, at a depth that is set at every cell
+# corner (vertex) by a hash: state 0 -> 3 px, state 1 -> 9 px from the edge, blended along the side with a
+# small wave that is 0 at the corners (east side: 6 / 12 px). A straight terrace therefore wanders in and out
+# by about 6 px from corner to corner instead of following the cell edges, and two cells sharing a corner
+# agree on the depth there. Convex (outer) corners are rounded (radius 6 px). The band between the rim and the
+# cell's edge is left clear (it reads as the lower ground), except on the east side, where a 2.5-4.5 px wavy
+# shadow follows the rim (stopping short of the cell's edge), so the shadow is on the high cell itself and
+# always shows (round 10, R2).
+#   <prefix>.step2.<mask>.<code>      mask = N 1, E 2, W 4 (sides whose neighbour is lower); code = the
+#                                     states of the corners those sides touch, in the order NW, NE, SE, SW,
+#                                     bit k = state of the k-th of them
+#   <prefix>.step2.inner.<ne|nw>.<s>  an inner corner (as step.inner) with the state s of that corner
+# ------------------------------------------------------------------------------------------------------
+VERT_D = {"N": (3.0, 9.0), "W": (3.0, 9.0), "E": (6.0, 12.0)}  # rim depth at a corner of state 0 / 1, per side
+SHADOW_W = 3.5  # the east shadow band: 2.5-4.5 px from the rim line (it stops short of the cell's edge)
+ROUND = 6.0  # radius of the rounded outer corners
+OUT_W, RIM_W = 1.6, 2.6  # outline and rim band widths
+CORNERS = ("NW", "NE", "SE", "SW")
+SIDE_CORNERS = {"N": ("NW", "NE"), "E": ("NE", "SE"), "W": ("NW", "SW")}
+
+
+def step2_corners(mask):
+    """The corners whose state matters for a mask, in the order NW, NE, SE, SW."""
+    used = set()
+    for sd, bit in (("N", N), ("E", E), ("W", W)):
+        if mask & bit:
+            used.update(SIDE_CORNERS[sd])
+    return [c for c in CORNERS if c in used]
+
+
+def _smooth(t):
+    return t * t * (3 - 2 * t)
+
+
+def _side_depth(sd, t, s0, s1):
+    """Depth of the rim line on a side at t (0-1 from its first corner), its corners in states s0, s1."""
+    ph = {"N": 0.3, "E": 1.9, "W": 3.7}[sd]
+    wave = 2.2 * math.sin(math.pi * t) * math.sin(2 * math.pi * 1.4 * t + ph)
+    d0, d1 = VERT_D[sd][s0], VERT_D[sd][s1]
+    return d0 + (d1 - d0) * _smooth(t) + wave
+
+
+def step2_overlay(mat, mask, code):
+    c = Canvas(32, 32, None, wrap=False)
+    t_out, t_sh = min(1, dark_tone(mat, OUTLINE)), dark_tone(mat, SHADE)
+    corners = step2_corners(mask)
+    st = {k: (code >> i) & 1 for i, k in enumerate(corners)}
+    sides = [sd for sd, bit in (("N", N), ("E", E), ("W", W)) if mask & bit]
+    for y in range(32):
+        for x in range(32):
+            # signed distance into the high part from each lowered side's rim line
+            vals = {}
+            for sd in sides:
+                a, b = SIDE_CORNERS[sd]
+                if sd == "N":
+                    vals[sd] = (y + 0.5) - _side_depth(sd, (x + 0.5) / 32, st[a], st[b])
+                elif sd == "E":
+                    vals[sd] = (31.5 - x) - _side_depth(sd, (y + 0.5) / 32, st[a], st[b])
+                else:
+                    vals[sd] = (x + 0.5) - _side_depth(sd, (y + 0.5) / 32, st[a], st[b])
+            dist = min(vals.values())
+            near = min(vals, key=vals.get)
+            # rounded outer corners: two sides both closer than ROUND
+            for p, q in (("N", "E"), ("N", "W")):
+                if p in vals and q in vals and vals[p] < ROUND and vals[q] < ROUND and vals[p] > -ROUND and vals[q] > -ROUND:
+                    r = math.hypot(ROUND - vals[p], ROUND - vals[q])
+                    if vals[p] >= 0 and vals[q] >= 0:
+                        dist = min(dist, ROUND - r)
+                    if dist < 0:
+                        near = q if vals[q] < vals[p] else p
+            if dist < 0:
+                if near == "E" and dist > -(SHADOW_W + math.sin((y + 0.5) / 3.1 + code) * 1.0):
+                    c.put(x, y, mat, t_sh)  # the step's shadow, on the high cell's east band
+                continue
+            if dist < OUT_W:
+                c.put(x, y, mat, t_out)
+            elif dist < OUT_W + RIM_W:
+                c.put(x, y, mat, t_sh if near == "E" else (5 if dist < OUT_W + 1 else 4))
+    return c
+
+
+def step2_inner(mat, corner, s):
+    """An inner corner (the high cell's two side neighbours there are not lower, its diagonal one is): the rim
+    turns around the corner on a quarter ellipse, from the end of the north neighbour's east (west) rim to the
+    start of the east (west) neighbour's north rim. ne: the shadow band of the east rim comes round it."""
+    c = Canvas(32, 32, None, wrap=False)
+    t_out, t_sh = min(1, dark_tone(mat, OUTLINE)), dark_tone(mat, SHADE)
+    rx = VERT_D["E" if corner == "ne" else "W"][s]  # across: the depth of the side rim coming down from the north
+    ry = VERT_D["N"][s]  # down: the depth of the north rim going on to the side
+    cx = 32.0 if corner == "ne" else 0.0
+    for y in range(32):
+        for x in range(32):
+            u, v = abs(x + 0.5 - cx) / rx, (y + 0.5) / ry
+            q = math.hypot(u, v)
+            dist = (q - 1) * min(rx, ry)  # roughly px from the arc, positive on the high side
+            east_like = corner == "ne" and u * rx > v * ry * 0.6
+            if dist < 0:
+                if east_like and dist > -SHADOW_W:
+                    c.put(x, y, mat, t_sh)
+            elif dist < OUT_W:
+                c.put(x, y, mat, t_out)
+            elif dist < OUT_W + RIM_W:
+                c.put(x, y, mat, t_sh if east_like else 4)
+    return c
+
+
+def step2_tiles(mat):
+    out = {}
+    for m in range(1, 8):
+        for code in range(2 ** len(step2_corners(m))):
+            out[f"steptwo{m}.{code}"] = step2_overlay(mat, m, code)
+    for k in ("ne", "nw"):
+        for s in (0, 1):
+            out[f"steptwoinner{k}.{s}"] = step2_inner(mat, k, s)
     return out

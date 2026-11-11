@@ -1,6 +1,6 @@
 # Ground v2 — key scheme (for wiring)
 
-Folder `src/art-release-v2/terrain/`: **2852 PNGs** = 189 v1 keys redrawn + 2477 new keys + 186 v1 keys copied unchanged (not redrawn: ruin / wall faces, v1.1 shores, trees, rocks, floors…). The group **contains every key of the v1 terrain group**, so it can replace it as a whole (`manifest.json` lists the three groups; the test checks v2 ⊇ v1). All new / redrawn ground tiles are 32×32 art px (= one 16 px map cell), anchor **top-left**, alpha 0 / 255. Generator: `tools/terrain_v2/gen_v2.py`; `tools/terrain_v2/render_ref.py` is a reference renderer of everything below (the review images use it).
+Folder `src/art-release-v2/terrain/`: **3940 PNGs** = 189 v1 keys redrawn + 3565 new keys + 186 v1 keys copied unchanged (not redrawn: ruin / wall faces, v1.1 shores, trees, rocks, floors…). The group **contains every key of the v1 terrain group**, so it can replace it as a whole (`manifest.json` lists the three groups; the test checks v2 ⊇ v1). All new / redrawn ground tiles are 32×32 art px (= one 16 px map cell), anchor **top-left**, alpha 0 / 255. Generator: `tools/terrain_v2/gen_v2.py`; `tools/terrain_v2/render_ref.py` is a reference renderer of everything below (the review images use it).
 
 ## 1. Grounds
 
@@ -35,6 +35,8 @@ In winter the 4 seasonal grounds use the same rule with their `winter.` keys (sn
 - column symbol `s(i)` (0-2) of the vertical line of edges at the west of column i (i ≥ 0), never the same on two neighbouring lines: `k = floor(i / 2)`, `e0 = hash(k, 7) % 3`, `e1 = hash(k + 1, 7) % 3`; `s = e0` when i is even; when i is odd, `s = 3 − e0 − e1` if `e0 ≠ e1`, else `(e0 + 1 + hash(k, 11) % 2) % 3`
 - `W = s(i)`, `E = s(i + 1)`, `n = 6·R + 2·W + (E if E < W else E − 1)`
 - the ruin's overlay over water is `tile.ruin.edge.<mask>.<R>` (R = 0-10, the same row phase), so the courses run on from the overlay into the full tiles beside it. No pictures.
+
+**Changes in round 10** (for the engine): new step pieces `<prefix>.step2.<mask>.<code>` and `<prefix>.step2.inner.<ne|nw>.<s>` with their rule (section 2c): use them instead of 2b's rims, inner corners and east shadow, and one tint for every level. No key removed; 2b's keys stay.
 
 **Changes in round 8** (for the engine): transition overlays never hold a detached island or a hole (16 sets × `edge.1.0`, `2.0`, `4.3`, `7.0-3` and the foam redrawn); masks 6 / 9 use the same shared wobble as the others; dunes by step 4b (new formula); pictures only on one height (step 5); inner step corners `<prefix>.step.inner.<ne|nw>` (2b). No key removed.
 
@@ -76,6 +78,17 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - **Order and opacity:** the rim right after the cell's surface, before the next row's surfaces. The shadow after all the surfaces of its row (else a slightly lower east cell's surface would hide it), opaque, as drawn (it covers the small marks of the lower cell's ground under it; if the engine prefers it see-through, draw it at alpha 0.6 — its tone was chosen for full strength). No shadow when the lower east cell is water or a ground with no v2 art; a cliff face (south side) keeps its own contact shadow.
 - Along a straight step the outline, rim and shadow depths are 32-periodic in the position along the side, so they join from cell to cell (variant 1 adds a bump that is 0 at the cell's corners). Keys exist for every ground of section 1 and every season set (`tile.ruin.step.*` too).
 
+## 2c. Steps off the cell edges (round 10, new; use instead of 2b's rims, shadow and inner corners)
+
+The step line of 2b runs on the cell's edge, so terraces read as a staircase of cell edges. The step2 pieces draw it INSIDE the high cell at a depth that changes from cell corner to cell corner. Collision and heights do not change: only the drawing.
+- **Corner state:** every cell corner (vertex) `(vx, vy)` (the NW corner of cell (tx, ty) is (tx, ty), its NE (tx+1, ty), SE (tx+1, ty+1), SW (tx, ty+1)) has `s = (hash(vx + 211, vy + 97) >> 3) & 1`. The rim line's depth there is 3 px (s = 0) or 9 px (s = 1) on the north and west sides, 6 / 12 px on the east side, blended along the side with a small wave that is 0 at the corners. Two cells that share a corner agree on it, so a terrace's rim is continuous and wanders by about 6 px instead of following the cell edges.
+- **Rim:** on a raised cell, where 2b would draw `step.<mask>.<v>`, draw `<prefix>.step2.<mask>.<code>` (same position, after the surface; mask as in 2b: lower north 1, east 2, west 4). The corners of the lowered sides — N: NW, NE; E: NE, SE; W: NW, SW — taken together and in the order NW, NE, SE, SW; `code = Σ s(k-th of them)·2^k` (mask 1, 2, 4: codes 0-3; 3, 5: 0-7; 6, 7: 0-15). It holds the dark outline, the lit rim (north, west) or shaded rim (east), rounded outer corners (6 px), and on the east side a 2.5-4.5 px wavy shadow outside the rim that stops short of the cell's edge. Between the rim and the cell's edge the cell's own surface shows (it reads as the lower ground).
+- **Inner corners:** where 2b draws `step.inner.<ne|nw>` (north and east / west not lower, NE / NW lower), draw `<prefix>.step2.inner.<ne|nw>.<s>`, s = the state of that corner (NE: (tx+1, ty), NW: (tx, ty)).
+- **Shadow (R2):** the east shadow is part of the rim piece, on the high cell itself, so it shows wherever the step's east side shows (2b's `step.shade` on the lower east cell was hidden behind a higher cell to the south on diagonal terraces). With step2, do NOT draw `step.shade` on the east cell.
+- **Tint:** with step2, draw every raised surface with the level-0 tint (gameView.levelTint: the same brightness for every level with the v2 ground). Otherwise the 5 % brighter raised surface shows the cell's straight edge outside the moved rim.
+- The south side keeps its cliff face (section 4) and its contact shadow.
+- `tools/terrain_v2/render_steps.py` draws all of this from the world map (review images `steps_*`).
+
 ## 3. Water (4 frames)
 
 | key | what |
@@ -107,6 +120,7 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - `autumn.forest.grass.macro7.*` — 4
 - `autumn.forest.grass.macro8.*` — 4
 - `autumn.forest.grass.step.*` — 18
+- `autumn.forest.grass.step2.*` — 64
 - `autumn.lake.grass.*` — 28
 - `autumn.lake.grass.edge.*` — 52
 - `autumn.lake.grass.macro.*` — 4
@@ -118,6 +132,7 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - `autumn.lake.grass.macro7.*` — 4
 - `autumn.lake.grass.macro8.*` — 4
 - `autumn.lake.grass.step.*` — 18
+- `autumn.lake.grass.step2.*` — 64
 - `autumn.plains.grass.*` — 28
 - `autumn.plains.grass.edge.*` — 52
 - `autumn.plains.grass.macro.*` — 4
@@ -129,6 +144,7 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - `autumn.plains.grass.macro7.*` — 4
 - `autumn.plains.grass.macro8.*` — 4
 - `autumn.plains.grass.step.*` — 18
+- `autumn.plains.grass.step2.*` — 64
 - `autumn.tile.grass.*` — 29
 - `autumn.tile.grass.edge.*` — 52
 - `autumn.tile.grass.macro.*` — 4
@@ -140,6 +156,7 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - `autumn.tile.grass.macro7.*` — 4
 - `autumn.tile.grass.macro8.*` — 4
 - `autumn.tile.grass.step.*` — 18
+- `autumn.tile.grass.step2.*` — 64
 - `desert.sand.*` — 29
 - `desert.sand.dune1.*` — 4
 - `desert.sand.dune2.*` — 4
@@ -157,6 +174,7 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - `desert.sand.macro7.*` — 4
 - `desert.sand.macro8.*` — 4
 - `desert.sand.step.*` — 18
+- `desert.sand.step2.*` — 64
 - `forest.grass.*` — 28
 - `forest.grass.edge.*` — 52
 - `forest.grass.macro.*` — 4
@@ -168,6 +186,7 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - `forest.grass.macro7.*` — 4
 - `forest.grass.macro8.*` — 4
 - `forest.grass.step.*` — 18
+- `forest.grass.step2.*` — 64
 - `lake.grass.*` — 28
 - `lake.grass.edge.*` — 52
 - `lake.grass.macro.*` — 4
@@ -179,6 +198,7 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - `lake.grass.macro7.*` — 4
 - `lake.grass.macro8.*` — 4
 - `lake.grass.step.*` — 18
+- `lake.grass.step2.*` — 64
 - `mountains.snow.*` — 28
 - `mountains.snow.edge.*` — 52
 - `mountains.snow.macro.*` — 4
@@ -190,6 +210,7 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - `mountains.snow.macro7.*` — 4
 - `mountains.snow.macro8.*` — 4
 - `mountains.snow.step.*` — 18
+- `mountains.snow.step2.*` — 64
 - `plains.grass.*` — 28
 - `plains.grass.edge.*` — 52
 - `plains.grass.macro.*` — 4
@@ -201,6 +222,7 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - `plains.grass.macro7.*` — 4
 - `plains.grass.macro8.*` — 4
 - `plains.grass.step.*` — 18
+- `plains.grass.step2.*` — 64
 - `tile.grass.*` — 29
 - `tile.grass.edge.*` — 52
 - `tile.grass.macro.*` — 4
@@ -212,6 +234,7 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - `tile.grass.macro7.*` — 4
 - `tile.grass.macro8.*` — 4
 - `tile.grass.step.*` — 18
+- `tile.grass.step2.*` — 64
 - `tile.path.*` — 31
 - `tile.path.edge.*` — 52
 - `tile.path.macro.*` — 4
@@ -223,9 +246,11 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - `tile.path.macro7.*` — 4
 - `tile.path.macro8.*` — 4
 - `tile.path.step.*` — 18
+- `tile.path.step2.*` — 64
 - `tile.ruin.*` — 65
 - `tile.ruin.edge.*` — 154
 - `tile.ruin.step.*` — 18
+- `tile.ruin.step2.*` — 64
 - `tile.sand.*` — 31
 - `tile.sand.edge.*` — 52
 - `tile.sand.macro.*` — 4
@@ -237,6 +262,7 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - `tile.sand.macro7.*` — 4
 - `tile.sand.macro8.*` — 4
 - `tile.sand.step.*` — 18
+- `tile.sand.step2.*` — 64
 - `tile.water.*` — 2
 - `tile.water.deep.*` — 4
 - `tile.water.deep.edge.*` — 56
@@ -254,6 +280,7 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - `winter.forest.grass.macro7.*` — 4
 - `winter.forest.grass.macro8.*` — 4
 - `winter.forest.grass.step.*` — 18
+- `winter.forest.grass.step2.*` — 64
 - `winter.lake.grass.*` — 28
 - `winter.lake.grass.edge.*` — 52
 - `winter.lake.grass.macro.*` — 4
@@ -265,6 +292,7 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - `winter.lake.grass.macro7.*` — 4
 - `winter.lake.grass.macro8.*` — 4
 - `winter.lake.grass.step.*` — 18
+- `winter.lake.grass.step2.*` — 64
 - `winter.plains.grass.*` — 28
 - `winter.plains.grass.edge.*` — 52
 - `winter.plains.grass.macro.*` — 4
@@ -276,6 +304,7 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - `winter.plains.grass.macro7.*` — 4
 - `winter.plains.grass.macro8.*` — 4
 - `winter.plains.grass.step.*` — 18
+- `winter.plains.grass.step2.*` — 64
 - `winter.tile.grass.*` — 29
 - `winter.tile.grass.edge.*` — 52
 - `winter.tile.grass.macro.*` — 4
@@ -287,5 +316,6 @@ For an elevated cell (gameView: its surface square on the cell grid at `(tx·16,
 - `winter.tile.grass.macro7.*` — 4
 - `winter.tile.grass.macro8.*` — 4
 - `winter.tile.grass.step.*` — 18
+- `winter.tile.grass.step2.*` — 64
 
 Redrawn v1 keys: `autumn.face.earth.top-base.4`, `autumn.face.earth.top-base.4.v1`, `autumn.face.earth.top-base.4.v2`, `autumn.face.earth.top-base.8`, `autumn.face.earth.top-base.8.v1`, `autumn.face.earth.top-base.8.v2`, `autumn.face.earth.top.4`, `autumn.face.earth.top.4.v1`, `autumn.face.earth.top.4.v2`, `autumn.face.earth.top.8`, `autumn.face.earth.top.8.v1`, `autumn.face.earth.top.8.v2`, `autumn.face.stone.top-base.4`, `autumn.face.stone.top-base.4.v1`, `autumn.face.stone.top-base.4.v2`, `autumn.face.stone.top-base.8`, `autumn.face.stone.top-base.8.v1`, `autumn.face.stone.top-base.8.v2`, `autumn.face.stone.top.4`, `autumn.face.stone.top.4.v1`, `autumn.face.stone.top.4.v2`, `autumn.face.stone.top.8`, `autumn.face.stone.top.8.v1`, `autumn.face.stone.top.8.v2`, `autumn.forest.grass.0`, `autumn.forest.grass.1`, `autumn.forest.grass.2`, `autumn.forest.grass.3`, `autumn.lake.grass.0`, `autumn.lake.grass.1`, `autumn.lake.grass.2`, `autumn.lake.grass.3`, `autumn.plains.grass.0`, `autumn.plains.grass.1`, `autumn.plains.grass.2`, `autumn.plains.grass.3`, `autumn.tile.grass.0`, `autumn.tile.grass.1`, `autumn.tile.grass.2`, `desert.sand.0`, `desert.sand.1`, `desert.sand.2`, `face.desert.mid-base.4`, `face.desert.mid-base.4.v1`, `face.desert.mid-base.8`, `face.desert.mid-base.8.v1`, `face.desert.mid.4`, `face.desert.mid.4.v1`, `face.desert.mid.8`, `face.desert.mid.8.v1`, `face.desert.top-base.4`, `face.desert.top-base.4.v1`, `face.desert.top-base.8`, `face.desert.top-base.8.v1`, `face.desert.top.4`, `face.desert.top.4.v1`, `face.desert.top.8`, `face.desert.top.8.v1`, `face.earth.mid-base.4`, `face.earth.mid-base.4.v1`, `face.earth.mid-base.4.v2`, `face.earth.mid-base.8`, `face.earth.mid-base.8.v1`, `face.earth.mid-base.8.v2`, `face.earth.mid.4`, `face.earth.mid.4.v1`, `face.earth.mid.4.v2`, `face.earth.mid.8`, `face.earth.mid.8.v1`, `face.earth.mid.8.v2`, `face.earth.top-base.4`, `face.earth.top-base.4.v1`, `face.earth.top-base.4.v2`, `face.earth.top-base.8`, `face.earth.top-base.8.v1`, `face.earth.top-base.8.v2`, `face.earth.top.4`, `face.earth.top.4.v1`, `face.earth.top.4.v2`, `face.earth.top.8`, `face.earth.top.8.v1`, `face.earth.top.8.v2`, `face.path.mid-base.4`, `face.path.mid-base.4.v1`, `face.path.mid-base.8`, `face.path.mid-base.8.v1`, `face.path.mid.4`, `face.path.mid.4.v1`, `face.path.mid.8`, `face.path.mid.8.v1`, `face.path.top-base.4`, `face.path.top-base.4.v1`, `face.path.top-base.8`, `face.path.top-base.8.v1`, `face.path.top.4`, `face.path.top.4.v1`, `face.path.top.8`, `face.path.top.8.v1`, `face.sand.mid-base.4`, `face.sand.mid-base.4.v1`, `face.sand.mid-base.8`, `face.sand.mid-base.8.v1`, `face.sand.mid.4`, `face.sand.mid.4.v1`, `face.sand.mid.8`, `face.sand.mid.8.v1`, `face.sand.top-base.4`, `face.sand.top-base.4.v1`, `face.sand.top-base.8`, `face.sand.top-base.8.v1`, `face.sand.top.4`, `face.sand.top.4.v1`, `face.sand.top.8`, `face.sand.top.8.v1`, `face.stone.mid-base.4`, `face.stone.mid-base.4.v1`, `face.stone.mid-base.4.v2`, `face.stone.mid-base.8`, `face.stone.mid-base.8.v1`, `face.stone.mid-base.8.v2`, `face.stone.mid.4`, `face.stone.mid.4.v1`, `face.stone.mid.4.v2`, `face.stone.mid.8`, `face.stone.mid.8.v1`, `face.stone.mid.8.v2`, `face.stone.top-base.4`, `face.stone.top-base.4.v1`, `face.stone.top-base.4.v2`, `face.stone.top-base.8`, `face.stone.top-base.8.v1`, `face.stone.top-base.8.v2`, `face.stone.top.4`, `face.stone.top.4.v1`, `face.stone.top.4.v2`, `face.stone.top.8`, `face.stone.top.8.v1`, `face.stone.top.8.v2`, `forest.grass.0`, `forest.grass.1`, `forest.grass.2`, `forest.grass.3`, `lake.grass.0`, `lake.grass.1`, `lake.grass.2`, `lake.grass.3`, `mountains.snow.0`, `mountains.snow.1`, `mountains.snow.2`, `mountains.snow.3`, `plains.grass.0`, `plains.grass.1`, `plains.grass.2`, `plains.grass.3`, `tile.grass.0`, `tile.grass.1`, `tile.grass.2`, `tile.path`, `tile.ruin`, `tile.sand`, `tile.water.0`, `tile.water.1`, `winter.face.earth.top-base.4`, `winter.face.earth.top-base.4.v1`, `winter.face.earth.top-base.4.v2`, `winter.face.earth.top-base.8`, `winter.face.earth.top-base.8.v1`, `winter.face.earth.top-base.8.v2`, `winter.face.earth.top.4`, `winter.face.earth.top.4.v1`, `winter.face.earth.top.4.v2`, `winter.face.earth.top.8`, `winter.face.earth.top.8.v1`, `winter.face.earth.top.8.v2`, `winter.forest.grass.0`, `winter.forest.grass.1`, `winter.forest.grass.2`, `winter.forest.grass.3`, `winter.lake.grass.0`, `winter.lake.grass.1`, `winter.lake.grass.2`, `winter.lake.grass.3`, `winter.plains.grass.0`, `winter.plains.grass.1`, `winter.plains.grass.2`, `winter.plains.grass.3`, `winter.tile.grass.0`, `winter.tile.grass.1`, `winter.tile.grass.2`.

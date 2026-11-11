@@ -41,6 +41,10 @@ def final_name(internal):
     p = PREFIX[g]
     if rest[0].startswith("e"):
         return f"{season}{p}.edge.{rest[0][1:]}.{rest[1]}"
+    if rest[0].startswith("steptwoinner"):  # round 10: step2.inner.<ne|nw>.<s>
+        return f"{season}{p}.step2.inner.{rest[0][12:]}.{rest[1]}"
+    if rest[0].startswith("steptwo"):  # round 10: step2.<mask>.<code>
+        return f"{season}{p}.step2.{rest[0][7:]}.{rest[1]}"
     if rest[0].startswith("stepshade"):  # round 7
         return f"{season}{p}.step.shade.{rest[1]}"
     if rest[0].startswith("stepinner"):  # round 8

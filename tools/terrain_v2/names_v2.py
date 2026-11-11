@@ -111,6 +111,10 @@ def names_md(files, redrawn, new, copied):
     a("- the ruin's overlay over water is `tile.ruin.edge.<mask>.<R>` (R = 0-10, the same row phase), so the courses "
       "run on from the overlay into the full tiles beside it. No pictures.")
     a("")
+    a("**Changes in round 10** (for the engine): new step pieces `<prefix>.step2.<mask>.<code>` and "
+      "`<prefix>.step2.inner.<ne|nw>.<s>` with their rule (section 2c): use them instead of 2b's rims, inner "
+      "corners and east shadow, and one tint for every level. No key removed; 2b's keys stay.")
+    a("")
     a("**Changes in round 8** (for the engine): transition overlays never hold a detached island or a hole (16 "
       "sets × `edge.1.0`, `2.0`, `4.3`, `7.0-3` and the foam redrawn); masks 6 / 9 use the same shared wobble as "
       "the others; dunes by step 4b (new formula); pictures only on one height (step 5); inner step corners "
@@ -209,6 +213,36 @@ def names_md(files, redrawn, new, copied):
       "they join from cell to cell (variant 1 adds a bump that is 0 at the cell's corners). Keys exist for every "
       "ground of section 1 and every season set (`tile.ruin.step.*` too).")
     a("")
+    a("## 2c. Steps off the cell edges (round 10, new; use instead of 2b's rims, shadow and inner corners)")
+    a("")
+    a("The step line of 2b runs on the cell's edge, so terraces read as a staircase of cell edges. The step2 "
+      "pieces draw it INSIDE the high cell at a depth that changes from cell corner to cell corner. Collision and "
+      "heights do not change: only the drawing.")
+    a("- **Corner state:** every cell corner (vertex) `(vx, vy)` (the NW corner of cell (tx, ty) is (tx, ty), its "
+      "NE (tx+1, ty), SE (tx+1, ty+1), SW (tx, ty+1)) has `s = (hash(vx + 211, vy + 97) >> 3) & 1`. The rim "
+      "line's depth there is 3 px (s = 0) or 9 px (s = 1) on the north and west sides, 6 / 12 px on the east "
+      "side, blended along the side with a small wave that is 0 at the corners. Two cells that share a corner "
+      "agree on it, so a terrace's rim is continuous and wanders by about 6 px instead of following the cell "
+      "edges.")
+    a("- **Rim:** on a raised cell, where 2b would draw `step.<mask>.<v>`, draw `<prefix>.step2.<mask>.<code>` "
+      "(same position, after the surface; mask as in 2b: lower north 1, east 2, west 4). The corners of the "
+      "lowered sides — N: NW, NE; E: NE, SE; W: NW, SW — taken together and in the order NW, NE, SE, SW; "
+      "`code = Σ s(k-th of them)·2^k` (mask 1, 2, 4: codes 0-3; 3, 5: 0-7; 6, 7: 0-15). It holds the dark "
+      "outline, the lit rim (north, west) or shaded rim (east), rounded outer corners (6 px), and on the east "
+      "side a 2.5-4.5 px wavy shadow outside the rim that stops short of the cell's edge. Between the rim and the "
+      "cell's edge the cell's own surface shows (it reads as the lower ground).")
+    a("- **Inner corners:** where 2b draws `step.inner.<ne|nw>` (north and east / west not lower, NE / NW "
+      "lower), draw `<prefix>.step2.inner.<ne|nw>.<s>`, s = the state of that corner (NE: (tx+1, ty), NW: (tx, "
+      "ty)).")
+    a("- **Shadow (R2):** the east shadow is part of the rim piece, on the high cell itself, so it shows wherever the "
+      "step's east side shows (2b's `step.shade` on the lower east cell was hidden behind a higher cell to the "
+      "south on diagonal terraces). With step2, do NOT draw `step.shade` on the east cell.")
+    a("- **Tint:** with step2, draw every raised surface with the level-0 tint (gameView.levelTint: the same "
+      "brightness for every level with the v2 ground). Otherwise the 5 % brighter raised surface shows the cell's "
+      "straight edge outside the moved rim.")
+    a("- The south side keeps its cliff face (section 4) and its contact shadow.")
+    a("- `tools/terrain_v2/render_steps.py` draws all of this from the world map (review images `steps_*`).")
+    a("")
     a("## 3. Water (4 frames)")
     a("")
     a("| key | what |")
@@ -245,6 +279,8 @@ def names_md(files, redrawn, new, copied):
             head = k.split(".edge.")[0] + ".edge.*"
         elif ".step." in k:
             head = k.split(".step.")[0] + ".step.*"
+        elif ".step2." in k:
+            head = k.split(".step2.")[0] + ".step2.*"
         elif ".macro" in k:
             head = k.rsplit(".", 1)[0] + ".*"
         elif ".foam." in k:

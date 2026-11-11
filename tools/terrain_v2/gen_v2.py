@@ -116,7 +116,7 @@ def check_seams(cv):
 
     errors = []
     bands = {WG.W: lambda c: [c.px[y][0] for y in range(32)], WG.E: lambda c: [c.px[y][31] for y in range(32)]}
-    sets = sorted({k.rsplit(".", 1)[0] for k in cv if k.endswith(".15") and ".e" not in k and "water" not in k and "macro" not in k})
+    sets = sorted({k.rsplit(".", 1)[0] for k in cv if k.endswith(".15") and ".e" not in k and "water" not in k and "macro" not in k and ".step" not in k})
     for p in sets:
         look = "snow" if p.startswith("winter.") else p.rsplit(".", 1)[1]
         if look not in WG.TEX4:

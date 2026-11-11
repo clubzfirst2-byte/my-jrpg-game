@@ -45,7 +45,10 @@ const FACE_KEYS = ['earth', 'stone', 'sand', 'desert', 'path'].flatMap((mat) =>
 );
 const GROUND_KEYS = SETS.flatMap(([g, s]) => tiles(g, s));
 // round 7: one-level step rims (mask N 1, E 2, W 4) and the shadow east of them, per set
-const STEP_KEYS = SETS.flatMap(([g, s]) => [...range(7).flatMap((m) => [0, 1].map((v) => `${s}${PREFIX[g]}.step.${m + 1}.${v}`)), ...[0, 1].map((v) => `${s}${PREFIX[g]}.step.shade.${v}`), ...['ne', 'nw'].map((k) => `${s}${PREFIX[g]}.step.inner.${k}`)]);
+const STEP_KEYS = SETS.flatMap(([g, s]) => [...range(7).flatMap((m) => [0, 1].map((v) => `${s}${PREFIX[g]}.step.${m + 1}.${v}`)), ...[0, 1].map((v) => `${s}${PREFIX[g]}.step.shade.${v}`), ...['ne', 'nw'].map((k) => `${s}${PREFIX[g]}.step.inner.${k}`),
+  // round 10 (NAMES.md 2c): rims off the cell edges, code = the states of the corners of the lowered sides
+  ...range(7).flatMap((m) => range(2 ** [2, 2, 3, 2, 3, 4, 4][m]).map((c) => `${s}${PREFIX[g]}.step2.${m + 1}.${c}`)),
+  ...['ne', 'nw'].flatMap((k) => [0, 1].map((v) => `${s}${PREFIX[g]}.step2.inner.${k}.${v}`))]);
 const OVERLAY_KEYS = SETS.flatMap(([g, s]) => edges(g, s));
 const WATER_TILES = ['tile.water', 'tile.water.v1', 'tile.water.deep', 'tile.water.deep.v1'].flatMap((p) => range(4).map((f) => `${p}.${f}`));
 const WATER_OVERLAYS = ['tile.water.deep.edge', 'tile.water.foam'].flatMap((p) => MASKS.flatMap((m) => range(4).map((f) => `${p}.${m}.${f}`)));
