@@ -209,6 +209,16 @@ describe('W1: a border between grounds next to a wall runs on to the wall', () =
     for (const p of pieces) if (!p.anim && p.key.startsWith('tile.ruin')) expect(ART.has(p.key), p.key).toBe(true);
     expect([...v.v2Missing]).toEqual([]);
     expect(CHUNK).toBe(32);
+    // the same with raised walls (as in the lake region's room): the border still runs on to them
+    const r = smallView({
+      ground: ['#uuuuuu#', '#uuuuuu#', '#~~~~~~#', '#~~~~~~#', '#uuuuuu#', '#uuuuuu#'],
+      elev: ['10000001', '10000001', '10000001', '10000001', '10000001', '10000001'],
+    });
+    const rp = r.groundPiecesV2(0, 0);
+    const rat = (i, j) => rp.filter((p) => Math.floor((p.x - 8) / 16) === i && Math.floor((p.y - 8) / 16) === j);
+    expect(rat(0, 1).some((p) => p.key.startsWith('tile.ruin.edge.') && p.quarter === 'ne')).toBe(true);
+    expect(rat(6, 1).some((p) => p.key.startsWith('tile.ruin.edge.') && p.quarter === 'nw')).toBe(true);
+    expect(rat(0, 1).some((p) => p.quarter === 'nw' || p.quarter === 'sw')).toBe(false); // the raised wall: drawn by its row
     expect(landKey('ruin', '0')).toBe('tile.ruin');
   });
 });

@@ -751,18 +751,21 @@ export class GameView {
           for (const l of layersOf(/** @type {string[]} */ (cls), true)) out.push({ key: l.key, anim: l.anim, x: px, y: py, quarter: null });
           continue;
         }
-        // W1 (inspection fix): a border between grounds next to a cell with no v2 art (a wall): those
-        // corners take the ground of the corner beside them, and the blended tile is drawn over the
+        // W1 (inspection fix): a border between grounds next to a cell with no v2 art or raised (a wall):
+        // those corners take the ground of the corner beside them, and the blended tile is drawn over the
         // other corners' quarters only — the border runs on to the wall instead of stopping square
-        const real = cls.filter((c) => c !== null);
-        if (allFlat && real.length && new Set(real).size > 1) {
-          const sub = cls.map((c, k) => c ?? cls[k ^ 1] ?? cls[k ^ 2] ?? cls[k ^ 3]);
+        // (corners that are real: in the map, flat, with v2 art; the others are a wall, raised ground, ...)
+        const isReal = CORNERS.map(([dx, dy], k) => inBounds(map, i + dx, j + dy) && flat(i + dx, j + dy) && cls[k] !== null);
+        const real = cls.filter((c, k) => isReal[k]);
+        if (real.length && new Set(real).size > 1) {
+          const pick = (/** @type {number} */ k) => (isReal[k] ? cls[k] : null);
+          const sub = cls.map((c, k) => pick(k) ?? pick(k ^ 1) ?? pick(k ^ 2) ?? pick(k ^ 3));
           const layers = layersOf(/** @type {string[]} */ (sub), false);
           CORNERS.forEach(([dx, dy], k) => {
             const x = i + dx;
             const y = j + dy;
-            if (!inBounds(map, x, y)) return;
-            if (cls[k] === null) {
+            if (!inBounds(map, x, y) || !flat(x, y)) return;
+            if (!isReal[k]) {
               const own = this.cellKeyV2(x, y);
               out.push({ key: own.key, anim: own.anim, x: px + dx * half, y: py + dy * half, quarter: quarterOfCorner(k) });
               return;
