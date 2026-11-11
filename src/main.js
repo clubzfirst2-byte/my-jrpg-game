@@ -22,16 +22,17 @@ import { ART_SCALE } from './view/assets/placeholderPack.js';
 import { testHeroFrames } from './debug/testHero.js';
 import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
 import { availableV1Groups, availableV2Groups, prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
-import { resolveArtGroups } from './view/assets/artV2.js';
+import { resolveArtGroups, v2Name } from './view/assets/artV2.js';
+import { installUiSkin, loadOtherUiArt, loadTitleArt, showButtonLabels } from './ui/uiSkin.js';
 import { GROUND_RUIN_BUNDLE, ISLAND_EDGES_BUNDLE, ISLAND_STEPS_BUNDLE, TERRAIN_GROUP, releaseTerrainEntries, v2BundleParts, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
 import { GameView } from './view/gameView.js';
 import { Bench } from './view/bench.js';
 import { InputManager } from './platform/inputManager.js';
 import { installLifecycle } from './platform/lifecycle.js';
-import { loadSettings, saveSettings } from './platform/settings.js';
+import { countSession, loadSettings, peekSessions, saveSettings } from './platform/settings.js';
 import { PauseOverlay } from './ui/pauseOverlay.js';
-import { SettingsMenu } from './ui/settingsMenu.js';
+import { BUTTON_LABELS_ROW, SETTING_ROWS, SettingsMenu } from './ui/settingsMenu.js';
 import { HeartsHud } from './ui/hud.js';
 import { RotateHint } from './ui/rotateHint.js';
 import { TitleScreen } from './ui/title.js';
@@ -158,7 +159,32 @@ async function boot() {
   releaseGroups.push(...objectsReleaseGroups(params, { releaseHero, protoGroups }));
   // Graphics v2: a group's v2 art (src/art-release-v2) in place of its v1 art when enabled (?v2=0, ?<group>=v1|v2; artV2.js)
   const artGroups = resolveArtGroups(releaseGroups, params, { available: availableV2Groups(), v1Groups: availableV1Groups() });
-  for (const frames of await Promise.all(artGroups.map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
+  // W4: the v2 UI art (v2/ui) is not world art: it goes to the DOM UI (uiSkin.js), not the sprite packs.
+  const uiArtGroup = artGroups.find((g) => g === v2Name('ui'));
+  // (one file per frame: put on at once, nothing cut out. The title's frames, preloaded by the page,
+  // decode meanwhile and the title waits for them just before it is built; the other frames load once
+  // the title is up. If anything fails, the v1 UI.)
+  /** @type {Map<string, import('./view/assets/placeholderPack.js').ArtSource> | null} */
+  let uiFrames = null;
+  /** @type {Promise<void>} */
+  let uiTitleArt = Promise.resolve();
+  const uiSkinLoad = uiArtGroup
+    ? releaseFrames(uiArtGroup)
+        .then((f) => {
+          if (!f.size) return false;
+          installUiSkin(uiRoot, f);
+          uiFrames = f;
+          if (params.get('map') === null) uiTitleArt = loadTitleArt(f);
+          return true;
+        })
+        .catch((err) => (console.warn(`art: v2 ui: ${String(err)}; using the v1 UI`), false))
+    : Promise.resolve(false);
+  for (const frames of await Promise.all(artGroups.filter((g) => g !== uiArtGroup).map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
+  const uiV2 = await uiSkinLoad;
+  // W4: plays so far, this one included. A play is counted when it starts (startGame: はじめから /
+  // つづきから), not on each page load; the title shows what the next play will be. Without the title
+  // (?map=…) the page load is the start. (The v1 UI stores nothing new.)
+  let sessions = !uiV2 ? 1 : params.get('map') === null ? peekSessions() + 1 : countSession();
   installItemIcons(artOverrides); // the menus' item icons, from the same art
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
 
@@ -365,6 +391,8 @@ async function boot() {
       newer: 'この保存データは新しいバージョンで作られています。ページを再読み込みしてください（データは消しません）。',
       error: loaded.status === 'error' ? failureMessage(loaded.reason) : '',
     };
+    await uiTitleArt; // W4: the v2 title's frames decoded (they load alongside everything above)
+    performance.mark('titleArt');
     title = new TitleScreen(uiRoot, {
       title: GAME_TITLE,
       hasSave: loaded.status === 'ok',
@@ -372,7 +400,9 @@ async function boot() {
       onNew: () => startGame(false),
       onContinue: () => startGame(true),
     });
+    performance.mark('title');
   }
+  if (uiFrames) loadOtherUiArt(uiFrames); // W4: the HUD's and menus' frames, now that the title is up
   /** @param {boolean} fromSave */
   function startGame(fromSave) {
     if (fromSave && loaded.status === 'ok') {
@@ -393,6 +423,10 @@ async function boot() {
     input.clear();
     loop.reset();
     view.snapCamera(state);
+    if (uiV2) {
+      sessions = countSession(); // W4: one more play (the labels of the first plays)
+      applySettings();
+    }
   }
   // v1.0 (C9): a tap or a key skips the opening.
   // The tap that skips it goes no further (not to the attack button or the stick).
@@ -464,7 +498,7 @@ async function boot() {
       } else if (ev.type === 'noBow') {
         toast.show('弓を持っていない', { ms: 1200 });
       } else if (ev.type === 'ability') {
-        toast.show(`星環の力「${ABILITY_NAMES[ev.id]}」を手に入れた！ 右の「能力」ボタンで使える`, { ms: 4000 });
+        toast.show(`星環の力「${ABILITY_NAMES[ev.id]}」を手に入れた！ ${settings.hand === 'left' ? '左' : '右'}の「能力」ボタンで使える`, { ms: 4000 }); // (W4: the hand the buttons are under)
       } else if (ev.type === 'noAbility') {
         toast.show('星環の力をまだ持っていない', { ms: 1200 });
       } else if (ev.type === 'noTarget') {
@@ -535,8 +569,10 @@ async function boot() {
       applySettings();
     },
     onClose: () => pauseOverlay.refresh(),
-  });
+  }, uiV2 ? [...SETTING_ROWS, BUTTON_LABELS_ROW] : SETTING_ROWS);
   function applySettings() {
+    // W4: the round buttons' text labels (v2 UI): the first few sessions, always, or never.
+    uiRoot.classList.toggle('ui-labels', uiV2 && showButtonLabels(settings.buttonLabels, sessions));
     uiRoot.classList.toggle('text-large', settings.textSize === 'large');
     uiRoot.classList.toggle('btn-small', settings.buttonSize === 'small');
     uiRoot.classList.toggle('btn-large', settings.buttonSize === 'large');
@@ -854,7 +890,22 @@ async function boot() {
     menu.setNearby(inTitle || inTalk() ? null : state.nearby, state.nearbyNpc?.name ?? '');
     // The ability button shows the selected 星環 power (hidden until the first one is learned).
     const abilityLabel = state.progress.ability ? ABILITY_NAMES[state.progress.ability] : '';
-    if (abilityButton.textContent !== abilityLabel) abilityButton.textContent = abilityLabel;
+    if (abilityButton.textContent !== abilityLabel) {
+      // W4 (R-8): a 3-character name (蔓結び) may break into 蔓 / 結び on the smallest v2 ring (styles.css);
+      // each part is kept whole, and the v1 UI keeps it on one line (white-space: nowrap there).
+      if (abilityLabel.length === 3) {
+        const part = (/** @type {string} */ t) => Object.assign(document.createElement('span'), { textContent: t });
+        abilityButton.replaceChildren(part(abilityLabel.slice(0, 1)), document.createElement('wbr'), part(abilityLabel.slice(1)));
+      } else abilityButton.textContent = abilityLabel;
+      if (abilityLabel) abilityButton.setAttribute('aria-label', abilityLabel); // W4: the v2 UI shows an icon
+    }
+    // W4 (v2 UI): the round buttons are hidden while the dialogue box is open (styles.css).
+    const talking = !!state.dialogue;
+    if (uiRoot.classList.contains('talking') !== talking) uiRoot.classList.toggle('talking', talking);
+    // W4 (v2 UI, inspection W-4): the HUD is hidden under the full-screen panels (inventory / cooking,
+    // shop, settings), so nothing shows through them or peeks out at their edges (styles.css).
+    const panelOpen = menu.isOpen || shopMenu.isOpen || settingsMenu.isOpen;
+    if (uiRoot.classList.contains('panel-open') !== panelOpen) uiRoot.classList.toggle('panel-open', panelOpen);
     const showAbility = !!state.progress.ability && !inTitle;
     if (abilityButton.hidden === showAbility) abilityButton.hidden = !showAbility;
     const showNext = showAbility && state.progress.abilities.length > 1;

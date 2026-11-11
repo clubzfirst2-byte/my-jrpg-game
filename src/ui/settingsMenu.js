@@ -55,6 +55,17 @@ export const SETTING_ROWS = [
   },
 ];
 
+/** W4: shown only with the v2 UI (main.js), where the round buttons are icons. @type {Row} */
+export const BUTTON_LABELS_ROW = {
+  key: 'buttonLabels',
+  label: 'ボタンに文字を表示',
+  options: [
+    { value: 'auto', label: 'はじめだけ' },
+    { value: 'on', label: 'いつも' },
+    { value: 'off', label: 'なし' },
+  ],
+};
+
 /** What each difficulty means, shown under the choices. */
 const DIFFICULTY_NOTES = /** @type {Record<string, string>} */ ({
   easy: '受けるダメージが半分',
@@ -66,9 +77,11 @@ export class SettingsMenu {
   /**
    * @param {HTMLElement} root
    * @param {{ get: () => Settings, set: (key: keyof Settings, value: any) => void, onClose: () => void }} hooks
+   * @param {Row[]} [rows] the rows shown (SETTING_ROWS; W4 adds BUTTON_LABELS_ROW with the v2 UI)
    */
-  constructor(root, hooks) {
+  constructor(root, hooks, rows = SETTING_ROWS) {
     this.hooks = hooks;
+    this.settingRows = rows;
     this.el = document.createElement('div');
     this.el.id = 'settings-menu';
     this.el.hidden = true;
@@ -111,7 +124,7 @@ export class SettingsMenu {
   render() {
     const s = this.hooks.get();
     this.rows.replaceChildren(
-      ...SETTING_ROWS.map((row) => {
+      ...this.settingRows.map((row) => {
         const line = document.createElement('div');
         line.className = 'settings-row';
         const name = document.createElement('div');

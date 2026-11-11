@@ -232,7 +232,8 @@ describe('preload: only the terrain sheet that is drawn (fx-v2\'s fix, by the UR
   const pairs = { terrain: { v1: { png: './t1.png', json: './t1.json' }, v2: { png: './t2.png', json: './t2.json' } } };
   const run = (search) => {
     const links = [];
-    const document = { createElement: () => ({ attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } }), head: { appendChild: (l) => links.push(l.attrs) } };
+    // (the one preload script of the page, tools/precache.mjs preloadScript, sets the link's properties)
+    const document = { createElement: () => ({}), head: { appendChild: (l) => links.push(l) } };
     new Function('location', 'document', preloadSwitchScript(pairs))({ search }, document);
     return links.map((l) => l.href);
   };

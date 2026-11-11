@@ -8,8 +8,13 @@ import { onDemandReleaseGroup, precacheFiles, releaseGroupOf } from '../../tools
 const p = (q) => new URLSearchParams(q);
 
 describe('graphics v2 art groups', () => {
-  it('a group is enabled only after its art passes inspection: the terrain (ground v2, gfx W1)', () => {
-    expect(V2_ENABLED).toEqual(['terrain']);
+  it('a group is enabled only after its art passes inspection: the terrain (ground v2, gfx W1) and the ui (the W4 UI)', () => {
+    expect(V2_ENABLED).toEqual(['terrain', 'ui']);
+    // ?ui=v1 and ?v2=0 still give the v1 UI
+    const opts = { available: ['ui'] };
+    expect(artVersion('ui', p(''), opts)).toBe('v2');
+    expect(artVersion('ui', p('ui=v1'), opts)).toBe('v1');
+    expect(artVersion('ui', p('v2=0'), opts)).toBe('v1');
   });
 
   it('a v2 group is drawn when present and enabled; ?v2=0 turns every group back to v1; ?<group>= wins', () => {

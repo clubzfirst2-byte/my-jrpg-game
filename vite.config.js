@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { packGroup, releaseGroups } from './tools/release-art-pack.mjs';
-import { precacheFiles, hasV2Pair, preloadReleaseGroup, preloadSwitchScript, releaseGroupOf } from './tools/precache.mjs';
+import { precacheFiles, hasV2Pair, preloadReleaseGroup, preloadScript, releaseGroupOf } from './tools/precache.mjs';
+import { isTitleFrame } from './src/ui/uiTitleFrames.js';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
@@ -37,6 +38,9 @@ function serviceWorker() {
  * is `null` and the game loads the frame files one by one, as before.
  * @returns {import('vite').Plugin}
  */
+/** Release groups emitted frame by frame instead of on a sheet (drawn by CSS: the v2 UI). */
+const FILE_GROUPS = new Set(['v2/ui']);
+
 function releaseArt() {
   const ID = 'virtual:release-art';
   const root = fileURLToPath(new URL('./src/art-release/', import.meta.url));
@@ -57,6 +61,19 @@ function releaseArt() {
       if (!build) return 'export default null;';
       const all = [...releaseGroups(root).map((group) => ({ dir: join(root, group), name: group, file: group })), ...releaseGroups(rootV2).map((group) => ({ dir: join(rootV2, group), name: `v2/${group}`, file: `v2-${group}` }))];
       const groups = all.map(({ dir, name, file }) => {
+        if (FILE_GROUPS.has(name)) {
+          // W4: the v2 UI is drawn by CSS (9-slice border images, layered backgrounds), which cannot
+          // take a place on a sheet: each frame is its own file, as drawn (no cutting at start-up).
+          const entries = readdirSync(dir)
+            .filter((f) => f.endsWith('.png'))
+            .sort()
+            .map((f) => {
+              this.addWatchFile(join(dir, f));
+              const ref = this.emitFile({ type: 'asset', name: `release-${file}.${f}`, source: readFileSync(join(dir, f)) });
+              return `${JSON.stringify(f.slice(0, -4))}: import.meta.ROLLUP_FILE_URL_${ref}`;
+            });
+          return `  ${JSON.stringify(name)}: { files: { ${entries.join(', ')} } },`;
+        }
         const { png, table, files } = packGroup(dir);
         for (const f of files) this.addWatchFile(f);
         const sheet = this.emitFile({ type: 'asset', name: `release-${file}.png`, source: png });
@@ -75,24 +92,29 @@ function releaseArt() {
         if (!ctx.bundle) return undefined;
         const assets = Object.values(ctx.bundle).flatMap((out) => {
           if (out.type !== 'asset') return [];
-          const group = (out.names ?? []).map(releaseGroupOf).find((g) => g !== null);
-          return group ? [{ group, href: `./${out.fileName}`, png: out.fileName.endsWith('.png') }] : [];
+          const names = out.names ?? [];
+          const group = names.map(releaseGroupOf).find((g) => g !== null);
+          // a frame of the v2 UI emitted on its own (FILE_GROUPS): release-v2-ui.<frame>.png
+          const frame = /^release-v2-ui\.(.+)\.png$/.exec(names[0] ?? '')?.[1];
+          return group ? [{ group, frame, href: `./${out.fileName}`, png: out.fileName.endsWith('.png') }] : [];
         });
         const groups = new Set(assets.map((a) => a.group));
-        // gfx W1: a group with a v2 counterpart (terrain) is preloaded by a script that reads the URL
-        // (only the one drawn: an unused preload is a console warning); the others as before
-        /** @type {Record<string, any>} */
-        const pairs = {};
-        for (const a of assets) {
-          if (!hasV2Pair(a.group, groups)) continue;
-          const g = a.group.replace(/^v2-/, '');
-          const side = a.group.startsWith('v2-') ? 'v2' : 'v1';
-          ((pairs[g] ??= {})[side] ??= {})[a.png ? 'png' : 'json'] = a.href;
+        // Graphics v2 (gfx W1 terrain, W4 UI, W3 enemies): a v2 group, and the v1 group it replaces, are
+        // preloaded by ONE script that reads the URL as the game does (only the art drawn: an unused
+        // preload is a console warning); of the UI only what the title shows. The others as before.
+        /** @type {Record<string, { v1?: string[], v2?: string[] }>} */
+        const switched = {};
+        for (const a of [...assets].sort((x, y) => Number(y.png) - Number(x.png))) {
+          if (a.group.startsWith('v2-')) {
+            if (a.frame !== undefined && !isTitleFrame(a.frame)) continue;
+            ((switched[a.group.slice(3)] ??= {}).v2 ??= []).push(a.href);
+          } else if (hasV2Pair(a.group, groups)) ((switched[a.group] ??= {}).v1 ??= []).push(a.href);
         }
+        /** @type {import('vite').HtmlTagDescriptor[]} */
         const tags = assets
           .filter((a) => preloadReleaseGroup(a.group, groups))
           .map((a) => ({ tag: 'link', attrs: a.png ? { rel: 'preload', as: 'image', href: a.href } : { rel: 'preload', as: 'fetch', type: 'application/json', crossorigin: 'anonymous', href: a.href }, injectTo: /** @type {const} */ ('head') }));
-        if (Object.keys(pairs).length) tags.push({ tag: 'script', children: preloadSwitchScript(pairs), injectTo: /** @type {const} */ ('head') });
+        if (Object.keys(switched).length) tags.push({ tag: 'script', children: preloadScript(switched), injectTo: /** @type {const} */ ('head') });
         return tags;
       },
     },

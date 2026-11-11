@@ -13,10 +13,11 @@
 
 /**
  * The v2 groups that passed inspection and are drawn by default; the director adds a group once its
- * art is approved. terrain: the ground v2 (gfx W1), after the inspections of its wiring.
+ * art is approved. terrain: the ground v2 (gfx W1), after the inspections of its wiring. ui: the W4 UI
+ * (title, buttons, menus), after the wiring inspections (round 3).
  * @type {readonly string[]}
  */
-export const V2_ENABLED = Object.freeze(['terrain']);
+export const V2_ENABLED = Object.freeze(['terrain', 'ui']);
 
 /** The name a v2 group has in the game (releaseFrames, the build's sheet table). @param {string} group */
 export const v2Name = (group) => `v2/${group}`;

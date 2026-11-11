@@ -34,6 +34,7 @@ export class HeartsHud {
 function heart(fill, i) {
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', '0 0 22 20');
+  svg.dataset.q = String(Math.round(fill * 4)); // W4: the v2 UI draws heart.<q> (quarters) instead
   const clipId = `heart-clip-${i}`;
   const defs = document.createElementNS(SVG_NS, 'defs');
   const clip = document.createElementNS(SVG_NS, 'clipPath');

@@ -652,6 +652,32 @@ body {
   display: none;
 }
 
+/* W4 (inspection W-3): in play the toast keeps clear of the button cluster, whose widest reach is
+   228 px × button size from its screen edge (the ⇄ button above 能力 is the highest part), and of the
+   Ⅱ / 持ち物 column on the left (to 60 px): it is centred in the space between them, on the side away
+   from the cluster for either hand. (It used to be centred on the screen, over ⇄ when long, and with
+   the left hand over the whole cluster's top on an SE.) */
+#ui #toast {
+  left: calc(66px + var(--safe-left));
+  right: calc(228px * var(--btn) + 10px + var(--safe-right));
+  transform: none;
+  width: fit-content;
+  max-width: 520px;
+  margin: 0 auto;
+}
+#ui.left-handed #toast {
+  left: calc(228px * var(--btn) + 10px + var(--safe-left));
+  right: calc(10px + var(--safe-right));
+}
+/* W4 (inspection W-5): with large text the toast keeps its size (17 px, as zoomed before) but is not
+   zoomed itself, so the space beside the cluster is not shrunk by 1.22 (3 lines over the hero on an SE
+   with 大 buttons). */
+#ui.text-large #toast {
+  zoom: 1;
+  font-size: 17px;
+  padding: 10px 17px;
+}
+
 /* v1.0 QA4 (L-3): in a boss fight (main.js sets #ui.boss-fight while the boss bar shows) the top of
    the screen is where the boss stands: messages go to the bottom, centred in the space between the
    stick side's edge and the button cluster (its widest reach is 228 px × button size from its
@@ -675,6 +701,25 @@ body {
 #ui.boss-fight.text-large #toast {
   zoom: 1;
   font-size: 17px;
+}
+/* W4 (inspection W-5): while the round buttons are hidden (the dialogue box, a full-screen panel) the
+   toast has nothing to avoid: centred on the screen as before (#ui#ui: over the hand and boss-fight
+   places above). The dialogue only in v2: the v1 UI keeps its round buttons during the dialogue, so
+   there the toast keeps clear of them (inspection W-5b). Over a panel it sits in the middle of the screen, clear of the panel's head (tabs,
+   閉じる; two rows of tabs with large text) and of the settings' foot. */
+#ui#ui.ui-v2.talking #toast,
+#ui#ui.panel-open #toast {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(520px, calc(100vw - 40px));
+  margin: 0;
+}
+#ui#ui.panel-open #toast {
+  top: 50%;
+  bottom: auto;
+  transform: translate(-50%, -50%);
 }
 
 #toast[data-kind='error'] {
@@ -1121,7 +1166,6 @@ body {
 
 /* Text size: conversations, messages, menus, the clock and the boss bar. */
 #ui.text-large #dialogue,
-#ui.text-large #toast,
 #ui.text-large #inv-menu,
 #ui.text-large #shop-menu,
 #ui.text-large #settings-menu,
@@ -1167,4 +1211,482 @@ body {
 #ui.left-handed #ability-next {
   right: auto;
   left: calc(176px * var(--btn) + 26px * var(--btn) - 22px + var(--safe-left));
+}
+
+/* =====================================================================================================
+   Graphics v2, W4: the v2 UI art (src/art-release-v2/ui; specs docs/art-release-v2/ui/NAMES.md).
+   Only with #ui.ui-v2 (src/ui/uiSkin.js: ?ui=v2, or once the ui group is enabled; ?ui=v1 keeps v1).
+   Each frame is a custom property --ui-<name> (url). 1 art px = 1 CSS px (the title: 2 CSS px), always
+   pixelated. The round buttons' sizes / places / art are generated (uiSkin.js hudButtonCss) so every
+   diameter is a drawn ring and every place a whole px. Text stays HTML (12 px or more, 44 px targets).
+   ===================================================================================================== */
+#ui.ui-v2 {
+  image-rendering: -webkit-optimize-contrast; /* older Safari */
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  --uz: 1;
+}
+/* Large text zooms these boxes × 1.22 (above): the art's sizes are divided by it (--uz), so a frame's
+   edge stays its drawn width in screen px (10 art px = 10 CSS px, never 12.2). */
+#ui.ui-v2.text-large #dialogue,
+#ui.ui-v2.text-large #inv-menu,
+#ui.ui-v2.text-large #shop-menu,
+#ui.ui-v2.text-large #settings-menu,
+#ui.ui-v2.text-large #use-button {
+  --uz: 1.22;
+}
+#ui.ui-v2.text-large #toast {
+  --uz: 1; /* (not zoomed: styles above, W-5) */
+}
+
+/* ---- text buttons on plates (btn.text.*, 9-slice 8) ---- */
+#ui.ui-v2 button:not(.action-button):not(#ability-next) {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 0;
+  border-image: var(--ui-btn-text-idle) 8 fill / calc(8px / var(--uz)) stretch;
+  box-shadow: none;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.8);
+}
+#ui.ui-v2 button:not(.action-button):not(#ability-next).selected,
+#ui.ui-v2 #title-new:not(.action-button):not(#ability-next),
+#ui.ui-v2 #resume-button:not(.action-button):not(#ability-next),
+#ui.ui-v2 #use-button:not(.action-button):not(#ability-next) {
+  border-image-source: var(--ui-btn-text-selected);
+}
+#ui.ui-v2 button:not(.action-button):not(#ability-next):active {
+  border-image-source: var(--ui-btn-text-pressed);
+}
+#ui.ui-v2 button:not(.action-button):not(#ability-next)[disabled] {
+  border-image-source: var(--ui-btn-text-disabled);
+  opacity: 1;
+  color: var(--muted);
+}
+
+/* ---- inventory / shop tabs (tab.*, 9-slice 6) and list rows (row.*, 9-slice 6) ---- */
+#ui.ui-v2 .inv-tabs button:not(.action-button):not(#ability-next) {
+  border-image: var(--ui-tab-idle) 6 fill / calc(6px / var(--uz)) stretch;
+}
+#ui.ui-v2 .inv-tabs button:not(.action-button):not(#ability-next).active {
+  border-image-source: var(--ui-tab-active);
+}
+#ui.ui-v2 .inv-tabs button:not(.action-button):not(#ability-next):active {
+  border-image-source: var(--ui-tab-pressed);
+}
+#ui.ui-v2 .inv-row {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 0;
+  border-image: var(--ui-row-idle) 6 fill / calc(6px / var(--uz)) stretch;
+}
+#ui.ui-v2 .inv-row.active {
+  outline: none;
+  border-image-source: var(--ui-row-selected);
+}
+#ui.ui-v2 .inv-row.clickable:active {
+  border-image-source: var(--ui-row-pressed);
+}
+#ui.ui-v2 .inv-pot {
+  border-radius: 0;
+}
+
+/* ---- panels (9-slice): menus, the shop, settings, dialogue, toast, pause, ending ---- */
+#ui.ui-v2 #inv-menu,
+#ui.ui-v2 #settings-menu {
+  border: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  border-image: var(--ui-panel-menu) 10 fill / calc(10px / var(--uz)) stretch;
+}
+#ui.ui-v2 #inv-menu {
+  padding: 10px;
+}
+#ui.ui-v2 .settings-foot {
+  background: rgb(10, 16, 26);
+}
+#ui.ui-v2 #shop-menu {
+  border: 2px solid transparent;
+  border-radius: 0;
+  padding: 10px;
+  background: none;
+  border-image: var(--ui-panel-shop) 11 fill / calc(11px / var(--uz)) stretch;
+}
+#ui.ui-v2 #dialogue {
+  border-color: transparent;
+  border-radius: 0;
+  background: none;
+  border-image: var(--ui-panel-dialogue) 10 fill / calc(10px / var(--uz)) stretch;
+}
+#ui.ui-v2 .dialogue-speaker {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-image: var(--ui-panel-nameplate) 5 fill / calc(5px / var(--uz)) stretch;
+}
+#ui.ui-v2 .dialogue-speaker:empty {
+  display: none; /* narration: no empty plate */
+}
+#ui.ui-v2 #toast {
+  border-radius: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-image: var(--ui-panel-toast) 5 fill / calc(5px / var(--uz)) stretch;
+}
+/* the pause screen: title, version, message and 再開 in a menu panel with the crest on its top edge */
+.pause-panel {
+  display: contents;
+}
+#ui.ui-v2 .pause-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: min(360px, 70vw);
+  padding: 22px 28px 20px;
+  border-image: var(--ui-panel-menu) 10 fill / calc(10px / var(--uz)) stretch;
+}
+#ui.ui-v2 .pause-panel::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: calc(50% - 15px);
+  width: 31px;
+  height: 17px;
+  background: var(--ui-panel-crest) 0 0 / 31px 17px no-repeat;
+}
+/* the ending: its frame (16-px corners with the medals) inside the safe area, over the roll */
+#ui.ui-v2 #ending-screen::after {
+  content: '';
+  position: absolute;
+  inset: calc(6px + var(--safe-top)) calc(6px + var(--safe-right)) calc(6px + var(--safe-bottom)) calc(6px + var(--safe-left));
+  border-image: var(--ui-panel-ending) 16 / calc(16px / var(--uz)) stretch;
+  pointer-events: none;
+}
+
+/* ---- the "more below" cue (cue.more.0/1, 11×9): two frames, still with reduced motion ---- */
+#ui.ui-v2 #inv-menu.more-below::after,
+#ui.ui-v2 #shop-menu.more-below::after {
+  content: '';
+  width: calc(11px / var(--uz));
+  height: calc(9px / var(--uz));
+  background: var(--ui-cue-more-0) 0 0 / 100% 100% no-repeat;
+  text-shadow: none;
+  transform: translateX(-50%);
+  animation: ui-cue-more 0.8s steps(1) infinite;
+}
+#ui.ui-v2 .dialogue-more {
+  bottom: 10px;
+  width: calc(11px / var(--uz));
+  height: calc(9px / var(--uz));
+  overflow: hidden;
+  color: transparent;
+  background: var(--ui-cue-more-0) 0 0 / 100% 100% no-repeat;
+}
+@keyframes ui-cue-more {
+  50% {
+    background-image: var(--ui-cue-more-1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #ui.ui-v2 #inv-menu.more-below::after,
+  #ui.ui-v2 #shop-menu.more-below::after {
+    animation: none;
+  }
+}
+
+/* ---- hearts (heart.0..4 = empty, ¼ … full; 22×20) ---- */
+#ui.ui-v2 #hud-hearts svg {
+  filter: none;
+  background: var(--ui-heart-4) 0 0 / 22px 20px no-repeat;
+}
+#ui.ui-v2 #hud-hearts svg > * {
+  display: none;
+}
+#ui.ui-v2 #hud-hearts svg[data-q='0'] {
+  background-image: var(--ui-heart-0);
+}
+#ui.ui-v2 #hud-hearts svg[data-q='1'] {
+  background-image: var(--ui-heart-1);
+}
+#ui.ui-v2 #hud-hearts svg[data-q='2'] {
+  background-image: var(--ui-heart-2);
+}
+#ui.ui-v2 #hud-hearts svg[data-q='3'] {
+  background-image: var(--ui-heart-3);
+}
+
+/* ---- the boss bar: 12 px frame (9-slice 5 7 5 7), the fill over its 6-px groove (inspection I-2) ---- */
+#ui.ui-v2 #boss-bar .boss-track {
+  height: 12px;
+  padding: 3px;
+  border-radius: 0;
+  background: none;
+  border-image: var(--ui-bossbar-frame) 5 7 5 7 fill / 5px 7px 5px 7px stretch;
+}
+#ui.ui-v2 #boss-bar .boss-fill {
+  height: 6px;
+  border-radius: 0;
+  background: var(--ui-bossbar-fill-1) 0 0 / 4px 4px repeat-x;
+  background-size: 4px 6px;
+}
+/* large text: the name grows, the bar stays 12 px (not zoomed) */
+#ui.ui-v2.text-large #boss-bar {
+  zoom: 1;
+}
+#ui.ui-v2.text-large #boss-bar .boss-name {
+  font-size: 16px;
+}
+#ui.ui-v2 #boss-bar.phase2 .boss-fill {
+  background-image: var(--ui-bossbar-fill-2);
+}
+
+/* ---- round buttons: glass discs with icons (sizes, places and art: uiSkin.js) ---- */
+#ui.ui-v2 .action-button,
+#ui.ui-v2 #ability-next {
+  min-width: 0;
+  min-height: 0;
+  padding: 0 2px; /* labels keep inside the ring's metal edge (ダッ / シュ at 44 px, as in v1) */
+  border: 0;
+  border-radius: 50%;
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: 0 0;
+  color: transparent; /* the label is the aria-label; ui-labels shows it */
+  text-shadow: none;
+}
+#ui.ui-v2 .action-button::before,
+#ui.ui-v2 #ability-next::before {
+  content: '';
+  position: absolute;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+#ui.ui-v2 .action-button.active,
+#ui.ui-v2 .action-button:active {
+  background-color: transparent;
+}
+/* the first few sessions (or 「ボタンに文字を表示：いつも」): the text instead of the icon */
+#ui.ui-v2.ui-labels .action-button {
+  color: var(--text);
+  text-shadow: var(--hud-outline);
+}
+#ui.ui-v2.ui-labels .action-button::before {
+  display: none;
+}
+/* the ability button shows WHICH power is selected (灯火 / 念動 / 蔓結び / 共鳴): with the other labels off it
+   still shows the name, 12 px, centred inside the ring's metal edge, and no icon. (Its icon is the same
+   for every power, so the name is what tells them apart; icon and name together do not fit inside the
+   edge: a 3-character name under a 20-px icon needs a 46-px glass at the smallest size, which has 34;
+   inspection W-2b.) The teal ring marks it as the ability button. */
+#ui.ui-v2:not(.ui-labels) #ability-button:not([hidden]) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 12px;
+  line-height: 12px;
+  letter-spacing: -0.12em;
+  color: var(--text);
+  text-shadow: var(--hud-outline);
+}
+#ui.ui-v2:not(.ui-labels) #ability-button::before {
+  display: none;
+}
+/* R-8: on the smallest ring 蔓結び breaks at its <wbr> into 蔓 / 結び (main.js) rather than being squeezed onto
+   one line; the 2-character names stay on one line */
+#ui.ui-v2.btn-small:not(.ui-labels) #ability-button {
+  flex-wrap: wrap; /* (the parts are flex items: they wrap, not the text) */
+  align-content: center;
+  padding: 0 8px;
+  white-space: normal;
+  text-align: center;
+  letter-spacing: 0;
+  line-height: 13px;
+}
+#ui.ui-v2 #ability-button span {
+  white-space: nowrap;
+}
+/* while the dialogue box is open the discs are hidden (the panel shows through them otherwise) */
+#ui.ui-v2.talking .action-button,
+#ui.ui-v2.talking #ability-next {
+  visibility: hidden;
+}
+
+/* ---- pause and bag: 44 × 44 plates with an icon (the bag shows its text with ui-labels) ---- */
+#ui.ui-v2 button#pause-button,
+#ui.ui-v2:not(.ui-labels) button#bag-button {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  color: transparent;
+  text-shadow: none;
+}
+#ui.ui-v2 #pause-button::before,
+#ui.ui-v2:not(.ui-labels) #bag-button::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  width: 20px;
+  height: 20px;
+  background: var(--ui-icon-ui-pause-20) 0 0 / 20px 20px no-repeat;
+  pointer-events: none;
+}
+#ui.ui-v2:not(.ui-labels) #bag-button::before {
+  background-image: var(--ui-icon-ui-bag-20);
+}
+
+/* ---- the title: hand-drawn logo, 4-layer parallax (flat with reduced motion), plates ---- */
+#ui.ui-v2 #title-screen {
+  /* the picture is 400 px tall on the bottom edge: the logo and the buttons sit where it leaves room
+     for them (art y 19 and 98 → 38 and 196 px from its top), clear of the ring and the lighthouse */
+  justify-content: flex-start;
+  gap: 30px;
+  padding: max(calc(4px + var(--safe-top)), calc(100vh - 362px)) 24px calc(10px + var(--safe-bottom));
+  padding-top: max(calc(4px + var(--safe-top)), calc(100dvh - 362px));
+  background-color: #0b1230;
+  background-image: var(--ui-title-bg-near), var(--ui-title-bg-mid), var(--ui-title-bg-far), var(--ui-title-bg-sky);
+  background-size: 960px 400px;
+  background-repeat: no-repeat;
+  background-position: 50% 100%;
+  animation: ui-title-pan 24s ease-in-out infinite alternate;
+}
+/* layers drift by 0 / 0.15 / 0.4 / 1.0 of 32 px (near … sky in the order above) */
+@keyframes ui-title-pan {
+  from {
+    background-position: calc(50% - 16px) 100%, calc(50% - 6px) 100%, calc(50% - 2px) 100%, 50% 100%;
+  }
+  to {
+    background-position: calc(50% + 16px) 100%, calc(50% + 6px) 100%, calc(50% + 2px) 100%, 50% 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #ui.ui-v2 #title-screen {
+    background-image: var(--ui-title-bg);
+    animation: none;
+  }
+}
+#ui.ui-v2 #title-screen h1 {
+  width: 460px;
+  max-width: 100%;
+  height: 128px;
+  flex: none;
+  overflow: hidden;
+  color: transparent; /* the title stays as text for screen readers */
+  text-shadow: none;
+  font-size: 0;
+  background: var(--ui-title-logo) 50% 0 / 460px 128px no-repeat;
+}
+/* a short screen (Safari with its bars, 343 px): the logo at 1 art px = 1 CSS px … keeps 2× (crisp), smaller box margins */
+@media (max-height: 360px) {
+  #ui.ui-v2 #title-screen {
+    gap: 12px;
+  }
+}
+#ui.ui-v2 .title-buttons,
+#ui.ui-v2 .title-confirm {
+  gap: 8px;
+}
+#ui.ui-v2 .title-buttons button,
+#ui.ui-v2 .title-confirm button {
+  min-width: 200px;
+  min-height: 48px;
+}
+#ui.ui-v2 .title-confirm p {
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-image: var(--ui-panel-toast) 5 fill / 5px stretch;
+  color: var(--text);
+}
+#ui.ui-v2 .title-note:empty {
+  display: none;
+}
+#ui.ui-v2 .title-note {
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-image: var(--ui-panel-toast) 5 fill / calc(5px / var(--uz)) stretch;
+}
+
+/* ---- W4 inspection round 2 ---- */
+/* W-1: a disabled plate (e.g. つづきから with no save) is opaque: the art's 170-alpha inside gets its
+   own colour under it (inside the 1-px outline, so the plate's cut corners stay cut) */
+#ui.ui-v2 button:not(.action-button):not(#ability-next)[disabled] {
+  background-color: rgb(20, 32, 51);
+  background-clip: padding-box;
+}
+/* W-4: the full-screen panels are opaque (the art's 236-alpha inside gets its colour under it, inside
+   the 2-px edge), and the HUD under them is hidden while one is open (main.js: panel-open), so nothing
+   shows through and, with large text (zoom), no plate edge peeks out beside them */
+#ui.ui-v2 #inv-menu,
+#ui.ui-v2 #settings-menu,
+#ui.ui-v2 #shop-menu {
+  background-color: rgb(11, 18, 29);
+  background-clip: padding-box;
+}
+#ui.ui-v2.panel-open .action-button,
+#ui.ui-v2.panel-open #ability-next,
+#ui.ui-v2.panel-open #pause-button,
+#ui.ui-v2.panel-open #bag-button,
+#ui.ui-v2.panel-open #use-button,
+#ui.ui-v2.panel-open #hud-hearts,
+#ui.ui-v2.panel-open #hud-clock,
+#ui.ui-v2.panel-open #hud-treasure {
+  visibility: hidden;
+}
+/* W-2: the text labels stay inside the ring's metal edge (5 px): 5-px sides, and the 4-character
+   labels break at their <wbr> into two halves (ダッ / シュ, ジャ / ンプ) when they would not fit */
+#ui.ui-v2.ui-labels .action-button {
+  padding: 0 5px;
+  white-space: normal;
+  line-height: 1.1;
+}
+#ui.ui-v2.ui-labels .action-button span {
+  white-space: nowrap;
+}
+#ui.ui-v2.ui-labels.btn-small #guard-button {
+  letter-spacing: -0.16em; /* ガード inside the 44-px ring's edge */
+}
+/* R-1: 閉じる with the × icon; the equipped row's ▶ mark; the cooking pot strip as a row plate */
+#ui.ui-v2 #inv-close,
+#ui.ui-v2 #shop-close,
+#ui.ui-v2 #settings-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+#ui.ui-v2 #inv-close::before,
+#ui.ui-v2 #shop-close::before,
+#ui.ui-v2 #settings-close::before {
+  content: '';
+  flex: none;
+  width: calc(20px / var(--uz));
+  height: calc(20px / var(--uz));
+  background: var(--ui-icon-ui-close-20) 0 0 / 100% 100% no-repeat;
+}
+#ui.ui-v2 .inv-row.active {
+  position: relative;
+}
+#ui.ui-v2 .inv-row.active::before {
+  content: '';
+  position: absolute;
+  left: calc(2px / var(--uz));
+  top: calc(50% - 4.5px / var(--uz));
+  width: calc(5px / var(--uz));
+  height: calc(9px / var(--uz));
+  background: #ffd75e;
+  /* a stepped (pixel) triangle, 5 × 9 */
+  clip-path: polygon(0 0, 20% 0, 20% 11.11%, 40% 11.11%, 40% 22.22%, 60% 22.22%, 60% 33.33%, 80% 33.33%, 80% 44.44%, 100% 44.44%, 100% 55.56%, 80% 55.56%, 80% 66.67%, 60% 66.67%, 60% 77.78%, 40% 77.78%, 40% 88.89%, 20% 88.89%, 20% 100%, 0 100%);
+}
+#ui.ui-v2 .inv-pot {
+  background: none;
+  border: 1px solid transparent;
+  border-image: var(--ui-row-idle) 6 fill / calc(6px / var(--uz)) stretch;
+}
+/* R-2: the version number 12 px */
+#ui.ui-v2 .pause-version {
+  font-size: 12px;
 }
