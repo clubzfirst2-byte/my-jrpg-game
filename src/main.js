@@ -10,7 +10,7 @@ import { collectDeviceInfo } from './debug/deviceInfo.js';
 import { buildReport } from './debug/report.js';
 import { createOverlay } from './debug/overlay.js';
 import { createRenderer, resizeRenderer } from './view/renderer.js';
-import { RESOLUTION_CANDIDATES, DEFAULT_TARGET_HEIGHT, nextCandidate } from './view/resolution.js';
+import { RESOLUTION_CANDIDATES, DEFAULT_TARGET_HEIGHT, nextCandidate, parseScaleMode } from './view/resolution.js';
 import { AssetManager } from './view/assets/assetManager.js';
 import { buildPlaceholderPack, buildRegionPack, REGION_ENTRIES, placeholderEntries, releaseHeroEntries, releaseNpcEntries, releaseEnemyEntries, SOURCE_BUNDLE, sourceEntries } from './view/assets/placeholderPack.js';
 import { finalBossDebugApi, finalBossToast } from './debug/finalBossDebug.js';
@@ -161,11 +161,17 @@ async function boot() {
   for (const frames of await Promise.all(artGroups.map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
   installItemIcons(artOverrides); // the menus' item icons, from the same art
   const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
+  // Display scale (render_audit.md 案1, approved 2026-11-11; the default stays 'fit' until the director
+  // decides): ?scale=int makes every canvas and art pixel a whole number of device pixels (the view area
+  // changes); ?scale=fit (default) is the previous view. URL only: nothing is saved.
+  // `artDensities` lists the art densities on screen (art px per game px), kept apart from the canvas
+  // density: a future finer art set (e.g. 4) is added here and 'int' then keeps its pixels whole too.
+  const viewOpts = { mode: parseScaleMode(params.get('scale')), artDensities: [artDensity] };
 
   /** @type {import('pixi.js').Application} */
   let app;
   try {
-    app = await createRenderer(host, targetHeight, artDensity);
+    app = await createRenderer(host, targetHeight, artDensity, viewOpts);
     performance.mark('renderer');
   } catch (err) {
     errorLog.add('error', err, performance.now());
@@ -575,7 +581,7 @@ async function boot() {
   // Non-integer canvas scale (HD art, odd device scale): scroll in whole game px so every step is
   // the same number of device pixels (docs/perf/hd-view-size.md).
   const applyResolution = () => {
-    const res = resizeRenderer(app, targetHeight, artDensity);
+    const res = resizeRenderer(app, targetHeight, artDensity, viewOpts);
     view.camera.snapStep = Number.isInteger(res.canvasScale) ? 0 : 1;
     return res;
   };
@@ -722,7 +728,7 @@ async function boot() {
       errors: errorLog.total - r.errorsAtStart,
       load: timing,
       device: {
-        内部解像度: `${resolution.width}×${resolution.height}（目標 ${targetHeight}、×${resolution.canvasScale}、見える高さ ${resolution.gameHeight}）`,
+        内部解像度: `${resolution.width}×${resolution.height}（${resolution.mode}、目標 ${targetHeight}、×${resolution.canvasScale}、見える高さ ${resolution.gameHeight}）`,
         ...collectDeviceInfo(gl, app.renderer.name),
       },
     });
@@ -1017,6 +1023,15 @@ async function boot() {
     saveNow: () => autosave.saveNow(),
     saveInfo: () => ({ enabled: autosave.enabled, saves: autosave.saves, failures: autosave.failures, loaded: loaded.status }),
     toasts: () => [...toast.history],
+    showToast: (/** @type {string} */ text) => toast.show(text),
+    // Hero / enemy sprite bounds in canvas px (?scale= checks: nothing hidden under the UI)
+    spriteBounds: () => {
+      const b = (/** @type {any} */ s) => {
+        const r = s.getBounds();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      };
+      return { hero: b(view.player), enemies: view.enemySprites.live(state.enemies).map((/** @type {any} */ e) => ({ id: e.id, boss: !!e.owner.boss, ...b(e.sprite) })) };
+    },
     markers: () => view.features.visibleMarkers(),
     /** P4 environment: summary, and test helpers to set a tile alight / read a tile. */
     env: () => envSummary(state.env),
