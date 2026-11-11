@@ -71,24 +71,26 @@ describe('deep water, shaped (inspection R2)', () => {
   const W = m.width;
   const H = m.height;
   const water = (x, y) => m.ground[y * W + x] === Ground.WATER;
-  const longestRun = (d) => {
-    let max = 0;
+  /** the lengths of the straight pieces of the deep / shallow border along cell edges */
+  const runsOf = (d) => {
+    const out = [];
     for (let y = 1; y < H; y++) {
       let r = 0;
-      for (let x = 0; x < W; x++) {
-        r = water(x, y) && water(x, y - 1) && d[y * W + x] !== d[(y - 1) * W + x] ? r + 1 : 0;
-        max = Math.max(max, r);
+      for (let x = 0; x <= W; x++) {
+        if (x < W && water(x, y) && water(x, y - 1) && d[y * W + x] !== d[(y - 1) * W + x]) r++;
+        else if (r) (out.push(r), (r = 0));
       }
     }
     for (let x = 1; x < W; x++) {
       let r = 0;
-      for (let y = 0; y < H; y++) {
-        r = water(x, y) && water(x - 1, y) && d[y * W + x] !== d[y * W + x - 1] ? r + 1 : 0;
-        max = Math.max(max, r);
+      for (let y = 0; y <= H; y++) {
+        if (y < H && water(x, y) && water(x - 1, y) && d[y * W + x] !== d[y * W + x - 1]) r++;
+        else if (r) (out.push(r), (r = 0));
       }
     }
-    return max;
+    return out;
   };
+  const longestRun = (d) => Math.max(...runsOf(d));
   const shaped = deepMapShaped(W, H, water, hash);
   const ref = deepMap(W, H, water);
 
@@ -104,11 +106,14 @@ describe('deep water, shaped (inspection R2)', () => {
     }
   });
 
-  it('its border no longer runs straight along the shore: the longest straight run along cell edges is a quarter of the reference rule\'s', () => {
-    const a = longestRun(ref);
-    const b = longestRun(shaped);
-    expect(a).toBeGreaterThan(30);
-    expect(b).toBeLessThanOrEqual(12);
+  it('its border no longer runs straight along the shore (R3): no straight piece of 5 cells or more (the reference rule: dozens, up to 40+)', () => {
+    expect(longestRun(ref)).toBeGreaterThan(30);
+    expect(runsOf(ref).filter((r) => r >= 5).length).toBeGreaterThan(30);
+    // the inspection's goal: at most 10 pieces of 5+ cells, none longer than 6
+    expect(runsOf(shaped).filter((r) => r >= 5).length).toBeLessThanOrEqual(10);
+    expect(longestRun(shaped)).toBeLessThanOrEqual(6);
+    // (as made: none of 5+ at all)
+    expect(longestRun(shaped)).toBeLessThanOrEqual(4);
     // about as much deep water as before (it is a shape change)
     const n = (d) => d.reduce((s, v) => s + v, 0);
     expect(n(shaped) / n(ref)).toBeGreaterThan(0.8);
@@ -231,8 +236,8 @@ describe('preload: only the terrain sheet that is drawn (fx-v2\'s fix, by the UR
     new Function('location', 'document', preloadSwitchScript(pairs))({ search }, document);
     return links.map((l) => l.href);
   };
-  it('v1 by default and with ?terrain=v1 / ?v2=0; v2 with ?terrain=v2; none with ?terrain=placeholder or ?hd=0', () => {
-    expect(run('')).toEqual(['./t1.png', './t1.json']);
+  it('v2 by default (V2_ENABLED) and with ?terrain=v2; v1 with ?terrain=v1 / ?v2=0; none with ?terrain=placeholder or ?hd=0', () => {
+    expect(run('')).toEqual(['./t2.png', './t2.json']);
     expect(run('?map=world&terrain=v1')).toEqual(['./t1.png', './t1.json']);
     expect(run('?v2=0')).toEqual(['./t1.png', './t1.json']);
     expect(run('?terrain=v2')).toEqual(['./t2.png', './t2.json']);

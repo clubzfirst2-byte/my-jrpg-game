@@ -10,13 +10,14 @@ import { V2_ENABLED } from '../src/view/assets/artV2.js';
 export const PRECACHE_STATIC = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'];
 
 /**
- * Release art groups (src/art-release/<group>) loaded only on demand, never in normal play:
- * the review sets npc-revision* (?npc=revision…). The terrain and the objects are drawn in
- * normal play since v1.0, so they are kept.
- * A group the game starts to load in normal play must be taken off this list (else it is not
- * available offline): terrain and objects since v1.0 (terrainArt.js, objectsArt.js).
- * Graphics v2 groups (release-v2-<group>, src/art-release-v2) are kept once enabled (artV2.js
- * V2_ENABLED, i.e. drawn by default); until then they load on demand (?<group>=v2).
+ * Release art groups loaded only on demand, never kept for offline play:
+ *   - the review sets npc-revision* (?npc=revision…);
+ *   - a graphics v2 group (release-v2-<group>, src/art-release-v2) that is not drawn by default
+ *     (artV2.js V2_ENABLED): it loads from the network when asked for (?<group>=v2).
+ * Everything else is kept: every v1 group (src/art-release/<group>) the game loads — terrain and
+ * objects since v1.0 —, and a v2 group once it is drawn by default. A v1 group whose v2 group is drawn
+ * by default (terrain since gfx W1, as the enemies' in fx-v2) STAYS kept, so ?<group>=v1 and ?v2=0
+ * still show it offline; it is only no longer preloaded (preloadReleaseGroup).
  * @param {string} group
  */
 export const onDemandReleaseGroup = (group) => group.startsWith('npc-revision') || (group.startsWith('v2-') && !V2_ENABLED.includes(group.slice(3)));
@@ -26,7 +27,8 @@ export const onDemandReleaseGroup = (group) => group.startsWith('npc-revision') 
  * the groups normal play draws. A group that has a v2 counterpart is not preloaded statically: which
  * of the two is drawn depends on the URL (?<group>=v1|v2, ?v2=0: artV2.js), so the page chooses with a
  * small script (preloadSwitchScript) — an unused preload is a console warning and a wasted download on
- * the phone. Both stay in the precache list as before (onDemandReleaseGroup), so a switch works offline.
+ * the phone. Which of them are kept for offline play is onDemandReleaseGroup's: the v1 group always,
+ * the v2 group once it is drawn by default.
  * @param {string} group @param {Set<string>} groups every release group in the build
  */
 export const preloadReleaseGroup = (group, groups) => !onDemandReleaseGroup(group) && !hasV2Pair(group, groups);

@@ -12,11 +12,11 @@
 // Pure (no Vite / PixiJS imports): tools/precache.mjs reads V2_ENABLED too.
 
 /**
- * The v2 groups that passed inspection and are drawn by default. Starts empty; the director adds a
- * group once its art is approved.
+ * The v2 groups that passed inspection and are drawn by default; the director adds a group once its
+ * art is approved. terrain: the ground v2 (gfx W1), after the inspections of its wiring.
  * @type {readonly string[]}
  */
-export const V2_ENABLED = Object.freeze([]);
+export const V2_ENABLED = Object.freeze(['terrain']);
 
 /** The name a v2 group has in the game (releaseFrames, the build's sheet table). @param {string} group */
 export const v2Name = (group) => `v2/${group}`;

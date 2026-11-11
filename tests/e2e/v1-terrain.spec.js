@@ -13,7 +13,8 @@ async function open(page, query = '') {
   page.on('console', (m) => {
     if (m.type() === 'warning' || m.type() === 'error' || m.text().startsWith('art:')) problems.push(`${m.type()}: ${m.text()}`);
   });
-  await page.goto(`/?map=world&time=10${query}`);
+  // (the v1 terrain: since gfx W1 the default draws the v2 ground, so these checks name ?terrain=v1)
+  await page.goto(`/?map=world&time=10${query}${query.includes('terrain=') ? '' : '&terrain=v1'}`);
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
   await api(page, 'clearEnemies');
   return problems;

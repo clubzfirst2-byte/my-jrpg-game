@@ -124,8 +124,9 @@ export function deepMap(width, height, isWater) {
  * distance to the nearest land cell (Euclidean, in cells; outside the map is not land) is more than a
  * threshold of 2 + 1.6 × a smooth noise (2-cell lattice) ± 0.7 by a hash per cell (2.0 … 4.3) — so the
  * deep area's border steps in and out every few cells along a straight shore and its corners are round,
- * not a copy of the shore 2 cells out (world map: longest straight run along cell edges 43 → 11 cells) —
- * and, as deepMap, only where such cells form a 2×2 area. The shallow band is always 2+ cells wide.
+ * not a copy of the shore 2 cells out —, as deepMap only where such cells form a 2×2 area, and with no
+ * straight border longer than 4 cells (R3, notchStraightRuns; world map: longest straight run along
+ * cell edges 43 → 4 cells, none of 5 or more). The shallow band is always 2+ cells wide.
  * @param {number} width @param {number} height @param {(x: number, y: number) => boolean} isWater
  * @param {(a: number, b: number) => number} hash
  * @returns {Uint8Array} 1 = deep
@@ -152,7 +153,53 @@ export function deepMapShaped(width, height, isWater, hash) {
       deep[y * width + x] = near > t * t ? 1 : 0;
     }
   }
-  return keep2x2(width, height, deep);
+  // R3: no straight border longer than 4 cells (notches, then the 2×2 rule again, until it holds)
+  let out = keep2x2(width, height, deep);
+  for (let n = 0; n < 4; n++) {
+    const next = keep2x2(width, height, notchStraightRuns(out, width, height, isWater, hash, 4));
+    if (next.every((v, k) => v === out[k])) break;
+    out = next;
+  }
+  return out;
+}
+
+/**
+ * Inspection R3: breaks the deep area's straight borders. Along each line of cell edges (between rows,
+ * then between columns) where deep and shallow water meet for more than maxRun cells in a row, a deep
+ * cell on the border is made shallow every 2 … maxRun cells (by hash): a small notch, so no straight
+ * piece is longer than maxRun. Only deep cells change (the shallow band along the shore never narrows).
+ * @param {Uint8Array} deep @param {number} width @param {number} height
+ * @param {(x: number, y: number) => boolean} isWater @param {(a: number, b: number) => number} hash @param {number} maxRun
+ */
+function notchStraightRuns(deep, width, height, isWater, hash, maxRun) {
+  const d = deep.slice();
+  for (const horiz of [true, false]) {
+    const A = horiz ? height : width;
+    const B = horiz ? width : height;
+    for (let a = 1; a < A; a++) {
+      const cells = (/** @type {number} */ b) => (horiz ? [b, a, b, a - 1] : [a, b, a - 1, b]);
+      let run = 0;
+      let start = 0;
+      for (let b = 0; b <= B; b++) {
+        const [x1, y1, x0, y0] = cells(b);
+        const on = b < B && isWater(x1, y1) && isWater(x0, y0) && d[y1 * width + x1] !== d[y0 * width + x0];
+        if (on) {
+          if (!run) start = b;
+          run++;
+          continue;
+        }
+        if (run > maxRun) {
+          for (let k = start + 1 + (hash(start + 31 * a, a + 7) % maxRun); k < b; k += 2 + (hash(k + 13, a + (horiz ? 17 : 34)) % (maxRun - 1))) {
+            const [p1, q1, p0, q0] = cells(k);
+            if (d[q1 * width + p1]) d[q1 * width + p1] = 0;
+            else if (d[q0 * width + p0]) d[q0 * width + p0] = 0;
+          }
+        }
+        run = 0;
+      }
+    }
+  }
+  return d;
 }
 
 /** Keeps a deep cell only if one of the 4 blocks of 2×2 cells containing it is all deep. @param {number} width @param {number} height @param {Uint8Array} deep */

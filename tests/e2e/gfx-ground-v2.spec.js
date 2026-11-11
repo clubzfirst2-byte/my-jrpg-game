@@ -67,9 +67,10 @@ test('?terrain=v2: shore foam and deep water on the beach, 4 water frames, the g
   expect(problems).toEqual([]);
 });
 
-test('?terrain=v1 and the default keep the v1.1 ground; v2 stays within the 35 MB image guide in the same place (at most 2 MB more)', async ({ page, browser }) => {
+test('?terrain=v1 and ?v2=0 keep the v1.1 ground; the default is the v2 ground (V2_ENABLED), within the 35 MB image guide (at most 2 MB more than v1)', async ({ page, browser }) => {
   const mb = {};
-  for (const q of ['&terrain=v1', '']) {
+  // (since the terrain is drawn as v2 by default, the v1.1 ground is checked with ?terrain=v1 and ?v2=0)
+  for (const q of ['&terrain=v1', '&v2=0']) {
     const p = q ? page : await (await browser.newContext({ viewport: page.viewportSize() ?? undefined })).newPage();
     const problems = await open(p, q);
     await visit(p, 49, 69);
@@ -82,8 +83,10 @@ test('?terrain=v1 and the default keep the v1.1 ground; v2 stays within the 35 M
     else await p.context().close();
   }
   const other = await (await browser.newContext({ viewport: page.viewportSize() ?? undefined })).newPage();
-  await open(other, '&terrain=v2');
+  const problems = await open(other, '');
   await visit(other, 49, 69);
+  expect((await api(other, 'terrainEdges')).groundV2).toBe(true);
+  expect(problems).toEqual([]);
   mb.v2 = await textureMb(other);
   // (round 8 art: the island grounds' edge variants 2 / 3 and step pieces, 2 × 512 × 256, do not fit in
   // the base atlas; the guide is 35 MB of images: perf v1)

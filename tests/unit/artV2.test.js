@@ -8,8 +8,8 @@ import { onDemandReleaseGroup, precacheFiles, releaseGroupOf } from '../../tools
 const p = (q) => new URLSearchParams(q);
 
 describe('graphics v2 art groups', () => {
-  it('starts with no group enabled (a group is enabled only after its art passes inspection)', () => {
-    expect(V2_ENABLED).toEqual([]);
+  it('a group is enabled only after its art passes inspection: the terrain (ground v2, gfx W1)', () => {
+    expect(V2_ENABLED).toEqual(['terrain']);
   });
 
   it('a v2 group is drawn when present and enabled; ?v2=0 turns every group back to v1; ?<group>= wins', () => {
@@ -32,8 +32,12 @@ describe('graphics v2 art groups', () => {
     expect(resolveArtGroups(['hero', 'npc', 'enemy', 'terrain', 'objects'], p('enemy=v2&ui=v1'), opts)).toEqual(['hero', 'npc', 'v2/enemy', 'v2/terrain', 'objects']);
     // a v1 group the game does not load now (?terrain=placeholder) does not come back as v2
     expect(resolveArtGroups(['hero', 'npc', 'enemy', 'objects'], p(''), opts)).toEqual(['hero', 'npc', 'enemy', 'objects', 'v2/ui']);
-    // the default today: nothing enabled, so exactly the v1 groups
-    expect(resolveArtGroups(['hero', 'terrain'], p(''), { available: ['terrain'] })).toEqual(['hero', 'terrain']);
+    // the default today: the terrain is drawn as v2; ?terrain=v1 and ?v2=0 bring the v1 terrain back
+    expect(resolveArtGroups(['hero', 'terrain'], p(''), { available: ['terrain'] })).toEqual(['hero', 'v2/terrain']);
+    expect(resolveArtGroups(['hero', 'terrain'], p('terrain=v1'), { available: ['terrain'] })).toEqual(['hero', 'terrain']);
+    expect(resolveArtGroups(['hero', 'terrain'], p('v2=0'), { available: ['terrain'] })).toEqual(['hero', 'terrain']);
+    // nothing enabled: exactly the v1 groups
+    expect(resolveArtGroups(['hero', 'terrain'], p(''), { available: ['terrain'], enabled: [] })).toEqual(['hero', 'terrain']);
   });
 
   it('names: "v2/<group>" in the game, release-v2-<group>.png|json when built', () => {

@@ -9,7 +9,8 @@ const api = (page, fn, ...args) => page.evaluate(([f, a]) => window.__debugApi[f
 async function open(page, query) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(`/?map=world&time=10&season=summer${query}`);
+  // (the counts include the v1 terrain's 375 frames: since gfx W1 the default draws the v2 ground, so ?terrain=v1)
+  await page.goto(`/?map=world&time=10&season=summer${query}${query.includes('terrain=') ? '' : '&terrain=v1'}`);
   await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 20_000 });
   await api(page, 'clearEnemies');
   return errors;
