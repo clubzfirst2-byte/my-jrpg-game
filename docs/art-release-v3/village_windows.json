@@ -50,6 +50,109 @@
    ],
    "lit_like_outside_windows": 12
   },
+  "obj.v3.house_stone": {
+   "size": [
+    256,
+    288
+   ],
+   "game_size": [
+    64.0,
+    72.0
+   ],
+   "windows": [
+    {
+     "art": [
+      40,
+      114,
+      30,
+      40
+     ],
+     "game": [
+      -22.0,
+      -43.5,
+      7.5,
+      10.0
+     ],
+     "glass": 989,
+     "lit": 977,
+     "glints_unlit": 12,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      186,
+      114,
+      30,
+      40
+     ],
+     "game": [
+      14.5,
+      -43.5,
+      7.5,
+      10.0
+     ],
+     "glass": 989,
+     "lit": 977,
+     "glints_unlit": 12,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      112,
+      118,
+      32,
+      34
+     ],
+     "game": [
+      -4.0,
+      -42.5,
+      8.0,
+      8.5
+     ],
+     "glass": 899,
+     "lit": 887,
+     "glints_unlit": 12,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      36,
+      202,
+      40,
+      50
+     ],
+     "game": [
+      -23.0,
+      -21.5,
+      10.0,
+      12.5
+     ],
+     "glass": 1726,
+     "lit": 1714,
+     "glints_unlit": 12,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      180,
+      202,
+      40,
+      50
+     ],
+     "game": [
+      13.0,
+      -21.5,
+      10.0,
+      12.5
+     ],
+     "glass": 1726,
+     "lit": 1714,
+     "glints_unlit": 12,
+     "lit_not_glass": 0
+    }
+   ],
+   "lit_like_outside_windows": 44
+  },
   "autumn.obj.house": {
    "size": [
     192,
@@ -249,7 +352,7 @@
      "lit_not_glass": 0
     }
    ],
-   "lit_like_outside_windows": 293
+   "lit_like_outside_windows": 292
   },
   "winter.obj.v3.house_stone": {
    "size": [
@@ -352,110 +455,7 @@
      "lit_not_glass": 0
     }
    ],
-   "lit_like_outside_windows": 351
-  },
-  "obj.v3.house_stone": {
-   "size": [
-    256,
-    288
-   ],
-   "game_size": [
-    64.0,
-    72.0
-   ],
-   "windows": [
-    {
-     "art": [
-      40,
-      114,
-      30,
-      40
-     ],
-     "game": [
-      -22.0,
-      -43.5,
-      7.5,
-      10.0
-     ],
-     "glass": 989,
-     "lit": 912,
-     "glints_unlit": 77,
-     "lit_not_glass": 0
-    },
-    {
-     "art": [
-      186,
-      114,
-      30,
-      40
-     ],
-     "game": [
-      14.5,
-      -43.5,
-      7.5,
-      10.0
-     ],
-     "glass": 989,
-     "lit": 912,
-     "glints_unlit": 77,
-     "lit_not_glass": 0
-    },
-    {
-     "art": [
-      112,
-      118,
-      32,
-      34
-     ],
-     "game": [
-      -4.0,
-      -42.5,
-      8.0,
-      8.5
-     ],
-     "glass": 899,
-     "lit": 830,
-     "glints_unlit": 69,
-     "lit_not_glass": 0
-    },
-    {
-     "art": [
-      36,
-      202,
-      40,
-      50
-     ],
-     "game": [
-      -23.0,
-      -21.5,
-      10.0,
-      12.5
-     ],
-     "glass": 1726,
-     "lit": 1612,
-     "glints_unlit": 114,
-     "lit_not_glass": 0
-    },
-    {
-     "art": [
-      180,
-      202,
-      40,
-      50
-     ],
-     "game": [
-      13.0,
-      -21.5,
-      10.0,
-      12.5
-     ],
-     "glass": 1726,
-     "lit": 1612,
-     "glints_unlit": 114,
-     "lit_not_glass": 0
-    }
-   ],
-   "lit_like_outside_windows": 44
+   "lit_like_outside_windows": 380
   }
  }
 }

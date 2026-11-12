@@ -104,8 +104,10 @@ def main():
                    ("obj.brazier.0", "obj.brazier.1")):
         for name, d in (("now", CUR), ("v3", V.OUT), ("v3 winter", V.OUT)):
             pre = "winter." if name == "v3 winter" else ""
-            x = np.array(Image.open(os.path.join(d, pre + a_ + ".png")).convert("RGBA")).astype(float)
-            y = np.array(Image.open(os.path.join(d, pre + b_ + ".png")).convert("RGBA")).astype(float)
+            def ld(k):  # a season without its own file falls back to the summer file
+                f = os.path.join(d, pre + k + ".png")
+                return np.array(Image.open(f if os.path.exists(f) else os.path.join(d, k + ".png")).convert("RGBA")).astype(float)
+            x, y = ld(a_), ld(b_)
             op = (x[..., 3] > 0) | (y[..., 3] > 0)
             df = (x != y).any(-1) & op
             dl = np.abs(luma(x) * (x[..., 3] > 0) - luma(y) * (y[..., 3] > 0))

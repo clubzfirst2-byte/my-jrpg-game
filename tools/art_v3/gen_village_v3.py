@@ -202,7 +202,16 @@ def roof_snow(c, roof_mask, bot, mid_x, seed, eave_y=None, icicle_x=None):
     for y, x in zip(ys, xs):
         rows.setdefault(x, []).append(y)
     ytop = int(ys.min())
-    drift_rows = [ytop + (bot - ytop) * f for f in (0.22, 0.45, 0.66)]
+    # round 3: each drift its own span, height, slope and wave (not 3 ruled parallel lines)
+    x_lo, x_hi = int(xs.min()), int(xs.max())
+    span = x_hi - x_lo
+    drifts = [  # (row as a share of the roof, from, to (shares of the width), slope, wave amp, wave freq)
+        (0.20, 0.05, 0.62, 0.03, 1.5, 0.09),
+        (0.44, 0.30, 0.97, -0.04, 2.5, 0.06),
+        (0.64, 0.00, 0.55, 0.02, 2.0, 0.11),
+        (0.70, 0.62, 1.00, -0.02, 1.5, 0.08),
+    ]
+    drift_rows = [(ytop + (bot - ytop) * f, x_lo + span * a, x_lo + span * b, sl, amp, fr) for f, a, b, sl, amp, fr in drifts]
     for x, col in rows.items():
         top = min(col)
         edge = int(bot - 9 - 2.5 * math.sin(x * 0.11 + seed) - 1.5 * math.sin(x * 0.047 + 2 * seed))
@@ -222,8 +231,10 @@ def roof_snow(c, roof_mask, bot, mid_x, seed, eave_y=None, icicle_x=None):
                 # each drift a lit crest over a 2-row shade
                 f = (y - ytop) / max(1, edge - ytop)
                 t = 6 if f < 0.28 else 5 if f < 0.62 else 4
-                for kd, yy in enumerate(drift_rows):
-                    v = y - yy - 2.0 * math.sin(x * 0.07 + kd * 1.9 + seed)
+                for kd, (yy, xa, xb, sl, amp, fr) in enumerate(drift_rows):
+                    if not xa <= x <= xb:
+                        continue
+                    v = y - yy - sl * (x - xa) - amp * math.sin(x * fr + kd * 1.9 + seed)
                     if 0 <= v < 1:
                         t = 6
                     elif 1 <= v < 3:
@@ -537,8 +548,9 @@ def house(season):
     c.fill(step, "stone", 4)
     bevel(c, step)
     # roof (over the wall's top), eaves board
-    rm = c.m_poly([(0, H_ROOF_BOT), (192, H_ROOF_BOT), (164, H_ROOF_TOP), (28, H_ROOF_TOP)])
-    roof_tiles(c, rm, H_ROOF_TOP, H_ROOF_BOT, 28, 164, 0, 192, mid, rng)
+    # round 3: the eaves 1 texel in from the picture's sides (their outline inside the picture)
+    rm = c.m_poly([(1, H_ROOF_BOT), (191, H_ROOF_BOT), (164, H_ROOF_TOP), (28, H_ROOF_TOP)])
+    roof_tiles(c, rm, H_ROOF_TOP, H_ROOF_BOT, 28, 164, 1, 191, mid, rng)
     ridge = c.m_rect(26, H_ROOF_TOP - 6, 165, H_ROOF_TOP + 1)
     c.fill(ridge, "roof", 4)
     for x in range(26, 166, 10):
@@ -546,9 +558,9 @@ def house(season):
         c.fill(c.m_rect(x + 2, H_ROOF_TOP - 5, x + 3, H_ROOF_TOP - 4), "roof", 5)
     c.fill(c.m_rect(26, H_ROOF_TOP + 1, 165, H_ROOF_TOP + 1), "roof", 1)
     c.fill(c.m_rect(97, H_ROOF_TOP - 6, 165, H_ROOF_TOP + 1) & (c.mat == c.mid("roof")) & (c.tone > 1), "roof", 3)
-    eave = c.m_rect(0, H_ROOF_BOT, W - 1, H_ROOF_BOT + 4)
+    eave = c.m_rect(1, H_ROOF_BOT, W - 2, H_ROOF_BOT + 4)
     c.fill(eave, "timber", 2)
-    c.fill(c.m_rect(0, H_ROOF_BOT, W - 1, H_ROOF_BOT), "timber", 4)
+    c.fill(c.m_rect(1, H_ROOF_BOT, W - 2, H_ROOF_BOT), "timber", 4)
     roof_all = (c.mat == c.mid("roof")) & c.m_rect(0, 0, W - 1, H_ROOF_BOT)
     # the right end of the wall in shade
     darken_right(c, c.m_rect(0, H_ROOF_BOT + 5, W - 1, H), 176)
@@ -564,15 +576,17 @@ def house(season):
 # ------------------------------------------------------------------ the stone house's seasons
 
 
-def house_stone(season, pilot_glass=False):
+def house_stone(season, pilot_drawing=False):
     """The pilot's drawing steps, in the pilot's order with its random sequence (summer = the pilot's
     file, pixel for pixel; checked by main), then the season: autumn flowers (ramps), winter snow."""
     r = ramps_for(season)
-    if pilot_glass:
+    if pilot_drawing:
         r["glass"] = HS.RAMPS["glass"]
     c = Canvas(HS.W, HS.H, r)
     rng = random.Random(42)
     HS.chimney(c)
+    if not pilot_drawing:  # round 3: the chimney cap one row lower, its outline on row 0 (not cut by the edge)
+        c.mat[0, :] = 0
     HS.side_wall(c, rng)
     HS.stones(c, 16, HS.UP_BOT, 239, HS.G, rng)
     c.fill(c.m_rect(16, HS.UP_BOT, 239, HS.UP_BOT + 4), "stone", 1)
@@ -581,7 +595,7 @@ def house_stone(season, pilot_glass=False):
     HS.window(c, 36, 202, 40, 50)
     HS.window(c, 180, 202, 40, 50)
     HS.front_door(c)
-    if not pilot_glass:
+    if not pilot_drawing:
         short_glints(c)  # round 2 (the pilot's own drawing keeps its long glints)
     for y, x in zip(*np.nonzero(c.mat != 0)):
         if x > 228 and c.tone[y, x] > 1 and y > HS.ROOF_BOT:
@@ -593,7 +607,8 @@ def house_stone(season, pilot_glass=False):
         c.tone[fl] = 3
         roof_all = (c.mat == c.mid("roof")) & c.m_rect(0, 0, HS.W - 1, HS.ROOF_BOT)
         roof_snow(c, roof_all, HS.ROOF_BOT, HS.W / 2, 5, eave_y=HS.ROOF_BOT + 4, icicle_x=(6, 248))
-        snow_on(c, ("stone",), seed=2, depth=(2, 3), mound=2, region=c.m_rect(178, 0, 210, 6))
+        snow_on(c, ("stone",), seed=2, depth=(2, 3), mound=2, region=c.m_rect(178, 0, 210, 6)) if pilot_drawing else \
+            snow_on(c, ("stone",), seed=2, depth=(2, 2), mound=0, region=c.m_rect(178, 0, 210, 6))
         for x0, w, y0, h in ((36, 40, 202, 50), (180, 40, 202, 50), (40, 30, 114, 40), (186, 30, 114, 40)):
             ledge_snow(c, x0 - 4, x0 + w + 3, y0 + h + 3, 4)
         despeckle(c, keep=("pink", "yellow", "iron"), loose=("snow",))
@@ -630,15 +645,15 @@ def chest(season, opened):
         c.fill(c.m_rect(3, 24, 60, 24), "gold", 4)
         c.fill(c.m_rect(3, 27, 60, 27), "gold", 1)
     else:  # round 2: the lid thrown right back (its dark underside), a dark mouth, a heap of gold
-        under = c.m_poly([(5, 21), (58, 21), (55, 2), (8, 2)])
+        under = c.m_poly([(5, 21), (58, 21), (55, 4), (8, 4)])  # round 3: 2 rows lower
         c.fill(under, "chestwood", 1)  # the underside, away from the light: dark
         for y0 in (8, 14):  # the underside's planks: a lit lip over a dark seam
             c.fill(c.m_rect(0, y0, 63, y0) & under, "chestwood", 0)
             c.fill(c.m_rect(0, y0 - 1, 63, y0 - 1) & under, "chestwood", 2)
-        c.fill(under & c.m_rect(0, 3, 63, 4), "chestwood", 2)
-        edge = c.m_poly([(8, 3), (55, 3), (54, 0), (9, 0)])  # the lid's thickness on top, lit
+        c.fill(under & c.m_rect(0, 4, 63, 5), "chestwood", 2)
+        edge = c.m_poly([(8, 5), (55, 5), (54, 1), (9, 1)])  # the lid's thickness, lit; outline on row 0
         c.fill(edge, "chestwood", 4)
-        c.fill(edge & c.m_rect(0, 3, 63, 3), "chestwood", 3)
+        c.fill(edge & c.m_rect(0, 4, 63, 4), "chestwood", 3)
         for bx in (11, 46):  # gold bands across the underside
             band = under & c.m_rect(bx, 0, bx + 5, 63)
             c.fill(band, "gold", 2)
@@ -675,7 +690,8 @@ def chest(season, opened):
     c.fill(c.m_rect(31, ly + 8, 32, ly + 9), "chestwood", 1)
     darken_right(c, c.m_rect(0, 0, 63, 63) & (c.mat == c.mid("chestwood")), 52)
     if season == "winter":
-        snow_on(c, ("chestwood", "gold"), seed=4 + opened, depth=(3, 3), mound=2)
+        if not opened:  # round 3: an opened lid has shed its snow
+            snow_on(c, ("chestwood", "gold"), seed=4, depth=(3, 3), mound=2)
     finish(c, keep=("gold", "gem"), loose=("snow",))
     return c
 
@@ -875,7 +891,7 @@ def campfire(season, frame):
             stone(*st)
             if season == "winter" and abs(st[1] - 31.5) > 8:  # snow on the outer front stones (cold)
                 m = c.m_ellipse(st[1], st[0], st[2], st[3]) & c.m_rect(0, 0, 63, 54) & (c.mat == c.mid("stone"))
-                cap_part(c, m, 2, 4)
+                cap_part(c, m & c.m_rect(2, 0, 61, 63), 2, 4)
     finish(c, keep=("fire",), loose=("snow", "ash"), skip_outline=("fire",))
     return c
 
@@ -1181,9 +1197,9 @@ def signpost(season):
 
 ITEMS = [  # key, function(season) -> Canvas, seasons drawn (others fall back to summer)
     ("obj.house", house, ("summer", "autumn", "winter")),
-    ("obj.v3.house_stone", house_stone, ("autumn", "winter")),  # summer: the pilot's file
+    ("obj.v3.house_stone", house_stone, ("summer", "autumn", "winter")),  # summer replaces the pilot's (round 3)
     ("obj.chest.closed", lambda s: chest(s, False), ("summer", "winter")),
-    ("obj.chest.open", lambda s: chest(s, True), ("summer", "winter")),
+    ("obj.chest.open", lambda s: chest(s, True), ("summer",)),  # winter: no snow on it, the summer file
     ("obj.barrel", barrel, ("summer", "winter")),
     ("obj.crate", crate, ("summer", "winter")),
     ("obj.jar", jar, ("summer", "winter")),
@@ -1297,13 +1313,20 @@ def main(which):
     res = []
     for s in seasons:
         res += write(s)
-    # the stone house's summer: the pilot's file (not rewritten); check this script draws it the same
+    # round 3 (coordinator's decision): the stone house's summer file is this script's drawing (short
+    # glints, the chimney cap inside the picture). Check the pilot's own steps still give the pilot's
+    # picture (gfx/v3-art 814aa23), so the seasons are the pilot's house plus only those changes.
+    import io
+    import subprocess
     from PIL import Image
-    pilot = Image.open(os.path.join(OUT, "obj.v3.house_stone.png")).convert("RGBA")
-    same = np.array_equal(np.array(pilot), house_stone("summer", pilot_glass=True).rgba())
-    print("stone house summer, drawn with the pilot's glass ramp == pilot file:", same)
-    c = house_stone("summer")  # with the night-glass tone (what the pilot file would become)
-    res.append(("obj.v3.house_stone", "summer", c, pilot, None))
+    try:
+        blob = subprocess.run(["git", "-C", ROOT, "show", "814aa23:src/art-release-v3/objects/obj.v3.house_stone.png"],
+                              capture_output=True, check=True).stdout
+        pilot = np.array(Image.open(io.BytesIO(blob)).convert("RGBA"))
+        print("pilot steps (pilot_drawing=True) == the pilot picture of 814aa23:",
+              np.array_equal(pilot, house_stone("summer", pilot_drawing=True).rgba()))
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("814aa23 not in this checkout: pilot check skipped")
     if which == "all":
         tab = glass_table(res)
         old = {}
