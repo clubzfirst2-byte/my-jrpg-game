@@ -39,6 +39,7 @@ import { BUTTON_LABELS_ROW, SETTING_ROWS, SettingsMenu } from './ui/settingsMenu
 import { HeartsHud } from './ui/hud.js';
 import { RotateHint } from './ui/rotateHint.js';
 import { TitleScreen } from './ui/title.js';
+import { StartLoading } from './ui/startLoading.js';
 import { InventoryMenu } from './ui/inventoryMenu.js';
 import { DialogueBox } from './ui/dialogueBox.js';
 import { ShopMenu } from './ui/shopMenu.js';
@@ -92,6 +93,19 @@ function countDisplayObjects(node) {
   for (const child of node.children) n += countDisplayObjects(child);
   return n;
 }
+
+/** Resolves once the page has painted (a frame, then a task), or after 100 ms when no frame comes (a hidden page). */
+const afterPaint = () =>
+  new Promise((resolve) => {
+    const done = () => resolve(undefined);
+    const t = setTimeout(done, 100);
+    requestAnimationFrame(() =>
+      setTimeout(() => {
+        clearTimeout(t);
+        done();
+      }, 0),
+    );
+  });
 
 async function boot() {
   performance.mark('boot');
@@ -182,10 +196,62 @@ async function boot() {
         })
         .catch((err) => (console.warn(`art: v2 ui: ${String(err)}; using the v1 UI`), false))
     : Promise.resolve(false);
+  // gfx v2 integration (start-up): the title first. Without ?map= the page shows the title as soon as
+  // its own art and the save are read, and only then prepares the world (the art sheets, the atlases,
+  // the view, the HUD), which the title does not need (with the v2 art that work held the title back by
+  // 1.5 s or more on a cold start). A start pressed before the world is ready, or before the start area
+  // is drawn with all its art, waits behind a short loading note (StartLoading; beginPlay below).
+  // ?map=... (tests, height/field test maps) skips the title and never touches the save.
+  const mapParam = params.get('map');
+  const withTitle = mapParam === null;
+  const store = new SaveStore(__APP_VERSION__);
+  /** @type {any} */
+  let loaded = { status: 'empty' };
+  let inTitle = withTitle;
+  /** The game has started but its start area is not drawn yet: the world waits (beginPlay). */
+  let holding = false;
+  /** @type {TitleScreen | null} */
+  let title = null;
+  const startLoading = new StartLoading(uiRoot);
+  /** Starts the game once the world is ready (set at the end of boot). @type {((fromSave: boolean) => void) | null} */
+  let startWhenReady = null;
+  /** A start pressed before that. @type {boolean | null} */
+  let startAsked = null;
+  const requestStart = (/** @type {boolean} */ fromSave) => {
+    startLoading.show();
+    if (startWhenReady) startWhenReady(fromSave);
+    else startAsked = fromSave;
+  };
+  if (withTitle) {
+    loaded = await store.load();
+    performance.mark('save');
+    const notes = {
+      empty: '',
+      ok: loaded.recovered ? '最新の保存データが壊れていたため、ひとつ前の保存から再開します。' : '',
+      corrupt: '保存データが壊れていて読み込めませんでした。はじめから遊べます。',
+      newer: 'この保存データは新しいバージョンで作られています。ページを再読み込みしてください（データは消しません）。',
+      error: loaded.status === 'error' ? failureMessage(loaded.reason) : '',
+    };
+    await uiSkinLoad; // (the v2 UI's skin on, and its title frames asked for: uiTitleArt)
+    await uiTitleArt; // W4: the v2 title's frames decoded (they load alongside everything above)
+    performance.mark('titleArt');
+    title = new TitleScreen(uiRoot, {
+      title: GAME_TITLE,
+      hasSave: loaded.status === 'ok',
+      saveNote: notes[/** @type {keyof typeof notes} */ (loaded.status)] ?? '',
+      onNew: () => requestStart(false),
+      onContinue: () => requestStart(true),
+    });
+    performance.mark('title');
+    await afterPaint(); // the title on screen before the world's work starts
+  }
+  /** With the title up, a frame between the world's steps, so the title keeps being drawn (and answers taps). */
+  const breathe = () => (withTitle ? afterPaint() : Promise.resolve());
   for (const frames of await Promise.all(artGroups.filter((g) => g !== uiArtGroup).map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
   //   gfx W3: the enemies' frame counts and speeds come from their art's frames.json — the table of
   //   the enemy art that was just loaded (v1, or v2 from src/art-release-v2/enemy; enemyFrames.js)
   useEnemyFrameTable(tableForArt((k) => artOverrides.has(k)));
+  await breathe();
   const uiV2 = await uiSkinLoad;
   // W4: plays so far, this one included. A play is counted when it starts (startGame: はじめから /
   // つづきから), not on each page load; the title shows what the next play will be. Without the title
@@ -199,6 +265,7 @@ async function boot() {
   try {
     app = await createRenderer(host, targetHeight, artDensity);
     performance.mark('renderer');
+    await breathe();
   } catch (err) {
     errorLog.add('error', err, performance.now());
     showFatal(
@@ -239,10 +306,8 @@ async function boot() {
   assets.register(SOURCE_BUNDLE, () => buildPlaceholderPack(sourceEntries(), artOverrides));
   await assets.load('placeholder');
   performance.mark('art');
-  // Without ?map= the game starts at the title on the first island and saves its progress.
-  // ?map=... (tests, height/field test maps) skips the title and never touches the save.
-  const mapParam = params.get('map');
-  const withTitle = mapParam === null;
+  await breathe();
+  // Without ?map= the game starts at the title on the first island and saves its progress (above).
   // P8: a new game is the whole world (the island and the regions south of it).
   const mapName = /** @type {keyof typeof MAPS} */ (mapParam ?? 'world');
   const state = createGameState(MAPS[mapName] ?? MAPS.world);
@@ -250,6 +315,7 @@ async function boot() {
   // gfx W5: light, shadow and effects — on, or the look before them with ?fx=v1 / ?v2=0 (fxSwitch.js)
   const view = new GameView(app, assets, state, { fx: fxVersion(params) });
   performance.mark('view');
+  await breathe();
   // Test / check helpers: ?time=20 (hour) and ?weather=rain|storm|cloudy|clear.
   const timeParam = Number.parseFloat(params.get('time') ?? '');
   if (Number.isFinite(timeParam)) setWorldTime(state.env, timeParam * CLOCK.hourMs);
@@ -316,15 +382,11 @@ async function boot() {
   const WEATHER_NAMES = { clear: '晴れ', cloudy: 'くもり', rain: '雨', storm: '雷雨', snow: '雪' };
 
   // --- save (DESIGN.md 2.6) ---
-  const store = new SaveStore(__APP_VERSION__);
   const autosave = new Autosave(
     store,
     () => ({ ...state.progress, worldMs: Math.round(state.env.now), worldDiff: computeWorldDiff(state) }),
     (msg) => toast.show(msg, { kind: 'error', ms: 6000 }),
   );
-  /** @type {any} */
-  let loaded = { status: 'empty' };
-  let inTitle = withTitle;
   let inMenu = false;
   const menu = new InventoryMenu(uiRoot, {
     getState: () => state,
@@ -386,30 +448,9 @@ async function boot() {
     } else if (e.code === 'Escape' && menu.isOpen) menu.close();
     else if (e.code === 'KeyR' && !inTitle && !menu.isOpen) cycleAbility(state);
   });
-  /** @type {TitleScreen | null} */
-  let title = null;
-  if (withTitle) {
-    loaded = await store.load();
-    performance.mark('save');
-    const notes = {
-      empty: '',
-      ok: loaded.recovered ? '最新の保存データが壊れていたため、ひとつ前の保存から再開します。' : '',
-      corrupt: '保存データが壊れていて読み込めませんでした。はじめから遊べます。',
-      newer: 'この保存データは新しいバージョンで作られています。ページを再読み込みしてください（データは消しません）。',
-      error: loaded.status === 'error' ? failureMessage(loaded.reason) : '',
-    };
-    await uiTitleArt; // W4: the v2 title's frames decoded (they load alongside everything above)
-    performance.mark('titleArt');
-    title = new TitleScreen(uiRoot, {
-      title: GAME_TITLE,
-      hasSave: loaded.status === 'ok',
-      saveNote: notes[/** @type {keyof typeof notes} */ (loaded.status)] ?? '',
-      onNew: () => startGame(false),
-      onContinue: () => startGame(true),
-    });
-    performance.mark('title');
-  }
-  if (uiFrames) loadOtherUiArt(uiFrames); // W4: the HUD's and menus' frames, now that the title is up
+  // (the title is up already: above)
+  // W4: the HUD's and menus' frames, now that the title is up
+  const uiOtherArt = uiFrames ? loadOtherUiArt(uiFrames) : Promise.resolve();
   /** @param {boolean} fromSave */
   function startGame(fromSave) {
     if (fromSave && loaded.status === 'ok') {
@@ -435,10 +476,42 @@ async function boot() {
       applySettings();
     }
   }
+  /**
+   * gfx v2 integration: resolves once the start area is drawn with all its art — no chunk waiting for
+   * its art bundles, two frames drawn so — and the HUD's frames are in.
+   * @returns {Promise<void>}
+   */
+  const worldDrawn = () =>
+    Promise.all([
+      uiOtherArt,
+      new Promise((resolve) => {
+        let frames = 0;
+        const check = () => {
+          const s = view.streamStats();
+          frames = s.pending === 0 && s.chunks > 0 ? frames + 1 : 0;
+          if (frames >= 2) resolve(undefined);
+          else requestAnimationFrame(check);
+        };
+        requestAnimationFrame(check);
+      }),
+    ]).then(() => {});
+  /**
+   * gfx v2 integration: starts the game from the title; the loading note (shown on the press) stays,
+   * and the world waits, until the start area is drawn with its art. @param {boolean} fromSave
+   */
+  const beginPlay = (fromSave) => {
+    holding = true;
+    startGame(fromSave);
+    void worldDrawn().then(() => {
+      holding = false; // (keys held meanwhile are kept: startGame cleared the press that started it)
+      loop.reset();
+      startLoading.hide();
+    });
+  };
   // v1.0 (C9): a tap or a key skips the opening.
   // The tap that skips it goes no further (not to the attack button or the stick).
   const skipOpeningNow = (/** @type {Event} */ e) => {
-    if (!state.opening || inTitle) return;
+    if (!state.opening || inTitle || holding) return;
     skipOpening(state);
     e.preventDefault();
     e.stopPropagation();
@@ -835,7 +908,7 @@ async function boot() {
   /** @type {Record<string, boolean>} */
   const heldTaps = {};
   app.ticker.add((ticker) => {
-    if (!paused && !inTitle && !inMenu && !inTalk()) {
+    if (!paused && !inTitle && !holding && !inMenu && !inTalk()) {
       const frameInput = input.sample();
       // A tap read on a frame where the logic runs no step must not be lost: keep it for the next
       // frame (the display can run slightly faster than the 60 Hz logic).
@@ -856,7 +929,7 @@ async function boot() {
       loop.reset();
     }
     wasTalking = inTalk();
-    if (!paused && !inTitle && !inMenu && !inTalk()) {
+    if (!paused && !inTitle && !holding && !inMenu && !inTalk()) {
       announceEvents();
       autosave.update(state, ticker.elapsedMS);
     }
@@ -1167,6 +1240,9 @@ async function boot() {
   const timing = loadTiming(performance.now());
   api.loadTiming = () => timing;
   registerServiceWorker({ onUpdate: () => toast.show('新しい版を受け取りました。次に開いたときから新しくなります', { ms: 4000 }) });
+  // gfx v2 integration: the world is ready; a start pressed on the title meanwhile goes on now
+  startWhenReady = beginPlay;
+  if (startAsked !== null) beginPlay(startAsked);
   document.body.dataset.ready = 'true';
 }
 

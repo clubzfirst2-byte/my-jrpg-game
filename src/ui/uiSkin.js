@@ -168,16 +168,27 @@ export function loadTitleArt(frames) {
 /**
  * Starts loading the other frames (HUD, menus), in the background, once the title is up (or the game
  * starts without it), so they do not compete with the start-up and are in before they are needed.
+ * Resolves once all of them are decoded (gfx v2 integration: a game started from the title waits for
+ * them, so the HUD never shows without its frames). Never rejects.
  * @param {Map<string, import('../view/assets/placeholderPack.js').ArtSource>} frames
+ * @returns {Promise<void>}
  */
 export function loadOtherUiArt(frames) {
   const rest = [...frames].filter(([name, src]) => typeof src === 'string' && !isTitleFrame(name)).map(([, src]) => /** @type {string} */ (src));
-  // when the page is idle (not during the title's first frames), a few at a time
-  const step = () => {
-    for (const url of rest.splice(0, 12)) load(url);
-    if (rest.length) later(step);
-  };
-  later(step);
+  /** @type {Promise<unknown>[]} */
+  const decoded = [];
+  return new Promise((resolve) => {
+    // when the page is idle (not during the title's first frames), a few at a time
+    const step = () => {
+      for (const url of rest.splice(0, 12)) {
+        const img = load(url);
+        decoded.push(typeof img.decode === 'function' ? img.decode().catch(() => {}) : Promise.resolve());
+      }
+      if (rest.length) later(step);
+      else void Promise.all(decoded).then(() => resolve());
+    };
+    later(step);
+  });
 }
 
 /** Runs `fn` when the main thread is idle (or after a short wait where that is not offered). @param {() => void} fn */

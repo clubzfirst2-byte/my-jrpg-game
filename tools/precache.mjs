@@ -46,18 +46,21 @@ export const hasV2Pair = (group, groups) => (group.startsWith('v2-') ? groups.ha
  *     ?<group>=release, ?hd=0: main.js, terrainArt.wantsTerrainArt);
  *   - a v2 group with no v1 counterpart (the UI): its files when it is drawn as v2, else nothing;
  *   - files marked `title` (the v2 UI's title frames) only on a page that shows the title: none with
- *     ?map= (main.js withTitle, uiSkin loadTitleArt), where they would be an unused preload.
+ *     ?map= (main.js withTitle, uiSkin loadTitleArt), where they would be an unused preload;
+ *   - a group marked `afterTitle` (the world's v1 / v2 sheets: terrain, enemies) not on a page that
+ *     shows the title: the game loads them once the title is up (main.js), so they do not compete
+ *     with the title's own files; with ?map= (no title) they are preloaded as before.
  * The enemies (fx-v2) are a v1 / v2 pair like the terrain.
  * An inline script, so it runs while the HTML is read, before the game's JS. (It sets the links'
  * attributes; without setAttribute, in the unit tests' stand-in document, their properties.)
- * @param {Record<string, { v1?: string[], v2?: string[], title?: boolean }>} groups hrefs by group (folder name) and side
+ * @param {Record<string, { v1?: string[], v2?: string[], title?: boolean, afterTitle?: boolean }>} groups hrefs by group (folder name) and side
  * @param {readonly string[]} [enabled] the groups drawn by default
  * @returns {string}
  */
 export function preloadScript(groups, enabled = V2_ENABLED) {
   return `(function(){var p=new URLSearchParams(location.search),E=${JSON.stringify(enabled)},G=${JSON.stringify(groups)};
 function add(h){var l=document.createElement('link'),a=/\\.json$/.test(h)?{rel:'preload',as:'fetch',type:'application/json',crossorigin:'anonymous',href:h}:{rel:'preload',as:'image',href:h};for(var k in a){if(l.setAttribute)l.setAttribute(k,a[k]);else l[k]=a[k];}document.head.appendChild(l);}
-for(var g in G){var q=p.get(g),f=G[g];if(f.title&&p.get('map')!==null)continue;if(f.v1&&(p.get('hd')==='0'||q==='placeholder'||q==='proto'||(p.get('proto')==='all'&&q!=='release')))continue;
+for(var g in G){var q=p.get(g),f=G[g];if(f.title&&p.get('map')!==null)continue;if(f.afterTitle&&p.get('map')===null)continue;if(f.v1&&(p.get('hd')==='0'||q==='placeholder'||q==='proto'||(p.get('proto')==='all'&&q!=='release')))continue;
 var v2=q==='v2'||(q!=='v1'&&p.get('v2')!=='0'&&E.indexOf(g)>=0);(f[v2?'v2':'v1']||[]).forEach(add);}})();`;
 }
 
