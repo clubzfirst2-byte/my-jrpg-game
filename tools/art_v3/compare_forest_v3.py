@@ -101,6 +101,40 @@ def tile_v3(g, terrain, i, j, season):
     return t
 
 
+def _winter_order(ts):
+    """The priority order of one display tile in winter (FOREST.md 1, NAMES.md 2.1): forest (moss) and
+    plains exchange places when the tile's corners hold both; every other ground keeps its place."""
+    P = list(RR.PRIORITY)
+    if "moss" in ts and "plains" in ts:
+        a, b = P.index("moss"), P.index("plains")
+        P[a], P[b] = P[b], P[a]
+    return P
+
+
+def winter_mask(g, t, i, j):
+    """Terrain t's overlay mask on display tile (i, j), read with that tile's own winter order."""
+    ts = [RR.terr(g, *c) for c in [(i, j), (i + 1, j), (i, j + 1), (i + 1, j + 1)]]
+    P = _winter_order(ts)
+    return sum(b for b, tt in zip((1, 2, 4, 8), ts) if tt in P and P.index(tt) >= P.index(t))
+
+
+def winter_forest_v(g, m, i, j):
+    """The forest winter edge's v on a swapped tile: the v2 rule (NAMES v2 2) with every mask read in
+    the winter order, so a side next to a tile whose forest mask is 6 / 9 (the forest touches only
+    diagonally there) has state 0."""
+    if m in (6, 9):
+        return RR.dhash(i + 7, j) % 2
+    from transitions import crossing_sides
+    v = 0
+    for k, sd in enumerate(crossing_sides(m)):
+        hargs, ends, across = RR.SIDE_GEOM[sd]
+        s = (RR.dhash(*hargs(i, j)) >> 4) & 1
+        if any(RR.terr(g, *c) == "water" for c in ends(i, j)) or winter_mask(g, "moss", *across(i, j)) in (6, 9):
+            s = 0
+        v += s << k
+    return v
+
+
 def ground(ver, season):
     g = grid()
     d = 2 if ver == "now" else 4
@@ -119,7 +153,7 @@ def ground(ver, season):
                 if swap:
                     base = tile_v3(g, "plains", i, j, season)
                     m = sum(b for b, t in zip((1, 2, 4, 8), ts) if t == "moss")
-                    v = RR.edge_variant(g, "moss", m, i, j)
+                    v = winter_forest_v(g, m, i, j)
                     base = base.copy()
                     base.alpha_composite(ld(os.path.join(V3T, f"{pre}forest.grass.v3.edge.{m}.{v}.png")))
                     im.alpha_composite(base, (i * T, j * T))

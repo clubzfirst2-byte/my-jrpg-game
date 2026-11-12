@@ -289,9 +289,11 @@ def flow_tints(season):
     so the shape is the tint itself; winter keeps the plains' drift streaks, body 214 / tip 255).
     Chosen so the patch reads (colour difference to the plain moss ΔE 1.4-2.4) without grain (texel
     pairs more than 15 apart in brightness: 3-5 % on full patches):
-      summer d #1a382a (deep shade), l #2d5632 (a sun fleck); autumn d #4a3c20 (browner, not darker),
-      l #544c28 (old gold, near the moss's brightness); winter: the plains winter tints."""
-    return {"summer": {"d": "#1a382a", "l": "#2d5632"}, "autumn": {"d": "#4a3c20", "l": "#544c28"},
+      summer d #1a3830 (deep shade; round 3: bluer than #1a382a at the same brightness, ΔE 1.45 -> 1.88.
+      Not darker: below brightness 47.9 the patch is more than 15 under the moss's main colour, L 62.9,
+      and the grain jumps from 3.7 % to 14.7 %), l #2d5632 (a sun fleck); autumn d #4a3c20 (browner,
+      not darker), l #544c28 (old gold, near the moss's brightness); winter: the plains winter tints."""
+    return {"summer": {"d": "#1a3830", "l": "#2d5632"}, "autumn": {"d": "#4a3c20", "l": "#544c28"},
             "winter": {"d": "#aabcd6", "l": "#fafcff"}}[season]
 
 
