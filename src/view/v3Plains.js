@@ -149,10 +149,21 @@ export function crossed(bits) {
   return out;
 }
 
-/** How many flow variants a corner set has (8 where the border crosses 2 sides, else 2). @param {string} bits */
+/** The corner bits (TL TR BR BL) of a tile mirrored left to right. @param {string} bits */
+export const flipBits = (bits) => bits[1] + bits[0] + bits[3] + bits[2];
+
+/** The corner sets stored as pictures (NAMES.md 3.2); the others are drawn as their mirror. */
+export const STORED = Object.freeze(['1000', '0001', '1001', '1110', '0111', '1100', '0011', '1010', '1111']);
+/** A corner set that is drawn as a stored one mirrored → that stored one. */
+export const MIRROR = Object.freeze(Object.fromEntries(STORED.filter((b) => !STORED.includes(flipBits(b))).map((b) => [flipBits(b), b])));
+/** Inner shapes of a tile whose border crosses 2 sides; stored pictures of the full tile 1111. */
+const INNER_SHAPES = 3;
+const FULL_SHAPES = 4;
+
+/** How many pictures a stored corner set has: 4 (1111), 16 (1010), else 12. @param {string} bits */
 export const flowVariants = (bits) => {
   const n = crossed(bits).length;
-  return n === 2 ? 8 : 2;
+  return n === 0 ? FULL_SHAPES : n === 4 ? 16 : 4 * INNER_SHAPES;
 };
 
 /** gen_ground_v3.side_state: a side's state 0 / 1, the same for both tiles sharing it. @param {number} i @param {number} j @param {'N' | 'E' | 'S' | 'W'} side */
@@ -161,63 +172,80 @@ export function sideState(i, j, side) {
   return (h >>> 4) & 1;
 }
 
+/** @typedef {[kind: string, bits: string, v: number, flip: boolean]} FlowKey */
+
 /**
- * gen_ground_v3.flow_key: (kind, corners TL TR BR BL, v) of display tile (i, j), or null (no flow).
- * `corner` gives a world corner's state (the game's: flowCorner, 'm' where the 4 display tiles around the
- * corner are not all full plains). @param {number} i @param {number} j
- * @param {(cx: number, cy: number) => 'd' | 'l' | 'm'} [corner]
- * @returns {[string, string, number] | null}
+ * gen_ground_v3.flow_key (NAMES.md 3.2, round 7): (kind, stored corners TL TR BR BL, v, flip) of display
+ * tile (i, j), or null (no flow). A corner set without a picture of its own is its stored mirror drawn
+ * flipped left to right (its E / W side states read swapped). v: 2 sides crossed s(A) + 2 s(B) + 4 ((i + 2j)
+ * mod 3); 4 sides s(N) + 2 s(E) + 4 s(S) + 8 s(W); none hsh % 4 (flip by hsh). `corner` gives a world
+ * corner's state (the game's: flowCorner, 'm' where the 4 display tiles around it are not all full plains).
+ * @param {number} i @param {number} j @param {(cx: number, cy: number) => 'd' | 'l' | 'm'} [corner]
+ * @returns {FlowKey | null}
  */
 export function flowKey(i, j, corner = flowCorner) {
   const cs = [corner(i, j), corner(i + 1, j), corner(i + 1, j + 1), corner(i, j + 1)];
   const kinds = [...new Set(cs.filter((k) => k !== 'm'))].sort();
   if (!kinds.length) return null;
   const kind = kinds[0];
-  const bits = cs.map((k) => (k === kind ? '1' : '0')).join('');
+  const b = cs.map((k) => (k === kind ? '1' : '0')).join('');
+  const flip = b in MIRROR;
+  const bits = flip ? /** @type {Record<string, string>} */ (MIRROR)[b] : b;
+  const st = (/** @type {'N' | 'E' | 'S' | 'W'} */ side) => sideState(i, j, flip && side === 'E' ? 'W' : flip && side === 'W' ? 'E' : side);
   const sides = crossed(bits);
-  const v = sides.length === 2 ? sideState(i, j, sides[0]) + 2 * sideState(i, j, sides[1]) + 4 * (hsh(i, j, 34) % 2) : hsh(i, j, 33) % 2;
-  return [kind, bits, v];
+  if (!sides.length) return [kind, bits, hsh(i, j, 33) % FULL_SHAPES, ((hsh(i, j, 35) >>> 2) & 1) === 1];
+  if (sides.length === 4) return [kind, bits, st('N') + 2 * st('E') + 4 * st('S') + 8 * st('W'), flip];
+  return [kind, bits, st(sides[0]) + 2 * st(sides[1]) + 4 * ((((i + 2 * j) % INNER_SHAPES) + INNER_SHAPES) % INNER_SHAPES), flip];
 }
 
-/** The key of a flow tile. @param {string | null | undefined} season @param {[string, string, number]} fk */
-export const flowTileKey = (season, fk) => `${seasonPrefix(season)}plains.grassflow.v3.${fk[0]}${fk[1]}.${fk[2]}`;
+/** The flow pictures' set of a season: summer and autumn share one ("" ), winter has its own. @param {string | null | undefined} season */
+export const flowSet = (season) => (v3Season(season) === 'winter' ? 'winter.' : '');
+
+/** The key of a flow picture (a grey shape). @param {string | null | undefined} season @param {FlowKey} fk */
+export const flowTileKey = (season, fk) => `${flowSet(season)}plains.grassflow.v3.${fk[1]}.${fk[2]}`;
+
+/** FLOW_TINT[season][kind] (NAMES.md 3.3): the colour the grey flow shapes are multiplied by. */
+export const FLOW_TINT = Object.freeze({
+  summer: Object.freeze({ d: 0x335d3a, l: 0x638b46 }),
+  autumn: Object.freeze({ d: 0x744b28, l: 0x91802e }),
+  winter: Object.freeze({ d: 0x99abc7, l: 0xdce6f2 }),
+});
 
 /**
- * How a flow tile is drawn: its texture key and a tint (0xffffff: as painted). The one place to change
- * when the flow comes as shapes coloured by the game (inspect_v3_pilot.md, production 3rd check, memory
- * (1): one alpha shape per corners / v shared by d and l, its colour multiplied in): FLOW_SHAPE then
- * names the shape's key and FLOW_TINT the colour per season and kind, and this returns them.
- * @param {string | null | undefined} season @param {[string, string, number]} fk
- * @param {(key: string) => boolean} has whether a texture is loaded
- * @returns {{ key: string, tint: number } | null}
+ * How a flow tile is drawn: its picture, the colour it is multiplied by, and whether it is mirrored left
+ * to right (about the tile's centre), or null when its picture is not loaded.
+ * @param {string | null | undefined} season @param {FlowKey} fk @param {(key: string) => boolean} has
+ * @returns {{ key: string, tint: number, flip: boolean } | null}
  */
 export function flowLook(season, fk, has) {
-  const painted = flowTileKey(season, fk);
-  if (has(painted)) return { key: painted, tint: 0xffffff };
-  const shape = FLOW_SHAPE(fk);
-  const tint = FLOW_TINT[v3Season(season)]?.[fk[0]];
-  if (shape && tint !== undefined && has(shape)) return { key: shape, tint };
-  return null;
+  const key = flowTileKey(season, fk);
+  const tint = /** @type {Record<string, number>} */ (FLOW_TINT[v3Season(season)])[fk[0]];
+  return has(key) && tint !== undefined ? { key, tint, flip: fk[3] } : null;
 }
-
-/** The shared shape of a flow tile (none yet: the flow is painted per season and kind). @param {[string, string, number]} fk @returns {string | null} */
-// eslint-disable-next-line no-unused-vars
-export const FLOW_SHAPE = (fk) => null;
-/** The flow's colour per season and kind when drawn from shapes (none yet). @type {Record<string, Record<string, number>>} */
-export const FLOW_TINT = {};
 
 /** The v3 key of the plains grass edge over a lower ground (v2's "plains.grass.edge.<mask>.<v>"). @param {string | null | undefined} season @param {string} v2Name e.g. "edge.5.2" */
 export const edgeKey = (season, v2Name) => `${seasonPrefix(season)}plains.grass.v3.${v2Name}`;
 
-/** Whether a key is plains v3 art (the bundles "v3:plains:<season>"). @param {string} key @returns {'summer' | 'autumn' | 'winter' | null} */
-export function v3PlainsSeasonOf(key) {
-  const m = /^(?:(autumn|winter)\.)?plains\.(?:grass|grassflow|tree|prop)\.v3\./.exec(key);
+/**
+ * Which bundle a plains v3 key goes in: its season's ("summer", "autumn", "winter": base, edges, trees,
+ * props; winter's flow shapes too), or "flow" (the flow shapes summer and autumn share), or null.
+ * @param {string} key @returns {'summer' | 'autumn' | 'winter' | 'flow' | null}
+ */
+export function v3PlainsPartOf(key) {
+  const m = /^(?:(autumn|winter)\.)?plains\.(grass|grassflow|tree|prop)\.v3\./.exec(key);
   if (!m) return null;
+  if (m[2] === 'grassflow' && !m[1]) return 'flow';
   return /** @type {'autumn' | 'winter' | undefined} */ (m[1]) ?? 'summer';
 }
 
-/** The bundle of a season's plains v3 art. @param {string | null | undefined} season */
-export const v3PlainsBundle = (season) => `v3:plains:${v3Season(season)}`;
+/** The bundle of a part of the plains v3 art. @param {'summer' | 'autumn' | 'winter' | 'flow'} part */
+export const v3PlainsBundleName = (part) => `v3:plains:${part}`;
+
+/** The bundles of the plains v3 art a season draws with (summer's for spring). @param {string | null | undefined} season */
+export const v3PlainsBundles = (season) => {
+  const s = v3Season(season);
+  return s === 'winter' ? [v3PlainsBundleName(s)] : [v3PlainsBundleName(s), v3PlainsBundleName('flow')];
+};
 
 // --- trees (STYLE.md 7.1b) and props (7.2) ---
 

@@ -4,7 +4,7 @@ import { GameView, CHUNK } from '../../src/view/gameView.js';
 import { Ground, Shape } from '../../src/game/world/tilemap.js';
 import { PREFIX, SEASONAL, deepMap, landKey } from '../../src/view/groundV2.js';
 import {
-  MacroGrid, PATTERNS, flowKey, flowCorner, flowLook, flowVariants, hsh, baseKey, v3Season, seasonPrefix, v3PlainsSeasonOf, v3PlainsBundle,
+  MacroGrid, PATTERNS, flowKey, flowCorner, flowLook, flowVariants, hsh, baseKey, v3Season, seasonPrefix, v3PlainsPartOf, v3PlainsBundles, FLOW_TINT, STORED, MIRROR, flipBits,
   treeKind, plainsTreeLook, openProp, treeFootProp, PROPS, swayStep, swayFrame, TREE_SWAY, PROP_SWAY, floraKey, floraFrames,
 } from '../../src/view/v3Plains.js';
 import { hash01 } from '../../src/view/placement.js';
@@ -72,7 +72,9 @@ describe('v3 plains ground: the engine draws what the art side\'s reference draw
             if (p.quarter) continue;
             const id = `${(p.x - 8) / 16},${(p.y - 8) / 16}`;
             if (!here.has(id)) here.set(id, []);
-            here.get(id).push(p.anim ? p.key : seasonKey(p.key));
+            // (a flow shape: "<key>[~f]@<tint>", ~f mirrored left to right)
+            const flow = p.tint !== undefined ? `${p.flip ? '~f' : ''}@#${p.tint.toString(16).padStart(6, '0')}` : '';
+            here.get(id).push((p.anim ? p.key : seasonKey(p.key)) + flow);
           }
           for (const [id, keys] of here) if (!drawn.has(id)) drawn.set(id, keys.join('|'));
         }
@@ -80,13 +82,16 @@ describe('v3 plains ground: the engine draws what the art side\'s reference draw
       let compared = 0;
       let flows = 0;
       let edges = 0;
+      let flips = 0;
       const vs = new Set();
       const missing = new Set();
       for (let j = 0; j < H - 1; j++) {
         for (let i = 0; i < W - 1; i++) {
           const want = ref.draws[`${i},${j}`].split('|').map(engineKey).join('|');
           expect(drawn.get(`${i},${j}`), `${ref.name} ${i},${j}`).toBe(want);
-          for (const k of want.split('|')) {
+          for (const piece of want.split('|')) {
+            const k = piece.replace(/(?:~f)?@#[0-9a-f]{6}$/, '');
+            if (piece.includes('~f')) flips++;
             if (k.startsWith('tile.water')) continue;
             if (!ART.has(k)) missing.add(k);
             if (k.includes('grassflow')) {
@@ -102,8 +107,9 @@ describe('v3 plains ground: the engine draws what the art side\'s reference draw
       expect(compared).toBe((W - 1) * (H - 1));
       expect(flows).toBeGreaterThan(100);
       expect(edges).toBeGreaterThan(50);
-      // the flow's v used as it comes: 0-7 (not only 0 / 1)
-      if (ref.season === null) expect([...vs].sort()).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+      // the flow's v used as it comes (round 7: up to 11 / 15), some drawn mirrored
+      if (ref.season === null) expect(Math.max(...vs)).toBeGreaterThanOrEqual(11);
+      expect(flips).toBeGreaterThan(20);
     });
   }
 
@@ -129,15 +135,24 @@ describe('v3 plains ground: the engine draws what the art side\'s reference draw
       const cells = rows[r].split(' ');
       for (let c = 0; c < cells.length; c++) {
         const fk = flowKey(i0 + c, j0 + r);
-        expect(fk ? `${fk[0]}${fk[1]}${fk[2]}` : '.', `${i0 + c},${j0 + r}`).toBe(cells[c]);
+        expect(fk ? `${fk[0]}${fk[1]}.${fk[2]}${fk[3] ? 'f' : ''}` : '.', `${i0 + c},${j0 + r}`).toBe(cells[c]);
         if (fk) {
           n++;
+          expect(STORED).toContain(fk[1]);
           expect(fk[2]).toBeLessThan(flowVariants(fk[1]));
-          expect(ART.has(`plains.grassflow.v3.${fk[0]}${fk[1]}.${fk[2]}`)).toBe(true);
+          for (const set of ['', 'winter.']) expect(ART.has(`${set}plains.grassflow.v3.${fk[1]}.${fk[2]}`), `${set}${fk[1]}.${fk[2]}`).toBe(true);
         }
       }
     }
     expect(n).toBeGreaterThan(3000);
+  });
+
+  it('the stored corner sets, their variant counts, the mirror pairs and FLOW_TINT are the reference\'s', () => {
+    expect([...STORED]).toEqual(REF.stored);
+    for (const b of STORED) expect(flowVariants(b), b).toBe(REF.variants[b]);
+    for (const [m, b] of Object.entries(MIRROR)) expect(flipBits(m)).toBe(b);
+    expect(Object.keys(MIRROR).length + STORED.length).toBe(15);
+    for (const s of ['summer', 'autumn', 'winter']) for (const k of ['d', 'l']) expect(`#${FLOW_TINT[s][k].toString(16).padStart(6, '0')}`).toBe(REF.tints[s][k]);
   });
 
   it('hsh is the reference\'s 32-bit hash (negative coordinates too) and hash01 × 2³²', () => {
@@ -151,19 +166,26 @@ describe('v3 plains: seasons, keys, the flow\'s colour hook', () => {
   it('spring and no season draw summer\'s art; autumn / winter their own', () => {
     expect([null, 'spring', 'summer', 'autumn', 'winter'].map(v3Season)).toEqual(['summer', 'summer', 'summer', 'autumn', 'winter']);
     expect(seasonPrefix('spring')).toBe('');
-    expect(v3PlainsBundle('spring')).toBe('v3:plains:summer');
-    expect(v3PlainsSeasonOf('winter.plains.grassflow.v3.d0011.5')).toBe('winter');
-    expect(v3PlainsSeasonOf('plains.tree.v3.oak_l.2')).toBe('summer');
-    expect(v3PlainsSeasonOf('plains.grass.12')).toBe(null);
-    expect(v3PlainsSeasonOf('prop.v3.tuft')).toBe(null);
+    expect(v3PlainsBundles('spring')).toEqual(['v3:plains:summer', 'v3:plains:flow']);
+    expect(v3PlainsBundles('autumn')).toEqual(['v3:plains:autumn', 'v3:plains:flow']);
+    expect(v3PlainsBundles('winter')).toEqual(['v3:plains:winter']);
+    expect(v3PlainsPartOf('winter.plains.grassflow.v3.0011.5')).toBe('winter');
+    expect(v3PlainsPartOf('plains.grassflow.v3.0011.5')).toBe('flow');
+    expect(v3PlainsPartOf('autumn.plains.grass.v3.edge.3.1')).toBe('autumn');
+    expect(v3PlainsPartOf('plains.tree.v3.oak_l.2')).toBe('summer');
+    expect(v3PlainsPartOf('plains.grass.12')).toBe(null);
+    expect(v3PlainsPartOf('prop.v3.tuft')).toBe(null);
     const g = new MacroGrid();
     expect(baseKey(g, 'autumn', 5, 2)).toBe(`autumn.plains.grass.v3.${g.at(1, 0)}21`);
     expect(baseKey(g, null, -1, -1)).toBe(`plains.grass.v3.${g.at(-1, -1)}33`);
     expect(PATTERNS.length).toBe(8);
   });
-  it('the flow is drawn as painted; a shape + colour set (memory: shapes shared by d and l) is one function away', () => {
-    const fk = /** @type {[string, string, number]} */ (['l', '0011', 6]);
-    expect(flowLook('winter', fk, (k) => ART.has(k))).toEqual({ key: 'winter.plains.grassflow.v3.l0011.6', tint: 0xffffff });
+  it('the flow is a grey shape (summer and autumn share one set, winter its own) times FLOW_TINT[season][kind], maybe mirrored', () => {
+    const fk = /** @type {[string, string, number, boolean]} */ (['l', '0011', 6, true]);
+    const has = (k) => ART.has(k);
+    expect(flowLook('winter', fk, has)).toEqual({ key: 'winter.plains.grassflow.v3.0011.6', tint: 0xdce6f2, flip: true });
+    expect(flowLook('autumn', ['d', '1111', 3, false], has)).toEqual({ key: 'plains.grassflow.v3.1111.3', tint: 0x744b28, flip: false });
+    expect(flowLook('spring', ['d', '1111', 3, false], has)?.tint).toBe(0x335d3a);
     expect(flowLook('summer', fk, () => false)).toBe(null);
   });
 });

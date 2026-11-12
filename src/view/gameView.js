@@ -22,7 +22,7 @@ import { areaAt } from '../game/world/features.js';
 import { sourceFrameKey, drawSourceTelegraphs, drawSeatLights } from './sourceView.js';
 import { FeatureView } from './featureView.js';
 import { EnvView } from './envView.js';
-import { WeatherView, starRingOpen, crystalLightColor } from './weatherView.js';
+import { WeatherView, starRingOpen, crystalLightColor, LIGHT_MAP_RESOLUTION_V3 } from './weatherView.js';
 import { ItemView } from './itemView.js';
 import { PuzzleView } from './puzzleView.js';
 import { NpcView } from './npcView.js';
@@ -39,7 +39,8 @@ import { SilhouetteCache, placeFlash } from './flashOverlay.js';
 import { EnemySlots } from './enemySlots.js';
 import { setFrame } from './spriteFrame.js';
 import { frameFight } from './assets/artV3.js';
-import { MacroGrid, PROPS, PROP_SWAY, TREE_SWAY, baseKey as v3BaseKey, edgeKey as v3EdgeKey, floraFrames, floraKey, flowCorner, flowKey, flowLook, openProp, plainsTreeLook, seasonPrefix, swayFrame, swayStep, treeFootProp, v3PlainsBundle } from './v3Plains.js';
+import { GroundCache } from './groundCache.js';
+import { MacroGrid, PROPS, PROP_SWAY, TREE_SWAY, baseKey as v3BaseKey, edgeKey as v3EdgeKey, floraFrames, floraKey, flowCorner, flowKey, flowLook, openProp, plainsTreeLook, seasonPrefix, swayFrame, swayStep, treeFootProp, v3PlainsBundles } from './v3Plains.js';
 import { activeBoss } from '../game/entities/bosses.js';
 import { hash01, valueNoise } from './placement.js';
 
@@ -86,7 +87,8 @@ export function chunkCacheArea(cx, cy, ts) {
  *   edges: { sprite: Sprite, key: string }[], waterFrame: number,
  *   waterMesh: import('pixi.js').Mesh | null, waterKeys: string[],
  *   extents: Map<number, { x0: number, x1: number, y0: number, y1: number }[]>, bundles: string[],
- *   sway?: { sprite: Sprite, kind: string, frames: number, tx: number, ty: number, frame: number }[], foot?: { sprite: Sprite, o: any }[] }} Chunk
+ *   sway?: { sprite: Sprite, kind: string, frames: number, tx: number, ty: number, frame: number }[], foot?: { sprite: Sprite, o: any }[],
+ *   props?: Container }} Chunk
  *   (graphics v3: sway = the swaying props of its ground, foot = the props at the foot of its trees, with the actors)
  */
 
@@ -129,7 +131,7 @@ export class GameView {
    * @param {import('pixi.js').Application} app
    * @param {import('./assets/assetManager.js').AssetManager} assets
    * @param {import('../game/state.js').GameState} state
-   * @param {{ v3?: boolean, v3Opaque?: boolean }} [opts] v3: graphics v3 and its narrow view (?v3=1, assets/artV3.js)
+   * @param {{ v3?: boolean, v3Opaque?: boolean, v3Cache?: boolean }} [opts] v3: graphics v3 and its narrow view (?v3=1, assets/artV3.js)
    */
   constructor(app, assets, state, opts = {}) {
     this.app = app;
@@ -163,7 +165,7 @@ export class GameView {
     this.v3TreeObjects = null;
     /** Graphics v3: the other objects' tiles (v3TreeRoom), made on first use. @type {Set<number> | null} */
     this.v3Others = null;
-    /** Graphics v3: the v3 plains bundle of the season the world is about to change to, kept while it loads (updateSeason). @type {string | null} */
+    /** Graphics v3: the v3 plains bundles of the season the world is about to change to, kept while they load (updateSeason). @type {string[] | null} */
     this.v3SeasonWant = null;
     /** Graphics v3: the camera's view of the last frame, game px (state.viewRect). @type {{ x: number, y: number, width: number, height: number } | null} */
     this.cameraRect = null;
@@ -194,6 +196,18 @@ export class GameView {
     this.overlay.label = 'overlay';
     this.world.addChild(this.base, this.actors, this.overlay);
     app.stage.addChildAt(this.world, 0);
+    /**
+     * Graphics v3: the flat ground drawn into a texture a little larger than the view (groundCache.js),
+     * shown in place of the ground sprites (null with ?v3cache=0); the swaying props stay sprites, in a
+     * layer of their own just above it.
+     * @type {GroundCache | null}
+     */
+    this.groundCache = this.v3 && opts.v3Cache !== false ? new GroundCache(app.renderer, this.base) : null;
+    /** Graphics v3: the chunks' open-ground props (swaying grass and flowers), above the ground. */
+    this.v3DecorLayer = new Container();
+    this.v3DecorLayer.label = 'v3-decor';
+    if (this.v3) this.world.addChildAt(this.v3DecorLayer, this.world.getChildIndex(this.base) + 1);
+    if (this.groundCache) this.world.addChildAt(this.groundCache.sprite, this.world.getChildIndex(this.base) + 1);
 
     // Camera (DESIGN.md 3.5): outdoors = the map (or its outdoor part); areas (caves) set their own.
     this.camera = new Camera();
@@ -316,7 +330,7 @@ export class GameView {
       state,
     );
     // Time of day and weather (P5): light map, rain, lightning, above the world.
-    this.weather = new WeatherView(app, (key) => this.makeSprite(key), this.actors);
+    this.weather = new WeatherView(app, (key) => this.makeSprite(key), this.actors, this.v3 ? { lightResolution: LIGHT_MAP_RESOLUTION_V3 } : {});
     this.weather.crystalLight = crystalLightColor(assets.texture('obj.crystal'));
     this.weather.attach(app.stage, app.stage.getChildIndex(this.world) + 1);
     this.weather.indoorAmbient = indoorLight(this.releaseTerrain);
@@ -425,11 +439,11 @@ export class GameView {
     }
     // graphics v3: near the plains, the season's v3 plains art first too (the old look stays meanwhile)
     if (this.v3) {
-      const v3 = v3PlainsBundle(want);
       const near = [...this.chunks.values()].some((c) => c.bundles.some((b) => b.startsWith('v3:plains:')));
-      if (near && v3 !== v3PlainsBundle(this.season) && this.assets.builders.has(v3) && !this.assets.isLoaded(v3)) {
-        this.v3SeasonWant = v3;
-        this.requestBundle(v3);
+      const missing = near ? v3PlainsBundles(want).filter((b) => this.assets.builders.has(b) && !this.assets.isLoaded(b)) : [];
+      if (missing.length) {
+        this.v3SeasonWant = missing;
+        for (const b of missing) this.requestBundle(b);
         return;
       }
     }
@@ -727,7 +741,7 @@ export class GameView {
   buildGroundV2(base, cx, cy) {
     /** @type {{ key: string, x: number, y: number, quarter: string | null }[]} */
     const water = [];
-    for (const p of /** @type {{ key: string, anim: boolean, x: number, y: number, quarter: string | null, tint?: number }[]} */ (this.groundPiecesV2(cx, cy))) {
+    for (const p of /** @type {{ key: string, anim: boolean, x: number, y: number, quarter: string | null, tint?: number, flip?: boolean }[]} */ (this.groundPiecesV2(cx, cy))) {
       // (the water goes to the chunk's water mesh, under the cache: buildChunk)
       if (p.anim) {
         water.push(p);
@@ -738,7 +752,12 @@ export class GameView {
       if (!tex) continue;
       const s = new Sprite(tex);
       s.position.set(p.x, p.y);
-      if (p.tint !== undefined) s.tint = p.tint; // (graphics v3: a flow shape coloured by the game, v3Plains.flowLook)
+      // (graphics v3: a flow shape coloured by the game and mirrored left to right about the tile's centre, v3Plains.flowLook)
+      if (p.tint !== undefined) s.tint = p.tint;
+      if (p.flip) {
+        s.scale.x = -1;
+        s.x += tex.width;
+      }
       if (this.v3 && OPAQUE_V3.test(p.key)) s.label = OPAQUE_LABEL; // (graphics v3: drawn without blending, groupGround)
       base.addChild(s);
     }
@@ -760,7 +779,7 @@ export class GameView {
    * one the plains grass edges of the higher grounds lie on), then the flow where all 4 corners are
    * plains, then the other layers, the plains grass edges over a lower ground taking their v3 picture
    * (same mask and v: the v2 rule). Pieces whose v3 art is not loaded stay v2.
-   * @param {{ key: string, anim: boolean, x: number, y: number, quarter: string | null, tint?: number }[]} out
+   * @param {{ key: string, anim: boolean, x: number, y: number, quarter: string | null, tint?: number, flip?: boolean }[]} out
    * @param {{ key: string, anim: boolean }[]} layers v2's (displayLayers) @param {string[]} cls the 4 corners
    * @param {number} i @param {number} j @param {number} px @param {number} py
    */
@@ -774,7 +793,7 @@ export class GameView {
         if (n === 0 && this.v3FullPlains(i, j)) {
           const fk = flowKey(i, j, this.v3CornerAt);
           const look = fk && flowLook(this.season, fk, has);
-          if (look) out.push({ key: look.key, anim: false, x: px, y: py, quarter: null, ...(look.tint !== 0xffffff ? { tint: look.tint } : {}) });
+          if (look) out.push({ key: look.key, anim: false, x: px, y: py, quarter: null, tint: look.tint, ...(look.flip ? { flip: true } : {}) });
         }
         continue;
       }
@@ -1010,8 +1029,7 @@ export class GameView {
       if (needs.steps && this.assets.builders.has(ISLAND_STEPS_BUNDLE)) list.push(ISLAND_STEPS_BUNDLE);
     }
     // graphics v3: the plains' v3 ground, trees and props of the season, with the chunks that have plains
-    const v3 = this.v3PlainsBundleOf(cx, cy);
-    if (v3) list.push(v3);
+    list.push(...this.v3PlainsBundlesOf(cx, cy));
     // P10.2: and the season's look (gfx W1: the season's art of each seasonal ground the chunk has, apart).
     if (!this.seasonBundle) return list;
     list.push(this.seasonBundle);
@@ -1025,17 +1043,18 @@ export class GameView {
   }
 
   /**
-   * Graphics v3: the bundle of the plains' v3 art in the current season ("v3:plains:<season>", summer's in
-   * spring) when a chunk has plains ground or a part of the plains region, else null. @param {number} cx @param {number} cy
+   * Graphics v3: the bundles of the plains' v3 art in the current season ("v3:plains:<season>", summer's
+   * in spring, and the flow shapes summer and autumn share) when a chunk has plains ground or a part of
+   * the plains region, else none. @param {number} cx @param {number} cy
    */
-  v3PlainsBundleOf(cx, cy) {
-    if (!this.v3) return null;
-    const b = v3PlainsBundle(this.season);
-    if (!this.assets.builders.has(b)) return null;
+  v3PlainsBundlesOf(cx, cy) {
+    if (!this.v3) return [];
+    const bs = v3PlainsBundles(this.season).filter((b) => this.assets.builders.has(b));
+    if (!bs.length) return [];
     const x0 = cx * CHUNK;
     const y0 = cy * CHUNK;
     const inRegion = this.regions.some((r) => r.id === 'plains' && r.tx < x0 + CHUNK && r.tx + r.tw > x0 && r.ty < y0 + CHUNK && r.ty + r.th > y0);
-    return inRegion || (this.groundV2 && this.chunkClasses(cx, cy).includes('plains')) ? b : null;
+    return inRegion || (this.groundV2 && this.chunkClasses(cx, cy).includes('plains')) ? bs : [];
   }
 
   /**
@@ -1363,9 +1382,16 @@ export class GameView {
     this.flushShades(shades, y1 - 1, rows, cx);
     /** @type {ReturnType<GameView['addV3Decor']> | null} */
     let decor = null;
+    /** graphics v3: the chunk's open-ground props, above the ground (and its cache). @type {Container | null} */
+    let props = null;
     if (this.v3) {
       this.groupGround(base);
-      decor = this.addV3Decor(base, cx, cy, x1, y1);
+      props = new Container();
+      props.label = `props-${cx},${cy}`;
+      decor = this.addV3Decor(props, cx, cy, x1, y1);
+      props.tint = levelTint(0, this.releaseTerrain);
+      this.v3DecorLayer.addChild(props);
+      this.groundCache?.invalidate();
     }
     base.tint = levelTint(0, this.releaseTerrain);
     this.base.addChild(base);
@@ -1403,7 +1429,7 @@ export class GameView {
       this.addObjectSprite(o);
     }
     this.chunkStats.built++;
-    return { cx, cy, base, rows, water, edges, extents, bundles: this.chunkBundles(cx, cy), waterFrame: this.waterFrame, waterMesh, waterKeys, ...(decor ? { sway: decor.sway, foot: decor.foot } : {}) };
+    return { cx, cy, base, rows, water, edges, extents, bundles: this.chunkBundles(cx, cy), waterFrame: this.waterFrame, waterMesh, waterKeys, ...(decor ? { sway: decor.sway, foot: decor.foot } : {}), ...(props ? { props } : {}) };
   }
 
   /** @param {Chunk} c */
@@ -1418,6 +1444,8 @@ export class GameView {
     }
     for (const r of c.rows.values()) r.destroy({ children: true });
     for (const f of c.foot ?? []) f.sprite.destroy();
+    c.props?.destroy({ children: true });
+    this.groundCache?.invalidate();
     const inChunk = (/** @type {number} */ tx, /** @type {number} */ ty) => Math.floor(tx / CHUNK) === c.cx && Math.floor(ty / CHUNK) === c.cy;
     for (const [o, e] of this.objectSprites) {
       const home = this.chunks.get(this.chunkKey(Math.floor(o.tx / CHUNK), Math.floor(o.ty / CHUNK)));
@@ -1440,7 +1468,11 @@ export class GameView {
    * @param {{ x: number, y: number }} origin @param {number} viewW @param {number} viewH world px
    */
   updateChunks(origin, viewW, viewH) {
-    if (this.v3) for (const c of this.chunks.values()) this.cullGround(c, origin, viewW, viewH);
+    if (this.v3) {
+      // (graphics v3: with the ground cache, the ground it is about to hold: its area, a little larger than the view)
+      const r = this.groundCache ? this.groundCache.plan(origin, viewW, viewH, this.camera.zoom * this.app.renderer.resolution) : { x: origin.x, y: origin.y, w: viewW, h: viewH };
+      for (const c of this.chunks.values()) this.cullGround(c, r, r.w, r.h);
+    }
     this.viewRect = { x: origin.x, y: origin.y, w: viewW, h: viewH };
     const ts = this.map.tileSize;
     const size = CHUNK * ts;
@@ -1493,7 +1525,7 @@ export class GameView {
         this.assets.unload(b); // the chunks hold their own references now
         this.preloaded.delete(b);
       } else if (!this.bundlesLoading.has(b)) {
-        const stillWanted = waiting.has(b) || b === this.v3SeasonWant || this.regions.some((r) => r.bundle === b && this.regionNear(r, origin, viewW, viewH));
+        const stillWanted = waiting.has(b) || !!this.v3SeasonWant?.includes(b) || this.regions.some((r) => r.bundle === b && this.regionNear(r, origin, viewW, viewH));
         if (!stillWanted) {
           if (b === 'region:plains') this.npcs.clear();
           this.dropBossSprites();
@@ -1803,7 +1835,7 @@ export class GameView {
       for (const e of c.sway ?? []) frames.props[e.frame]++;
       foot += c.foot?.length ?? 0;
       // (the open-ground props are the chunk ground's own children, after its groups)
-      for (const sp of c.base.children) {
+      for (const sp of (c.props ?? c.base).children) {
         const key = /** @type {any} */ (sp).v3Prop;
         if (key) props[key] = (props[key] ?? 0) + 1;
       }
@@ -1854,7 +1886,8 @@ export class GameView {
     /** @type {Map<Container, Container>} */
     const opaque = new Map();
     for (const child of [...base.children]) {
-      const gx = Math.floor(child.x / size);
+      // (a sprite mirrored left to right stands at its right edge)
+      const gx = Math.floor((child.scale.x < 0 ? child.x - child.width : child.x) / size);
       const gy = Math.floor(child.y / size);
       const k = `${gx},${gy}`;
       let g = groups.get(k);
@@ -2050,6 +2083,7 @@ export class GameView {
     this.updateSourceBundle(state);
     this.updateChunks(this.camera.origin(), this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom);
     if (this.v3) this.updateSway(timeSec); // graphics v3: the plains trees, grass and flowers sway
+    this.groundCache?.update(this.camera.zoom * this.app.renderer.resolution); // graphics v3: the ground, drawn again only when needed
     // P10.1: the elder's charm is back on its shelf once the quest is done.
     const charmHome = state.progress.quests.lost_charm === 'done';
     if (charmHome !== this.charmHome) {
@@ -2415,6 +2449,7 @@ export class GameView {
     }
     for (const e of c.edges) e.sprite.texture = this.edgeTexture(e.key, frame);
     if (!this.v3) c.base.updateCacheTexture();
+    else this.groundCache?.invalidate();
     this.waterStats.redraws++;
     this.waterStats.ms += performance.now() - t0;
   }

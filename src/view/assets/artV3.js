@@ -56,7 +56,7 @@ export function v3ArtGroups(params, available) {
 /**
  * Which region bundle a v3 key goes in (memory: STYLE.md 10.1 (1), a region's art only near it), or null
  * (hero, villagers, enemies: the base bundle, where they keep their v1 frames' place; the plains' ground,
- * trees and props: their own bundle per season, v3Plains.v3PlainsSeasonOf / placeholderPack.v3PlainsEntries;
+ * trees and props: their own bundle per season, v3Plains.v3PlainsPartOf / placeholderPack.v3PlainsEntries;
  * the pilot's tree, flowers and stump, replaced by the production art, are not packed). The pilot's stone
  * house is the plains'.
  * @param {string} key

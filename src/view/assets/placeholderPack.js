@@ -93,7 +93,7 @@ import { sourceFrames, starRingSprite } from './sourceArt.js';
 import { ICON_ANCHORS } from './iconAnchors.js';
 import { releaseTerrainEntries } from './terrainArt.js';
 import { v3RegionOf } from './artV3.js';
-import { v3PlainsSeasonOf } from '../v3Plains.js';
+import { v3PlainsPartOf } from '../v3Plains.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
 const TOP_LEFT = /** @type {[number, number]} */ ([0, 0]);
@@ -311,17 +311,18 @@ export function releaseV3RegionEntries(region, overrides) {
 }
 
 /**
- * Graphics v3 (STYLE.md 6, 7.1b, 7.2; memory 10.1 (1)): the plains' v3 art of one season — its ground
- * (the 8 base patterns' 128 tiles, the flow tiles, the grass edges: 64×64, on the 16 px grid), its trees
- * and props (on their feet) — a bundle of its own, "v3:plains:<season>" (v3Plains.v3PlainsBundle), loaded
- * by the chunks that have plains in that season only (summer's in spring). Only the names are read.
- * @param {'summer' | 'autumn' | 'winter'} season @param {Map<string, ArtSource> | Set<string>} [overrides]
+ * Graphics v3 (STYLE.md 6, 7.1b, 7.2, NAMES.md 3; memory 10.1 (1)): a part of the plains' v3 art, a
+ * bundle of its own ("v3:plains:<part>", v3Plains.v3PlainsBundles): a season's ground (the 8 base
+ * patterns' 128 tiles, the grass edges: 64×64, on the 16 px grid), trees and props (on their feet), and
+ * winter's flow shapes; "flow": the flow shapes summer and autumn share. Loaded by the chunks that have
+ * plains in that season only (summer's in spring). Only the names are read.
+ * @param {'summer' | 'autumn' | 'winter' | 'flow'} season @param {Map<string, ArtSource> | Set<string>} [overrides]
  * @returns {{ key: string, rows: string[], anchor: [number, number] }[]}
  */
 export function v3PlainsEntries(season, overrides) {
   if (!overrides?.size) return [];
   return [...overrides.keys()]
-    .filter((k) => v3PlainsSeasonOf(k) === season)
+    .filter((k) => v3PlainsPartOf(k) === season)
     .sort()
     .map((key) => (/plains\.(?:grass|grassflow)\.v3\./.test(key) ? { key, rows: Array(16).fill('.'.repeat(16)), anchor: TOP_LEFT } : { key, rows: ['.'], anchor: FEET }));
 }

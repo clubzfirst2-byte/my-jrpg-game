@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync } from 'node:fs';
 import { chooseToastSlot, V3_DEFAULT, V3_DENSITY, V3_TARGET_HEIGHT, v3Enabled, v3ArtGroups, v3RegionOf, mirrorSourceOf, frameFight, onScreen } from '../../src/view/assets/artV3.js';
 import { computeView } from '../../src/view/resolution.js';
+import { planCacheRect, CACHE_MARGIN } from '../../src/view/groundCache.js';
 import { GameView, CHUNK } from '../../src/view/gameView.js';
 import { createGameState, MAPS } from '../../src/game/state.js';
 import { createEnemy, updateEnemy } from '../../src/game/entities/enemies.js';
@@ -80,18 +81,21 @@ describe('art', () => {
     expect(releaseV3RegionEntries('region:plains', overrides).map((e) => e.key)).toEqual(['obj.v3.house_stone']);
     expect(releaseV3RegionEntries('region:forest', overrides)).toEqual([]);
     const seasons = /** @type {const} */ (['summer', 'autumn', 'winter']);
-    const all = seasons.flatMap((s) => v3PlainsEntries(s, overrides).map((e) => e.key));
+    const all = [...seasons, /** @type {const} */ ('flow')].flatMap((s) => v3PlainsEntries(s, overrides).map((e) => e.key));
     expect(new Set(all).size).toBe(all.length);
     // every production file is in exactly one season's bundle; the pilot's tree / flowers / stump in none
     expect(all.sort()).toEqual(files.filter((f) => /plains\.(?:grass|grassflow|tree|prop)\.v3\./.test(f)).sort());
     for (const s of seasons) {
       const e = v3PlainsEntries(s, overrides);
       expect(e.filter((x) => /grass\.v3\.[a-h]\d\d$/.test(x.key)).length).toBe(128);
-      expect(e.filter((x) => x.key.includes('grassflow')).length).toBe(204);
+      // the flow shapes: winter's own 104, summer and autumn share the "flow" bundle's 104
+      expect(e.filter((x) => x.key.includes('grassflow')).length).toBe(s === 'winter' ? 104 : 0);
       expect(e.filter((x) => x.key.includes('.edge.')).length).toBe(52);
       for (const x of e) expect(x.anchor).toEqual(/grass(?:flow)?\.v3\./.test(x.key) ? [0, 0] : [0.5, 1]);
       if (s !== 'summer') expect(e.every((x) => x.key.startsWith(`${s}.`))).toBe(true);
     }
+    expect(v3PlainsEntries('flow', overrides).length).toBe(104);
+    expect(v3PlainsEntries('flow', overrides).every((x) => /^plains\.grassflow\.v3\.[01]{4}\.\d+$/.test(x.key))).toBe(true);
     expect(REGION_ENTRIES['region:plains']).toBeTypeOf('function');
   });
   it('a v3 atlas is only as high as it is used (exactHeight), a season of plains art fits 2048 × about 1100', () => {
@@ -308,7 +312,7 @@ describe('v3 ground (no chunk cache)', () => {
       for (let cy = 2; cy <= 4; cy++) for (const cx of [0, 1]) for (const p of v.groundPiecesV2(cx, cy)) keys.add(p.key);
       const base = [...keys].filter((k) => new RegExp(`^${pre.replace('.', '\\.')}plains\\.grass\\.v3\\.[a-h]\\d\\d$`).test(k));
       expect(base.length, season).toBeGreaterThan(100);
-      expect([...keys].some((k) => k.startsWith(`${pre}plains.grassflow.v3.`)), season).toBe(true);
+      expect([...keys].some((k) => k.startsWith(`${season === 'winter' ? 'winter.' : ''}plains.grassflow.v3.`)), season).toBe(true);
       expect([...keys].some((k) => k.startsWith(`${pre}plains.grass.v3.edge.`)), season).toBe(true);
       // no v2 plains grass left on the flat ground
       expect([...keys].filter((k) => /^plains\.grass\.(?:\d+|macro|edge)/.test(k)), season).toEqual([]);
@@ -326,5 +330,30 @@ describe('messages in the narrow view (chooseToastSlot)', () => {
     expect(chooseToastSlot(top, low, [{ x: 410, y: 150, width: 30, height: 56 }])).toBe('top');
     expect(chooseToastSlot(top, low, [{ x: 410, y: 100, width: 30, height: 30 }])).toBe('low');
     expect(chooseToastSlot(top, low, [{ x: 410, y: 100, width: 30, height: 30 }, { x: 200, y: 330, width: 30, height: 30 }])).toBe('top');
+  });
+});
+
+describe('the v3 ground cache (groundCache.js): a texture a little larger than the view', () => {
+  const res = 4;
+  it('covers the view with a margin, on the canvas pixel grid; leads in the direction of the move', () => {
+    const r = planCacheRect(null, { x: 100.25, y: 50.5 }, 319.5, 147.5, { x: 0, y: 0 }, res);
+    expect(r).toEqual({ x: 100.25 - CACHE_MARGIN, y: 50.5 - CACHE_MARGIN, w: 319.5 + 2 * CACHE_MARGIN, h: 147.5 + 2 * CACHE_MARGIN });
+    for (const v of [r.x, r.y, r.w, r.h]) expect(Number.isInteger(v * res)).toBe(true);
+    // 15 Pro 1342 × 654 px (3.3 MB), SE 1398 × 814 px (4.3 MB)
+    expect(r.w * res * r.h * res * 4).toBeLessThan(3.6 * 2 ** 20);
+    const se = planCacheRect(null, { x: 0, y: 0 }, 333.5, 187.5, { x: 0, y: 0 }, res);
+    expect(se.w * res * se.h * res * 4).toBeLessThan(4.6 * 2 ** 20);
+    // moving right: nothing behind, twice the margin ahead
+    const right = planCacheRect(null, { x: 100, y: 50 }, 319.5, 147.5, { x: 1, y: 0 }, res);
+    expect(right.x).toBe(100);
+    expect(right.y).toBe(50 - CACHE_MARGIN);
+  });
+  it('is kept while the view stays inside it, drawn again once it leaves', () => {
+    const r = planCacheRect(null, { x: 100, y: 50 }, 319.5, 147.5, { x: 1, y: 0 }, res);
+    expect(planCacheRect(r, { x: 100 + 2 * CACHE_MARGIN, y: 50 }, 319.5, 147.5, { x: 1, y: 0 }, res)).toBe(null);
+    expect(planCacheRect(r, { x: 100 + 2 * CACHE_MARGIN + 0.25, y: 50 }, 319.5, 147.5, { x: 1, y: 0 }, res)).not.toBe(null);
+    expect(planCacheRect(r, { x: 100, y: 50 - CACHE_MARGIN - 0.25 }, 319.5, 147.5, { x: 1, y: 0 }, res)).not.toBe(null);
+    // the view's size changed (rotation, resize): a new texture
+    expect(planCacheRect(r, { x: 100, y: 50 }, 300, 147.5, { x: 1, y: 0 }, res)).not.toBe(null);
   });
 });

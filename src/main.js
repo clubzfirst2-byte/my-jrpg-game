@@ -19,7 +19,7 @@ import { startOpening, skipOpening, finishEnding, endingLine, ENDING } from './g
 import { EndingScreen } from './ui/ending.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE, acquireSheet, releaseSheet, v3PlainsEntries } from './view/assets/placeholderPack.js';
-import { v3PlainsBundle } from './view/v3Plains.js';
+import { v3PlainsBundleName } from './view/v3Plains.js';
 import { testHeroFrames } from './debug/testHero.js';
 import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
 import { availableV1Groups, availableV2Groups, availableV3Groups, prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
@@ -28,7 +28,7 @@ import { releaseSheetsLazily, dropIdleSheets, sameMirrored, freeAtlasCanvases, c
 import { resolveArtGroups } from './view/assets/artV2.js';
 import { GROUND_RUIN_BUNDLE, ISLAND_EDGES_BUNDLE, ISLAND_STEPS_BUNDLE, TERRAIN_GROUP, releaseTerrainEntries, v2BundleParts, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
-import { GameView } from './view/gameView.js';
+import { GameView, CHUNK } from './view/gameView.js';
 import { Bench } from './view/bench.js';
 import { InputManager } from './platform/inputManager.js';
 import { installLifecycle } from './platform/lifecycle.js';
@@ -231,9 +231,9 @@ async function boot() {
   assets.register(SOURCE_BUNDLE, () => buildPlaceholderPack(sourceEntries(), artOverrides, packOpts));
   // Graphics v3: the plains' v3 ground, trees and props, one bundle per season (summer's in spring), loaded
   // by the chunks that have plains (gameView.v3PlainsBundleOf), packed tallest first on atlases of their own
-  for (const season of /** @type {const} */ (['summer', 'autumn', 'winter'])) {
+  for (const season of /** @type {const} */ (['summer', 'autumn', 'winter', 'flow'])) {
     const entries = v3 ? v3PlainsEntries(season, artOverrides) : [];
-    if (entries.length) assets.register(v3PlainsBundle(season), () => buildPlaceholderPack(entries, artOverrides, { ...packOpts, tallestFirst: true, exactHeight: true }));
+    if (entries.length) assets.register(v3PlainsBundleName(season), () => buildPlaceholderPack(entries, artOverrides, { ...packOpts, tallestFirst: true, exactHeight: true }));
   }
   await assets.load('placeholder');
   if (v3) dropIdleSheets(); // graphics v3: the sheets no bundle is cut from now (v3Memory.js)
@@ -246,7 +246,7 @@ async function boot() {
   const mapName = /** @type {keyof typeof MAPS} */ (mapParam ?? 'world');
   const state = createGameState(MAPS[mapName] ?? MAPS.world);
   performance.mark('world');
-  const view = new GameView(app, assets, state, { v3, v3Opaque: params.get('v3opaque') === '1' });
+  const view = new GameView(app, assets, state, { v3, v3Opaque: params.get('v3opaque') === '1', v3Cache: params.get('v3cache') !== '0' });
   performance.mark('view');
   // Test / check helpers: ?time=20 (hour) and ?weather=rain|storm|cloudy|clear.
   const timeParam = Number.parseFloat(params.get('time') ?? '');
@@ -1175,6 +1175,8 @@ async function boot() {
       viewRect: state.viewRect ?? null,
       /** the plains' v3 trees and props on the loaded chunks, and their sway frames now (gameView.v3Stats) */
       plains: v3 ? view.v3Stats() : null,
+      /** the ground cache (groundCache.js): its texture's bytes, how often it was drawn, the time spent */
+      cache: view.groundCache ? { bytes: view.groundCache.bytes(), rect: view.groundCache.rect, ...view.groundCache.stats } : null,
     }),
     /** Graphics v3: a loaded texture's art density (texture px per game px), or null. */
     textureDensity: (/** @type {string} */ key) => (assets.hasTexture(key) ? assets.texture(key).source.resolution : null),
@@ -1190,6 +1192,15 @@ async function boot() {
       visualTime = t;
     },
     assets: () => assets.stats(),
+    /**
+     * The ground pieces of display tile (i, j) as drawn, bottom first (gfx W1 / graphics v3): each key
+     * (season applied), and for a v3 flow shape its tint and whether it is mirrored.
+     */
+    groundAt: (/** @type {number} */ i, /** @type {number} */ j) =>
+      view
+        .groundPiecesV2(Math.floor((i * 16 + 8) / (CHUNK * 16)), Math.floor((j * 16 + 8) / (CHUNK * 16)))
+        .filter((p) => p.x === i * 16 + 8 && p.y === j * 16 + 8)
+        .map((/** @type {any} */ p) => ({ key: p.anim ? p.key : view.seasonal(p.key), tint: p.tint ?? null, flip: !!p.flip, quarter: p.quarter })),
     /**
      * Performance checks: the layers of the stage and of the world (by label, else "stage.<n>" /
      * "world.<n>"), with the ones named in `hide` hidden and the rest shown. Returns every layer's name.

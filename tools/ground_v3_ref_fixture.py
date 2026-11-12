@@ -9,7 +9,8 @@ The reference (none of it changed, only imported):
   - tools/terrain_v2/render_ref.py: every other ground, the water, and the plains grass edges' mask and v
     (render_v2, run as is; its drawing calls are recorded, as tools/ground_v2_ref_fixture.py does)
 On top of render_v2's draws, as STYLE.md 6 says: a display tile whose lowest ground is plains gets the v3
-base in place of the v2 tile; a display tile whose 4 corners are plains gets the flow tile of flow_key, a
+base in place of the v2 tile; a display tile whose 4 corners are plains gets the flow shape of flow_key
+(round 7: "<shape key>[~f]@<tint>", ~f = mirrored left to right, tint = flow_tints[season][kind]), a
 world corner being 'm' (no flow) unless the 4 display tiles around it are full plains tiles; the plains
 grass edges over a lower ground take the v3 edge of the same mask and v.
 """
@@ -80,8 +81,10 @@ def record_v3(grid, season=None):
                     new.append(f"{pre}plains.grass.v3.{G.macro_of(i // 4, j // 4)}{j % 4}{i % 4}")
                     if full(i, j):
                         fk = G.flow_key(i, j)
-                        if fk:
-                            new.append(f"{pre}plains.grassflow.v3.{fk[0]}{fk[1]}.{fk[2]}")
+                        if fk:  # (kind, bits, v, flip): the shape, mirrored or not, times FLOW_TINT[season][kind]
+                            kind, bits, v, flip = fk
+                            tint = G.flow_tints(season or "summer")[kind]
+                            new.append(f"{G.FLOW_SETS[season or 'summer']}plains.grassflow.v3.{bits}.{v}{'~f' if flip else ''}@{tint}")
                     continue
                 e = re.match(r"^e(\d+)\.(\d+)$", m.group(1)) if m else None
                 if e:
@@ -133,9 +136,12 @@ def main():
         row = []
         for i in range(-4, 124):
             fk = G.flow_key(i, j)
-            row.append("." if fk is None else f"{fk[0]}{fk[1]}{fk[2]}")
+            row.append("." if fk is None else f"{fk[0]}{fk[1]}.{fk[2]}{'f' if fk[3] else ''}")
         flow_rows.append(" ".join(row))
     out["flow"] = {"i0": -4, "j0": -4, "rows": flow_rows}
+    out["tints"] = {s: G.flow_tints(s) for s in ("summer", "autumn", "winter")}
+    out["stored"] = list(G.STORED)
+    out["variants"] = {b: G.n_flow_variants(b) for b in G.STORED}
     path = os.path.join(HERE, "..", "tests", "fixtures", "ground_v3_ref.json")
     with open(path, "w") as f:
         json.dump(out, f, separators=(",", ":"))
@@ -144,3 +150,33 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def tiles_fixture(i0=54, j0=112, w=8, h=6):
+    """tests/fixtures/ground_v3_tiles.<season>.png: gen_ground_v3.ground_tile (the reference's own
+    composition: base, flow shape mirrored when flip, times FLOW_TINT) of the world's display tiles
+    (i0 .. i0+w-1, j0 .. j0+h-1) — a meadow of the plains — side by side, for the E2E pixel check
+    (tests/e2e/gfx-v3.spec.js); and the pieces each was composed of."""
+    from PIL import Image
+    out = {"i0": i0, "j0": j0, "w": w, "h": h, "pieces": {}}
+    for season in ("summer", "autumn", "winter"):
+        img = Image.new("RGBA", (w * 64, h * 64))
+        keys = []
+        for j in range(j0, j0 + h):
+            row = []
+            for i in range(i0, i0 + w):
+                img.alpha_composite(G.ground_tile(i, j, season), ((i - i0) * 64, (j - j0) * 64))
+                pre = PRE[None if season == "summer" else season]
+                base = f"{pre}plains.grass.v3.{G.macro_of(i // 4, j // 4)}{j % 4}{i % 4}"
+                fk = G.flow_key(i, j)
+                flow = "" if not fk else f"|{G.FLOW_SETS[season]}plains.grassflow.v3.{fk[1]}.{fk[2]}{'~f' if fk[3] else ''}@{G.flow_tints(season)[fk[0]]}"
+                row.append(base + flow)
+            keys.append(row)
+        img.save(os.path.join(HERE, "..", "tests", "fixtures", f"ground_v3_tiles.{season}.png"), optimize=True)
+        out["pieces"][season] = keys
+    with open(os.path.join(HERE, "..", "tests", "fixtures", "ground_v3_tiles.json"), "w") as f:
+        json.dump(out, f, separators=(",", ":"))
+
+
+if __name__ == "__main__":
+    tiles_fixture()

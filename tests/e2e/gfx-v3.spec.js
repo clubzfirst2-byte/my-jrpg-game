@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { decodePng } from '../../tools/release-art-pack.mjs';
 
 // Graphics v3 (docs/art-release-v3/STYLE.md, ?v3=1): the v3 art at density 4 and the narrow integer view
 // (about 20×9 tiles on an iPhone 15 Pro, 21×12 on an SE), with the rest of the art blown up 2×2. The
@@ -121,13 +123,15 @@ for (const screen of [PRO, SE]) {
     expect(v3.hero.density).toBe(4);
     // memory: no CPU-side copies kept, no chunk caches
     expect(v3.cpu.total).toBe(0);
-    expect(v3.gpu.render).toBeLessThan(1 << 20);
+    // (the ground cache, a little larger than the screen: 15 Pro 3.5 MB, SE 4.5 MB; nothing else rendered to a texture over 1 MB)
+    expect(v3.cache.bytes).toBeLessThan(4.6 * 2 ** 20);
+    expect(v3.gpu.render - v3.cache.bytes).toBeLessThan(1 << 20);
 
     // the plains: v3 ground, trees and props (the summer bundle), the stone house (the plains' bundle)
     await api(page, 'teleport', 28, 89);
     await page.waitForTimeout(1500);
     expect(await api(page, 'textureDensity', 'plains.grass.v3.a00')).toBe(4);
-    expect(await api(page, 'textureDensity', 'plains.grassflow.v3.d1111.0')).toBe(4);
+    expect(await api(page, 'textureDensity', 'plains.grassflow.v3.1111.0')).toBe(4);
     expect(await api(page, 'textureDensity', 'plains.tree.v3.oak_l.0')).toBe(4);
     expect(await api(page, 'textureDensity', 'obj.v3.house_stone')).toBe(4);
 
@@ -292,7 +296,7 @@ test('?v3=1: the plains in summer, autumn and winter — each season\'s own v3 b
     const pre = season === 'summer' ? '' : `${season}.`;
     const names = (await api(page, 'stream')).bundleNames;
     expect(names).toContain(`v3:plains:${season}`);
-    expect(names.filter((n) => n.startsWith('v3:plains:'))).toEqual([`v3:plains:${season}`]);
+    expect(names.filter((n) => n.startsWith('v3:plains:')).sort()).toEqual(season === 'winter' ? ['v3:plains:winter'] : [`v3:plains:${season}`, 'v3:plains:flow'].sort());
     expect(await api(page, 'textureDensity', `${pre}plains.grass.v3.a00`)).toBe(4);
     const a = (await api(page, 'v3')).plains;
     expect(a.season === season || (season === 'summer' && a.season === null)).toBe(true);
@@ -326,3 +330,61 @@ test('?v3=1: changing the season near the plains loads the next season\'s v3 art
   expect(errors).toEqual([]);
   await context.close();
 });
+
+// The art side's reference composes each plains ground tile (gen_ground_v3.ground_tile: the base, the flow
+// shape mirrored when flip, times FLOW_TINT); tools/ground_v3_ref_fixture.py saved a meadow's tiles
+// (tests/fixtures/ground_v3_tiles.<season>.png; 8 × 6 tiles, 47 with flow). On the SE (1 canvas px = 1 device px) with only the ground
+// shown, every tile the engine draws from the same pieces must be those pixels, times the ground's level
+// tint (levelTint(0): 242/255) — within 2 per channel for the rounding of two multiplications.
+const TILES = JSON.parse(readFileSync(new URL('../fixtures/ground_v3_tiles.json', import.meta.url), 'utf8'));
+for (const season of ['summer', 'autumn', 'winter']) {
+  for (const cache of ['1', '0']) {
+    test(`?v3=1 ${season}${cache === '0' ? ' (?v3cache=0)' : ''}: the plains ground is the reference's tiles, pixel for pixel`, async ({ browser }, testInfo) => {
+      const { context, page, errors } = await open(browser, SE, `&v3=1&v3cache=${cache}`);
+      await api(page, 'setSeason', season);
+      await api(page, 'teleport', TILES.i0 + TILES.w / 2, TILES.j0 + TILES.h / 2);
+      await page.waitForTimeout(2500);
+      await expect.poll(async () => (await api(page, 'season')).view).toBe(season);
+      await page.waitForTimeout(1000);
+      const all = await api(page, 'layers', []);
+      const keep = ['world', 'water', 'base', 'ground-cache'];
+      await api(page, 'layers', all.filter((l) => !keep.includes(l)));
+      await page.addStyleTag({ content: '#ui, #ui * { visibility: hidden !important }' });
+      await page.waitForTimeout(400);
+      const cam = await api(page, 'camera');
+      const shot = decodePng(await page.screenshot());
+      await testInfo.attach('ground', { body: await page.screenshot(), contentType: 'image/png' });
+      const ref = decodePng(readFileSync(new URL(`../fixtures/ground_v3_tiles.${season}.png`, import.meta.url)));
+      let compared = 0;
+      let flows = 0;
+      let worst = 0;
+      for (let r = 0; r < TILES.h; r++) {
+        for (let c = 0; c < TILES.w; c++) {
+          const i = TILES.i0 + c;
+          const j = TILES.j0 + r;
+          const want = TILES.pieces[season][r][c];
+          const got = (await api(page, 'groundAt', i, j)).map((p) => p.key + (p.tint !== null ? `${p.flip ? '~f' : ''}@#${p.tint.toString(16).padStart(6, '0')}` : '')).join('|');
+          if (got !== want) continue; // (a tile next to other ground: its flow fades out, not the reference's tile)
+          const x0 = Math.round((i * 16 + 8 - cam.origin.x) * 4);
+          const y0 = Math.round((j * 16 + 8 - cam.origin.y) * 4);
+          if (x0 < 0 || y0 < 0 || x0 + 64 > shot.width || y0 + 64 > shot.height) continue;
+          for (let y = 0; y < 64; y++) {
+            for (let x = 0; x < 64; x++) {
+              const a = ((y0 + y) * shot.width + x0 + x) * 4;
+              const b = ((r * 64 + y) * ref.width + c * 64 + x) * 4;
+              for (let k = 0; k < 3; k++) worst = Math.max(worst, Math.abs(shot.data[a + k] - Math.round((ref.data[b + k] * 242) / 255)));
+            }
+          }
+          compared++;
+          if (want.includes('grassflow')) flows++;
+        }
+      }
+      console.log(`${season} cache=${cache}: ${compared} tiles (${flows} with flow), worst ${worst}`);
+      expect(compared).toBeGreaterThanOrEqual(40);
+      expect(flows).toBeGreaterThanOrEqual(30);
+      expect(worst).toBeLessThanOrEqual(2);
+      expect(errors).toEqual([]);
+      await context.close();
+    });
+  }
+}

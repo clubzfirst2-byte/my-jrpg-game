@@ -71,6 +71,12 @@ export function warningLights(enemies) {
 
 /** The light map's pixels per screen pixel (0.5: a quarter of the pixels to fill). */
 export const LIGHT_MAP_RESOLUTION = 0.5;
+/**
+ * Graphics v3: the light map's pixels per screen pixel in the v3 view (4 canvas px per game px): 0.25,
+ * one map pixel per game pixel as the v3=0 view has with 0.5 (about 2 canvas px per game px), so the
+ * lights look as soft as before and the map has the same pixels to fill.
+ */
+export const LIGHT_MAP_RESOLUTION_V3 = 0.25;
 
 const RAIN_SPEED = 320; // px/s on screen
 const RAIN_WIND = 120;
@@ -143,8 +149,8 @@ const toHex = (c) => (Math.round(Math.min(1, c.r) * 255) << 16) | (Math.round(Ma
  * an odd screen size the texture is up to one map pixel larger than the screen (it still starts at
  * the top left, so screen and map coordinates match).
  */
-export function createLightMap() {
-  const rt = RenderTexture.create({ width: 8, height: 8, dynamic: true, resolution: LIGHT_MAP_RESOLUTION, scaleMode: 'linear' });
+export function createLightMap(resolution = LIGHT_MAP_RESOLUTION) {
+  const rt = RenderTexture.create({ width: 8, height: 8, dynamic: true, resolution, scaleMode: 'linear' });
   const overlay = new Sprite(rt);
   overlay.blendMode = 'multiply';
   overlay.label = 'light-map';
@@ -174,9 +180,12 @@ export class WeatherView {
    * @param {import('pixi.js').Application} app
    * @param {(key: string) => Sprite} makeSprite
    * @param {Container} actors world layer for the strike warning
+   * @param {{ lightResolution?: number }} [opts] the light map's pixels per screen pixel (graphics v3: LIGHT_MAP_RESOLUTION_V3)
    */
-  constructor(app, makeSprite, actors) {
+  constructor(app, makeSprite, actors, { lightResolution = LIGHT_MAP_RESOLUTION } = {}) {
     this.app = app;
+    /** The light map's pixels per screen pixel (LIGHT_MAP_RESOLUTION; graphics v3: LIGHT_MAP_RESOLUTION_V3). */
+    this.lightResolution = lightResolution;
     this.renderer = app.renderer;
     this.makeSprite = makeSprite;
     /** The ambient light indoors (caves, mines, trial rooms); v1.0: set by the view (terrainArt.indoorLight). @type {{ r: number, g: number, b: number }} */
@@ -196,7 +205,7 @@ export class WeatherView {
     this.lightScene.addChild(this.ambientFill);
     /** @type {Sprite[]} */
     this.lights = [];
-    const map = createLightMap();
+    const map = createLightMap(lightResolution);
     this.rt = map.rt;
     this.overlay = map.overlay;
     // Rain (screen space).
@@ -328,7 +337,7 @@ export class WeatherView {
       if (this.rtW !== sw || this.rtH !== sh) {
         this.rtW = sw;
         this.rtH = sh;
-        this.rt.resize(sw, sh, LIGHT_MAP_RESOLUTION);
+        this.rt.resize(sw, sh, this.lightResolution);
       }
       const ambHex = toHex(amb);
       this.ambientFill.width = this.rt.width;
