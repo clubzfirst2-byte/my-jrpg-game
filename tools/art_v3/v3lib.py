@@ -11,7 +11,8 @@ new mid shadow between the v1 shadow and base), 7-tone ramps for the ground (v2 
 Two ways to make a picture:
   * Canvas: draw parts (ellipses, polygons, lines) as materials, shade each part as a volume lit from
     the top left (shade_part), then outline();
-  * remaster(): the approved v1 frame is the UNDERDRAWING. It is moved to the 2x grid (edge-directed,
+  * remaster() (round 1 only, no longer used for pilot art: STYLE.md 5.2): the approved v1 frame is
+    the UNDERDRAWING. It is moved to the 2x grid (edge-directed,
     so diagonals become finer steps), the outline is redrawn at half the thickness, the 6-tone ramp is
     re-applied (mid tones on every shadow edge, rim light on the lit silhouette), then details are hand
     stamped on the 2x grid (eyes, hair strands, seams) by the caller.
@@ -161,7 +162,7 @@ class Canvas:
 
     # --- shading
     def shade_part(self, mask, tones=(1, 2, 3, 4, 5), light=(-0.55, -0.75, 0.55), dome=1.0, bias=0.0,
-                   global_mask=None, gmix=0.0, rim=True):
+                   global_mask=None, gmix=0.0, rim=True, norm=False, cuts=None):
         """Shade the texels of `mask` as a dome lit from the top left; tones from dark to light.
         global_mask: a larger shape (e.g. the whole canopy) whose dome lighting is mixed in (gmix)."""
         mask = mask & (self.mat != 0)
@@ -172,7 +173,14 @@ class Canvas:
             lam = lam * (1 - gmix) + dome_light(global_mask, light, dome) * gmix
         lam = lam + bias
         n = len(tones)
-        idx = np.clip((lam * n).astype(int), 0, n - 1)
+        if norm:  # spread the part's own range over all the tones (clean, even bands)
+            v = lam[mask]
+            lo, hi = float(np.percentile(v, 3)), float(np.percentile(v, 97))
+            lam = (lam - lo) / max(1e-6, hi - lo) + bias
+        if cuts is not None:  # explicit band edges (len(tones) - 1 ascending values in 0..1)
+            idx = np.searchsorted(np.array(cuts), np.clip(lam, 0, 1))
+        else:
+            idx = np.clip((lam * n).astype(int), 0, n - 1)
         t = np.array(tones)[idx]
         self.tone[mask] = t[mask]
 
@@ -458,3 +466,77 @@ def block_detail(img):
     flat = (b == b[..., :1]).all(-1)
     n = opaque.sum()
     return float((opaque & ~flat).sum() / n) if n else 0.0
+
+
+def luma(c):
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+
+def lift_ramp(r, min_l=36.0):
+    """Raise every tone darker than `min_l` (Rec.709 luma) to it, keeping the hue: outlines of
+    background objects are the material's own dark colour, never near-black (STYLE.md 3.3)."""
+    out = []
+    for col in ramp(r):
+        L = luma(col)
+        if L < min_l:
+            f = min_l / max(L, 1.0)
+            col = tuple(min(255, round(v * f + 0.5)) for v in col)
+            while luma(col) < min_l:
+                col = tuple(min(255, v + 1) for v in col)
+        out.append(col)
+    return out
+
+
+def despeckle(c, keep=(), loose=()):
+    """Clean-up (STYLE.md 3.4): a texel unlike all its 4 neighbours, 3 or 4 of which are one other
+    tone of the same material, takes that tone (no lone dots from band edges). Inks and materials in
+    `keep` are left alone."""
+    m, t = c.mat, c.tone
+    ink = c.mid("_ink")
+    keepk = {c.mid(k) for k in keep}
+    loosek = {c.mid(k) for k in loose}  # materials where 2 agreeing neighbours are enough
+    ch = []
+    for y in range(1, c.h - 1):
+        for x in range(1, c.w - 1):
+            k = m[y, x]
+            if k in (0, ink) or k in keepk:
+                continue
+            nb = [(m[y + dy, x + dx], t[y + dy, x + dx]) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))]
+            if (k, t[y, x]) in nb:
+                continue
+            for cand in set(nb):  # 3 or 4 neighbours agree on one tone of this material
+                if cand[0] == k and nb.count(cand) >= (2 if k in loosek else 3):
+                    ch.append((x, y, cand[1]))
+                    break
+    for x, y, v in ch:
+        t[y, x] = v
+
+
+def clean_isolated(img, passes=2):
+    """Image-level clean-up (round 6 of the production checks): an opaque texel whose 4 neighbours
+    are all opaque and all of other colours takes the most common colour among them (ties: the
+    darker one, which keeps outlines closed). For thin props whose 1-texel steps read as specks."""
+    a = np.array(img.convert("RGBA")).astype(np.int64)
+    for _ in range(passes):
+        op = a[..., 3] == 255
+        key = (a[..., 0] << 16) | (a[..., 1] << 8) | a[..., 2]
+        H, W = key.shape
+        ch = []
+        for y in range(1, H - 1):
+            for x in range(1, W - 1):
+                if not op[y, x]:
+                    continue
+                nb = [(y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)]
+                if not all(op[q] for q in nb):
+                    continue
+                ks = [key[q] for q in nb]
+                if key[y, x] in ks:
+                    continue
+                best = max(set(ks), key=lambda k: (ks.count(k), -luma(((k >> 16) & 255, (k >> 8) & 255, k & 255))))
+                q = nb[ks.index(best)]
+                ch.append((y, x, a[q].copy()))
+        if not ch:
+            break
+        for y, x, v in ch:
+            a[y, x] = v
+    return Image.fromarray(a.astype(np.uint8), "RGBA")

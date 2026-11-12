@@ -1,19 +1,23 @@
-"""Comparison pictures of the v3 pilot against the current art (STYLE.md 10).
+"""Comparison pictures of the v3 pilot against the current art (STYLE.md 12), rounds 2-3.
 
-  01_items_same_size.png   each pilot item beside the current one, the same size in the game, shown at
-                           the proposed iPhone 15 Pro scale (1 game px = 8 device px: v1 texel 4 px,
-                           v3 texel 2 px). Integer scales only.
-  02_scene_15pro_now.png       the same small scene, current art, current view (2556 x 1179, x2.5 per
-                               v1 texel: art pixels alternate 2 and 3 device px — what ships today)
-  03_scene_15pro_v1_x4.png     current art at the proposed integer view (x4 per v1 texel, 20 x 9.2 tiles)
-  04_scene_15pro_v3_x2.png     v3 pilot art at the proposed integer view (x2 per v3 texel, 20 x 9.2 tiles)
-  05_scene_se_v3_x1.png        v3 pilot art on iPhone SE (1334 x 750, x1 per texel, 20.8 x 11.7 tiles)
-  06_crop_hero_x3.png          the hero's surroundings, device pixels enlarged x3: now / v1 x4 / v3 x2
+Integer scales only, except the "now" pictures, which show what ships today (x2.5 / x1.5 per v1 texel).
+  01_items_same_size.png        each pilot item beside the current one, the same size in the game
+                                (15 Pro proposal: 1 game px = 8 device px; v1 texel 4 px, v3 texel 2 px)
+  02_15pro_now.png              the scene, current art, current 15 Pro view (2556 x 1179, 32 x 14.7 tiles)
+  03_15pro_v3_k2.png            the scene, v3 art, 15 Pro k = 2 (2556 x 1179, 20 x 9.2 tiles)
+  04_se_now.png                 the scene, current art, current SE view (1334 x 750, 27.8 x 15.6 tiles)
+  05_se_v3_k1.png               the scene, v3 art, SE k = 1 (1334 x 750, 20.8 x 11.7 tiles)
+  06_zoom_x3_now_v3.png         round the hero, the woman and the door, device pixels x3: now | v3 (15 Pro)
+  07_grass_24x12_x1.png         24 x 12 tiles of v3 ground at 1 texel = 1 px, both ground layers (gen_ground_v3.ground_tile)
+  08_grass_48x24_half.png       48 x 24 tiles, shrunk to half (every other texel): the wide view
+  09_hero_face_v1_x24_v3_x12.png the hero's face: v1 x24 | v3 idle 0 x12 | v3 walk 1 x12 (the same size)
+No contact shadows are drawn in any scene (the art alone; shadows are the game's, STYLE.md 8).
 The v3-only kinds (props, the big oak, the stone house) have no v1 counterpart: the v1 scene uses the
 v1 tree, pine and house in the same places and no props.
 Run: python3 tools/art_v3/compare_v3.py <out dir>
 """
 
+import functools
 import os
 import sys
 
@@ -21,6 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from PIL import Image, ImageDraw  # noqa: E402
 
+from gen_ground_v3 import ground_tile  # noqa: E402
 from gen_nature_v3 import hsh  # noqa: E402
 from v3lib import ROOT  # noqa: E402
 
@@ -30,6 +35,7 @@ V3 = os.path.join(ROOT, "src", "art-release-v3")
 BG = (40, 44, 52, 255)
 
 
+@functools.lru_cache(maxsize=None)
 def ld(*p):
     return Image.open(os.path.join(*p)).convert("RGBA")
 
@@ -42,7 +48,7 @@ PAIRS = [  # label, v1 image, v3 image
     ("tree -> oak (new size)", ld(V1, "terrain", "obj.tree.png"), ld(V3, "terrain", "obj.v3.oak.png")),
     ("pine", ld(V1, "terrain", "forest.pine.png"), ld(V3, "terrain", "obj.v3.pine.png")),
     ("house -> stone house (new kind)", ld(V1, "objects", "obj.house.png"), ld(V3, "objects", "obj.v3.house_stone.png")),
-    ("grass tile (v2 ground)", ld(V1T, "plains.grass.0.png"), ld(V3, "terrain", "plains.grass.v3.11.png")),
+    ("grass tile (v2 ground)", ld(V1T, "plains.grass.0.png"), ground_tile(1, 1)),
     ("tuft (new)", None, ld(V3, "terrain", "prop.v3.tuft.png")),
     ("flowers (new)", None, ld(V3, "terrain", "prop.v3.flowers.png")),
     ("bush (new)", None, ld(V3, "terrain", "prop.v3.bush.png")),
@@ -85,11 +91,11 @@ GW, GH = TW * 16, TH * 16
 HERO = (GW // 2, GH // 2 + 10)
 # kind, x, y (feet, game px)
 OBJECTS = [  # placed inside the proposed 15 Pro view (319 x 147 game px round the hero)
-    ("house", 172, 112), ("oak", 402, 120), ("pine", 334, 104), ("pine", 128, 196), ("oak", 196, 204),
-    ("npc", 222, 126), ("hero", *HERO), ("slime", 334, 168), ("bush", 124, 122), ("bush", 418, 196),
-    ("stump", 368, 140), ("flowers", 240, 164), ("flowers", 150, 154), ("flowers", 392, 156),
-    ("flowers", 300, 194), ("tuft", 258, 186), ("tuft", 312, 128), ("tuft", 140, 176), ("tuft", 284, 98),
-    ("tuft", 430, 150), ("tuft", 360, 200), ("pine", 60, 120), ("oak", 500, 200), ("pine", 520, 60),
+    ("house", 172, 128), ("oak", 404, 128), ("pine", 338, 110), ("pine", 126, 204), ("oak", 196, 214),
+    ("npc", 226, 136), ("hero", *HERO), ("slime", 330, 176), ("bush", 120, 130), ("bush", 420, 200),
+    ("stump", 372, 150), ("flowers", 246, 170), ("flowers", 150, 160), ("flowers", 398, 166),
+    ("flowers", 300, 200), ("tuft", 262, 192), ("tuft", 312, 136), ("tuft", 140, 182), ("tuft", 286, 104),
+    ("tuft", 432, 160), ("tuft", 362, 206), ("pine", 58, 128), ("oak", 500, 206), ("pine", 520, 70),
 ]
 V1ART = {
     "house": ld(V1, "objects", "obj.house.png"), "oak": ld(V1, "terrain", "obj.tree.png"),
@@ -115,19 +121,9 @@ def scene(density):
             if d == 2:
                 t = ld(V1T, f"plains.grass.{hsh(tx, ty, 5) % 32}.png")
             else:
-                t = ld(V3, "terrain", f"plains.grass.v3.{ty % 4}{tx % 4}.png")
+                t = ground_tile(tx, ty, load=ld)
             img.alpha_composite(t, (tx * 16 * d, ty * 16 * d))
     art = V1ART if d == 2 else V3ART
-    sh = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    sd = ImageDraw.Draw(sh)
-    for kind, x, y in sorted(OBJECTS, key=lambda o: o[2]):
-        if kind not in art or d != 4:
-            continue
-        w = art[kind].width / d
-        sd.ellipse(((x - w * 0.36) * d, (y - 2.5) * d, (x + w * 0.36) * d, (y + 1.5) * d), fill=SHADOW + (90,))
-    # (v3 only: the contact shadows of STYLE.md 8 — v1 has the hero's only)
-    if d == 4:
-        img.alpha_composite(sh.point(lambda v: v) if False else sh)
     for kind, x, y in sorted(OBJECTS, key=lambda o: o[2]):
         if kind not in art:
             continue
@@ -145,24 +141,51 @@ def view(world, density, dev_w, dev_h, per_texel):
     return crop.resize((dev_w, dev_h), Image.NEAREST)
 
 
+def ground_only(tw, th):
+    g = Image.new("RGBA", (tw * 64, th * 64))
+    for ty in range(th):
+        for tx in range(tw):
+            g.alpha_composite(ground_tile(tx, ty, load=ld), (tx * 64, ty * 64))
+    return g
+
+
 def main(out):
     os.makedirs(out, exist_ok=True)
     items(os.path.join(out, "01_items_same_size.png"))
     w1, w3 = scene(2), scene(4)
     now = view(w1, 2, 2556, 1179, 2.5)
-    now.save(os.path.join(out, "02_scene_15pro_now.png"), optimize=True)
-    v1x4 = view(w1, 2, 2556, 1179, 4)
-    v1x4.save(os.path.join(out, "03_scene_15pro_v1_x4.png"), optimize=True)
-    v3x2 = view(w3, 4, 2556, 1179, 2)
-    v3x2.save(os.path.join(out, "04_scene_15pro_v3_x2.png"), optimize=True)
-    view(w3, 4, 1334, 750, 1).save(os.path.join(out, "05_scene_se_v3_x1.png"), optimize=True)
-    # crops round the hero, enlarged x3 (device pixels): what one sees up close on the phone
-    cw, ch = 300, 300
-    strip = Image.new("RGBA", (cw * 3 * 3 + 40, ch * 3), BG)
-    for i, im in enumerate((now, v1x4, v3x2)):
-        c = im.crop((1278 - cw // 2, 590 - ch // 2 - 40, 1278 + cw // 2, 590 + ch // 2 - 40))
-        strip.alpha_composite(c.resize((cw * 3, ch * 3), Image.NEAREST), (i * (cw * 3 + 20), 0))
-    strip.save(os.path.join(out, "06_crop_hero_x3.png"), optimize=True)
+    now.save(os.path.join(out, "02_15pro_now.png"), optimize=True)
+    v3 = view(w3, 4, 2556, 1179, 2)
+    v3.save(os.path.join(out, "03_15pro_v3_k2.png"), optimize=True)
+    view(w1, 2, 1334, 750, 1.5).save(os.path.join(out, "04_se_now.png"), optimize=True)
+    view(w3, 4, 1334, 750, 1).save(os.path.join(out, "05_se_v3_k1.png"), optimize=True)
+    # zoom: the same game area round the hero, the woman and the door, device pixels x3
+    gx0, gy0, gx1, gy1 = HERO[0] - 110, HERO[1] - 62, HERO[0] + 20, HERO[1] + 4
+
+    def crop(im, d, per_texel):
+        vw, vh = im.width / per_texel, im.height / per_texel
+        ox, oy = int(HERO[0] * d - vw / 2), int((HERO[1] - 14) * d - vh / 2)
+        return im.crop((int((gx0 * d - ox) * per_texel), int((gy0 * d - oy) * per_texel),
+                        int((gx1 * d - ox) * per_texel), int((gy1 * d - oy) * per_texel)))
+    a, b = crop(now, 2, 2.5), crop(v3, 4, 2)
+    z = Image.new("RGBA", (a.width * 3 + b.width * 3 + 30, max(a.height, b.height) * 3), BG)
+    z.alpha_composite(a.resize((a.width * 3, a.height * 3), Image.NEAREST), (0, 0))
+    z.alpha_composite(b.resize((b.width * 3, b.height * 3), Image.NEAREST), (a.width * 3 + 30, 0))
+    z.save(os.path.join(out, "06_zoom_x3_now_v3.png"), optimize=True)
+    ground_only(24, 12).save(os.path.join(out, "07_grass_24x12_x1.png"), optimize=True)
+    # the hero's face: v1 (x24) beside v3 (x12), the same size; idle 0 and walk 1
+    faces = [ld(V1, "hero", "hero.idle.down.0.png").crop((2, 0, 30, 24)).resize((28 * 24, 24 * 24), Image.NEAREST)]
+    for n in ("idle.down.0", "walk.down.1"):
+        faces.append(ld(V3, "hero", f"hero.{n}.png").crop((4, 0, 60, 48)).resize((56 * 12, 48 * 12), Image.NEAREST))
+    f = Image.new("RGBA", (sum(i.width for i in faces) + 40, max(i.height for i in faces)), BG)
+    x = 0
+    for i in faces:
+        f.alpha_composite(i, (x, 0))
+        x += i.width + 20
+    f.save(os.path.join(out, "09_hero_face_v1_x24_v3_x12.png"), optimize=True)
+    g = ground_only(48, 24)
+    g.resize((g.width // 2, g.height // 2), Image.NEAREST).save(os.path.join(out, "08_grass_48x24_half.png"),
+                                                                  optimize=True)
     print("\n".join(sorted(os.listdir(out))))
 
 
