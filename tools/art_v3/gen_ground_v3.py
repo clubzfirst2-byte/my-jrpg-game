@@ -304,6 +304,29 @@ def side_state(tx, ty, side):
     return (h >> 4) & 1
 
 
+@functools.lru_cache(maxsize=None)
+def is_full(tx, ty):
+    """True when all four corners of tile (tx, ty) are the same flow kind (the 1111 shape)."""
+    c = flow_corner(tx, ty)
+    return c != "m" and c == flow_corner(tx + 1, ty) == flow_corner(tx + 1, ty + 1) == flow_corner(tx, ty + 1)
+
+
+def full_v(tx, ty):
+    """The variant of a full (1111) tile. Round 8: two equal variants side by side, one of them drawn
+    mirrored, met as a symmetric seam, so a tile never takes the v of the 1111 tile on its left:
+        v0 = hsh(tx, ty, 33) % 4;  v = (v0 + 1) % 4 if the left tile is 1111 and its v == v0, else v0
+    The left tile's v is found by the same rule; walking from the first 1111 tile of the row run
+    (the leftmost one, whose left neighbour is not 1111) to the right gives every v of the run."""
+    x0 = tx
+    while is_full(x0 - 1, ty):
+        x0 -= 1
+    v = None
+    for x in range(x0, tx + 1):
+        v0 = hsh(x, ty, 33) % FULL_SHAPES
+        v = (v0 + 1) % FULL_SHAPES if v == v0 else v0
+    return v
+
+
 def flow_key(tx, ty):
     """What the game draws on tile (tx, ty) for the flow layer, or None:
          (kind, bits, v, flip)
@@ -319,7 +342,8 @@ def flow_key(tx, ty):
           v = s(A) + 2 s(B) + 4 * ((tx + 2 ty) % 3)   (the inner shape: never the same as the tile
           above or beside it, so a column / row of equal corner sets does not line up)
       * border crosses 4 sides (1010; 0101 is its mirror): v = s(N) + 2 s(E) + 4 s(S) + 8 s(W)
-      * full patch 1111: v = hsh(tx, ty, 33) % 4, flip = bit 2 of hsh(tx, ty, 35)"""
+      * full patch 1111: v = full_v(tx, ty) (hsh(tx, ty, 33) % 4, moved on to the next number when it
+        equals the v of the 1111 tile on the left), flip = bit 2 of hsh(tx, ty, 35)"""
     cs = [flow_corner(tx, ty), flow_corner(tx + 1, ty), flow_corner(tx + 1, ty + 1), flow_corner(tx, ty + 1)]
     kinds = {k for k in cs if k != "m"}
     if not kinds:
@@ -335,7 +359,7 @@ def flow_key(tx, ty):
         return side_state(tx, ty, side)
     sides = crossed(stored)
     if not sides:
-        return kind, stored, hsh(tx, ty, 33) % FULL_SHAPES, bool((hsh(tx, ty, 35) >> 2) & 1)
+        return kind, stored, full_v(tx, ty), bool((hsh(tx, ty, 35) >> 2) & 1)
     if len(sides) == 4:
         return kind, stored, st("N") + 2 * st("E") + 4 * st("S") + 8 * st("W"), flip
     return kind, stored, st(sides[0]) + 2 * st(sides[1]) + 4 * ((tx + 2 * ty) % INNER_SHAPES), flip
@@ -362,7 +386,7 @@ def _push(t, d):
     return np.sin(np.pi * t) ** 2 * np.clip(1 - d, 0, 1)  # (symmetric along the side: mirrors join)
 
 
-def flow_field(bits, variant):
+def flow_field(bits, variant, raw=False):
     """The corners' bilinear blend + a weak wobble every tile shares + for each crossed side a push of
     +0.26 (state 1) or -0.26 (state 0) reaching the middle of the tile + an inner shape (0 on the
     tile's edges). Both tiles sharing a side compute the same value along it (the other sides' pushes
@@ -385,12 +409,47 @@ def flow_field(bits, variant):
     shared = _tile_noise(901)
     shared = (shared + shared[:, ::-1]) / 2  # left-right symmetric, so a mirrored tile meets the others
     F = f + 0.08 * shared + amp * inner * edge_fade * _tile_noise(1000 + shape * 37 + int(bits, 2))
-    if len(sides) == 2:  # each inner shape also moves the middle by its own step (-0.3 / 0 / +0.3)
+    if len(sides) == 2 and bits not in STRAIGHT:  # each inner shape also moves the middle by its own step
         F = F + (-0.3, 0.0, 0.3, 0.1)[shape] * inner * edge_fade
     for sd, on in states.items():
         t, d = {"N": (u, v), "S": (u, 1 - v), "W": (v, u), "E": (v, 1 - u)}[sd]
         F = F + (0.26 if on else -0.26) * _push(t, d)
+    if bits in STRAIGHT and not raw:  # round 8: the middle set to its own width (see STRAIGHT)
+        F = F + _middle_step(bits, variant) * inner * edge_fade
     return F
+
+
+# Round 8: the straight sets (border across 2 OPPOSITE sides; 0110 is the mirror of 1001). Their middles
+# clustered at 34-42 texels in 6 of the 12 variants, so a column of them read as a ruled edge. Each
+# variant's middle (the patch's width across rows 20-43 of F > 0.5, from the patch side) is now set to
+#     32 + 6 * (s(A) + s(B) - 1) + (-14, 0, +14)[inner shape]
+# i.e. 12..52 texels; down a column the inner shape cycles (tx + 2 ty) % 3, so 3 tiles in a row always
+# hold 3 different middles >= 8 texels apart.
+STRAIGHT = {"1001": "W", "1100": "N", "0011": "S"}  # the patch's side
+
+
+def _patch_width(F, side):
+    a = F > 0.5
+    if side in ("N", "S"):
+        a = a.T
+    cov = a[20:44].mean(0)
+    if side in ("E", "S"):
+        cov = cov[::-1]
+    ok = np.nonzero(cov >= 0.4)[0]
+    return int(ok.max()) + 1 if len(ok) else 0
+
+
+@functools.lru_cache(maxsize=None)
+def _middle_step(bits, variant):
+    sA, sB, shape = variant & 1, (variant >> 1) & 1, variant >> 2
+    want = 32 + 6 * (sA + sB - 1) + (-14, 0, 14)[shape]
+    F0 = flow_field(bits, variant, raw=True)
+    yy, xx = np.mgrid[0:64, 0:64]
+    u, v = (xx + 0.5) / 64, (yy + 0.5) / 64
+    edge_fade = np.clip(np.minimum(np.minimum(xx + 0.5, 63.5 - xx), np.minimum(yy + 0.5, 63.5 - yy)) / 6, 0, 1)
+    bump = np.sin(np.pi * u) * np.sin(np.pi * v) * edge_fade
+    steps = [i / 100 for i in range(-150, 151)]  # the smallest step whose width is nearest the want
+    return min(steps, key=lambda c: (abs(_patch_width(F0 + c * bump, STRAIGHT[bits]) - want), abs(c)))
 
 
 def flow_shape(sset, bits, variant):
@@ -571,12 +630,15 @@ def _fill_thin(c, inside, k, tone_add, rng):
 
 def flow_tints(season):
     """FLOW_TINT[season][kind]: the colour the game multiplies a shape by (the tip = this colour, the
-    body = 214/255 of it). d: the ground's tone 2 (thick, darker grass); l: the sunny ramp's tone 5
-    (summer), 3 (autumn: calm, less grain), the snow's tone 5 (winter: softer than white)."""
-    r = ramps_for(season)
-    d = r["grass"][2]
-    lt = {"summer": r["sunny"][5], "autumn": r["sunny"][3], "winter": r["grass"][5]}[season]
-    return {"d": "#%02x%02x%02x" % tuple(d), "l": "#%02x%02x%02x" % tuple(lt)}
+    body = 214/255 of it). Summer: the ground's tone 2 (d) and the sunny ramp's tone 5 (l).
+    Round 8 (colours only, the shapes are the same for every tint):
+      autumn d #80572c (body luma 78), autumn l #a79138 (body 120: the sunny patch +4 over the ground,
+      the highest that keeps neighbour steps > 15 at 10 %); winter d #aabcd6 (body 156), winter l
+      #fafcff (body 211, brighter than the snow ground 198)."""
+    if season == "summer":
+        r = ramps_for(season)
+        return {"d": "#%02x%02x%02x" % tuple(r["grass"][2]), "l": "#%02x%02x%02x" % tuple(r["sunny"][5])}
+    return {"autumn": {"d": "#80572c", "l": "#a79138"}, "winter": {"d": "#aabcd6", "l": "#fafcff"}}[season]
 
 
 FLOW_TINT = None  # filled lazily: {season: {"d": "#rrggbb", "l": "#rrggbb"}}
