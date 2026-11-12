@@ -67,7 +67,8 @@ def record_v3(grid, season=None):
             return "m"
         return REF_FLOW_CORNER(cx, cy)
 
-    G.flow_corner = corner  # flow_key reads the module's flow_corner
+    G.flow_corner = corner  # flow_key (and is_full, cached: cleared here) read the module's flow_corner
+    G.is_full.cache_clear()
     try:
         out = {}
         for (i, j), keys in record_v2(grid, season).items():
@@ -95,6 +96,7 @@ def record_v3(grid, season=None):
         return out
     finally:
         G.flow_corner = REF_FLOW_CORNER
+        G.is_full.cache_clear()
 
 
 def plains_grid(W=72, H=56):

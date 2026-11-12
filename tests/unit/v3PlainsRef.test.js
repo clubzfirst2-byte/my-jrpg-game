@@ -183,8 +183,8 @@ describe('v3 plains: seasons, keys, the flow\'s colour hook', () => {
   it('the flow is a grey shape (summer and autumn share one set, winter its own) times FLOW_TINT[season][kind], maybe mirrored', () => {
     const fk = /** @type {[string, string, number, boolean]} */ (['l', '0011', 6, true]);
     const has = (k) => ART.has(k);
-    expect(flowLook('winter', fk, has)).toEqual({ key: 'winter.plains.grassflow.v3.0011.6', tint: 0xdce6f2, flip: true });
-    expect(flowLook('autumn', ['d', '1111', 3, false], has)).toEqual({ key: 'plains.grassflow.v3.1111.3', tint: 0x744b28, flip: false });
+    expect(flowLook('winter', fk, has)).toEqual({ key: 'winter.plains.grassflow.v3.0011.6', tint: 0xfafcff, flip: true });
+    expect(flowLook('autumn', ['d', '1111', 3, false], has)).toEqual({ key: 'plains.grassflow.v3.1111.3', tint: 0x80572c, flip: false });
     expect(flowLook('spring', ['d', '1111', 3, false], has)?.tint).toBe(0x335d3a);
     expect(flowLook('summer', fk, () => false)).toBe(null);
   });

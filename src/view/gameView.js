@@ -40,6 +40,7 @@ import { EnemySlots } from './enemySlots.js';
 import { setFrame } from './spriteFrame.js';
 import { frameFight } from './assets/artV3.js';
 import { GroundCache } from './groundCache.js';
+import { V3_OBJECTS_WINTER, V3_VILLAGE_TYPES, V3_WINTER_OBJECTS, v3VillageBundle } from './assets/villageV3.js';
 import { MacroGrid, PROPS, PROP_SWAY, TREE_SWAY, baseKey as v3BaseKey, edgeKey as v3EdgeKey, floraFrames, floraKey, flowCorner, flowKey, flowLook, openProp, plainsTreeLook, seasonPrefix, swayFrame, swayStep, treeFootProp, v3PlainsBundles } from './v3Plains.js';
 import { activeBoss } from '../game/entities/bosses.js';
 import { hash01, valueNoise } from './placement.js';
@@ -167,6 +168,8 @@ export class GameView {
     this.v3Others = null;
     /** Graphics v3: the v3 plains bundles of the season the world is about to change to, kept while they load (updateSeason). @type {string[] | null} */
     this.v3SeasonWant = null;
+    /** Graphics v3: the winter look of the common objects, held while it is winter (updateSeason). @type {string | null} */
+    this.v3SeasonObjects = null;
     /** Graphics v3: the camera's view of the last frame, game px (state.viewRect). @type {{ x: number, y: number, width: number, height: number } | null} */
     this.cameraRect = null;
     /** Graphics v3: the share of the view the UI covers at the top / bottom in a boss fight (main.js measures it). */
@@ -323,7 +326,7 @@ export class GameView {
     this.npcs = new NpcView(assets, (key) => this.makeSprite(key), this.actors);
     this.puzzles = new PuzzleView(
       (key) => this.makeSprite(key),
-      (key) => this.assets.texture(key),
+      (key) => this.assets.texture(this.seasonal(key)), // (graphics v3: the plates' winter look)
       this.envGround,
       this.actors,
       this.overlay,
@@ -440,14 +443,26 @@ export class GameView {
     // graphics v3: near the plains, the season's v3 plains art first too (the old look stays meanwhile)
     if (this.v3) {
       const near = [...this.chunks.values()].some((c) => c.bundles.some((b) => b.startsWith('v3:plains:')));
-      const missing = near ? v3PlainsBundles(want).filter((b) => this.assets.builders.has(b) && !this.assets.isLoaded(b)) : [];
+      const nearVillage = [...this.chunks.values()].some((c) => c.bundles.some((b) => b.startsWith('v3:village:')));
+      const wanted = [...(near ? v3PlainsBundles(want) : []), ...(nearVillage ? [v3VillageBundle(want)] : []), ...(want === 'winter' ? [V3_OBJECTS_WINTER] : [])];
+      const missing = wanted.filter((b) => this.assets.builders.has(b) && !this.assets.isLoaded(b));
       if (missing.length) {
-        this.v3SeasonWant = missing;
+        this.v3SeasonWant = wanted; // (all of them: one loaded early must not be let go meanwhile)
         for (const b of missing) this.requestBundle(b);
         return;
       }
     }
     this.v3SeasonWant = null; // (the chunks rebuilt below take it over; updateChunks lets the preload go)
+    // graphics v3 (VILLAGE.md 1): the winter look of the things found everywhere (chests, barrels, crates,
+    // jars, fires, checkpoints, plates), a bundle the view holds through the winter; not the open chest
+    if (this.v3) {
+      const objs = want === 'winter' && this.assets.builders.has(V3_OBJECTS_WINTER) ? V3_OBJECTS_WINTER : null;
+      if (objs !== this.v3SeasonObjects) {
+        if (objs && this.assets.isLoaded(objs)) this.assets.retain(objs);
+        if (this.v3SeasonObjects) this.assets.unload(this.v3SeasonObjects);
+        this.v3SeasonObjects = objs && this.assets.isLoaded(objs) ? objs : null;
+      }
+    }
     for (const c of this.chunks.values()) this.destroyChunk(c);
     this.chunks.clear();
     if (this.seasonBundle) this.assets.unload(this.seasonBundle);
@@ -456,6 +471,8 @@ export class GameView {
     this.seasonLoaded = null;
     this.season = want;
     this.seasonKeySet = seasonKeys(want);
+    // graphics v3: the common objects' winter look (the keys its bundle has)
+    if (this.v3SeasonObjects) for (const k of V3_WINTER_OBJECTS) if (this.assets.hasTexture(`winter.${k}`)) this.seasonKeySet.add(k);
     // v1.1: the release terrain's own season keys (autumn forest and mountains, the lips of the cliff
     // variants), where the season's bundle has them.
     if (this.releaseTerrain) for (const k of releaseSeasonKeys(want)) if (this.assets.hasTexture(`${want}.${k}`)) this.seasonKeySet.add(k);
@@ -1030,6 +1047,8 @@ export class GameView {
     }
     // graphics v3: the plains' v3 ground, trees and props of the season, with the chunks that have plains
     list.push(...this.v3PlainsBundlesOf(cx, cy));
+    const village = this.v3VillageBundleOf(cx, cy);
+    if (village) list.push(village);
     // P10.2: and the season's look (gfx W1: the season's art of each seasonal ground the chunk has, apart).
     if (!this.seasonBundle) return list;
     list.push(this.seasonBundle);
@@ -1040,6 +1059,24 @@ export class GameView {
       }
     }
     return list;
+  }
+
+  /**
+   * Graphics v3 (VILLAGE.md 4.0): the bundle of the village's houses, fences, well and signposts in the
+   * current season ("v3:village:<season>", summer's in spring), for a chunk that has any of them, else null.
+   * @param {number} cx @param {number} cy
+   */
+  v3VillageBundleOf(cx, cy) {
+    if (!this.v3) return null;
+    const b = v3VillageBundle(this.season);
+    if (!this.assets.builders.has(b)) return null;
+    const key = `v${cx},${cy}`;
+    let has = this.v2Tiles.get(key);
+    if (has === undefined) {
+      has = this.map.objects.some((/** @type {any} */ o) => Math.floor(o.tx / CHUNK) === cx && Math.floor(o.ty / CHUNK) === cy && V3_VILLAGE_TYPES.includes(o.type)) ? ['y'] : [];
+      this.v2Tiles.set(key, has);
+    }
+    return has.length ? b : null;
   }
 
   /**
@@ -1665,7 +1702,7 @@ export class GameView {
     if (o.type === 'charm_shelf') return this.charmHome ? 'obj.charm_shelf.on' : 'obj.charm_shelf'; // P10.1
     if (o.type === 'star_ring') return this.ringOpen ? 'obj.star_ring.on' : 'obj.star_ring.off'; // v1.0
     if (this.v3) {
-      const v3 = this.v3ObjectKey(o, timeSec);
+      const v3 = this.v3ObjectKey(o, timeSec) ?? this.v3VillageKey(o);
       if (v3) return v3;
     }
     return `obj.${o.type}`;
@@ -1693,6 +1730,18 @@ export class GameView {
     }
     if (o.type === 'stump' && this.v3FrameCount('prop', 'stump')) return floraKey(this.season, 'prop', 'stump', 0);
     if (o.type === 'house' && hash01(o.tx, o.ty, 77) < 0.5 && has('obj.v3.house_stone')) return 'obj.v3.house_stone';
+    return null;
+  }
+
+  /**
+   * Graphics v3: the village's new kinds (game/world/villageProps.js, only in the v3 view): a fence piece
+   * (h / l / r / post), the well, a signpost. Their art is the village bundle's ("v3:village:<season>").
+   * @param {any} o @returns {string | null}
+   */
+  v3VillageKey(o) {
+    if (o.type === 'fence') return `obj.v3.fence.${o.kind ?? 'post'}`;
+    if (o.type === 'well') return 'obj.v3.well';
+    if (o.type === 'signpost') return 'obj.v3.signpost';
     return null;
   }
 
@@ -1957,7 +2006,7 @@ export class GameView {
     // W2: decorative objects outdoors are drawn a little off-centre, in clusters (placement.decorOffset);
     // only the drawing: collision and saves stay keyed to the tile. dy <= 0, so it still sorts by its tile.
     const [dx, dy] = this.placement && DECOR_TYPES.includes(o.type) && outdoorAt(this.outdoors, o.tx, o.ty) ? decorOffset(o.tx, o.ty) : [0, 0];
-    const x = o.tx * ts + ts / 2 + dx;
+    const x = o.tx * ts + ts / 2 + dx + (o.drawDx ?? 0); // (graphics v3: the well stands across 2 tiles)
     const feetY = o.ty * ts + ts + dy;
     const z = map.elev[o.ty * map.width + o.tx];
     s.position.set(x, feetY - z);
@@ -1968,7 +2017,7 @@ export class GameView {
     /** @type {Occluder | null} */
     let occluder = null;
     // Trees and houses (v1.0: the release house is 56 game px tall) fade when the player is behind them.
-    if (o.type === 'tree' || o.type === 'house') {
+    if (o.type === 'tree' || o.type === 'house' || o.type === 'well') {
       const w = s.width / 2;
       occluder = { sprite: s, x0: x - w, x1: x + w, y0: feetY - z - s.height, y1: feetY - z, key: feetY };
     }
@@ -2116,7 +2165,7 @@ export class GameView {
     this.puzzles.update(state, timeSec);
     this.features.update(
       state,
-      (key) => this.assets.texture(key),
+      (key) => this.assets.texture(this.seasonal(key)), // (graphics v3: the chests', checkpoints' and fires' winter look)
       this.camera.origin(),
       this.camera.zoom,
       this.app.screen.width,

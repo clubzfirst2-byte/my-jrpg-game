@@ -20,6 +20,8 @@ import { EndingScreen } from './ui/ending.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
 import { ART_SCALE, acquireSheet, releaseSheet, v3PlainsEntries } from './view/assets/placeholderPack.js';
 import { v3PlainsBundleName } from './view/v3Plains.js';
+import { V3_OBJECTS_WINTER, V3_VILLAGE_KEYS, v3VillageBundle, villageSources, winterObjectKeys } from './view/assets/villageV3.js';
+import { addVillageProps } from './game/world/villageProps.js';
 import { testHeroFrames } from './debug/testHero.js';
 import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
 import { availableV1Groups, availableV2Groups, availableV3Groups, prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
@@ -216,10 +218,13 @@ async function boot() {
   // gfx W1: with the v2 ground, a region's own ground is apart ("ground:<region>"), and so is each
   // seasonal ground's autumn /
   // winter art ("season:<season>:<ground>"): terrainArt.v2BundleParts. (REGION_ENTRIES holds the seasons too.)
+  // (graphics v3: the village's houses are in the village's own bundles, below: not in the region's)
+  const v3Village = v3 && villageSources('summer', artOverrides).size > 0;
+  const notVillage = (/** @type {{ key: string }} */ e) => !v3Village || !V3_VILLAGE_KEYS.includes(e.key);
   for (const name of Object.keys(REGION_ENTRIES)) {
     const parts = groundV2Entries.length > 0 ? v2BundleParts(name) : null;
-    if (!parts) assets.register(name, () => buildRegionPack(name, artOverrides, undefined, packOpts));
-    else for (const [part, keep] of parts) assets.register(part, () => buildRegionPack(name, artOverrides, (e) => keep(e.key), packOpts));
+    if (!parts) assets.register(name, () => buildRegionPack(name, artOverrides, notVillage, packOpts));
+    else for (const [part, keep] of parts) assets.register(part, () => buildRegionPack(name, artOverrides, (e) => keep(e.key) && notVillage(e), packOpts));
   }
   // v1.0: the final boss's art (loaded by the view only near its arena).
   // gfx W1 round 3: the ruin floor's edges over water, loaded with the chunks where the ruin floor meets water
@@ -229,6 +234,18 @@ async function boot() {
     if (entries.length) assets.register(name, () => buildPlaceholderPack(entries, artOverrides, packOpts));
   }
   assets.register(SOURCE_BUNDLE, () => buildPlaceholderPack(sourceEntries(), artOverrides, packOpts));
+  // Graphics v3 (VILLAGE.md 4.0): the village's house kinds, fences, well and signposts, one bundle per
+  // season (loaded by the chunks that have them); the winter look of the common objects, held in winter
+  if (v3Village) {
+    for (const season of /** @type {const} */ (['summer', 'autumn', 'winter'])) {
+      const src = villageSources(season, artOverrides);
+      const entries = [...src.keys()].map((key) => ({ key, rows: ['.'], anchor: /** @type {[number, number]} */ ([0.5, 1]) }));
+      assets.register(v3VillageBundle(season), () => buildPlaceholderPack(entries, src, { ...packOpts, tallestFirst: true, exactHeight: true }));
+    }
+    const anchors = new Map(placeholderEntries().map((e) => [e.key, e.anchor]));
+    const winter = winterObjectKeys(artOverrides).map((key) => ({ key, rows: ['.'], anchor: anchors.get(key.slice('winter.'.length)) ?? /** @type {[number, number]} */ ([0.5, 1]) }));
+    if (winter.length) assets.register(V3_OBJECTS_WINTER, () => buildPlaceholderPack(winter, artOverrides, { ...packOpts, tallestFirst: true, exactHeight: true }));
+  }
   // Graphics v3: the plains' v3 ground, trees and props, one bundle per season (summer's in spring), loaded
   // by the chunks that have plains (gameView.v3PlainsBundleOf), packed tallest first on atlases of their own
   for (const season of /** @type {const} */ (['summer', 'autumn', 'winter', 'flow'])) {
@@ -245,6 +262,9 @@ async function boot() {
   // P8: a new game is the whole world (the island and the regions south of it).
   const mapName = /** @type {keyof typeof MAPS} */ (mapParam ?? 'world');
   const state = createGameState(MAPS[mapName] ?? MAPS.world);
+  // graphics v3: the village's fences, well and signposts (solid where drawn; after the save's baseline,
+  // so a save never names them: game/world/villageProps.js)
+  if (v3 && v3Village) addVillageProps(state);
   performance.mark('world');
   const view = new GameView(app, assets, state, { v3, v3Opaque: params.get('v3opaque') === '1', v3Cache: params.get('v3cache') !== '0' });
   performance.mark('view');

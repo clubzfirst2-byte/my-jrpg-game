@@ -388,3 +388,49 @@ for (const season of ['summer', 'autumn', 'winter']) {
     });
   }
 }
+
+test('?v3=1: the village — its houses, fences, well and sign from the village bundle of the season; fences are solid; winter looks for the common objects, never for the open chest', async ({ browser }) => {
+  for (const season of ['summer', 'winter']) {
+    const { context, page, errors } = await open(browser, PRO, `&v3=1`);
+    await api(page, 'setSeason', season);
+    await api(page, 'teleport', 19, 86);
+    await page.waitForTimeout(2500);
+    await expect.poll(async () => (await api(page, 'season')).view).toBe(season);
+    const names = (await api(page, 'stream')).bundleNames;
+    expect(names).toContain(`v3:village:${season}`);
+    for (const k of ['obj.house', 'obj.v3.house_stone', 'obj.v3.fence.l', 'obj.v3.fence.r', 'obj.v3.well', 'obj.v3.signpost']) expect(await api(page, 'textureDensity', k), k).toBe(4);
+    if (season === 'winter') {
+      expect(names).toContain('v3:objects:winter');
+      expect(await api(page, 'textureDensity', 'winter.obj.chest.closed')).toBe(4);
+      expect(await api(page, 'textureDensity', 'winter.obj.barrel')).toBe(4);
+      expect(await api(page, 'textureDensity', 'winter.obj.chest.open')).toBe(null);
+    } else expect(names).not.toContain('v3:objects:winter');
+    // the fence north of the hero (tile 19,85) stops him
+    const p0 = await api(page, 'player');
+    await page.keyboard.down('ArrowUp');
+    await page.waitForTimeout(800);
+    await page.keyboard.up('ArrowUp');
+    const p1 = await api(page, 'player');
+    expect(p1.y).toBeGreaterThanOrEqual(86 * 16);
+    expect(p1.y).toBeLessThanOrEqual(p0.y);
+    const mem = await api(page, 'v3');
+    expect(mem.gpu.total).toBeLessThan(35 * 2 ** 20);
+    expect(errors).toEqual([]);
+    await context.close();
+  }
+});
+
+test('?v3=0: no village props, no v3 bundles (the game as before)', async ({ browser }) => {
+  const { context, page, errors } = await open(browser, PRO, '&v3=0');
+  await api(page, 'teleport', 19, 86);
+  await page.waitForTimeout(2000);
+  const names = (await api(page, 'stream')).bundleNames;
+  expect(names.some((n) => n.startsWith('v3:'))).toBe(false);
+  // nothing new stands at the fence's tile: the hero walks north through it
+  await page.keyboard.down('ArrowUp');
+  await page.waitForTimeout(800);
+  await page.keyboard.up('ArrowUp');
+  expect((await api(page, 'player')).y).toBeLessThan(86 * 16);
+  expect(errors).toEqual([]);
+  await context.close();
+});

@@ -72,13 +72,13 @@ describe('art', () => {
     expect(densityOf({ sheet: /** @type {any} */ ({}), x: 0, y: 0, w: 1, h: 1 })).toBe(ART_SCALE);
     expect(densityOf({ sheet: /** @type {any} */ ({}), x: 0, y: 0, w: 1, h: 1, density: 4 })).toBe(4);
   });
-  it('the v3 plains art: one bundle per season (summer for spring too), the stone house in the plains bundle, the characters in the base one', () => {
+  it('the v3 plains art: one bundle per season (summer for spring too), the stone house in the village bundle (villageV3.test.js), the characters in the base one', () => {
     const files = readdirSync(new URL('../../src/art-release-v3/terrain/', import.meta.url)).map((f) => f.slice(0, -4));
     const objects = readdirSync(new URL('../../src/art-release-v3/objects/', import.meta.url)).map((f) => f.slice(0, -4));
     const overrides = new Map([...files, ...objects, 'hero.idle.down.0', 'enemy.slime.idle.0'].map((k) => [k, { url: `${k}.png`, density: 4 }]));
     expect(v3RegionOf('hero.idle.down.0')).toBe(null);
     expect(v3RegionOf('npc.woman.idle.down.0')).toBe(null);
-    expect(releaseV3RegionEntries('region:plains', overrides).map((e) => e.key)).toEqual(['obj.v3.house_stone']);
+    expect(releaseV3RegionEntries('region:plains', overrides).map((e) => e.key)).toEqual([]);
     expect(releaseV3RegionEntries('region:forest', overrides)).toEqual([]);
     const seasons = /** @type {const} */ (['summer', 'autumn', 'winter']);
     const all = [...seasons, /** @type {const} */ ('flow')].flatMap((s) => v3PlainsEntries(s, overrides).map((e) => e.key));

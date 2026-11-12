@@ -178,7 +178,7 @@ export function sideState(i, j, side) {
  * gen_ground_v3.flow_key (NAMES.md 3.2, round 7): (kind, stored corners TL TR BR BL, v, flip) of display
  * tile (i, j), or null (no flow). A corner set without a picture of its own is its stored mirror drawn
  * flipped left to right (its E / W side states read swapped). v: 2 sides crossed s(A) + 2 s(B) + 4 ((i + 2j)
- * mod 3); 4 sides s(N) + 2 s(E) + 4 s(S) + 8 s(W); none hsh % 4 (flip by hsh). `corner` gives a world
+ * mod 3); 4 sides s(N) + 2 s(E) + 4 s(S) + 8 s(W); none fullV (round 8: never the left 1111 tile's v; flip by hsh). `corner` gives a world
  * corner's state (the game's: flowCorner, 'm' where the 4 display tiles around it are not all full plains).
  * @param {number} i @param {number} j @param {(cx: number, cy: number) => 'd' | 'l' | 'm'} [corner]
  * @returns {FlowKey | null}
@@ -193,9 +193,32 @@ export function flowKey(i, j, corner = flowCorner) {
   const bits = flip ? /** @type {Record<string, string>} */ (MIRROR)[b] : b;
   const st = (/** @type {'N' | 'E' | 'S' | 'W'} */ side) => sideState(i, j, flip && side === 'E' ? 'W' : flip && side === 'W' ? 'E' : side);
   const sides = crossed(bits);
-  if (!sides.length) return [kind, bits, hsh(i, j, 33) % FULL_SHAPES, ((hsh(i, j, 35) >>> 2) & 1) === 1];
+  if (!sides.length) return [kind, bits, fullV(i, j, corner), ((hsh(i, j, 35) >>> 2) & 1) === 1];
   if (sides.length === 4) return [kind, bits, st('N') + 2 * st('E') + 4 * st('S') + 8 * st('W'), flip];
   return [kind, bits, st(sides[0]) + 2 * st(sides[1]) + 4 * ((((i + 2 * j) % INNER_SHAPES) + INNER_SHAPES) % INNER_SHAPES), flip];
+}
+
+/** gen_ground_v3.is_full: all 4 corners of a tile the same flow kind (the 1111 shape). @param {number} i @param {number} j @param {(cx: number, cy: number) => 'd' | 'l' | 'm'} corner */
+function isFull(i, j, corner) {
+  const c = corner(i, j);
+  return c !== 'm' && c === corner(i + 1, j) && c === corner(i + 1, j + 1) && c === corner(i, j + 1);
+}
+
+/**
+ * gen_ground_v3.full_v (round 8): the picture of a full (1111) tile, never the same as the 1111 tile on
+ * its left: walking from the first 1111 tile of the row's run, v0 = hsh(x, j, 33) % 4, moved on by one
+ * where it equals the v before it. @param {number} i @param {number} j @param {(cx: number, cy: number) => 'd' | 'l' | 'm'} corner
+ */
+export function fullV(i, j, corner = flowCorner) {
+  let x0 = i;
+  while (isFull(x0 - 1, j, corner)) x0--;
+  /** @type {number | null} */
+  let v = null;
+  for (let x = x0; x <= i; x++) {
+    const v0 = hsh(x, j, 33) % FULL_SHAPES;
+    v = v === v0 ? (v0 + 1) % FULL_SHAPES : v0;
+  }
+  return /** @type {number} */ (v);
 }
 
 /** The flow pictures' set of a season: summer and autumn share one ("" ), winter has its own. @param {string | null | undefined} season */
@@ -207,8 +230,8 @@ export const flowTileKey = (season, fk) => `${flowSet(season)}plains.grassflow.v
 /** FLOW_TINT[season][kind] (NAMES.md 3.3): the colour the grey flow shapes are multiplied by. */
 export const FLOW_TINT = Object.freeze({
   summer: Object.freeze({ d: 0x335d3a, l: 0x638b46 }),
-  autumn: Object.freeze({ d: 0x744b28, l: 0x91802e }),
-  winter: Object.freeze({ d: 0x99abc7, l: 0xdce6f2 }),
+  autumn: Object.freeze({ d: 0x80572c, l: 0xa79138 }),
+  winter: Object.freeze({ d: 0xaabcd6, l: 0xfafcff }),
 });
 
 /**
