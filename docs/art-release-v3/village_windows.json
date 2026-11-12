@@ -1,0 +1,461 @@
+{
+ "note": "Night windows of the v3 village houses (gen_village_v3.py). art: [x, y, w, h] in texels from the image's top left; game: [x, y, w, h] in game px from the feet (bottom centre), 4 texels per game px. lit = texels houseWindows.glassKind lights; glints_unlit = glass texels left as drawn (tones 4-5); lit_not_glass must be 0.",
+ "houses": {
+  "obj.house": {
+   "size": [
+    192,
+    224
+   ],
+   "game_size": [
+    48.0,
+    56.0
+   ],
+   "windows": [
+    {
+     "art": [
+      24,
+      122,
+      30,
+      40
+     ],
+     "game": [
+      -18.0,
+      -25.5,
+      7.5,
+      10.0
+     ],
+     "glass": 1054,
+     "lit": 960,
+     "glints_unlit": 94,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      138,
+      122,
+      30,
+      40
+     ],
+     "game": [
+      10.5,
+      -25.5,
+      7.5,
+      10.0
+     ],
+     "glass": 1054,
+     "lit": 960,
+     "glints_unlit": 94,
+     "lit_not_glass": 0
+    }
+   ],
+   "lit_like_outside_windows": 12
+  },
+  "autumn.obj.house": {
+   "size": [
+    192,
+    224
+   ],
+   "game_size": [
+    48.0,
+    56.0
+   ],
+   "windows": [
+    {
+     "art": [
+      24,
+      122,
+      30,
+      40
+     ],
+     "game": [
+      -18.0,
+      -25.5,
+      7.5,
+      10.0
+     ],
+     "glass": 1054,
+     "lit": 960,
+     "glints_unlit": 94,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      138,
+      122,
+      30,
+      40
+     ],
+     "game": [
+      10.5,
+      -25.5,
+      7.5,
+      10.0
+     ],
+     "glass": 1054,
+     "lit": 960,
+     "glints_unlit": 94,
+     "lit_not_glass": 0
+    }
+   ],
+   "lit_like_outside_windows": 12
+  },
+  "autumn.obj.v3.house_stone": {
+   "size": [
+    256,
+    288
+   ],
+   "game_size": [
+    64.0,
+    72.0
+   ],
+   "windows": [
+    {
+     "art": [
+      40,
+      114,
+      30,
+      40
+     ],
+     "game": [
+      -22.0,
+      -43.5,
+      7.5,
+      10.0
+     ],
+     "glass": 989,
+     "lit": 912,
+     "glints_unlit": 77,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      186,
+      114,
+      30,
+      40
+     ],
+     "game": [
+      14.5,
+      -43.5,
+      7.5,
+      10.0
+     ],
+     "glass": 989,
+     "lit": 912,
+     "glints_unlit": 77,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      112,
+      118,
+      32,
+      34
+     ],
+     "game": [
+      -4.0,
+      -42.5,
+      8.0,
+      8.5
+     ],
+     "glass": 899,
+     "lit": 830,
+     "glints_unlit": 69,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      36,
+      202,
+      40,
+      50
+     ],
+     "game": [
+      -23.0,
+      -21.5,
+      10.0,
+      12.5
+     ],
+     "glass": 1726,
+     "lit": 1612,
+     "glints_unlit": 114,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      180,
+      202,
+      40,
+      50
+     ],
+     "game": [
+      13.0,
+      -21.5,
+      10.0,
+      12.5
+     ],
+     "glass": 1726,
+     "lit": 1612,
+     "glints_unlit": 114,
+     "lit_not_glass": 0
+    }
+   ],
+   "lit_like_outside_windows": 44
+  },
+  "winter.obj.house": {
+   "size": [
+    192,
+    224
+   ],
+   "game_size": [
+    48.0,
+    56.0
+   ],
+   "windows": [
+    {
+     "art": [
+      24,
+      122,
+      30,
+      40
+     ],
+     "game": [
+      -18.0,
+      -25.5,
+      7.5,
+      10.0
+     ],
+     "glass": 1064,
+     "lit": 970,
+     "glints_unlit": 94,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      138,
+      122,
+      30,
+      40
+     ],
+     "game": [
+      10.5,
+      -25.5,
+      7.5,
+      10.0
+     ],
+     "glass": 1064,
+     "lit": 970,
+     "glints_unlit": 94,
+     "lit_not_glass": 0
+    }
+   ],
+   "lit_like_outside_windows": 293
+  },
+  "winter.obj.v3.house_stone": {
+   "size": [
+    256,
+    288
+   ],
+   "game_size": [
+    64.0,
+    72.0
+   ],
+   "windows": [
+    {
+     "art": [
+      40,
+      114,
+      30,
+      40
+     ],
+     "game": [
+      -22.0,
+      -43.5,
+      7.5,
+      10.0
+     ],
+     "glass": 974,
+     "lit": 897,
+     "glints_unlit": 77,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      186,
+      114,
+      30,
+      40
+     ],
+     "game": [
+      14.5,
+      -43.5,
+      7.5,
+      10.0
+     ],
+     "glass": 974,
+     "lit": 897,
+     "glints_unlit": 77,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      112,
+      118,
+      32,
+      34
+     ],
+     "game": [
+      -4.0,
+      -42.5,
+      8.0,
+      8.5
+     ],
+     "glass": 899,
+     "lit": 830,
+     "glints_unlit": 69,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      36,
+      202,
+      40,
+      50
+     ],
+     "game": [
+      -23.0,
+      -21.5,
+      10.0,
+      12.5
+     ],
+     "glass": 1704,
+     "lit": 1590,
+     "glints_unlit": 114,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      180,
+      202,
+      40,
+      50
+     ],
+     "game": [
+      13.0,
+      -21.5,
+      10.0,
+      12.5
+     ],
+     "glass": 1704,
+     "lit": 1590,
+     "glints_unlit": 114,
+     "lit_not_glass": 0
+    }
+   ],
+   "lit_like_outside_windows": 351
+  },
+  "obj.v3.house_stone": {
+   "size": [
+    256,
+    288
+   ],
+   "game_size": [
+    64.0,
+    72.0
+   ],
+   "windows": [
+    {
+     "art": [
+      40,
+      114,
+      30,
+      40
+     ],
+     "game": [
+      -22.0,
+      -43.5,
+      7.5,
+      10.0
+     ],
+     "glass": 989,
+     "lit": 518,
+     "glints_unlit": 471,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      186,
+      114,
+      30,
+      40
+     ],
+     "game": [
+      14.5,
+      -43.5,
+      7.5,
+      10.0
+     ],
+     "glass": 989,
+     "lit": 518,
+     "glints_unlit": 471,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      112,
+      118,
+      32,
+      34
+     ],
+     "game": [
+      -4.0,
+      -42.5,
+      8.0,
+      8.5
+     ],
+     "glass": 899,
+     "lit": 501,
+     "glints_unlit": 398,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      36,
+      202,
+      40,
+      50
+     ],
+     "game": [
+      -23.0,
+      -21.5,
+      10.0,
+      12.5
+     ],
+     "glass": 1726,
+     "lit": 892,
+     "glints_unlit": 834,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      180,
+      202,
+      40,
+      50
+     ],
+     "game": [
+      13.0,
+      -21.5,
+      10.0,
+      12.5
+     ],
+     "glass": 1726,
+     "lit": 892,
+     "glints_unlit": 834,
+     "lit_not_glass": 0
+    }
+   ],
+   "lit_like_outside_windows": 44
+  }
+ }
+}
