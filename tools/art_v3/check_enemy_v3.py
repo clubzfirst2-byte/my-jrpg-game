@@ -177,5 +177,87 @@ def main():
     print("  per kind (MB, +10%):", {k: round(v / 1e6, 3) for k, v in per.items()})
 
 
+def _key(a):
+    r = a[..., :3].astype(np.int64)
+    return np.where(a[..., 3] == 255, (r[..., 0] << 16) | (r[..., 1] << 8) | r[..., 2], -1)
+
+
+def _win(a, s=32, step=16):
+    """Median colour count of the s x s windows (step `step`) that are 75 % opaque (the inspection's)."""
+    k = _key(a)
+    H, W = k.shape
+    out = [len(set(k[y:y + s, x:x + s][k[y:y + s, x:x + s] >= 0].ravel()))
+           for y in range(0, H - s + 1, step) for x in range(0, W - s + 1, step) if (k[y:y + s, x:x + s] >= 0).mean() >= 0.75]
+    return float(np.median(out)) if out else float("nan")
+
+
+def _v2img(name):
+    blob = subprocess.run(["git", "-C", ROOT, "show", f"{V2REF}:src/art-release-v2/enemy/{name}.png"],
+                          capture_output=True, check=True).stdout
+    return np.array(Image.open(io.BytesIO(blob)).convert("RGBA"))
+
+
+def _boil(A, B, r=4):
+    """Changed share after the best whole-texel alignment (the inspection's 'boil')."""
+    ka, kb = _key(A), _key(B)
+    H, W = ka.shape
+    best = 9.0
+    for dy in range(-r, r + 1):
+        for dx in range(-r, r + 1):
+            o = np.full_like(ka, -1)
+            o[max(0, dy):H + min(0, dy), max(0, dx):W + min(0, dx)] = ka[max(0, -dy):H + min(0, -dy), max(0, -dx):W + min(0, -dx)]
+            u = (o >= 0) | (kb >= 0)
+            best = min(best, float((o != kb)[u].mean()))
+    return best
+
+
+ACTS = (("idle", 4), ("move", 8), ("windup", 4), ("attack", 5), ("hurt", 3), ("defeat", 6))
+
+
+def detail_report():
+    """Round 2 (inspection 'the same information as v2'): colours in 32 x 32 windows (the game area of
+    v2's 16 x 16), agreement with v2 at 2x (each v2 colour mapped to its commonest v3 colour), the
+    luma spread, the idle boil, and the slime's shape change against idle 0."""
+    print("\ndetail (round 2):")
+    for kind in ("slime", "beast", "archer", "sentinel"):
+        M = collections.defaultdict(collections.Counter)
+        pairs, lum, c32 = [], [], []
+        for a, n in ACTS:
+            for i in range(n):
+                name = f"enemy.{kind}.{a}.{i}"
+                A = _key(np.repeat(np.repeat(_v2img(name), 2, 0), 2, 1))
+                b = np.array(Image.open(os.path.join(OUT, name + ".png")).convert("RGBA"))
+                B = _key(b)
+                pairs.append((A, B))
+                both = (A >= 0) & (B >= 0)
+                for x, y in zip(A[both], B[both]):
+                    M[x][y] += 1
+                lum.append(luma(b[..., :3].astype(float))[b[..., 3] == 255])
+                if a == "idle":
+                    c32.append(_win(b))
+        mp = {x: c.most_common(1)[0][0] for x, c in M.items()}
+        ag = tot = 0
+        for A, B in pairs:
+            both = (A >= 0) & (B >= 0)
+            ag += sum(1 for x, y in zip(A[both], B[both]) if mp.get(x) == y)
+            tot += int(both.sum())
+        L = np.concatenate(lum)
+        v2L = np.concatenate([luma(_v2img(f"enemy.{kind}.{a}.{i}")[..., :3].astype(float))[_v2img(f"enemy.{kind}.{a}.{i}")[..., 3] == 255]
+                              for a, n in ACTS for i in range(n)])
+        idle = [np.array(Image.open(os.path.join(OUT, f"enemy.{kind}.idle.{i}.png")).convert("RGBA")) for i in range(4)]
+        boil = [round(100 * _boil(idle[i], idle[(i + 1) % 4]), 1) for i in range(4)]
+        print(f"  {kind:9s} 32x32 colours (idle, median) {np.median(c32):4.1f}  agreement with v2x2 {ag / tot:.3f}  "
+              f"luma mean {L.mean():5.1f} sd {L.std():4.1f} (v2 {v2L.std():4.1f}, {L.std() / v2L.std():.2f}) p95 {np.percentile(L, 95):3.0f} "
+              f"(v2 {np.percentile(v2L, 95):3.0f})  idle boil {boil}")
+    i0 = np.array(Image.open(os.path.join(OUT, "enemy.slime.idle.0.png")))[..., 3] > 0
+    for a, n in (("windup", 4), ("attack", 5), ("hurt", 3)):
+        d = []
+        for i in range(n):
+            f = np.array(Image.open(os.path.join(OUT, f"enemy.slime.{a}.{i}.png")))[..., 3] > 0
+            d.append(round(100 * (i0 ^ f).sum() / (i0 | f).sum(), 1))
+        print(f"  slime {a:7s} shape change against idle 0 (%): {d}")
+
+
 if __name__ == "__main__":
     main()
+    detail_report()

@@ -62,7 +62,9 @@ def staff(r, x0, y0, x1, y1, orb, behind=False):
     ux, uy = dx / L, dy / L
     sx, sy = x1 + ux * 1.5, y1 + uy * 1.5
     r.ellipse(sx, sy, 2.6, 2.3, "bone", soft=1)  # the skull
-    r.px([(round(sx) - 1, round(sy)), (round(sx) + 1, round(sy))], "bone", 0)  # eye sockets
+    # v3 round 2: the skull's face at texel size: two deep sockets (a dark rim round a darker hole),
+    # a nose hole, a row of teeth
+    r.tstamp(sx - 2.0, sy - 0.8, ["00.00", "0m.0m", "..n..", ".t.t."], {"0": ("bone", 1), "m": ("murk", 0), "n": ("bone", 0), "t": ("bone", 1)})
     ox, oy = sx + ux * (orb + 2.4), sy + uy * (orb + 2.4)
     # the murk orb: hand-shaded so it glows from the inside (same colour in every frame)
     r.ellipse(ox, oy, orb, orb, "glow", tone=2)
@@ -77,6 +79,7 @@ def draw(p):
         return heap(r, p)
     X, dy = p.x, p.dy
     hip = (15 + X, 41 + dy)
+    r.anchor = hip  # v3 round 2: the surface detail moves with the body
     sh = (16 + X + p.lean, 29 + dy + abs(p.lean) * 0.3)
     hx_, hy = sh[0] + 2 + p.lean * 0.6 + p.head[0], sh[1] - 7 + p.head[1]
     # far arm and the staff when it is held behind (hold / raise)
@@ -106,11 +109,18 @@ def draw(p):
     r.add(r.m_poly([(hx_ - 3, hy - 2.2), et, (hx_ - 11, hy - 1.6), (hx_ - 3, hy + 1.5)]), "gobskin", soft=1)
     r.add(r.m_poly([(hx_ - 4, hy - 1.2), (et[0] + 3, et[1] + 1.6), (hx_ - 4, hy + 0.6)]), "gobskin", tone=1)  # inner ear
     # brow, eyes, tusk, mouth (hand-placed)
-    ex, ey = round(hx_ + 1), round(hy - 2)
-    r.stamp(ex, ey, ["aaa", ".bc", ".dd"], {"a": ("gobskin", 0), "b": ("eye", 3), "c": ("eye", 2), "d": ("gobskin", 1)})
-    r.px([(round(hx_ + 3), round(hy + 3) + p.mouth)], "gobskin", 0)
-    r.px([(round(hx_ + 2), round(hy + 3) + p.mouth), (round(hx_ + 1), round(hy + 3) + p.mouth)], "gobskin", 0)
-    r.px([(round(hx_ + 2), round(hy + 4) + p.mouth)], "bone", 3)  # the tusk
+    # v3 round 2, at texel size: the nose's lit ridge and a nostril, a heavy slanting brow over a
+    # glowing eye (rim, glint, light, core, deep), a cheek in light, the mouth (a dark line that opens),
+    # a lower lip lit, one tusk (lit left, shaded right)
+    r.add(r.m_limb(hx_ + 3.6, hy - 0.8, hx_ + 8.8, hy + 2.4, 0.5, 0.4), "gobskin", tone=3, cast=False)
+    r.tstamp(hx_ + 7.8, hy + 2.6, ["00", "0."], {"0": ("gobskin", 0)})
+    r.tstamp(hx_ + 0.2, hy - 2.8, ["00000000", ".0ggbbc0", "..0bbcd0", "...0cd0.", "....00.."],
+             {"0": ("gobskin", 0), "g": ("eye", 4), "b": ("eye", 3), "c": ("eye", 2), "d": ("eye", 1)})
+    r.shade(r.m_ellipse(hx_ + 1.6, hy + 1.0, 1.8, 0.9), lambda t: 2.5 if 1 <= t <= 2 else t)
+    my = hy + 3 + p.mouth
+    r.tstamp(hx_ + 0.2, my - 0.5, ["000000.", ".000000", "..LLLL."] if not p.mouth else ["000000.", "0mmmm00", ".00000.", "..LLLL."],
+             {"0": ("gobskin", 0), "m": ("murk", 0), "L": ("gobskin", 3)})
+    r.tstamp(hx_ + 1.6, my + 0.5, ["ab", "ab", "a."], {"a": ("bone", 4), "b": ("bone", 2)})
     # arm and staff (v2: the staff pose is a tuple, so it can be eased between the named poses)
     hand = None
     st = STAFF[p.staff] if isinstance(p.staff, str) else p.staff

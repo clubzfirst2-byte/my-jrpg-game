@@ -40,6 +40,16 @@ MINIMAL = ("beast", "archer")
 V2_SIZES = {"beast": (44, 32), "archer": (32, 56), "slime": (32, 28), "sentinel": (40, 56), "shot": (12, 12)}
 
 
+def v2_bottom(name):
+    """The lowest opaque row of the approved v2 frame (git d900394) at 2x: 2 * row + 1."""
+    import io
+    import subprocess
+    blob = subprocess.run(["git", "-C", ROOT, "show", f"d900394:src/art-release-v2/enemy/{name}.png"],
+                          capture_output=True, check=True).stdout
+    a = np.array(Image.open(io.BytesIO(blob)).convert("RGBA"))[..., 3] > 0
+    return 2 * int(np.nonzero(a.any(1))[0].max()) + 1
+
+
 def rgba(fr):
     if hasattr(fr, "rgba"):  # a v3lib Canvas
         return fr.rgba()
@@ -56,6 +66,13 @@ def build():
                 a = palette_v3.recolour(a, kind)  # the body darkened against the ground, mid tones in 3x3
                 if a[0, :, 3].any():  # keep the top row empty (v2's rule): drop that row's texels
                     a[0, :, 3] = 0
+                if kind == "beast":
+                    # round 2: the lowest texel row where v2's lowest pixel row is at 2x (the rig's
+                    # ground line sits 1-3 texels higher; a frame in the air stays in the air)
+                    want = v2_bottom(f"enemy.{kind}.{key}")
+                    gap = want - int(np.nonzero(a[..., 3].any(1))[0].max())
+                    if gap > 0:
+                        a = np.concatenate([np.zeros_like(a[:gap]), a[:-gap]], 0)
             out[f"enemy.{kind}.{key}"] = a
         if kind in MINIMAL:
             out[f"enemy.{kind}.0"] = out[f"enemy.{kind}.idle.0"]

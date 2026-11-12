@@ -51,6 +51,15 @@ def melt(img, squash, murk, pool):
                 if 0 <= y < h and not out[y, x, 3]:
                     out[y, x, :3] = RGBV3["murk"][i]
                     out[y, x, 3] = 255
+    # round 2: no 1-texel-high streaks (a row of texels with nothing above or below it)
+    for _ in range(2):
+        op_ = out[..., 3] > 0
+        up_ = np.zeros_like(op_)
+        up_[1:] = op_[:-1]
+        dn_ = np.zeros_like(op_)
+        dn_[:-1] = op_[1:]
+        thin = op_ & ~up_ & ~dn_
+        out[thin] = 0
     res = out.copy()
     for y in range(h):
         for x in range(w):

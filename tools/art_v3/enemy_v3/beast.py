@@ -83,6 +83,7 @@ def draw(p):
         return puddle_only(r, p)
     X, dy = p.x - 2, p.dy
     by = 17 + dy  # body centre line
+    r.anchor = (12 + X, by)  # v3 round 2: the surface detail moves with the body
     hip = (12 + X - p.stretch * 0.5, by + 2 - p.pitch * 0.2)
     sh = (28 + X + p.stretch * 0.5, by + 2 + p.pitch)
     if p.lying:
@@ -210,23 +211,35 @@ def draw(p):
     et = (hx_ - 2.4 - p.ear * 4.0, hy - 9.2 + p.ear * 5.0)
     r.add(r.m_poly([(hx_ - 3.8, hy - 2.0), et, (hx_ + 0.8, hy - 3.4)]), "ashfur", soft=1)
     r.add(r.m_poly([(hx_ - 2.6, hy - 2.6), (et[0] + 0.7, et[1] + 2.6), (hx_ - 0.4, hy - 3.2)]), "ashfur", tone=1)
-    r.px([(round(hx_ + 9), round(hy - 0.6))], "ashfur", 0)  # nose
-    r.px([(round(hx_ + 9), round(hy - 1.6))], "ashfur", 3)  # a glint on the nose bridge
+    # v3 round 2: the head's volume at texel size -- a lit forehead and muzzle top (a 2.5 band), the
+    # cheek under the eye lit, the underside of the muzzle and the throat in shade
+    r.shade(r.m_ellipse(hx_ + 0.5, hy - 2.2, 3.2, 1.3) | r.m_ellipse(hx_ + 5.5, hy - 1.6, 3.6, 0.9), lambda t: 2.5 if 1 <= t <= 2.5 else t)
+    r.shade(r.m_ellipse(hx_ + 0.5, hy + 1.4, 2.6, 1.1), lambda t: 2.5 if 1 <= t <= 2 else t)
+    r.shade(r.m_ellipse(hx_ + 5, hy + 1.6, 4.5, 0.8) | r.m_ellipse(hx_ - 2.5, hy + 3.0, 2.4, 1.0), lambda t: max(1, t - 1))
+    # the nose: a dark wet nose with a lit top and a nostril (texels)
+    r.tstamp(hx_ + 8.0, hy - 1.5, [".hh..", "00000", "00n00", ".000."], {"h": ("ashfur", 3), "0": ("ashfur", 0), "n": ("murk", 0)})
     # fangs (bone), hand-set: a long upper fang near the nose and a short one behind; when the jaw
     # opens a row of lower teeth shows against the dark mouth (the bite reads at 1x)
-    fy_ = round(hy + 1.6)
+    # v3 round 2: the lip line (2 texels, dark) from the nose back to the corner of the mouth
+    r.add(r.m_limb(hx_ + 1.0, hy + 1.3, hx_ + 8.6, hy + 1.0, 0.45, 0.4), "ashfur", tone=0, cast=False)
+    # fangs drawn at texel size: a long upper fang (2 wide, tapering, lit left, shaded right), a short
+    # one behind; an open jaw shows the lower teeth against the dark mouth and a dark gum line
+    fy_ = hy + 1.6
+    FANG = {"a": ("bone", 4), "b": ("bone", 2.5), "c": ("bone", 1)}
     if jaw:
-        r.px([(round(hx_ + 7), fy_), (round(hx_ + 7), fy_ + 1), (round(hx_ + 4), fy_)], "bone", 4)
-        r.px([(round(hx_ + 7), fy_ + 2)] if jaw >= 2 else [], "bone", 2)
-        jy = round(hy + 1.0 + jaw * 1.5)
-        r.px([(round(hx_ + 6), jy), (round(hx_ + 4), jy + 1), (round(hx_ + 2), jy + 1)], "bone", 3)
+        r.tstamp(hx_ + 6.5, fy_, ["ab", "ab", "ab", "ac", "a."] if jaw >= 2 else ["ab", "ab", "ac", "a."], FANG)
+        r.tstamp(hx_ + 3.5, fy_, ["ab", "ac", "a."], FANG)
+        jy = hy + 0.6 + jaw * 1.5
+        for tx in (5.5, 3.5, 1.8):
+            r.tstamp(hx_ + tx, jy, [".a", "ab", "ab"], FANG)
     else:
-        r.px([(round(hx_ + 7), fy_), (round(hx_ + 3.5), fy_)], "bone", 3)
-    # eye: hand-placed yellow eye with a dark lid
-    ex, ey = round(hx_ + 1.5), round(hy - 1.6)
-    # hand-drawn: a heavy dark brow slanting down to the snout over a bright 2x2 eye with a dark rim
-    r.stamp(ex - 1, ey - 1, ["00..", ".000", ".ab0", ".c0."], {"0": ("ashfur", 0), "a": ("eye", 4), "b": ("eye", 2), "c": ("eye", 1)})
-    r.add(r.m_line(hx_ + 3.5, hy - 2.6, hx_ + 8, hy - 1.4), "ashfur", tone=3, cast=False)  # lit bridge of the muzzle
+        r.tstamp(hx_ + 6.5, fy_, ["ab", "ab", "a."], FANG)
+        r.tstamp(hx_ + 3.2, fy_, ["ab", "a."], FANG)
+    # the eye (texels, 8 x 6): a heavy brow slanting down to the snout, a dark rim, a yellow iris in 3
+    # tones (light, core, deep), a slit pupil and a 2 x 1 glint
+    r.tstamp(hx_ - 0.6, hy - 3.6, ["0000000...", ".00000000.", "..0ggbbbp0", "..0gbbbcp0", "...0bcccd0", "....0ccd0.", ".....000.."],
+             {"0": ("ashfur", 0), "g": ("eye", 4), "b": ("eye", 3), "c": ("eye", 2), "d": ("eye", 1), "p": ("murk", 0)})
+    r.add(r.m_limb(hx_ + 4.2, hy - 2.4, hx_ + 8, hy - 1.5, 0.5, 0.45), "ashfur", tone=3, cast=False)  # lit bridge
     # spine crystals (glow, the enemy.magic magenta): 5 shards, tallest over the shoulders
     for i, (ox, h) in enumerate(((-2, 3), (3, 5), (8, 6), (12, 5), (16, 3))):
         cx = hip[0] + 1 + ox + p.stretch * (ox / 18)

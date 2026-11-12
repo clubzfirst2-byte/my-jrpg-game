@@ -35,13 +35,15 @@ import math
 
 import numpy as np
 
+from detail import DETAIL, MIN_AREA as DETAIL_MIN
+
 PAD = 12  # shapes are rasterised on a padded canvas so clipping does not shade a false edge
 S = 2  # v3: texels per v2 pixel (density 4)
 PADT = PAD * S
 K_MID = 3  # v3: an in-between tone survives only inside a K x K block of itself
 # v3: the 2x detail of the big volume parts of the normal enemies, drawn at texel size: the beast's
 # coat in locks lying back, the archer's robe in hanging folds, the sentinel's stone in cut plates
-MAT_TEX = {"ashfur": ("fur", 180, 3), "plum": ("fur", 90, 5), "oldstone": ("bark", 0, 7)}
+MAT_TEX = {}  # round 2: replaced by detail.py (the 1-texel locks read as scratches)
 MAT_TEX_MIN = 120  # texels: small parts (claws, ears, fingers) stay plain
 
 
@@ -76,6 +78,13 @@ RAMPS = {
     "bone": ["#3a3226", "#9a8c70", "#d0c4a4", "#e8dec4", "#fff8e4"],
     "wood": ["#1e1008", "#4a2c16", "#6e4424", "#906038", "#b07e50"],
     "leather": ["#24160c", "#4a3020", "#704c30", "#946c46", "#b88c5e"],
+    # v3 round 2: sub-materials of the bodies (detail.py), in the same 5-tone form
+    "ashfur_d": ["#161114", "#2e262c", "#463b40", "#625456", "#7e6e6e"],   # the beast's dark saddle
+    "ashfur_p": ["#221c1e", "#4e4446", "#76686a", "#9c8c88", "#bcaea6"],   # its pale belly and throat
+    "plum_d": ["#180c12", "#321c26", "#4a2c38", "#66424c", "#80565e"],     # the archer's frayed hem
+    "patch": ["#1c1c16", "#3c3c2e", "#5a5a44", "#78765a", "#969474"],      # a sewn-on worn patch
+    "oldstone_w": ["#1c1e26", "#464a58", "#80869a", "#a4aabc", "#c8cede"],  # weathered stone (cooler)
+    "moss": ["#141c10", "#2c4024", "#466236", "#64804a", "#86a062"],       # moss on the stone
 }
 RGB = {k: [hx(c) for c in v] for k, v in RAMPS.items()}
 
@@ -248,6 +257,26 @@ def _clusters(tex, t, m, oy, ox, org=(0, 0)):
                 elif ch == "D" and b >= 2:
                     out[Y, X] = b - 1
     return out
+
+
+def _label(mask):
+    """4-connected components (1..n)."""
+    h, w = mask.shape
+    lab = np.zeros((h, w), int)
+    n = 0
+    for y in range(h):
+        for x in range(w):
+            if mask[y, x] and not lab[y, x]:
+                n += 1
+                st = [(y, x)]
+                lab[y, x] = n
+                while st:
+                    a, b = st.pop()
+                    for c, d in ((a + 1, b), (a - 1, b), (a, b + 1), (a, b - 1)):
+                        if 0 <= c < h and 0 <= d < w and mask[c, d] and not lab[c, d]:
+                            lab[c, d] = n
+                            st.append((c, d))
+    return lab
 
 
 def _keep_runs(mask):
@@ -466,6 +495,34 @@ class Rig:
             mat, tone = keys[k]
             self.add(m, mat, tone=tone, cast=cast)
 
+    def tstamp(self, x, y, rows, legend, cast=False):
+        """v3 round 2: a hand-drawn map AT TEXEL SIZE (faces, eyes, fangs: drawn new on the 2x grid,
+        not moved from v2). (x, y) in frame units (v2 px), snapped to the nearest texel; legend:
+        char -> (material, tone), the tone may be a half step (2.5 = the ramp's in-between)."""
+        X0, Y0 = int(round(x * S)) + PADT, int(round(y * S)) + PADT
+        groups = {}
+        for j, row in enumerate(rows):
+            for i, ch in enumerate(row):
+                if ch in ". " or ch not in legend:
+                    continue
+                groups.setdefault(legend[ch], []).append((Y0 + j, X0 + i))
+        for (mat, tone), pts in groups.items():
+            m = np.zeros(self.X.shape, bool)
+            for Y, X in pts:
+                if 0 <= Y < self.H and 0 <= X < self.W:
+                    m[Y, X] = True
+            self.add(m, mat, tone=tone, cast=cast)
+
+    def tmask(self, x, y, rows, ch="#"):
+        """A texel mask from a map (for r.shade): (x, y) in frame units."""
+        X0, Y0 = int(round(x * S)) + PADT, int(round(y * S)) + PADT
+        m = np.zeros(self.X.shape, bool)
+        for j, row in enumerate(rows):
+            for i, c in enumerate(row):
+                if c == ch and 0 <= Y0 + j < self.H and 0 <= X0 + i < self.W:
+                    m[Y0 + j, X0 + i] = True
+        return m
+
     def pattern(self, mask, anchor, step, stamps, legend, seed=0, gaps=0.15):
         """Round 3: a hand-drawn material pattern (fur wedges, ice crusts, grains, bubbles...).
         `stamps` are small hand-drawn maps (2-4 px clusters, in the ramp's existing tones); they
@@ -560,9 +617,10 @@ class Rig:
             right = ~np.pad(m, ((0, 0), (0, 1)))[:, 1:]
             t[m & (down | right) & ~(up | left)] = 1
             t[m & (up | left) & ~(down | right) & (t < 3)] = 3
-            tex = p.tex or (MAT_TEX.get(p.mat) if area >= MAT_TEX_MIN else None)
-            if tex:  # fur locks / bark plates, hand-drawn clusters (v3: at texel size, the 2x detail)
-                t = _clusters(tex, t, m, ys.min() - y0, xs.min() - x0, (y0 - PADT, x0 - PADT))
+            sub = None
+            if p.tex:  # fur locks / bark plates, hand-drawn clusters
+                t = _clusters(p.tex, t, m, ys.min() - y0, xs.min() - x0, (y0 - PADT, x0 - PADT))
+
             t = np.clip(t - p.dark + p.lit, 1, 4)
             if p.mat not in SHINY:
                 t = np.minimum(t, 3)
@@ -575,6 +633,11 @@ class Rig:
             fh = np.zeros((H, W), int)
             fh[y0:y1, x0:x1] = hf
             half[vis] = fh[vis]
+            if sub is not None:
+                fm = np.full((H, W), None, dtype=object)
+                fm[y0:y1, x0:x1] = sub
+                sel = vis & (fm != None)  # noqa: E711
+                mat[sel] = fm[sel]
         # re-tones
         for i, p in enumerate(self.parts):
             if p.mat is None:
@@ -610,6 +673,44 @@ class Rig:
                         tone[y, x] = 0
                         half[y, x] = 0
                         break
+        # v3 round 2: the 2x detail inside each body region (detail.py), on the finished tones, so it
+        # covers the volume parts and the fixed-tone planes alike; tone-0 lines are left alone
+        for mname, fn in DETAIL.items():
+            region = (mat == mname) & (tone >= 1)
+            if region.sum() < DETAIL_MIN:
+                continue
+            lab = _label(region)
+            for k in range(1, lab.max() + 1):
+                m = lab == k
+                if m.sum() < DETAIL_MIN:
+                    continue
+                ys, xs = np.nonzero(m)
+                y0, y1, x0, x1 = ys.min() - 3, ys.max() + 4, xs.min() - 3, xs.max() + 4
+                y0, x0 = max(0, y0), max(0, x0)
+                sub_m = m[y0:y1, x0:x1]
+                t = tone[y0:y1, x0:x1].astype(float).copy()
+                hf = half[y0:y1, x0:x1].copy()
+                # the detail's grid is anchored to the body (r.anchor, set by the character from its
+                # pose) when there is one, else to the region: it moves with the body, not with the
+                # region's outline (a limb swinging out must not slide the whole pattern)
+                if getattr(self, "anchor", None) is not None:
+                    ax, ay = int(round(self.anchor[0] * S)), int(round(self.anchor[1] * S))
+                    org = (y0 - PADT - ay, x0 - PADT - ax)
+                else:
+                    org = (y0 - PADT, x0 - PADT)
+                t2, hf2, sub = fn(t, hf, sub_m, org)
+                win = np.zeros((H, W), bool)
+                win[y0:y1, x0:x1] = sub_m
+                tt = np.full((H, W), -1.0)
+                tt[y0:y1, x0:x1] = t2
+                hh = np.zeros((H, W), int)
+                hh[y0:y1, x0:x1] = hf2
+                tone[win] = tt[win]
+                half[win] = hh[win]
+                fm = np.full((H, W), None, dtype=object)
+                fm[y0:y1, x0:x1] = sub
+                sel = win & (fm != None)  # noqa: E711
+                mat[sel] = fm[sel]
         self.half = half
         return mat, tone
 

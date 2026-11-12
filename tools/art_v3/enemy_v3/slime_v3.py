@@ -26,7 +26,7 @@ RAMPS = {
 }
 EYE, EYE_D, EYE_W, PUPIL = "#e070e0", "#b040b0", "#ffd8ff", "#3a1a44"
 
-BASE = dict(lean=0, rx=21.5, top=16, foot=30, ph=0, dx=0, lift=0, eyes="open", charge=0, sink=0)
+BASE = dict(lean=0, rx=21.5, top=16, foot=30, ph=0, dx=0, lift=0, eyes="open", charge=0, sink=0, pilot_bubbles=False)
 IDLE = [  # the pilot's 4 poses
     dict(lean=0, rx=21.5, top=16, foot=30, ph=0),
     dict(lean=1, rx=22.5, top=17, foot=31, ph=1),
@@ -42,7 +42,7 @@ def P(**k):
 
 
 ACTIONS = {
-    "idle": [P(**p) for p in IDLE],
+    "idle": [P(pilot_bubbles=True, **p) for p in IDLE],
     # a hop: gather (squash) -> spring up (tall, narrow) -> apex -> falling -> land (squash wide) ->
     # rebound -> settle -> a step forward ready for the next hop
     "move": [
@@ -57,26 +57,26 @@ ACTIONS = {
     ],
     # wind-up: a small rise (anticipation), then it squashes back, leaning away, the core flaring;
     # the last frame is the held pose
-    "windup": [
-        P(top=13, rx=20.5, foot=28.5, ph=0, lean=0, charge=1),
-        P(top=19, rx=22.5, foot=31, ph=1, lean=-2, charge=1, eyes="squint"),
-        P(top=23, rx=24.0, foot=32.5, ph=2, lean=-3, charge=2, eyes="squint"),
-        P(top=25, rx=24.5, foot=33, ph=3, lean=-3, charge=2, eyes="squint"),
+    "windup": [  # round 2: deeper -- a rise, then squashed far back and low (held)
+        P(top=11, rx=19.5, foot=27.5, ph=0, lean=1, charge=1),
+        P(top=21, rx=23.5, foot=30.5, ph=1, lean=-4, charge=1, eyes="squint"),
+        P(top=28, rx=25.5, foot=30.5, ph=2, lean=-6, charge=2, eyes="squint"),
+        P(top=31, rx=26.0, foot=30.5, ph=3, lean=-7, charge=2, eyes="squint"),
     ],
-    # attack: the release (stretched forward, off the ground), the slam (flattened far forward),
-    # then three frames back to rest (70 %, 90 %)
+    # attack (round 2): two frames in the air (the launch, tall and leaning forward; the flight, high
+    # and stretched forward), the slam flattened forward on landing, then two frames back to rest
     "attack": [
-        P(top=11, rx=19.0, foot=24, ph=0, lean=6, lift=4, charge=2, eyes="squint"),
-        P(top=22, rx=24.5, foot=33.5, ph=1, lean=7, charge=1),
-        P(top=18, rx=23.0, foot=32, ph=2, lean=5, charge=1),
-        P(top=17, rx=22.0, foot=31, ph=3, lean=2),
-        P(top=16, rx=21.5, foot=30, ph=0, lean=0),
+        P(top=4, rx=16.5, foot=22, ph=0, lean=7, lift=8, charge=2, eyes="squint"),
+        P(top=4, rx=20.0, foot=24, ph=1, lean=10, lift=16, charge=2, eyes="squint"),
+        P(top=30, rx=26.0, foot=30.5, ph=2, lean=8, charge=1),
+        P(top=13, rx=20.5, foot=29, ph=3, lean=3),
+        P(top=17, rx=22.0, foot=30, ph=0, lean=1),
     ],
-    # hurt: knocked back (leaning away, squashed, eyes shut), then 45 % and 85 % back
+    # hurt (round 2): knocked up and back (narrow, tilted away, eyes shut), squashed on landing, back
     "hurt": [
-        P(top=20, rx=23.0, foot=31.5, ph=0, lean=-6, eyes="shut"),
-        P(top=18, rx=22.5, foot=31, ph=1, lean=-3, eyes="shut"),
-        P(top=16, rx=21.5, foot=30, ph=2, lean=-1),
+        P(top=14, rx=18.0, foot=24, ph=0, lean=-9, lift=6, eyes="shut"),
+        P(top=24, rx=24.5, foot=30.5, ph=1, lean=-5, eyes="shut"),
+        P(top=17, rx=22.0, foot=30, ph=2, lean=-2),
     ],
     # defeat: the hit, the buckle, sinking, melting, a puddle, the last of the core
     "defeat": [
@@ -211,11 +211,17 @@ def frame(p):
             continue
         if (halo | cry)[y0:y0 + 3, x0:x0 + 3].any():
             continue
-        for ddx, ddy in ((0, 0), (1, 0), (0, 1)):
-            c.put(x0 + ddx, y0 + ddy, "jelly", 6)
-        c.put(x0 + 1, y0 + 1, "jelly", 5)
-        c.put(x0 + 1, y0 + 2, "jelly", 1)
-        c.put(x0 + 2, y0 + 2, "jelly", 1)
+        if p.get("pilot_bubbles", False):  # the pilot's idle bubble (kept texel for texel)
+            for ddx, ddy in ((0, 0), (1, 0), (0, 1)):
+                c.put(x0 + ddx, y0 + ddy, "jelly", 6)
+            c.put(x0 + 1, y0 + 1, "jelly", 5)
+            c.put(x0 + 1, y0 + 2, "jelly", 1)
+            c.put(x0 + 2, y0 + 2, "jelly", 1)
+        else:  # round 2: a 2 x 2 light and a 2 x 1 shade under it (no single texels)
+            for ddx, ddy in ((0, 0), (1, 0), (0, 1), (1, 1)):
+                c.put(x0 + ddx, y0 + ddy, "jelly", 6 if ddy == 0 else 5)
+            c.put(x0, y0 + 2, "jelly", 1)
+            c.put(x0 + 1, y0 + 2, "jelly", 1)
     despeckle(c)
     c.outline()
     c.shadow_band()

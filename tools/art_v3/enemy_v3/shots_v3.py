@@ -41,7 +41,8 @@ def sphere_tones(c, mask, cx, cy, r, lo=1, hi=5):
 def orb(i):
     c = canvas()
     r = 8.9
-    m = c.m_ellipse(C + 0.5, C + 0.5, r, r)
+    rx, ry = (r + 0.6, r - 0.6) if i % 2 == 0 else (r - 0.6, r + 0.6)  # round 2: it wobbles as it flies
+    m = c.m_ellipse(C + 0.5, C + 0.5, rx, ry)
     c.fill(m, "glow", 3)
     sphere_tones(c, m, C + 0.5, C + 0.5, r, 1, 4)
     a0 = i * math.pi / 2
@@ -59,13 +60,19 @@ def orb(i):
 
 def ice(i):
     c = canvas()
-    tip, tail = (22, C + 0.5), (2.5, C + 0.5)
-    top, bot = (9.5, 5.5), (11.5, 18.5)
+    ang = (-0.10, 0.0, 0.10, 0.0)[i]  # round 2: the shard rocks a little as it flies
+    bob = (0.0, -0.8, 0.0, 0.8)[i]
+
+    def rot(px, py):
+        dx, dy = px - C - 0.5, py - C - 0.5
+        return (C + 0.5 + dx * math.cos(ang) - dy * math.sin(ang), C + 0.5 + bob + dx * math.sin(ang) + dy * math.cos(ang))
+    tip, tail = rot(22, C + 0.5), rot(2.5, C + 0.5)
+    top, bot = rot(9.5, 5.5), rot(11.5, 18.5)
     shard = c.m_poly([tail, top, tip, bot])
     c.fill(shard, "ice", 2)
-    up = c.m_poly([tail, top, tip, (12, C)])
+    up = c.m_poly([tail, top, tip, rot(12, C)])
     c.fill(up & shard, "ice", 3)  # the lit facet (the glint, tone 4-5, runs over it)
-    c.fill(c.m_poly([(12, C + 3.5), tip, bot]) & shard, "ice", 1)
+    c.fill(c.m_poly([rot(12, C + 3.5), tip, bot]) & shard, "ice", 1)
     heart = c.m_ellipse(11.5, C + 0.5, 2.6, 1.8)
     c.fill(heart, "glow", 3)
     c.fill(c.m_rect(10, 11, 11, 11), "glow", 4)
@@ -82,7 +89,11 @@ def ice(i):
 def sand(i):
     c = canvas()
     r = 8.4
-    m = c.m_ellipse(C + 0.5, C + 0.5, r, r * 0.92)
+    # round 2: a lumpy ball that tumbles: the radius bulges at 5 points that turn with the frame
+    yy, xx = np.mgrid[0:H, 0:W]
+    ang_ = np.arctan2(yy + 0.5 - C - 0.5, xx + 0.5 - C - 0.5) - i * math.pi / 2
+    rad = r + 0.9 * np.sin(5 * ang_) + 0.4 * np.sin(2 * ang_ + 1)
+    m = np.hypot(xx + 0.5 - C - 0.5, (yy + 0.5 - C - 0.5) / 0.94) <= rad
     c.fill(m, "murksand", 3)
     sphere_tones(c, m, C + 0.5, C + 0.5, r, 1, 3)
     a0 = i * math.pi / 2

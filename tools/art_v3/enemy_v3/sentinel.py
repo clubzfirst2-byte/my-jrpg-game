@@ -77,6 +77,7 @@ def draw(p):
     cx = 17 + X
     hip_y = 40 + dy
     top = 21 + dy  # shoulders
+    r.anchor = (cx, top)  # v3 round 2: the surface detail moves with the body
     # far arm (small, bronze and stone, hangs behind)
     r.limb(cx - 7, top + 3, cx - 9, top + 13, 2.4, 2.2, "bronze", dark=1, soft=1)
     r.add(r.m_rect(cx - 12, top + 13, cx - 6, top + 18), "oldstone", dark=1)
@@ -125,9 +126,16 @@ def draw(p):
     # v2 (hostile): a visor slit that slants down toward the front (a glare), the eye a long
     # bright magenta streak, and murk weeping from it
     r.add(r.m_poly([(hx_ - 4, vy - 1), (hx_ + 7.5, vy + 0.5), (hx_ + 7.5, vy + 3), (hx_ - 4, vy + 2)]), "murk", tone=0)
+    # v3 round 2: the slit's depth at texel size -- its upper lip lit stone, the inside stepping down
+    # from murk 2 (near the lip) to murk 0 (deep), the lower lip in shade
+    r.add(r.m_limb(hx_ - 4, vy - 1.2, hx_ + 7.5, vy + 0.3, 0.45, 0.45), "oldstone", tone=3, cast=False)
+    r.add(r.m_limb(hx_ - 3.5, vy - 0.3, hx_ + 7, vy + 1.0, 0.5, 0.5), "murk", tone=1, cast=False)
     if p.eye:
-        r.stamp(hx_ - 1, vy, ["aab.....", ".abbbc..", "...bccd."], {"a": ("glow", 2), "b": ("glow", 4), "c": ("glow", 3), "d": ("glow", 2)})
-        r.px([(hx_ + 2, vy + 4), (hx_ + 2, vy + 5), (hx_ + 5, vy + 4)], "murk", 2)  # weeping murk
+        # the eye: a long glare in 4 tones with a hot white core and a halo fading into the slit
+        r.tstamp(hx_ - 1.5, vy, ["aab..........", ".abbbcc......", "..bccgggcc...", "...bccggcccd.", ".....ddcccd..", "........dd..."],
+                 {"a": ("glow", 1), "b": ("glow", 2), "c": ("glow", 3), "g": ("glow", 4), "d": ("glow", 1)})
+        # weeping murk, 2 texels wide
+        r.tstamp(hx_ + 1.8, vy + 3.6, ["mm.", "mm.", ".mm", ".m."], {"m": ("murk", 2)})
     else:
         r.stamp(hx_ + 2, vy + 1, ["bb"], {"b": ("glow", 1)})
     r.add(r.m_rect(hx_ - 7, vy + 3, hx_ + 7, vy + 4), "bronze", soft=1)  # a bronze brim under the visor

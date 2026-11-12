@@ -4,6 +4,7 @@
                         15 Pro v3 view: 1 game px = 8 device px (v2 texel 4 px, v3 texel 2 px)
   <kind>_se_k1.png      the same at the SE v3 view: 1 game px = 4 device px (v2 texel 2 px, v3 texel 1 px)
   shots_15pro_k2.png / shots_se_k1.png   the 4 shots, 4 frames each, v2 and v3
+  faces_v2_v3_8x.png    the faces at 8x per v3 texel (v2 at 2x | v3), and the hero's face at the same scale
   scene_<v2|v3>_15pro_k2.png / scene_<v2|v3>_se_k1.png   a field (v3 grass) with the hero (v3) and
                         the 4 enemies (idle 0) and a shot, cropped to the device view
 No contact shadows (the game's).
@@ -96,6 +97,44 @@ def scene(ver, k, dev):
     return img.resize((W * k, H * k), Image.NEAREST).crop((0, 0, dev[0], dev[1]))
 
 
+FACES = {  # kind: (frame, crop box in v3 texels x0, y0, x1, y1)
+    "beast": ("idle.0", 50, 6, 88, 40), "archer": ("idle.0", 18, 22, 60, 56), "sentinel": ("idle.0", 18, 10, 60, 44),
+    "slime": ("idle.0", 12, 14, 52, 44),
+}
+
+
+def faces(path, z=8):
+    """The faces at 8x per v3 texel: v2 (at 2x first) | v3, with the hero's face (v3) for the scale."""
+    rows = []
+    for kind, (f, x0, y0, x1, y1) in FACES.items():
+        a = v2(f"enemy.{kind}.{f}")
+        a = a.resize((a.width * 2, a.height * 2), Image.NEAREST)
+        b = v3(f"enemy.{kind}.{f}")
+        cells = []
+        for im in (a, b):
+            bg = Image.new("RGBA", im.size, (70, 72, 78, 255))
+            bg.alpha_composite(im)
+            cells.append(bg.crop((x0, y0, x1, y1)).resize(((x1 - x0) * z, (y1 - y0) * z), Image.NEAREST))
+        rows.append((kind, cells))
+    hero = Image.open(os.path.join(ROOT, "src", "art-release-v3", "hero", "hero.idle.down.0.png")).convert("RGBA")
+    hb = Image.new("RGBA", hero.size, (70, 72, 78, 255))
+    hb.alpha_composite(hero)
+    hero = hb.crop((8, 10, 56, 50)).resize((48 * z, 40 * z), Image.NEAREST)
+    W = max(c[0].width + c[1].width for _, c in rows) + 60
+    H = sum(max(c[0].height, c[1].height) + 40 for _, c in rows) + hero.height + 40
+    img = Image.new("RGBA", (W, H), BG)
+    d = ImageDraw.Draw(img)
+    y = 0
+    for kind, (ca, cb) in rows:
+        d.text((8, y + 8), f"{kind}: v2 (2x) | v3, {z}x per v3 texel", fill=(230, 230, 230, 255))
+        img.alpha_composite(ca, (8, y + 30))
+        img.alpha_composite(cb, (ca.width + 40, y + 30))
+        y += max(ca.height, cb.height) + 40
+    d.text((8, y + 8), "hero v3 (the same scale)", fill=(230, 230, 230, 255))
+    img.alpha_composite(hero, (8, y + 30))
+    img.save(path, optimize=True)
+
+
 def main(out):
     os.makedirs(out, exist_ok=True)
     for kind in ("slime", "beast", "archer", "sentinel"):
@@ -106,6 +145,7 @@ def main(out):
     shots = [f"enemy.shot.{s}.{i}" for s in ("orb", "ice", "sand", "spark") for i in range(4)]
     strip(shots, 2).save(os.path.join(out, "shots_15pro_k2.png"), optimize=True)
     strip(shots, 1).save(os.path.join(out, "shots_se_k1.png"), optimize=True)
+    faces(os.path.join(out, "faces_v2_v3_8x.png"))
     for ver in ("v2", "v3"):
         scene(ver, 2, (2556, 1179)).save(os.path.join(out, f"scene_{ver}_15pro_k2.png"), optimize=True)
         scene(ver, 1, (1334, 750)).save(os.path.join(out, f"scene_{ver}_se_k1.png"), optimize=True)
