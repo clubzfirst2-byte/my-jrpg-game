@@ -25,8 +25,8 @@
       10.0
      ],
      "glass": 1054,
-     "lit": 960,
-     "glints_unlit": 94,
+     "lit": 1042,
+     "glints_unlit": 12,
      "lit_not_glass": 0
     },
     {
@@ -43,8 +43,8 @@
       10.0
      ],
      "glass": 1054,
-     "lit": 960,
-     "glints_unlit": 94,
+     "lit": 1042,
+     "glints_unlit": 12,
      "lit_not_glass": 0
     }
    ],
@@ -74,8 +74,8 @@
       10.0
      ],
      "glass": 1054,
-     "lit": 960,
-     "glints_unlit": 94,
+     "lit": 1042,
+     "glints_unlit": 12,
      "lit_not_glass": 0
     },
     {
@@ -92,8 +92,8 @@
       10.0
      ],
      "glass": 1054,
-     "lit": 960,
-     "glints_unlit": 94,
+     "lit": 1042,
+     "glints_unlit": 12,
      "lit_not_glass": 0
     }
    ],
@@ -123,8 +123,8 @@
       10.0
      ],
      "glass": 989,
-     "lit": 912,
-     "glints_unlit": 77,
+     "lit": 977,
+     "glints_unlit": 12,
      "lit_not_glass": 0
     },
     {
@@ -141,8 +141,8 @@
       10.0
      ],
      "glass": 989,
-     "lit": 912,
-     "glints_unlit": 77,
+     "lit": 977,
+     "glints_unlit": 12,
      "lit_not_glass": 0
     },
     {
@@ -159,8 +159,8 @@
       8.5
      ],
      "glass": 899,
-     "lit": 830,
-     "glints_unlit": 69,
+     "lit": 887,
+     "glints_unlit": 12,
      "lit_not_glass": 0
     },
     {
@@ -177,8 +177,8 @@
       12.5
      ],
      "glass": 1726,
-     "lit": 1612,
-     "glints_unlit": 114,
+     "lit": 1714,
+     "glints_unlit": 12,
      "lit_not_glass": 0
     },
     {
@@ -195,8 +195,8 @@
       12.5
      ],
      "glass": 1726,
-     "lit": 1612,
-     "glints_unlit": 114,
+     "lit": 1714,
+     "glints_unlit": 12,
      "lit_not_glass": 0
     }
    ],
@@ -226,8 +226,8 @@
       10.0
      ],
      "glass": 1064,
-     "lit": 970,
-     "glints_unlit": 94,
+     "lit": 1052,
+     "glints_unlit": 12,
      "lit_not_glass": 0
     },
     {
@@ -244,8 +244,8 @@
       10.0
      ],
      "glass": 1064,
-     "lit": 970,
-     "glints_unlit": 94,
+     "lit": 1052,
+     "glints_unlit": 12,
      "lit_not_glass": 0
     }
    ],
@@ -275,8 +275,8 @@
       10.0
      ],
      "glass": 974,
-     "lit": 897,
-     "glints_unlit": 77,
+     "lit": 962,
+     "glints_unlit": 12,
      "lit_not_glass": 0
     },
     {
@@ -293,7 +293,110 @@
       10.0
      ],
      "glass": 974,
-     "lit": 897,
+     "lit": 962,
+     "glints_unlit": 12,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      112,
+      118,
+      32,
+      34
+     ],
+     "game": [
+      -4.0,
+      -42.5,
+      8.0,
+      8.5
+     ],
+     "glass": 899,
+     "lit": 887,
+     "glints_unlit": 12,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      36,
+      202,
+      40,
+      50
+     ],
+     "game": [
+      -23.0,
+      -21.5,
+      10.0,
+      12.5
+     ],
+     "glass": 1704,
+     "lit": 1692,
+     "glints_unlit": 12,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      180,
+      202,
+      40,
+      50
+     ],
+     "game": [
+      13.0,
+      -21.5,
+      10.0,
+      12.5
+     ],
+     "glass": 1704,
+     "lit": 1692,
+     "glints_unlit": 12,
+     "lit_not_glass": 0
+    }
+   ],
+   "lit_like_outside_windows": 351
+  },
+  "obj.v3.house_stone": {
+   "size": [
+    256,
+    288
+   ],
+   "game_size": [
+    64.0,
+    72.0
+   ],
+   "windows": [
+    {
+     "art": [
+      40,
+      114,
+      30,
+      40
+     ],
+     "game": [
+      -22.0,
+      -43.5,
+      7.5,
+      10.0
+     ],
+     "glass": 989,
+     "lit": 912,
+     "glints_unlit": 77,
+     "lit_not_glass": 0
+    },
+    {
+     "art": [
+      186,
+      114,
+      30,
+      40
+     ],
+     "game": [
+      14.5,
+      -43.5,
+      7.5,
+      10.0
+     ],
+     "glass": 989,
+     "lit": 912,
      "glints_unlit": 77,
      "lit_not_glass": 0
     },
@@ -328,8 +431,8 @@
       10.0,
       12.5
      ],
-     "glass": 1704,
-     "lit": 1590,
+     "glass": 1726,
+     "lit": 1612,
      "glints_unlit": 114,
      "lit_not_glass": 0
     },
@@ -346,112 +449,9 @@
       10.0,
       12.5
      ],
-     "glass": 1704,
-     "lit": 1590,
+     "glass": 1726,
+     "lit": 1612,
      "glints_unlit": 114,
-     "lit_not_glass": 0
-    }
-   ],
-   "lit_like_outside_windows": 351
-  },
-  "obj.v3.house_stone": {
-   "size": [
-    256,
-    288
-   ],
-   "game_size": [
-    64.0,
-    72.0
-   ],
-   "windows": [
-    {
-     "art": [
-      40,
-      114,
-      30,
-      40
-     ],
-     "game": [
-      -22.0,
-      -43.5,
-      7.5,
-      10.0
-     ],
-     "glass": 989,
-     "lit": 518,
-     "glints_unlit": 471,
-     "lit_not_glass": 0
-    },
-    {
-     "art": [
-      186,
-      114,
-      30,
-      40
-     ],
-     "game": [
-      14.5,
-      -43.5,
-      7.5,
-      10.0
-     ],
-     "glass": 989,
-     "lit": 518,
-     "glints_unlit": 471,
-     "lit_not_glass": 0
-    },
-    {
-     "art": [
-      112,
-      118,
-      32,
-      34
-     ],
-     "game": [
-      -4.0,
-      -42.5,
-      8.0,
-      8.5
-     ],
-     "glass": 899,
-     "lit": 501,
-     "glints_unlit": 398,
-     "lit_not_glass": 0
-    },
-    {
-     "art": [
-      36,
-      202,
-      40,
-      50
-     ],
-     "game": [
-      -23.0,
-      -21.5,
-      10.0,
-      12.5
-     ],
-     "glass": 1726,
-     "lit": 892,
-     "glints_unlit": 834,
-     "lit_not_glass": 0
-    },
-    {
-     "art": [
-      180,
-      202,
-      40,
-      50
-     ],
-     "game": [
-      13.0,
-      -21.5,
-      10.0,
-      12.5
-     ],
-     "glass": 1726,
-     "lit": 892,
-     "glints_unlit": 834,
      "lit_not_glass": 0
     }
    ],

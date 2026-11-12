@@ -8,6 +8,12 @@ art (density 2) at 4 device px per texel, the v3 art (density 4) at 2. Integer s
   04_village_<now|v3>_night_15pro_k2.png  night: the scene darkened, only the window glass lit
                                   (houseWindows.glassKind and WINDOW_GLOW colours, gfx/fx-v2)
   05_zoom_x3_now_v3.png           the door, the hero and the chest at device px x3: now | v3
+  06_states_<k2|k1>.png           the state pairs on v3 grass (chest closed / open, plate off / on,
+                                  checkpoint off / on, campfire 0 / 1, brazier 0 / 1): rows now | v3 | v3 winter;
+                                  k2 = 15 Pro (8 device px per game px), k1 = SE (4)
+  07_night_windows_k2x2.png       the windows of the 3 house pictures at night (the scene's night rule),
+                                  15 Pro device px shown x2: house, stone house (summer = the pilot file),
+                                  stone house winter
 New kinds (well, fence, signpost, the stone house) have no current counterpart: the "now" scene leaves
 their places empty. No contact shadows (the game's, STYLE.md 8).
 Run: python3 tools/art_v3/compare_village_v3.py <out dir>
@@ -197,6 +203,57 @@ def zoom(path, now, v3):
     img.save(path, optimize=True)
 
 
+STATE_PAIRS = [("obj.chest.closed", "obj.chest.open"), ("sw.plate.off", "sw.plate.on"),
+               ("obj.checkpoint.off", "obj.checkpoint.on"), ("obj.campfire.0", "obj.campfire.1"),
+               ("obj.brazier.0", "obj.brazier.1")]
+
+
+def states(path, gpx):
+    """State pairs on v3 grass, gpx device px per game px; rows: now | v3 summer | v3 winter."""
+    cell_w, cell_h, pad = 30, 24, 4  # game px
+    cols = [k for pr in STATE_PAIRS for k in pr]
+    W, H = (len(cols) * (cell_w + pad) + pad) * 4, (3 * (cell_h + pad) + pad) * 4
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 255))
+    for ty in range(H // 64 + 1):
+        for tx in range(W // 64 + 1):
+            img.alpha_composite(ground_tile(tx + 7, ty + 3, "summer", load=lambda p: ld(p)), (tx * 64, ty * 64))
+    for r, (ver, season) in enumerate((("now", "summer"), ("v3", "summer"), ("v3", "winter"))):
+        for i, key in enumerate(cols):
+            if ver == "now":
+                im = ld(NOW, "objects", key + ".png")
+                im = im.resize((im.width * 2, im.height * 2), Image.NEAREST)
+            else:
+                im = v3obj(key, season)
+            fx = (pad + i * (cell_w + pad) + cell_w // 2) * 4
+            fy = (pad + r * (cell_h + pad) + cell_h) * 4
+            img.alpha_composite(im, (fx - im.width // 2, fy - im.height))
+    k = gpx // 4 if gpx >= 4 else 1
+    if gpx == 4:
+        img = img  # SE: 1 texel = 1 device px
+    else:
+        img = img.resize((img.width * k, img.height * k), Image.NEAREST)
+    img.save(path, optimize=True)
+
+
+def night_windows(path):
+    """The houses' windows at night (scene's night rule), 15 Pro device px (x2 per texel) shown x2."""
+    parts = []
+    for key, season in (("obj.house", "summer"), ("obj.v3.house_stone", "summer"), ("obj.v3.house_stone", "winter")):
+        im = v3obj(key, season)
+        dark = night(im, [(im, 0, 0)])
+        parts.append(dark)
+    crops = [parts[0].crop((8, 110, 184, 178)), parts[1].crop((28, 104, 228, 266)), parts[2].crop((28, 104, 228, 266))]
+    crops = [c.resize((c.width * 4, c.height * 4), Image.NEAREST) for c in crops]
+    W = sum(c.width for c in crops) + 24 * (len(crops) + 1)
+    H = max(c.height for c in crops) + 48
+    img = Image.new("RGBA", (W, H), BG)
+    x = 24
+    for c in crops:
+        img.alpha_composite(c, (x, 24))
+        x += c.width + 24
+    img.save(path, optimize=True)
+
+
 def main(out):
     os.makedirs(out, exist_ok=True)
     items(os.path.join(out, "01_items_same_size.png"))
@@ -213,6 +270,9 @@ def main(out):
             to_device(night(img, lb), 4).save(os.path.join(out, "04_village_v3_night_15pro_k2.png"), optimize=True)
     to_device(night(now, []), 2).save(os.path.join(out, "04_village_now_night_15pro_k2.png"), optimize=True)
     zoom(os.path.join(out, "05_zoom_x3_now_v3.png"), nowd, v3d)
+    states(os.path.join(out, "06_states_k2.png"), 8)
+    states(os.path.join(out, "06_states_k1.png"), 4)
+    night_windows(os.path.join(out, "07_night_windows_k2x2.png"))
     print(sorted(os.listdir(out)))
 
 

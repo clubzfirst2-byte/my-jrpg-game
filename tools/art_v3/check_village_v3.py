@@ -7,6 +7,7 @@ Also the GPU memory of the village set per season (RGBA, +10% packing).
 Run: python3 tools/art_v3/check_village_v3.py
 """
 
+import collections
 import json
 import os
 import sys
@@ -96,12 +97,34 @@ def main():
         print(f"{r['f']:42s} {r['size'][0]}x{r['size'][1]:<4d} {r['now']:6s} {str(r['x2'])[0]:2s} "
               f"{r['semi']:4d} {r['colours']:3d} {r['lone']:5d} {r['iso']:5.2f} {r['holes']:2d}({r['hole_px']:4d}) "
               f"{r['off']:3d} {r['minL']:5.1f} {r['meanL']:5.1f}")
+    # state pairs: changed texels over the union of opaque ones, mean |luma difference| over that union
+    print("\nstate pairs (changed % of the opaque union, mean |dL| over it):")
+    for a_, b_ in (("obj.chest.closed", "obj.chest.open"), ("sw.plate.off", "sw.plate.on"),
+                   ("obj.checkpoint.off", "obj.checkpoint.on"), ("obj.campfire.0", "obj.campfire.1"),
+                   ("obj.brazier.0", "obj.brazier.1")):
+        for name, d in (("now", CUR), ("v3", V.OUT), ("v3 winter", V.OUT)):
+            pre = "winter." if name == "v3 winter" else ""
+            x = np.array(Image.open(os.path.join(d, pre + a_ + ".png")).convert("RGBA")).astype(float)
+            y = np.array(Image.open(os.path.join(d, pre + b_ + ".png")).convert("RGBA")).astype(float)
+            op = (x[..., 3] > 0) | (y[..., 3] > 0)
+            df = (x != y).any(-1) & op
+            dl = np.abs(luma(x) * (x[..., 3] > 0) - luma(y) * (y[..., 3] > 0))
+            print(f"  {a_:20s} {name:10s} {100 * df.sum() / op.sum():5.1f}%  {dl[op].mean():5.1f}")
+    # snow faces of the roofs: share of the 2 commonest colours
+    print("\nwinter roof snow (texels of the snow ramp above the eaves): share of the 2 commonest colours")
+    snow = {tuple(int(v) for v in c) for c in V.SNOW}
+    for f, eave in (("winter.obj.house.png", V.H_ROOF_BOT), ("winter.obj.v3.house_stone.png", V.HS.ROOF_BOT)):
+        a = np.array(Image.open(os.path.join(V.OUT, f)).convert("RGBA"))[:eave]
+        cols = [tuple(int(v) for v in p[:3]) for p in a.reshape(-1, 4) if p[3] == 255 and tuple(int(v) for v in p[:3]) in snow]
+        cnt = sorted(collections.Counter(cols).values(), reverse=True)
+        print(f"  {f:34s} {len(cols)} texels, {len(cnt)} colours, top 2 = {100 * sum(cnt[:2]) / len(cols):.1f}%")
     # night glass
     tab = json.load(open(V.DOC))["houses"]
     print("\nnight glass (houseWindows.glassKind):")
     for k, t in tab.items():
         lit = sum(w["lit"] for w in t["windows"])
         print(f"  {k:32s} windows {len(t['windows'])}  lit {lit}  glints unlit {sum(w['glints_unlit'] for w in t['windows'])}"
+              f" (per window {min(w['glints_unlit'] for w in t['windows'])}-{max(w['glints_unlit'] for w in t['windows'])})"
               f"  lit-but-not-glass in windows {sum(w['lit_not_glass'] for w in t['windows'])}"
               f"  glass-like texels outside the windows {t['lit_like_outside_windows']}")
     # memory: one season resident (the summer files, or the season's own where it has one)

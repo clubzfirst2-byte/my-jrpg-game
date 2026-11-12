@@ -202,7 +202,7 @@ def roof_snow(c, roof_mask, bot, mid_x, seed, eave_y=None, icicle_x=None):
     for y, x in zip(ys, xs):
         rows.setdefault(x, []).append(y)
     ytop = int(ys.min())
-    drift_rows = [ytop + (bot - ytop) * f for f in (0.3, 0.58)]
+    drift_rows = [ytop + (bot - ytop) * f for f in (0.22, 0.45, 0.66)]
     for x, col in rows.items():
         top = min(col)
         edge = int(bot - 9 - 2.5 * math.sin(x * 0.11 + seed) - 1.5 * math.sin(x * 0.047 + 2 * seed))
@@ -213,17 +213,21 @@ def roof_snow(c, roof_mask, bot, mid_x, seed, eave_y=None, icicle_x=None):
             if y >= edge:  # the shadow the snow edge casts on the tiles
                 c.tone[y, x] = 1
                 continue
-            was = int(c.tone[y, x])
             c.mat[y, x] = k
             d = edge - y  # rows above the edge
             if d <= 3:
                 t = 3 if d <= 2 else 6  # the snow's front thickness, its lit top line
             else:
-                t = 5
-                # two or three long soft drifts across the roof (no tile pattern under the snow)
+                # round 2: light by height (bright by the ridge, a tone darker towards the eaves),
+                # each drift a lit crest over a 2-row shade
+                f = (y - ytop) / max(1, edge - ytop)
+                t = 6 if f < 0.28 else 5 if f < 0.62 else 4
                 for kd, yy in enumerate(drift_rows):
-                    if 0 <= (y - yy - 2.0 * math.sin(x * 0.07 + kd * 1.9 + seed)) < 2:
-                        t = 4
+                    v = y - yy - 2.0 * math.sin(x * 0.07 + kd * 1.9 + seed)
+                    if 0 <= v < 1:
+                        t = 6
+                    elif 1 <= v < 3:
+                        t = max(3, t - 1)
                 if y - top <= 1:
                     t = 6
             if right and t > 3:
@@ -332,16 +336,71 @@ def glass_pane(c, x0, y0, w, h):
     g = c.m_rect(x0, y0, x0 + w - 1, y0 + h - 1)
     c.fill(g, "glass", 2)
     for y, x in zip(*np.nonzero(g)):
-        u = (x - x0) - (y - y0) * 0.6
         t = 2 if y - y0 > h * 0.55 else 3
-        if 5 <= u % (w * 0.8) <= 8 and y - y0 < h * 0.7:
-            t = 5
-        elif 9 <= u % (w * 0.8) <= 10 and y - y0 < h * 0.7:
-            t = 4
         if y <= y0 + 1 or x <= x0 + 1:
             t = 1
         c.tone[y, x] = t
     return g
+
+
+def short_glints(c):
+    """Round 2: short glints (long diagonal ones read as cracks at night, crossing the lit pane):
+    every glass texel of tone 4-5 goes back to the glass base, then each window gets one 3 x 2 light
+    in its top-left pane and one short 2-wide stroke (6 texels) beside it: 12 texels a window."""
+    gk = c.mid("glass")
+    gm = c.mat == gk
+    for (x0, y0, x1, y1) in glass_windows(gm):
+        h = y1 - y0 + 1
+        sel = gm & c.m_rect(x0, y0, x1, y1) & (c.tone >= 4)
+        for y, x in zip(*np.nonzero(sel)):
+            c.tone[y, x] = 2 if y - y0 > h * 0.55 else 3
+        px, py = x0 + 4, y0 + 4
+        for dx in range(3):
+            for dy in range(2):
+                if gm[py + dy, px + dx]:
+                    c.tone[py + dy, px + dx] = 5
+        for i in range(3):  # the stroke, from lower left to upper right
+            for dx in range(2):
+                X, Y = px + 5 + i + dx, py + 6 - i
+                if gm[Y, X]:
+                    c.tone[Y, X] = 4
+
+
+def glass_windows(gm):
+    """Bounding boxes of the windows in a glass mask (panes split by mullions merged into one)."""
+    H, W = gm.shape
+    seen = np.zeros_like(gm)
+    wins = []
+    for y in range(H):
+        for x in range(W):
+            if gm[y, x] and not seen[y, x]:
+                st, comp = [(y, x)], []
+                seen[y, x] = True
+                while st:
+                    q = st.pop()
+                    comp.append(q)
+                    for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                        Y, X = q[0] + dy, q[1] + dx
+                        if 0 <= Y < H and 0 <= X < W and gm[Y, X] and not seen[Y, X]:
+                            seen[Y, X] = True
+                            st.append((Y, X))
+                if len(comp) >= 20:
+                    ys, xs = zip(*comp)
+                    wins.append((min(xs), min(ys), max(xs), max(ys)))
+    merged = True
+    while merged:
+        merged = False
+        for i in range(len(wins)):
+            for j in range(i + 1, len(wins)):
+                A, B = wins[i], wins[j]
+                if A[0] - 4 <= B[2] and B[0] - 4 <= A[2] and A[1] - 4 <= B[3] and B[1] - 4 <= A[3]:
+                    wins[i] = (min(A[0], B[0]), min(A[1], B[1]), max(A[2], B[2]), max(A[3], B[3]))
+                    del wins[j]
+                    merged = True
+                    break
+            if merged:
+                break
+    return sorted(wins, key=lambda r: (r[1], r[0]))
 
 
 def flower_box(c, x0, x1, y0, season):
@@ -450,6 +509,7 @@ def house(season):
                 c.fill(c.m_rect(sx + 1, yy - 1, sx + 7, yy - 1), "teal", 4)
             bevel(c, s)
         flower_box(c, gx - 4, gx + gw + 3, gy + gh + 3, season)
+    short_glints(c)
     # the door: an arched plank door in a timber arch, iron straps, a ring, a stone step
     x0, x1, y0 = H_DOOR
     cx = (x0 + x1 + 1) / 2
@@ -521,6 +581,8 @@ def house_stone(season, pilot_glass=False):
     HS.window(c, 36, 202, 40, 50)
     HS.window(c, 180, 202, 40, 50)
     HS.front_door(c)
+    if not pilot_glass:
+        short_glints(c)  # round 2 (the pilot's own drawing keeps its long glints)
     for y, x in zip(*np.nonzero(c.mat != 0)):
         if x > 228 and c.tone[y, x] > 1 and y > HS.ROOF_BOT:
             c.tone[y, x] -= 1
@@ -567,46 +629,50 @@ def chest(season, opened):
         c.fill(c.m_rect(3, 24, 60, 27), "gold", 3)  # the lid's rim
         c.fill(c.m_rect(3, 24, 60, 24), "gold", 4)
         c.fill(c.m_rect(3, 27, 60, 27), "gold", 1)
-    else:
-        back = c.m_rect(6, 3, 57, 20) | (c.m_ellipse(31.5, 8, 26, 6) & c.m_rect(0, 0, 63, 8))
-        c.fill(back, "chestwood", 2)  # the lid's inside, tipped back
-        for y0 in (8, 14):
-            c.fill(c.m_rect(6, y0, 57, y0) & back, "chestwood", 1)
-        grain(c, back, vertical=False, seed=9)
-        c.fill(c.m_rect(6, 18, 57, 20), "gold", 3)
-        c.fill(c.m_rect(6, 18, 57, 18), "gold", 4)
-        inside = c.m_rect(6, 21, 57, 27)
-        c.fill(inside, "chestwood", 1)
-        c.fill(c.m_rect(3, 26, 60, 28), "gold", 3)
-        c.fill(c.m_rect(3, 26, 60, 26), "gold", 4)
-        for i, (gx, gy, rx) in enumerate(((16, 25, 6), (28, 24, 7), (41, 25, 6), (50, 26, 4))):
-            pile = c.m_ellipse(gx, gy, rx, 3.2) & c.m_rect(0, 0, 63, 25)
-            c.fill(pile, "gold", 3)
-            c.fill(pile & c.m_rect(0, 0, int(gx), 23), "gold", 4)
-        for gx, gy in ((14, 22), (27, 21), (40, 22)):
-            c.fill(c.m_rect(gx, gy, gx + 1, gy + 1), "gold", 5)
-        c.fill(c.m_rect(33, 20, 35, 22), "gem", 4)
-        c.fill(c.m_rect(33, 20, 33, 20), "gem", 5)
+    else:  # round 2: the lid thrown right back (its dark underside), a dark mouth, a heap of gold
+        under = c.m_poly([(5, 21), (58, 21), (55, 2), (8, 2)])
+        c.fill(under, "chestwood", 1)  # the underside, away from the light: dark
+        for y0 in (8, 14):  # the underside's planks: a lit lip over a dark seam
+            c.fill(c.m_rect(0, y0, 63, y0) & under, "chestwood", 0)
+            c.fill(c.m_rect(0, y0 - 1, 63, y0 - 1) & under, "chestwood", 2)
+        c.fill(under & c.m_rect(0, 3, 63, 4), "chestwood", 2)
+        edge = c.m_poly([(8, 3), (55, 3), (54, 0), (9, 0)])  # the lid's thickness on top, lit
+        c.fill(edge, "chestwood", 4)
+        c.fill(edge & c.m_rect(0, 3, 63, 3), "chestwood", 3)
+        for bx in (11, 46):  # gold bands across the underside
+            band = under & c.m_rect(bx, 0, bx + 5, 63)
+            c.fill(band, "gold", 2)
+            c.fill(band & c.m_rect(bx, 0, bx, 63), "gold", 3)
+            c.fill(edge & c.m_rect(bx, 0, bx + 5, 63), "gold", 4)
+        c.fill(c.m_rect(5, 19, 58, 21), "chestwood", 3)  # the box's back rim, lit
+        c.fill(c.m_rect(5, 19, 58, 19), "chestwood", 4)
+        mouth = c.m_rect(6, 22, 57, 29)
+        c.fill(mouth, "chestwood", 0)  # the dark inside
+        heap = c.m_ellipse(30.5, 33, 17, 7.5) & c.m_rect(0, 0, 63, 29)
+        c.fill(heap, "gold", 3)
+        c.shade_part(heap, tones=(2, 3, 4, 4), norm=True)
+        for gx, gy in ((19, 28), (25, 27), (30, 26), (40, 27), (44, 28)):
+            c.fill(c.m_rect(gx, gy, gx + 1, gy + 1), "gold", 5 if gx < 34 else 4)
+        c.fill(c.m_rect(34, 25, 36, 27), "gem", 4)  # a blue gem on the heap
+        c.fill(c.m_rect(34, 25, 34, 25), "gem", 5)
+        c.fill(c.m_rect(3, 29, 60, 31), "gold", 3)  # the box's top rim
+        c.fill(c.m_rect(3, 29, 60, 29), "gold", 4)
+        c.fill(c.m_rect(3, 31, 60, 31), "gold", 1)
     for bx in (11, 46):  # gold bands
-        top = 9 if not opened else 3
+        top = 9 if not opened else 32
         band = c.m_rect(bx, top, bx + 6, G) & (c.mat != 0)
-        if opened:
-            band &= ~c.m_rect(0, 21, 63, 25)
         c.fill(band, "gold", 3)
         c.fill(band & c.m_rect(bx, 0, bx + 1, G), "gold", 4)
         c.fill(band & c.m_rect(bx + 6, 0, bx + 6, G), "gold", 1)
-        for ry in ((14, 33, 47) if not opened else (8, 33, 47)):
+        for ry in ((14, 33, 47) if not opened else (36, 47)):
             c.fill(c.m_rect(bx + 2, ry, bx + 3, ry + 1), "gold", 5)
     # lock plate (on the lid when closed; hanging on the body when open)
-    ly = 20 if not opened else 29
+    ly = 20 if not opened else 31  # the same plate (shape, colour, keyhole) in both states
     plate = c.m_rect(26, ly, 37, ly + 13)
     c.fill(plate, "gold", 3)
     bevel(c, plate)
-    if not opened:
-        c.fill(c.m_rect(31, ly + 4, 32, ly + 7), "chestwood", 0)
-        c.fill(c.m_rect(31, ly + 8, 32, ly + 9), "chestwood", 1)
-    else:
-        c.fill(c.m_rect(30, ly + 3, 33, ly + 4), "gold", 1)
+    c.fill(c.m_rect(31, ly + 4, 32, ly + 7), "chestwood", 0)
+    c.fill(c.m_rect(31, ly + 8, 32, ly + 9), "chestwood", 1)
     darken_right(c, c.m_rect(0, 0, 63, 63) & (c.mat == c.mid("chestwood")), 52)
     if season == "winter":
         snow_on(c, ("chestwood", "gold"), seed=4 + opened, depth=(3, 3), mound=2)
@@ -693,8 +759,8 @@ def crate(season):
 
 def jar(season):
     c = canvas(40, 48, season)
-    body = c.m_ellipse(19.5, 30, 16.5, 16.5) & c.m_rect(0, 0, 39, 45)
-    body |= c.m_rect(10, 41, 29, 45)
+    body = c.m_ellipse(19.5, 30.5, 16.5, 16.5) & c.m_rect(0, 0, 39, 46)
+    body |= c.m_rect(10, 41, 29, 46)  # round 2: down to row 46, its outline on the bottom row
     neck = c.m_rect(12, 7, 27, 16)
     c.fill(neck | body, "clay", 3)
     c.shade_part(body, tones=(1, 2, 3, 4, 5), norm=True)
@@ -726,7 +792,7 @@ def flames(c, cx, base_y, height, width, frame, seed):
     tongues = ((-width * 0.32, 0.72, -2), (0, 1.0, 2), (width * 0.3, 0.66, 3))
     allm = np.zeros((c.h, c.w), bool)
     for i, (dx, hf, lean) in enumerate(tongues):
-        hgt = height * hf * (1.08 if (i + frame) % 2 else 0.92)
+        hgt = min(height * hf * (1.08 if (i + frame) % 2 else 0.92), base_y - 3)
         sway = (2.5 if frame else -2.5) * (1 if i != 1 else -0.6)
         x0 = cx + dx
         pts_l, pts_r = [], []
@@ -755,7 +821,7 @@ def flames(c, cx, base_y, height, width, frame, seed):
     c.set_tone(allm & ~np.roll(allm, 1, 1), 1)  # the left edge red
     for _ in range(3):
         sx = int(cx + rng.randint(-int(width * 0.6), int(width * 0.6)))
-        sy = int(base_y - height * rng.uniform(0.9, 1.25))
+        sy = max(2, int(base_y - height * rng.uniform(0.9, 1.25)))
         if 0 <= sy < c.h - 1 and 0 <= sx < c.w - 1 and not allm[sy:sy + 2, sx:sx + 2].any():
             c.fill(c.m_rect(sx, sy, sx + 1, sy + 1), "fire", 4)
     return allm
@@ -797,7 +863,13 @@ def campfire(season, frame):
             c.set_tone(m & (c.tone >= 3), 4)
 
     order = sorted(stones)
-    flames(c, 31.5, 43, 40, 22, frame, 1)
+    flames(c, 31.5, 43, 36, 16, frame, 1)
+    # round 2: the logs' front halves over the flames' foot (the crossed logs read again)
+    for (a, b, w) in (((10, 50), (48, 38), 5.5), ((14, 38), (52, 49), 5.5), ((31, 51), (31, 41), 5.0)):
+        lg = c.m_line([a, b], w) & c.m_rect(0, 42, 63, 55)
+        c.fill(lg, "plank", 3)
+        c.fill(c.m_line([(a[0], a[1] - 2), (b[0], b[1] - 2)], 1.4) & lg, "plank", 4)
+        c.fill(c.m_line([(a[0], a[1] + 2), (b[0], b[1] + 2)], 1.4) & lg, "plank", 1)
     for st in order:
         if st[0] >= 45:
             stone(*st)
@@ -856,7 +928,10 @@ def checkpoint(season, on):
     groove_t = 1
     ring = c.m_ellipse(23.5, 30, 8.5, 8.5) & ~c.m_ellipse(23.5, 30, 6.5, 6.5)
     cross = (c.m_rect(23, 22, 24, 38) | c.m_rect(15, 29, 32, 30)) & c.m_ellipse(23.5, 30, 6.5, 6.5)
-    glyph = c.m_line([(23.5, 42), (20, 47), (27, 51), (20, 55), (23.5, 58)], 2.0)
+    # round 2: a straight stem with 3 diamonds (the zigzag read as a crack)
+    glyph = c.m_rect(23, 42, 24, 57)
+    for gy in (45, 50, 55):
+        glyph |= c.m_poly([(23.5, gy - 2.5), (26.5, gy), (23.5, gy + 2.5), (20.5, gy)])
     for m in (ring, cross, glyph):
         if on:
             c.fill(m, "gem", 4)
@@ -883,33 +958,48 @@ def checkpoint(season, on):
 
 
 def plate(season, on):
+    """Round 2: a floor plate seen from above. A stone frame (a wide top face, a 5-texel front edge)
+    round a square slab. off: the slab stands proud (lit top, a 3-texel front lip, a dim carved
+    sign). on: the slab sunk into the frame (dark, in the frame's shadow on its top and left), the seam
+    and the sign glowing ruin teal, the frame's front studs lit."""
     c = canvas(56, 40, season)
     G = 38
-    front = c.m_rect(2, 27, 53, G)
+    frame = c.m_rect(1, 3, 54, 33)
+    c.fill(frame, "ruin", 3)
+    c.fill(c.m_rect(1, 3, 54, 4), "ruin", 4)
+    c.fill(c.m_rect(1, 3, 2, 33), "ruin", 4)
+    front = c.m_rect(1, 34, 54, G)
     c.fill(front, "ruin", 2)
-    c.fill(c.m_rect(2, 27, 53, 27), "ruin", 3)
-    for x in (15, 28, 41):
-        c.fill(c.m_rect(x, 28, x, G), "ruin", 1)
-    top = c.m_rect(2, 7, 53, 26)
-    c.fill(top, "ruin", 4)
-    c.fill(c.m_rect(2, 7, 53, 8), "ruin", 5)
-    dy = 2 if on else 0  # pressed down when on
-    well = c.m_rect(8, 11, 47, 23)
-    c.fill(well, "ruin", 1)
-    p = c.m_rect(10, 12 + dy, 45, 22)
-    c.fill(p, "iron", 3)
-    bevel(c, p)
-    sym = c.m_rect(23, 14 + dy, 32, 20) & ~c.m_rect(25, 16 + dy, 30, 18)
-    c.fill(sym, "glow", 4 if on else 1)
-    c.fill(c.m_rect(27, 17 + dy, 28, 17 + dy), "glow", 5 if on else 2)
-    for x in range(7, 50, 8):
-        c.fill(c.m_rect(x, 31, x + 1, 32), "glow", 4 if on else 1)
-    if on:
-        c.fill(c.m_rect(8, 11, 47, 11) & ~p, "glow", 3)
-    darken_right(c, c.m_rect(0, 0, 55, 39), 48)
+    c.fill(c.m_rect(1, G, 54, G), "ruin", 1)
+    for x in (14, 27, 40):
+        c.fill(c.m_rect(x, 34, x, G), "ruin", 1)
+    for x in range(6, 52, 8):  # studs on the front edge
+        c.fill(c.m_rect(x, 35, x + 1, 36), "glow", 4 if on else 1)
+    pit = c.m_rect(6, 7, 49, 29)
+    if not on:
+        c.fill(pit, "ruin", 1)
+        slab = c.m_rect(7, 6, 48, 25)
+        c.fill(slab, "ruin", 4)
+        bevel(c, slab)
+        c.fill(c.m_rect(7, 26, 48, 28), "ruin", 3)  # the slab's front lip (it stands proud)
+        c.fill(c.m_rect(7, 28, 48, 28), "ruin", 2)
+        c.fill(c.m_rect(7, 6, 48, 6), "ruin", 5)
+        sign = c.m_ellipse(27.5, 15.5, 7, 6) & ~c.m_ellipse(27.5, 15.5, 4.6, 3.8)
+        c.fill(sign, "ruin", 2)
+        c.fill(c.m_rect(26, 14, 29, 17), "ruin", 2)
+    else:
+        c.fill(pit, "glow", 2)  # the seam glows round the sunk slab
+        slab = c.m_rect(8, 9, 47, 28)
+        c.fill(slab, "ruin", 1)
+        c.fill(c.m_rect(8, 9, 47, 11) | c.m_rect(8, 9, 10, 28), "ruin", 0)  # the frame's shadow
+        sign = c.m_ellipse(28.5, 18.5, 7, 6) & ~c.m_ellipse(28.5, 18.5, 4.6, 3.8)
+        c.fill(sign, "glow", 4)
+        c.fill(c.m_rect(27, 17, 30, 20), "glow", 5)
+        c.fill(c.m_rect(6, 7, 49, 7), "glow", 4)
+    darken_right(c, frame | front, 50)
     if season == "winter":
-        snow_on(c, ("ruin",), seed=12, depth=(2, 2), mound=0, min_w=3, region=c.m_rect(0, 0, 55, 10))
-    finish(c, keep=("glow", "iron"), loose=("snow",))
+        cap_part(c, c.m_rect(1, 3, 54, 4) & (c.mat == c.mid("ruin")), 2, 3)
+    finish(c, keep=("glow",), loose=("snow",))
     return c
 
 
@@ -978,7 +1068,7 @@ def well(season):
     c.fill(handle, "iron", 3)
     c.fill(c.m_rect(112, 58, 116, 63), "plank", 3)
     # the stone wall: the opening (water far down), the rim, the round front
-    wallm = c.m_rect(18, 82, 109, 116) | c.m_ellipse(cx, 116, 46, 10)
+    wallm = c.m_rect(18, 82, 109, 116) | c.m_ellipse(cx, 116, 46, 11)  # round 2: down to row 126
     wallm &= c.m_rect(0, 0, 127, G)
     c.fill(wallm, "stone", 3)
     rng = random.Random(14)
@@ -1080,7 +1170,8 @@ def signpost(season):
     c.fill(cap, "timber", 4)
     c.fill(c.m_rect(17, 11, 30, 11), "timber", 1)
     if season == "winter":
-        snow_on(c, ("plank", "timber"), seed=18, depth=(2, 3), mound=2, min_w=3)
+        # round 2: snow only along the board's flat top and the cap (none heaped on the arrow's slope)
+        snow_on(c, ("plank", "timber"), seed=18, depth=(2, 3), mound=1, min_w=3, region=c.m_rect(0, 0, 36, 17))
     finish(c, keep=("iron",), loose=("snow",))
     return c
 
