@@ -359,6 +359,10 @@ async function boot() {
   // gfx v2 integration (start-up): behind the title, one chunk a frame (a tap on the title is answered
   // meanwhile); all at once from the start press on (beginPlay)
   if (withTitle) view.chunkBudget = 1;
+  // gfx v2 integration (start-up): the world is not drawn under the title (it covers the screen): no
+  // GPU work then, which on a slow GPU held the page — and a tap on the title — back; the chunks are
+  // still prepared (above). It is drawn from the start press on (beginPlay).
+  if (withTitle) app.stage.visible = false;
   performance.mark('view');
   await breathe();
   // Test / check helpers: ?time=20 (hour) and ?weather=rain|storm|cloudy|clear.
@@ -548,6 +552,7 @@ async function boot() {
     holding = true;
     performance.mark('beginPlay');
     view.chunkBudget = Infinity; // (the start was pressed: what is left is built at once)
+    app.stage.visible = true; // (and the world is drawn from now on)
     hurryUiArt(); // (and the HUD's frames are asked for at once, not when the page is idle)
     startGame(fromSave);
     void worldDrawn().then(() => {
