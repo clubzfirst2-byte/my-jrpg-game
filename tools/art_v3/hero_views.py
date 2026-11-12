@@ -11,7 +11,7 @@ import math
 import numpy as np
 
 from hdkit import capsule, edge_band, gauntlet, grooves, lock
-from v3lib import Canvas, despeckle
+from v3lib import Canvas, absorb_cloth_islands, despeckle
 
 W, H = 64, 112
 
@@ -45,9 +45,13 @@ def side_head(c, oy, lag, EYE, BLUSH, MOUTH, lean=0, blink=False):
     """Profile: the big hair mass at the back (left), spikes up and back, the face on the right with
     one eye, a small nose step and the mouth at the front edge."""
     X = lean
-    mass = c.m_poly([(4 + X, 18 + oy), (8 + X, 8 + oy), (18 + X, 2 + oy), (30 + X, 0 + oy), (42 + X, 4 + oy),
-                     (50 + X, 12 + oy), (54 + X, 20 + oy), (50 + X, 24 + oy), (28 + X, 26 + oy),
-                     (24 + X, 40 + oy + lag), (16 + X, 42 + oy + lag), (8 + X, 36 + oy)])
+    # hero round 3: v1's onion crown (the middle spike highest) and the back hair as 4 locks pointing
+    # back, their tips on the back edge (no round bun)
+    mass = c.m_poly([(8 + X, 14 + oy), (14 + X, 11 + oy), (20 + X, 9 + oy), (26 + X, 7.5 + oy), (31 + X, 4 + oy),
+                     (37 + X, 7.5 + oy), (45 + X, 10 + oy), (51 + X, 14 + oy), (54 + X, 20 + oy), (50 + X, 24 + oy),
+                     (28 + X, 26 + oy), (24 + X, 38 + oy + lag), (14 + X, 41 + oy + lag), (12 + X, 36 + oy),
+                     (6 + X, 34 + oy + lag), (8 + X, 29 + oy), (4 + X, 25 + oy + lag), (7 + X, 20 + oy),
+                     (5 + X, 16 + oy + lag)])
     c.fill(mass, "hair")
     c.shade_part(mass, tones=(1, 2, 2, 3, 3), norm=True)
     # hero round 2: the nose's tip is the frontmost point of the profile (v1), the mouth inside the face
@@ -61,11 +65,10 @@ def side_head(c, oy, lag, EYE, BLUSH, MOUTH, lean=0, blink=False):
     # locks: crown spikes up and back, the back locks flowing down the nape, bangs over the brow
     # hero round 2: the back hair is one mass behind the ear ending at the chin line, several short
     # pointed tips (no long lock hanging down the nape: it read as a ponytail)
-    back = [((22 + X, 8 + oy), (2 + X, 20 + oy), 12, 3.0), ((26 + X, 12 + oy), (5 + X, 31 + oy + lag), 12, 3.0),
-            ((26 + X, 18 + oy), (10 + X, 39 + oy + lag), 11, 2.0), ((28 + X, 22 + oy), (19 + X, 42 + oy + lag), 9, 1.0),
-            ((28 + X, 6 + oy), (12 + X, 2 + oy), 9, 2.0)]
-    top = [((32 + X, 6 + oy), (30 + X, -1 + oy), 9, 1.0), ((38 + X, 7 + oy), (46 + X, 0 + oy), 8, -1.5),
-           ((44 + X, 12 + oy), (57 + X, 14 + oy), 8, -2.0)]
+    back = [((24 + X, 12 + oy), (5 + X, 16 + oy + lag), 11, 1.5), ((25 + X, 16 + oy), (4 + X, 25 + oy + lag), 11, 2.0),
+            ((26 + X, 21 + oy), (6 + X, 34 + oy + lag), 10, 2.0), ((27 + X, 26 + oy), (14 + X, 41 + oy + lag), 9, 1.5)]
+    top = [((31 + X, 13 + oy), (31 + X, 3 + oy), 9, 0.3), ((37 + X, 12 + oy), (43 + X, 8 + oy), 8, -1.0),
+           ((44 + X, 14 + oy), (55 + X, 15 + oy), 8, -2.0), ((25 + X, 12 + oy), (19 + X, 8 + oy), 8, 1.0)]
     bangs = [((40 + X, 14 + oy), (52 + X, 27 + oy), 8, -2.0), ((34 + X, 15 + oy), (40 + X, 28 + oy + lag), 8, -1.5),
              ((28 + X, 16 + oy), (27 + X, 30 + oy + lag), 7, 1.0)]
     _shade_lock_set(c, back + top, mass)
@@ -75,11 +78,20 @@ def side_head(c, oy, lag, EYE, BLUSH, MOUTH, lean=0, blink=False):
     bangs = bangs + [((47 + X, 15 + oy), (55 + X, 27 + oy), 7, -1.5), ((44 + X, 16 + oy), (47 + X, 29 + oy + lag), 7, -1.0)]
     _shade_lock_set(c, bangs, mass)
     # the ear (hero round 2: drawn over the back hair, 4 x 6, its inside one tone darker)
-    ear = c.m_ellipse(30.5 + X, 35 + oy, 2.4, 3.4)
+    ear = c.m_ellipse(30.5 + X, 35 + oy, 2.6, 3.6)
     c.fill(ear, "skin", 3)
+    edge = ear & ~(np.roll(ear, 1, 0) & np.roll(ear, -1, 0) & np.roll(ear, 1, 1) & np.roll(ear, -1, 1))
+    c.set_tone(edge & (c.mat == c.mid("skin")), 2)  # hero round 3: a darker rim and inside (readable)
     for yy in (34, 35, 36):
-        c.put(31 + X, yy + oy, "skin", 2)
-    c.put(29 + X, 35 + oy, "skin", 2)
+        c.put(31 + X, yy + oy, "skin", 1)
+    # hero round 3: above row 16 the hair keeps to the onion (the mass) and the spikes only — the
+    # crown locks' wide roots no longer square the top off
+    _spk = np.zeros(c.mat.shape, bool)
+    for _r, _t, _w, _b in top:
+        _spk |= lock(c, _r, _t, _w, _b)
+    _yy = np.mgrid[0:c.h, 0:c.w][0]
+    _out = (c.mat == c.mid("hair")) & ~(mass | _spk) & (_yy < 16 + oy)
+    c.mat[_out] = 0
     hairm = c.mat == c.mid("hair")
     for y, x in zip(*np.nonzero(c.mat == c.mid("skin"))):  # the bangs' shade on the face
         if y >= 2 and (hairm[y - 1, x] or hairm[y - 2, x]) and y < 34 + oy:
@@ -203,7 +215,6 @@ def side_frame(R, EYE, BLUSH, MOUTH, oy=0, lag=0, sway=0, legs=((0, 0, 0), (0, 0
     """legs: (dx of the foot from the body line, lift of the heel, knee bend) for the far and near leg.
     arms: swing of the far and near arm. lean: the upper body forward (run)."""
     c = Canvas(W, H, R)
-    c.keep_in = (2, 2, c.w - 3)  # hero round 2: nothing cut by the frame edge (hair tips, the flying cloak)
     hip = (32 + lean * 0.3, 78 + oy)
     # the far arm (behind the body), the far leg
     if not _off(no_arms, 0):
@@ -267,9 +278,10 @@ def side_frame(R, EYE, BLUSH, MOUTH, oy=0, lag=0, sway=0, legs=((0, 0, 0), (0, 0
     if not _off(no_arms, 1):
         side_arm(c, (32 + lean, 52 + oy - breath), arms[1], True, oy, bent)
     side_drape(c, oy - breath, lean)
-    side_head(c, oy, lag, EYE, BLUSH, MOUTH, lean=lean, blink=blink)
+    side_head(c, oy, lag, EYE, BLUSH, MOUTH, lean=min(lean, 4), blink=blink)  # round 3: the nose stays 3 inside
     if not finish:
         return c
+    absorb_cloth_islands(c)  # round 3: no cloak piece cut off by a leg / arm drawn over it
     despeckle(c, loose=("hair", "cloak"))
     edge_band(c, "cloak", 1)
     c.outline()
@@ -284,7 +296,6 @@ def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, b
     to the hem with the gold star between the shoulder blades, the grey gauntlets at the sides, the
     boots' heels below the hem. feet: lift of the left / right foot (the sole shows when lifted)."""
     c = Canvas(W, H, R)
-    c.keep_in = (2, 2, c.w - 3)  # hero round 2: nothing cut by the frame edge (hair tips, the flying cloak)
     # boots (behind the cloak's hem)
     for side, lift in ((-1, feet[0]), (1, feet[1])):
         x0 = 31.5 + side * 7
@@ -361,8 +372,8 @@ def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, b
     # hero round 2 (v1's back): vertical locks falling from the crown to the nape, each with its own
     # pointed tip on the lower edge (a zigzag, not a smooth arc), no rays from the whorl
     L = lag
-    mass = c.m_poly([(3, 18 + oy), (10, 6 + oy), (22, 1 + oy), (34, 0 + oy), (46, 3 + oy), (55, 10 + oy), (60, 20 + oy),
-                     (58, 32 + oy), (55, 39 + oy + L), (51, 36 + oy), (47, 43 + oy + L), (43, 38 + oy), (38, 45 + oy + L),
+    mass = c.m_poly([(4, 26 + oy), (4, 18 + oy), (8, 13 + oy), (14, 11 + oy), (20, 9 + oy), (26, 7.5 + oy), (32, 4 + oy),
+                     (38, 7.5 + oy), (44, 9 + oy), (50, 11 + oy), (56, 13 + oy), (60, 18 + oy), (60, 26 + oy), (58, 32 + oy), (55, 39 + oy + L), (51, 36 + oy), (47, 43 + oy + L), (43, 38 + oy), (38, 45 + oy + L),
                      (34, 39 + oy), (30, 46 + oy + L), (26, 39 + oy), (22, 45 + oy + L), (18, 37 + oy), (14, 42 + oy + L),
                      (10, 35 + oy), (8, 38 + oy + L), (5, 30 + oy)])
     c.fill(mass, "hair")
@@ -372,14 +383,23 @@ def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, b
              ((24, 8 + oy), (22, 45 + oy + L), 10, 0.5), ((31, 8 + oy), (30, 46 + oy + L), 10, 0.0),
              ((38, 8 + oy), (38, 45 + oy + L), 10, -0.5), ((45, 10 + oy), (47, 43 + oy + L), 10, -1.0),
              ((52, 14 + oy), (55, 39 + oy + L), 9, -1.0)]
-    spikes = [((26, 10 + oy), (20, -1 + oy), 9, 1.5), ((32, 9 + oy), (33, -2 + oy), 9, 0.5),
-              ((37, 10 + oy), (44, 0 + oy), 8, -1.5), ((12, 14 + oy), (1, 15 + oy), 8, 2.0),
-              ((51, 14 + oy), (62, 19 + oy), 8, -2.0)]
+    spikes = [((32, 13 + oy), (32, 3 + oy), 9, 0.3), ((26, 13 + oy), (21, 8 + oy), 8, 1.0),
+              ((38, 13 + oy), (43, 8 + oy), 8, -1.0), ((13, 17 + oy), (5, 18 + oy), 8, 1.5),
+              ((51, 17 + oy), (59, 20 + oy), 8, -1.5)]
     _shade_lock_set(c, spikes + locks, mass)
+    # hero round 3: above row 16 the hair keeps to the onion (the mass) and the spikes only — the
+    # crown locks' wide roots no longer square the top off
+    _spk = np.zeros(c.mat.shape, bool)
+    for _r, _t, _w, _b in spikes:
+        _spk |= lock(c, _r, _t, _w, _b)
+    _yy = np.mgrid[0:c.h, 0:c.w][0]
+    _out = (c.mat == c.mid("hair")) & ~(mass | _spk) & (_yy < 16 + oy)
+    c.mat[_out] = 0
     c.put(cr[0], cr[1], "hair", 1)  # the whorl
     c.put(cr[0] + 1, cr[1] + 1, "hair", 1)
     if not finish:
         return c
+    absorb_cloth_islands(c)  # round 3: no cloak piece cut off by a leg / arm drawn over it
     despeckle(c, loose=("hair", "cloak"))
     edge_band(c, "cloak", 1)
     c.outline()

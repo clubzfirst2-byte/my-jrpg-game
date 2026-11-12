@@ -26,7 +26,7 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from hdkit import capsule, edge_band, gauntlet  # noqa: E402
-from v3lib import Canvas, despeckle  # noqa: E402
+from v3lib import Canvas, absorb_cloth_islands, despeckle  # noqa: E402
 
 V1_TOOLS = [os.path.join(HERE, "..", "art_proto"), os.path.join(HERE, "..", "hero_release")]
 
@@ -102,11 +102,13 @@ def arm_to(c, shoulder, hand, view, darker=False, sleeve="cloak", mid_x=32.0):
     metal bands) to the wrist, the leather fist at the hand."""
     sx, sy = shoulder
     hx, hy = hand
-    hx, hy = min(max(hx, 6.0), c.w - 7.0), max(hy, 6.0)  # hero round 2: the fist stays inside the frame
+    hx, hy = min(max(hx, 7.0), c.w - 8.0), max(hy, 6.0)  # the fist stays inside the frame (3 texels)
     d = math.hypot(hx - sx, hy - sy) or 1.0
-    a, b = 11.0, 12.0
+    # hero round 3: the bones follow the reach (each 0.55 of it, 6..12 texels): an arm held out is
+    # nearly straight with the fist at its end, as in v1's arm maps, not folded back on itself
+    a = b = min(12.0, max(6.0, 0.55 * d))
     if d > a + b - 1:
-        a, b = d * a / (a + b), d * b / (a + b)
+        a = b = d / 2
     cosA = max(-1.0, min(1.0, (a * a + d * d - b * b) / (2 * a * d)))
     A = math.acos(cosA)
     ux, uy = (hx - sx) / d, (hy - sy) / d
@@ -115,11 +117,15 @@ def arm_to(c, shoulder, hand, view, darker=False, sleeve="cloak", mid_x=32.0):
     for sgn in (1, -1):
         ca, sa = math.cos(A * sgn), math.sin(A * sgn)
         e = (sx + a * (ux * ca - uy * sa), sy + a * (ux * sa + uy * ca))
-        score = e[1] if view == "side" else abs(e[0] - mid_x) + 0.3 * e[1]
+        score = e[1] if view == "side" else e[1] - 0.3 * abs(e[0] - mid_x)
+        # hero round 3: in the front / back view the fist is always the arm's outer end (v1): an elbow
+        # further out than the fist (the arm folding back in) is never chosen
+        if view != "side" and abs(e[0] - mid_x) > abs(hx - mid_x) + 1:
+            score -= 1000
         if best is None or score > best[0]:
             best = (score, e)
     ex, ey = best[1]
-    ex = min(max(ex, 5.0), c.w - 6.0)  # the elbow too
+    ex = min(max(ex, 7.0), c.w - 8.0)  # the elbow too (its round end 3 texels inside the frame)
     wx, wy = hx - ux * 3.0, hy - uy * 3.0
     upper = capsule(c, (sx, sy), (ex, ey), 3.6)
     c.fill(upper, sleeve)
@@ -129,7 +135,7 @@ def arm_to(c, shoulder, hand, view, darker=False, sleeve="cloak", mid_x=32.0):
     gauntlet(c, g, (ex, ey), (wx, wy))
     fist = c.m_ellipse(hx, hy, 3.7, 3.9)
     if darker:  # the far arm: the sleeve one tone down, the gauntlet's light line to mid grey
-        c.set_tone(upper, 1)
+        c.set_tone(upper & (c.mat == c.mid(sleeve)), 1)  # (not the gauntlet where the two overlap)
         c.tone[g & (c.tone == 3) & (c.mat == c.mid("shirt"))] = 1
     return fist
 
@@ -154,9 +160,9 @@ def sword(c, hx, hy, ang, length):
     if px * -0.6 + py * -0.8 < 0:  # the lit edge faces the top left
         px, py = -px, -py
     L = 2 * length
-    while L > 10:  # hero round 2: the point stays 2 texels inside the frame (no cut blade)
+    while L > 6:  # the point (and the blade's width) stays 4 texels inside the frame (no cut blade)
         tx, ty = hx + ux * L, hy + uy * L
-        if 3 <= tx <= c.w - 4 and ty >= 3:
+        if 4 <= tx <= c.w - 5 and ty >= 4:
             break
         L -= 1
     c.fill(c.m_line([(hx - ux * 5, hy - uy * 5), (hx + ux * 1, hy + uy * 1)], 2.2), "leather", 2)  # grip
@@ -183,7 +189,7 @@ def bow(c, hx, hy, ang, draw, arrow=True, reach=10, nock_at=None):
     a = math.radians(ang)
     ux, uy = math.cos(a), math.sin(a)
     px, py = -uy, ux
-    R = 2 * reach
+    R = int(round(2 * reach))
     pts = []
     for k in range(-R, R + 1, 2):
         t = k / R
@@ -260,6 +266,32 @@ def shoulders(view, oy, lean):
     return {"R": (34.0 + lean, 53.0 + oy), "L": (30.0 + lean, 53.0 + oy)}  # near, far (facing right)
 
 
+def shoulders_v1(view, lean, left=False):
+    """v1's shoulder points (tools/hero_release/actions.py SHOULDER / shoulders())."""
+    if view == "down":
+        return {"R": (9.5, 27), "L": (21.5, 27)}
+    if view == "up":
+        return {"R": (21.5, 27), "L": (9.5, 27)}
+    near, far = (16.5 + lean, 26), (15 + lean, 26)
+    return {"R": far, "L": near} if left else {"R": near, "L": far}
+
+
+def tweak(action, v, i, hands, sh, lean, oy):
+    """Hero round 3 (inspection P2): hands moved where the v3 head is bigger than v1's x 2."""
+    if v != "side":
+        return
+    if action == "bow" and "L" in hands:  # the bow below the face, in front of the chest
+        x, y = hands["L"]
+        hands["L"] = (x, y + 8)
+    if action == "attack3" and i in (1, 2) and "R" in hands:  # fist and blade ahead of the profile
+        x, y = hands["R"]
+        hands["R"] = (max(x, 60.0 + lean), y)
+    if action in ("glide", "climb"):  # a raised fist above the forehead, never on the nose
+        for k, (x, y) in list(hands.items()):
+            if y < sh[k][1] - 8:
+                hands[k] = (max(x, 54.0 + lean), min(y, 12.0 + oy))
+
+
 def build(action, view, i, H, HV):
     """One combat frame (a Canvas). H: gen_hero_v3, HV: hero_views."""
     left = view == "left" and action in OWN_LEFT
@@ -267,7 +299,7 @@ def build(action, view, i, H, HV):
     width = 96 if action in WIDE_ACTIONS else 64
     ox = (width - 64) // 2
     bob = p.get("bob", 0)
-    oy = 2 * bob
+    oy = max(2 * bob, -2)  # hero round 3: a hop lifts the body 2 texels at most (the crown stays inside)
     blink = bool(p.get("blink", False))
     near, far = p.get("near", (0, 0)), p.get("far", (0, 0))
     lean = 2 * p.get("lean", 0)
@@ -290,11 +322,25 @@ def build(action, view, i, H, HV):
                              legs=((2 * far[0], 2 * far[1], 0), (2 * near[0], 2 * near[1], 0)),
                              cloak_fly=0.3 * p.get("flare", 0), no_arms=off, finish=False, blink=blink)
     c = Canvas(width, 112, H.RAMPS)
-    c.keep_in = (2, 2, c.w - 3)  # hero round 2: nothing cut by the frame edge (hair tips, the flying cloak)
     sh = shoulders(v, oy, lean)
     if left:  # facing left (drawn facing right, then mirrored): his left arm is the near one
         sh = {"R": sh["L"], "L": sh["R"]}
-    hands = {k: (V(x), V(y + bob)) for k, (x, y) in (p.get("hands") or {}).items()}
+    # hero round 3: each hand is placed from ITS shoulder: v3 shoulder + 2 x (v1 hand - v1 shoulder), so a
+    # hand v1 holds out past the shoulder is out past the v3 shoulder too (the v3 body is wider than v1 x 2)
+    s1 = shoulders_v1(v, p.get("lean", 0), left)
+
+    def T(k, x, y):
+        return (sh[k][0] + 2 * (x - s1[k][0]), sh[k][1] + 2 * (y - s1[k][1]))
+    hands = {k: T(k, x, y) for k, (x, y) in (p.get("hands") or {}).items()}
+    held = {pr["key"] for pr in p.get("props", ()) if pr["kind"] in ("sword", "bow")}
+    for k in held & set(hands):  # a hand holding a sword or a bow: the one of the two placements nearer
+        x0, y0 = (p["hands"][k])  # the body's middle, so the prop has room inside the frame
+        vx = V(x0)
+        if abs(vx - 32) < abs(hands[k][0] - 32):
+            hands[k] = (vx, hands[k][1])
+    tweak(action, v, i, hands, sh, lean, oy)
+    for k, (x, y) in list(hands.items()):  # every hand (and what it holds) 7 texels inside the frame
+        hands[k] = (min(max(x, 7.0 - ox), width - 8.0 - ox), max(y, 6.0))
     if left and "R" in hands:  # the sword hand at full stretch ahead (v1's "reach" for the far arm)
         x, y = hands["R"]
         if (p.get("arms") or {}).get("R") == "reach":
@@ -332,6 +378,8 @@ def build(action, view, i, H, HV):
     for pr in p["props"]:
         key = pr["key"]
         in_back = pr["when"] == "behind" or any(e[1] == key and e[0] == "arm" for e in behind)
+        if left and key == "R" and v == "side":  # facing left the sword is in the far hand: behind him (v1)
+            in_back = True
         if left and (action, i) in {("attack2", 0)} and key == "R":
             in_back = False
         (behind if in_back else front).append(("prop", key, pr))
@@ -345,25 +393,25 @@ def build(action, view, i, H, HV):
             if it[0] == "arm":
                 _, k, s, hp, darker = it
                 fists.append((arm_to(c, (s[0] + ox, s[1]), (hp[0] + ox, hp[1]), v, darker,
-                                     sleeve="shirt" if v == "side" else "cloak", mid_x=32.0 + ox), darker))
+                                     sleeve="cloak", mid_x=32.0 + ox), darker))  # round 3: the upper arm stays in the cloak
         for it in items:
             if it[0] != "prop":
                 continue
             pr = it[2]
             kind = pr["kind"]
             if kind == "sword":
-                hx, hy = V(pr["x"]), V(pr["y"] + bob)
-                if pr["key"] in hands:
-                    hx, hy = hands[pr["key"]]
-                sword(c, hx + ox, hy, pr["ang"], pr["length"])
+                hx, hy = hands[pr["key"]] if pr["key"] in hands else T(pr["key"] or "R", pr["x"], pr["y"])
+                sword(c, hx + ox, hy, pr["ang"], pr["length"])  # (hands already moved by tweak())
             elif kind == "bow":
-                hx, hy = V(pr["x"]), V(pr["y"] + bob)
+                hx, hy = hands.get("L") or T("L", pr["x"], pr["y"])
                 nock = None
                 if pr.get("to_hand") and "R" in hands:
                     nock = (hands["R"][0] + ox, hands["R"][1])
-                bow(c, hx + ox, hy, pr["ang"], pr["draw"], pr.get("arrow", True), pr.get("reach", 10), nock)
+                reach = pr.get("reach", 10) * (0.8 if v == "side" else 1.0)  # side: the bow below the face (v1)
+                bow(c, hx + ox, hy, pr["ang"], pr["draw"], pr.get("arrow", True), reach, nock)
             elif kind == "shield":
-                shield(c, V(pr["x"]) + ox, V(pr["y"] + bob), pr["rx"], pr["ry"])
+                sx_, sy_ = T("L", pr["x"], pr["y"])
+                shield(c, sx_ + ox, sy_, pr["rx"], pr["ry"])
             elif kind == "ripple":
                 pass  # drawn after the water line cuts the body (below)
             elif kind == "dots":  # the front view's arrow point at the bow (pointing out of the picture)
@@ -389,6 +437,7 @@ def build(action, view, i, H, HV):
         for pr in p["props"]:
             if pr["kind"] == "ripple":
                 ripples(c, V(pr["cx"]) + ox, wl, 2 * pr["half"], pr["phase"])
+    absorb_cloth_islands(c)  # round 3: no cloak piece cut off by a leg / arm drawn over it
     despeckle(c, loose=("hair", "cloak"))
     edge_band(c, "cloak", 1)
     c.outline()

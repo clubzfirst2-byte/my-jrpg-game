@@ -20,7 +20,7 @@ sys.path.insert(0, HERE)
 import numpy as np  # noqa: E402
 
 from hdkit import capsule, edge_band, gauntlet, grooves, hand, hand_stamp, lock  # noqa: E402
-from v3lib import ROOT, Canvas, despeckle, edge_cuts, erode, hx, ramp6, save  # noqa: E402
+from v3lib import ROOT, Canvas, absorb_cloth_islands, cloth_islands, despeckle, edge_cuts, erode, hx, ramp6, save, stray_pieces  # noqa: E402
 
 OUT = os.path.join(ROOT, "src", "art-release-v3", "hero")
 W, H = 64, 112
@@ -79,8 +79,11 @@ def head(c, oy, lag, blink=False):
     Round 3: v1's outline (side hair ending in points just below the ears, spikes on top and out at
     the sides, not a helmet), curved pointed locks, a flat-lit face (shade only under the bangs and
     along the jaw)."""
-    mass = c.m_poly([(4, 17 + oy), (11, 6 + oy), (23, 1 + oy), (35, 0 + oy), (47, 3 + oy), (55, 10 + oy),
-                     (60, 21 + oy), (57, 30 + oy), (53, 40 + oy + lag), (48, 33 + oy), (47, 26 + oy), (16, 26 + oy),
+    # hero round 3: v1's onion crown — the top rises to the middle spike (the highest, row 3), the side
+    # spikes 3-4 rows lower, the head's shoulders down to row ~12 at x 8 / 56; drawn inside the frame
+    # from the start (nothing squeezed), so the head keeps its height in every frame
+    mass = c.m_poly([(4, 26 + oy), (4, 18 + oy), (8, 13 + oy), (14, 11 + oy), (20, 9 + oy), (26, 7.5 + oy), (32, 4 + oy),
+                     (38, 7.5 + oy), (44, 9 + oy), (50, 11 + oy), (56, 13 + oy), (60, 18 + oy), (60, 26 + oy), (57, 30 + oy), (53, 40 + oy + lag), (48, 33 + oy), (47, 26 + oy), (16, 26 + oy),
                      (15, 33 + oy), (10, 40 + oy + lag), (6, 30 + oy)])
     c.fill(mass, "hair")
     c.shade_part(mass, tones=(1, 2, 2, 3, 3), norm=True)
@@ -90,19 +93,21 @@ def head(c, oy, lag, blink=False):
     for y, x in zip(*np.nonzero(face)):  # shade: one column on the right and the jaw only
         if x >= 47 or (y >= 44 + oy) or (x >= 45 and y >= 41 + oy):
             c.tone[y, x] = 3
-    fore = c.m_poly([(15, 14 + oy), (49, 14 + oy), (49, 22 + oy), (40, 23 + oy), (31, 24 + oy), (22, 23 + oy), (15, 22 + oy)])
+    # hero round 3: the fringe comes down to just over the brows with a jagged lower edge (locks' tips)
+    fore = c.m_poly([(15, 14 + oy), (49, 14 + oy), (49, 27 + oy), (46, 29 + oy), (42, 26 + oy), (38, 29 + oy), (35, 26 + oy),
+                     (32, 28 + oy), (29, 26 + oy), (26, 29 + oy), (22, 26 + oy), (19, 29 + oy), (15, 27 + oy)])
     c.fill(fore, "hair", 2)
     cr = (31, 9 + oy)
     # (root, tip, root width, bend): every lock tapers to a point and curves
     side = [((14, 18 + oy), (9, 40 + oy + lag), 9, 2.5), ((50, 18 + oy), (54, 40 + oy + lag), 9, -2.5)]
     crown = [((cr[0] - 4, cr[1] + 2), (6, 23 + oy), 12, 3.0), ((cr[0] + 4, cr[1] + 2), (58, 25 + oy), 12, -3.0),
              ((cr[0] - 2, cr[1]), (15, 28 + oy), 11, 2.5), ((cr[0] + 2, cr[1]), (49, 28 + oy), 11, -2.5)]
-    spikes = [((26, 12 + oy), (20, -1 + oy), 9, 1.5), ((32, 11 + oy), (33, -2 + oy), 9, 0.5),
-              ((37, 12 + oy), (44, 0 + oy), 8, -1.5), ((14, 14 + oy), (1, 15 + oy), 8, 2.0),
-              ((50, 15 + oy), (62, 20 + oy), 8, -2.0)]
-    bangs = [((20, 13 + oy), (17, 29 + oy), 8, 2.0), ((27, 13 + oy), (24, 28 + oy + lag), 8, 1.5),
-             ((32, 13 + oy), (31, 26 + oy), 7, -0.5), ((38, 13 + oy), (40, 28 + oy + lag), 8, -1.5),
-             ((44, 13 + oy), (48, 29 + oy), 8, -2.0)]
+    spikes = [((32, 13 + oy), (32, 3 + oy), 9, 0.3), ((26, 13 + oy), (21, 8 + oy), 8, 1.0),
+              ((38, 13 + oy), (43, 8 + oy), 8, -1.0), ((13, 17 + oy), (5, 18 + oy), 8, 1.5),
+              ((51, 17 + oy), (59, 20 + oy), 8, -1.5)]
+    bangs = [((20, 13 + oy), (17, 30 + oy), 8, 2.0), ((27, 13 + oy), (24, 29 + oy + lag), 8, 1.5),
+             ((32, 13 + oy), (31, 28 + oy), 7, -0.5), ((38, 13 + oy), (40, 29 + oy + lag), 8, -1.5),
+             ((44, 13 + oy), (48, 30 + oy), 8, -2.0)]  # hero round 3: down to just over the brows
     # the top of the head (hero round, inspection P3-15): the crown and spike locks are drawn first;
     # each keeps its own light/dark facet but no dark lower band (which stacked into horizontal lines
     # across the crown), and each has one groove running out from the crown along it (1 texel darker,
@@ -132,6 +137,14 @@ def head(c, oy, lag, blink=False):
         c.fill(m, "hair")
         c.shade_part(m, tones=(2, 3, 3, 4, 5), norm=True, global_mask=mass, gmix=0.35)
         grooves(c, m, drop=1, sides=True)
+    # hero round 3: above row 16 the hair keeps to the onion (the mass) and the spikes only — the
+    # crown locks' wide roots no longer square the top off
+    _spk = np.zeros(c.mat.shape, bool)
+    for _r, _t, _w, _b in spikes:
+        _spk |= lock(c, _r, _t, _w, _b)
+    _yy = np.mgrid[0:c.h, 0:c.w][0]
+    _out = (c.mat == c.mid("hair")) & ~(mass | _spk) & (_yy < 16 + oy)
+    c.mat[_out] = 0
     hairm = c.mat == c.mid("hair")
     skin = c.mat == c.mid("skin")
     for y, x in zip(*np.nonzero(skin)):  # the bangs' shade: 1-2 rows under the hair
@@ -332,7 +345,6 @@ def frame(oy=0, breath=0, sway=0, lag=0, feet=(0, 0), swing=(0.0, 0.0), no_arms=
     """The front view. no_arms / finish=False: the body only, unfinished (hero_combat.py adds the
     arms and the props on a wider canvas, then finishes)."""
     c = Canvas(W, H, RAMPS)
-    c.keep_in = (2, 2, c.w - 3)  # hero round 2: nothing cut by the frame edge (hair tips, the flying cloak)
     # arms swung back go behind the cloak
     for side, s in ((-1, swing[0]), (1, swing[1])):
         if s < -0.45 and not arm_off(no_arms, side):
@@ -352,6 +364,7 @@ def frame(oy=0, breath=0, sway=0, lag=0, feet=(0, 0), swing=(0.0, 0.0), no_arms=
     head(c, oy, lag, blink)
     if not finish:
         return c
+    absorb_cloth_islands(c)  # round 3: no cloak piece cut off by a leg / arm drawn over it
     despeckle(c, loose=("hair", "cloak"))
     edge_band(c, "cloak", 1)
     c.outline()
@@ -401,7 +414,7 @@ S_RUN = [  # hero round 2: the feet 3 lower, so frames 0 and 3 stand on the bott
     dict(legs=((-6, 3, 0), (2, 10, -6)), arms=(0.3, -0.3), oy=0, lean=3, bent=0.8, cloak_fly=0.7, lag=1),
 ]
 # back (facing up): feet = heel lift left / right, arms = swing left / right
-B_IDLE = [dict(breath=0), dict(breath=0), dict(breath=0, lag=1, oy=2), dict(breath=0, lag=1, oy=2)]
+B_IDLE = [dict(breath=0), dict(breath=0, lag=1, sway=1), dict(breath=0, lag=1, oy=2), dict(breath=0, lag=0, oy=2, sway=-1)]  # every frame its own
 B_WALK = [dict(feet=(0, 3), arms=(0.5, -0.5), oy=0, sway=1, lag=1), dict(feet=(0, 6), arms=(0.8, -0.8), oy=2, sway=1),
           dict(feet=(1, 3), arms=(0.4, -0.4), oy=1, sway=0, lag=1), dict(feet=(3, 0), arms=(-0.5, 0.5), oy=0, sway=-1, lag=1),
           dict(feet=(6, 0), arms=(-0.8, 0.8), oy=2, sway=-1), dict(feet=(3, 1), arms=(-0.4, 0.4), oy=1, sway=0, lag=1)]
@@ -431,6 +444,12 @@ def _check(cv, name):
     n = edge_cuts(cv)
     if n:
         CUT.append((name, n))
+    st = stray_pieces(cv)
+    if st:
+        CUT.append((name, "stray pieces", st))
+    isl = [(n, box) for n, box, _ in cloth_islands(cv)]
+    if isl:
+        CUT.append((name, "cloak / gold pieces cut off", isl))
 
 
 def main():
@@ -454,9 +473,11 @@ def main():
                 out.append(save(img, os.path.join(OUT, f"hero.{action}.{view}.{i}.png")))
     print(f"{len(out)} files")
     if CUT:
-        print("edge check:", f"{len(CUT)} frames cut: {CUT[:8]}")
+        print("edge check:", f"{len(CUT)} frames cut: {CUT}")
         sys.exit(1)
-    print("edge check: no frame has a texel other than an outline on its top row or side columns")
+    print("edge check: no frame has a texel other than an outline on its top row or side columns "
+          "(the gauntlet's dark grey counted as a cut); no stray piece of 40 texels or fewer; "
+          "no piece of the cloak's green / gold of 40 texels or fewer cut off from the cloak")
 
 
 if __name__ == "__main__":

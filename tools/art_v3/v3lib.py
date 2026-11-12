@@ -73,7 +73,6 @@ class Canvas:
         self.ink = {}  # (x, y) -> rgb
         self.part = np.zeros((h, w), np.int32)  # which part drew it (for shading)
         self._parts = 0
-        self.keep_in = None  # (x0, y0, x1): polygons are kept inside x0..x1 and below y0 (hero: no edge cuts)
 
     def mid(self, name):
         if name not in self.names:
@@ -86,15 +85,6 @@ class Canvas:
         return ((xx + 0.5 - cx) / rx) ** 2 + ((yy + 0.5 - cy) / ry) ** 2 <= 1
 
     def m_poly(self, pts):
-        if self.keep_in is not None:
-            x0, y0, x1 = self.keep_in
-            # the band from y = -3 to y0 + 6 is squeezed into y0 .. y0 + 6 (the shapes keep their order and
-            # their pointed tips, only lower), so nothing reaches above y0
-            top = y0 + 6
-
-            def sq(y):
-                return y if y >= top else max(y0, y0 + (y + 3) * (top - y0) / (top + 3))
-            pts = [(min(max(x, x0), x1), sq(y)) for x, y in pts]
         yy, xx = np.mgrid[0:self.h, 0:self.w]
         xs, ys = xx + 0.5, yy + 0.5
         inside = np.zeros((self.h, self.w), bool)
@@ -557,9 +547,106 @@ def edge_cuts(c):
     """The texels on the top row and the left / right columns that are not an outline (tone 0): a part
     cut by the frame's edge. Returns their count (0 = nothing cut)."""
     m = c.mat != 0
+    shirt = c.mat == c.mid("shirt") if "shirt" in c.names else np.zeros_like(m)
     bad = 0
     for sel in (np.s_[0, :], np.s_[:, 0], np.s_[:, c.w - 1]):
-        bad += int((m[sel] & (c.tone[sel] != 0)).sum())
+        # hero round 3: the gauntlet's dark grey is the same colour as its outline: counted as a cut too
+        bad += int((m[sel] & ((c.tone[sel] != 0) | shirt[sel])).sum())
     ink = sum(1 for (x, y) in c.ink if y == 0 or x in (0, c.w - 1))
     return bad + ink
+
+
+def stray_pieces(c, limit=40, skip=("water",)):
+    """Hero round 3: 4-connected pieces of drawn texels (outline included) apart from the largest one,
+    of `limit` texels or fewer (a fragment of cloak, trim or leg left floating). Materials in `skip`
+    (the swimmer's water ring) are not counted. Returns [(size, (x0, y0, x1, y1), names)]."""
+    sk = {c.mid(n) for n in skip if n in c.names}
+    m = (c.mat != 0) & ~np.isin(c.mat, list(sk) or [-1])
+    lab = np.zeros(m.shape, np.int32)
+    comps = []
+    for y0, x0 in zip(*np.nonzero(m)):
+        if lab[y0, x0]:
+            continue
+        k = len(comps) + 1
+        st, pts = [(y0, x0)], []
+        lab[y0, x0] = k
+        while st:
+            y, x = st.pop()
+            pts.append((y, x))
+            for yy, xx in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)):
+                if 0 <= yy < c.h and 0 <= xx < c.w and m[yy, xx] and not lab[yy, xx]:
+                    lab[yy, xx] = k
+                    st.append((yy, xx))
+        comps.append(pts)
+    if not comps:
+        return []
+    big = max(range(len(comps)), key=lambda i: len(comps[i]))
+    out = []
+    for i, pts in enumerate(comps):
+        if i == big or len(pts) > limit:
+            continue
+        ys, xs = zip(*pts)
+        names = sorted({c.names[c.mat[y, x]] for y, x in pts})
+        out.append((len(pts), (min(xs), min(ys), max(xs), max(ys)), names))
+    return out
+
+
+def _pieces_of(m):
+    lab = np.zeros(m.shape, np.int32)
+    comps = []
+    for y0, x0 in zip(*np.nonzero(m)):
+        if lab[y0, x0]:
+            continue
+        k = len(comps) + 1
+        st, pts = [(y0, x0)], []
+        lab[y0, x0] = k
+        while st:
+            y, x = st.pop()
+            pts.append((y, x))
+            for yy, xx in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)):
+                if 0 <= yy < m.shape[0] and 0 <= xx < m.shape[1] and m[yy, xx] and not lab[yy, xx]:
+                    lab[yy, xx] = k
+                    st.append((yy, xx))
+        comps.append(pts)
+    return comps
+
+
+def cloth_islands(c, cloth="cloak", trim=("gold",), limit=40):
+    """Hero round 3: pieces of the cloak's green (with its gold trim) cut off from the rest of the
+    cloak by what was drawn over it, of `limit` texels or fewer. [(size, (x0, y0, x1, y1))]."""
+    if cloth not in c.names:
+        return []
+    k = c.mid(cloth)
+    grp = np.isin(c.mat, [k] + [c.mid(t) for t in trim if t in c.names])
+    comps = [p for p in _pieces_of(grp) if any(c.mat[y, x] == k for y, x in p)]
+    if len(comps) < 2:
+        return []
+    big = max(comps, key=len)
+    out = []
+    for p in comps:
+        if p is big or len(p) > limit:
+            continue
+        ys, xs = zip(*p)
+        out.append((len(p), (min(xs), min(ys), max(xs), max(ys)), p))
+    return out
+
+
+def absorb_cloth_islands(c, **kw):
+    """Each such piece takes, texel by texel, the most common other material around it (the leg or
+    the tunic it sits on)."""
+    k = c.mid(kw.get("cloth", "cloak"))
+    trim = [c.mid(t) for t in kw.get("trim", ("gold",))]
+    for _, _, pts in cloth_islands(c, **kw):
+        todo = set(pts)
+        for _ in range(12):
+            if not todo:
+                break
+            for (y, x) in list(todo):
+                nb = [(c.mat[yy, xx], c.tone[yy, xx]) for yy, xx in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1))
+                      if 0 <= yy < c.h and 0 <= xx < c.w and (yy, xx) not in todo
+                      and c.mat[yy, xx] not in [k] + trim and c.mat[yy, xx] != 0]
+                if nb:
+                    m, t = max(set(nb), key=nb.count)
+                    c.mat[y, x], c.tone[y, x] = m, t
+                    todo.discard((y, x))
 
