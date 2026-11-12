@@ -134,12 +134,12 @@ autumn (only the tint changes); winter loads its own set.
 
 ## 6. Villagers (production order 5)
 
-- `npc.<who>.<idle|walk>.<down|right|up|left>.<n>` in `src/art-release-v3/npc/`: the same people, keys, frame
+- `npc.<who>.<idle|walk>.<down|right|up|left>.<n>` in `src/art-release-v3/npc/`: the same 9 people, keys, frame
   counts and fps as the approved NPCs (`src/art-release/npc`, `src/view/npcAnim.js`: idle 4 at 3 fps, walk 6
-  at 8 fps). 64×112, anchor the bottom row's centre. `left` is stored for 7 people (v1's left frames are not
-  mirrors of its right frames); **princess and smith have no `left` files: the engine draws their `right`
+  at 8 fps). 64×112, anchor the bottom row's centre. **340 files** (40 × 7 + 30 × 2).
+- `left` is stored for woman, child, cook, elder, guard, merchant and traveller (v1's left frames are not
+  mirrors of their right frames). **princess and smith have no `left` files: the engine draws their `right`
   mirrored** (scale.x = −1), as for the hero (decision 2026-11-12).
-- Done so far: woman (40 files; idle down 0-3 are the approved pilot frames, unchanged); princess and smith
-  (30 files each: down / right / up); child, cook, elder, guard, merchant and traveller (40 files each).
-  All 9 villagers done: 330 files.
-
+- Round 2 (after the inspections): every frame is drawn from the approved v1 frame's part map
+  (`tools/art_v3/npc_v1map.py`), so poses, held things and motion are v1's; no two frames of one person are
+  the same picture.
