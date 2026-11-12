@@ -85,10 +85,15 @@ def conifer(kind, season, frame):
     prev = None
     shelves, tiers = [], []  # (round 3) the winter spruce's snow shelves
     sway = SWAY[frame]
+    rj = random.Random(seed * 31 + 5)  # round 3 (P3): pine_l's uneven tiers (own stream: pine_s / spruce unchanged)
     for i in range(n):
         f = (i + 1) / n
         yb = int(y_top + (yb_last - y_top) * (0.12 + 0.88 * f ** 1.1))
         hw = max(5, hw_bot * (0.18 + 0.82 * f))
+        uneven = kind == "pine_l"
+        if uneven and 0 < i < n - 1:
+            yb += rj.choice((-3, -2, 0, 2, 3))
+            hw *= 1 + rj.uniform(-0.08, 0.08)
         off = (rng.choice((-1, 0, 1)) if i else 0) * max(1, W // 64)
         skew = rng.uniform(-0.12, 0.12)
         cxi = cx + off + round(sway * (1 - i / (n - 1)))
@@ -96,16 +101,16 @@ def conifer(kind, season, frame):
         if gap and i:  # a gap above each tier (the trunk shows)
             yt = int(yt + (yb - yt) * gap)
         pts = [(cxi + skew * 10, yt)]
-        if i:
-            pts.append((cxi + hw * 0.5, yb - H * 0.055))
-        k = max(4, int(hw // 4))
+        if i or uneven:  # round 3: pine_l's top tier gets shoulders too (snow lies on them in winter)
+            pts.append((cxi + hw * 0.5, yb - H * (0.045 if i == 0 else 0.055)))
+        k = max(6 if uneven else 4, int(hw // 4))
         for j in range(k + 1):
             x = cxi + hw - 2 * hw * j / k
             dip = rng.choice((2, 3, 4)) if j % 2 == 0 else rng.choice((-1, 0))
             hang = droop * (1 - abs(x - cxi) / hw) * -2 + droop * 4 * (abs(x - cxi) / hw) ** 2
             pts.append((x, yb + dip + (1 - abs(x - cxi) / hw) * 3 + hang))
-        if i:
-            pts.append((cxi - hw * 0.55, yb - H * 0.055))
+        if i or uneven:
+            pts.append((cxi - hw * 0.55, yb - H * (0.045 if i == 0 else 0.055)))
         m = c.m_poly(pts)
         c.fill(m, "pine")
         c.shade_part(m, tones=(1, 2, 3, 4, 5, 6), global_mask=whole, gmix=0.4, light=(-0.7, -0.5, 0.5), norm=True)
@@ -131,6 +136,8 @@ def conifer(kind, season, frame):
     if season == "winter":
         if kind == "spruce":
             spruce_shelves(c, shelves, tiers, seed)
+        if kind == "pine_l":
+            top_tier_snow(c, tiers, seed)
         FL.snow_caps(c, ("pine",), depth=(2, 5), seed=seed)
         FL.drop_small_snow(c, 4, back="pine")
     return FL.finish(c, loose=())
@@ -160,6 +167,33 @@ def spruce_shelves(c, shelves, tiers, seed):
                 continue  # 1 row, or 2 on a third of the columns
             c.mat[y, x] = ks
             c.tone[y, x] = (6 if top else 5) if r < 0 else (5 if top else 4)
+
+
+def top_tier_snow(c, tiers, seed):
+    """Round 3 (P3): pine_l's top tier is a steep spire, so snow_caps (top runs 2+ wide) leaves it bare.
+    Snow clings along its outer slope instead: on the lit left the outermost 2 texels of each row, on the
+    shaded right 1 texel on every other pair of rows, from 30 % to 90 % of the tier's visible height.
+    Pieces under 4 texels go back to pine (drop_small_snow)."""
+    kp, ks = c.mid("pine"), c.mid("snow")
+    later = np.zeros_like(tiers[0])
+    for m in tiers[1:]:
+        later |= m
+    vis = tiers[0] & ~later & (c.mat == kp)
+    ys = np.nonzero(vis.any(axis=1))[0]
+    if not len(ys):
+        return
+    y0, y1 = ys.min(), ys.max()
+    for y in range(y0, y1 + 1):
+        fy = (y - y0) / max(1, y1 - y0)
+        xs = np.nonzero(vis[y])[0]
+        if not (0.3 <= fy <= 0.9) or len(xs) < 4:
+            continue
+        for x in xs[:2]:
+            c.mat[y, x] = ks
+            c.tone[y, x] = 6 if x == xs[0] else 5
+        if (y // 2) % 2 == 0:
+            c.mat[y, xs[-1]] = ks
+            c.tone[y, xs[-1]] = 4
 
 
 # ------------------------------------------------------------------ birch (round 2: its own form)
