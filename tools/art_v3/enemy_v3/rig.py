@@ -35,7 +35,7 @@ import math
 
 import numpy as np
 
-from detail import DETAIL, MIN_AREA as DETAIL_MIN
+from detail import DETAIL, MIN_AREA as DETAIL_MIN, TAKES_LOW
 
 PAD = 12  # shapes are rasterised on a padded canvas so clipping does not shade a false edge
 S = 2  # v3: texels per v2 pixel (density 4)
@@ -698,7 +698,24 @@ class Rig:
                     org = (y0 - PADT - ay, x0 - PADT - ax)
                 else:
                     org = (y0 - PADT, x0 - PADT)
-                t2, hf2, sub = fn(t, hf, sub_m, org)
+                split = getattr(self, "ground_split", None)
+                if split is not None and mname in TAKES_LOW:
+                    # round 3: below the shins (rows from ground_split down) only marks that follow
+                    # the part's own shape: the boots keep still while the body breathes above them
+                    sy = int(round(split * S)) + PADT - y0
+                    up_m, lo_m = sub_m.copy(), sub_m.copy()
+                    up_m[max(0, sy):] = False
+                    lo_m[:max(0, sy)] = False
+                    t2, hf2 = t.copy(), hf.copy()
+                    sub = np.full(sub_m.shape, None, dtype=object)
+                    for mm, low in ((up_m, False), (lo_m, True)):
+                        if mm.sum() < 6:
+                            continue
+                        ta, ha, sa = fn(t.copy(), hf.copy(), mm, org, low=low)
+                        t2[mm], hf2[mm] = ta[mm], ha[mm]
+                        sub[mm] = sa[mm]
+                else:
+                    t2, hf2, sub = fn(t, hf, sub_m, org)
                 win = np.zeros((H, W), bool)
                 win[y0:y1, x0:x1] = sub_m
                 tt = np.full((H, W), -1.0)

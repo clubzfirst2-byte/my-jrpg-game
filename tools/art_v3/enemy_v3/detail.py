@@ -167,11 +167,12 @@ def cloth(t, half, m, org, seed=5):
         if bw >= 18:
             py0 = y0 + int(bh * 0.46)
             px0 = x0 + int(bw * 0.18)
-            for yy in range(py0, py0 + 9):
-                for xx in range(px0, px0 + 10):
-                    if 0 <= yy < m.shape[0] and 0 <= xx < m.shape[1] and _erode(m, 2)[yy, xx]:
+            in2 = _erode(m, 2)
+            for yy in range(py0, py0 + 11):
+                for xx in range(px0, px0 + 12):
+                    if 0 <= yy < m.shape[0] and 0 <= xx < m.shape[1] and in2[yy, xx]:
                         mat[yy, xx] = "patch"
-                        border = yy < py0 + 2 or xx >= px0 + 8 or yy >= py0 + 7
+                        border = yy < py0 + 2 or xx >= px0 + 10 or yy >= py0 + 9
                         t[yy, xx] = 1 if border else (2 if xx < px0 + 5 else 2)
                         half[yy, xx] = 1 if (not border and yy < py0 + 5 and xx < px0 + 6) else 0
     return t, half, mat
@@ -194,7 +195,10 @@ def stone(t, half, m, org, seed=7):
                 continue
             fx_ = x + org[1] + (row % 2) * 6 + int(_hash(row, 7, seed) * 5)
             a, b = fy % 9, fx_ % 13
-            if a in (0, 1) or b in (0, 1):
+            if a == 0 or b == 0:  # round 3: the joint is a deep gap (the stone's tone 0, STYLE 3.3)
+                t[y, x] = 0
+                half[y, x] = 0
+            elif a == 1 or b == 1:  # its shaded lip
                 t[y, x] = max(1, t[y, x] - 1)
                 half[y, x] = 0
             elif (a in (2, 3) or b in (2, 3)) and t[y, x] < 3:
@@ -203,7 +207,7 @@ def stone(t, half, m, org, seed=7):
     ys, xs = np.nonzero(m)
     fx = xs + org[1]
     edge = 0.48 + 0.08 * np.sin(fx * 0.4 + seed) + 0.05 * np.sin(fx * 1.1)
-    streak = ((fx // 3) % 5 == 0) & (d[ys, xs] > 0.25)  # weathering running down in 3-texel streaks
+    streak = ((fx // 3) % 4 == 0) & (d[ys, xs] > 0.22)  # weathering running down in 3-texel streaks
     low = (d[ys, xs] > edge) | streak
     mat[ys[low], xs[low]] = "oldstone_w"  # weathered: cooler and darker towards the ground
     # moss on the top faces: tufts 4-6 wide, 2-3 high, here and there
@@ -245,19 +249,51 @@ def stone(t, half, m, org, seed=7):
     return t, half, mat
 
 
-# ------------------------------------------------------------------ bronze (sentinel): rivets
+# ------------------------------------------------------------------ bronze (sentinel)
 
-def bronze(t, half, m, org, seed=11):
-    y0, y1, x0, x1 = _bbox(m)
+def bronze(t, half, m, org, seed=11, low=False):
+    """Round 3: no dots on a grid. Beaten bronze = the joints between its plates (2 texels of shade,
+    at irregular places, 11-17 texels apart, with a 2-texel lit edge beside them) and a few rivets
+    (2 x 2 lit, a 2 x 1 shade under), at the plates' corners only. Below the shins (low) nothing but
+    the volume (the boots keep still while the body breathes)."""
     mat = np.full(m.shape, None, dtype=object)
+    if low:
+        return t, half, mat
+    y0, y1, x0, x1 = _bbox(m)
+    inner1 = _erode(m, 1)
+    joints = []
+    x = (x0 + org[1]) - (x0 + org[1]) % 11
+    k = 0
+    while x - org[1] <= x1:
+        joints.append(x - org[1] + int(_hash(x // 11, 5, seed) * 5))
+        x += 11 + int(_hash(k, 6, seed) * 7)
+        k += 1
+    for jx in joints:
+        for y in range(y0, y1 + 1):
+            for dx in range(4):
+                xx = jx + dx
+                if 0 <= xx < m.shape[1] and inner1[y, xx]:
+                    if dx < 2:
+                        t[y, xx] = max(1, t[y, xx] - 1)
+                    elif t[y, xx] < 3:
+                        t[y, xx] = t[y, xx] + 1
+                    half[y, xx] = 0
     inner = _erode(m, 2)
-    for x in range(x0 + 2, x1 - 1, 7):
-        y = (y0 + y1) // 2
-        if all(inner[y + a, x + b] for a in (0, 1, 2) for b in (0, 1)):
-            t[y, x] = t[y, x + 1] = t[y + 1, x] = 4
-            t[y + 1, x + 1] = 3
-            t[y + 2, x] = t[y + 2, x + 1] = 1
-            half[y:y + 3, x:x + 2] = 0
+    n = 0
+    for jx in joints:  # a rivet beside some joints, near the plate's top
+        if n >= 3 or _hash(jx + org[1], 9, seed) < 0.45:
+            continue
+        rx = jx + 5
+        col = np.nonzero(m[:, rx])[0] if 0 <= rx < m.shape[1] else []
+        if not len(col):
+            continue
+        ry = col.min() + 3
+        if all(0 <= ry + a < m.shape[0] and 0 <= rx + b < m.shape[1] and inner[ry + a, rx + b] for a in range(3) for b in range(2)):
+            t[ry, rx] = t[ry, rx + 1] = t[ry + 1, rx] = 4
+            t[ry + 1, rx + 1] = 3
+            t[ry + 2, rx] = t[ry + 2, rx + 1] = 1
+            half[ry:ry + 3, rx:rx + 2] = 0
+            n += 1
     return t, half, mat
 
 
@@ -294,93 +330,74 @@ def skin(t, half, m, org, seed=13):
     return t, half, mat
 
 
-# ------------------------------------------------------------------ leather: creases and a stitched seam
+# ------------------------------------------------------------------ leather: a cuff and creases
 
-def leather(t, half, m, org, seed=17):
-    y0, y1, x0, x1 = _bbox(m)
+def leather(t, half, m, org, seed=23, low=False):
+    """Round 3: leather = a folded cuff on top (3 rows a tone up over a 2-row shade, following the
+    part's own top edge) and, on bigger pieces above the shins, 2 or 3 diagonal creases (2 dark under
+    2 lit) at irregular places. No grid of marks."""
     mat = np.full(m.shape, None, dtype=object)
+    ys, xs = np.nonzero(m)
+    for x in np.unique(xs):
+        col = np.nonzero(m[:, x])[0]
+        if len(col) < 6:
+            continue
+        for y in col:
+            k = y - col.min()
+            if k < 3 and t[y, x] < 3:
+                t[y, x] = t[y, x] + 1
+                half[y, x] = 0
+            elif 3 <= k < 5:
+                t[y, x] = max(1, t[y, x] - 1)
+                half[y, x] = 0
+    if low or m.sum() < 200:
+        return t, half, mat
+    y0, y1, x0, x1 = _bbox(m)
     inner = _erode(m, 1)
-    for k, xx0 in enumerate(range(x0 + 2, x1 - 1, 6)):  # diagonal creases, 2 dark under 2 lit
-        for y in range(y0, y1 + 1):
+    for k in range(3):
+        if _hash(k, 1, seed) < 0.3:
+            continue
+        xx0 = x0 + 3 + int(_hash(k, 2, seed) * max(1, x1 - x0 - 6))
+        for y in range(y0 + 5, y1 + 1):
             x = xx0 + (y - y0) // 2
             for dx in range(-2, 2):
                 xx = x + dx
                 if 0 <= xx < m.shape[1] and inner[y, xx]:
                     if dx >= 0:
                         t[y, xx] = max(1, t[y, xx] - 1)
-                        half[y, xx] = 0
                     elif t[y, xx] < 3:
-                        t[y, xx] = t[y, xx] + 1 if t[y, xx] < 2 else t[y, xx]
+                        t[y, xx] = t[y, xx] + 1
+                    half[y, xx] = 0
     return t, half, mat
 
 
-# ------------------------------------------------------------------ bronze: hammered dents + rivets
-
-def bronze2(t, half, m, org, seed=19):
-    t, half, mat = bronze(t, half, m, org, seed)
-    y0, y1, x0, x1 = _bbox(m)
-    inner1 = _erode(m, 1)
-    # beaten plates (round 2): a joint every 8 texels (2 texels of shade), the plate beside it lit
-    # for 2 texels (it catches the light on its raised edge)
-    for y in range(y0, y1 + 1):
-        for x in range(x0, x1 + 1):
-            if not inner1[y, x]:
-                continue
-            u = (x + org[1] + ((y + org[0]) // 6) * 3) % 8
-            if u in (0, 1):
-                t[y, x] = max(1, t[y, x] - 1)
-                half[y, x] = 0
-            elif u in (2, 3) and t[y, x] < 3:
-                t[y, x] = t[y, x] + 1
-                half[y, x] = 0
-    inner = _erode(m, 2)
-    for j in range((y0 + org[0]) // 5 - 1, (y1 + org[0]) // 5 + 2):
-        for i in range((x0 + org[1]) // 6 - 1, (x1 + org[1]) // 6 + 2):
-            if _hash(i, j, seed) < 0.4:
-                continue
-            cy, cx = j * 5 - org[0] + (i % 2) * 2, i * 6 - org[1]
-            cells = [(cy + a, cx + b) for a in range(2) for b in range(3)]
-            if not all(0 <= a < m.shape[0] and 0 <= b < m.shape[1] and inner[a, b] for a, b in cells):
-                continue
-            for b in range(3):  # a dent: its upper edge in shade, its lower edge catching light
-                t[cy, cx + b] = max(1, t[cy, cx + b] - 1)
-                t[cy + 1, cx + b] = min(3, t[cy + 1, cx + b] + 1)
-                half[cy:cy + 2, cx + b] = 0
-    return t, half, mat
-
-
-def leather2(t, half, m, org, seed=23):
-    """Boots and straps: a lit cuff (the folded top, 3 rows a tone up) over a 2-row shade, then the
-    diagonal creases."""
-    t, half, mat = leather(t, half, m, org, seed)
-    d = _depth(m)
-    ys, xs = np.nonzero(m)
-    for y, x in zip(ys, xs):
-        if d[y, x] < 0:
-            continue
-        col = np.nonzero(m[:, x])[0]
-        k = y - col.min()
-        if k < 3 and t[y, x] < 3:
-            t[y, x] = t[y, x] + 1
-            half[y, x] = 0
-        elif 3 <= k < 5:
-            t[y, x] = max(1, t[y, x] - 1)
-            half[y, x] = 0
-    return t, half, mat
-
-
-def wood(t, half, m, org, seed=29):
-    """The staff: knots every ~10 texels along it (a 2 x 3 dark knot with a lit lip under it)."""
+def wood(t, half, m, org, seed=29, low=False):
+    """Round 3: the staff gets 2 or 3 knots at irregular places along it (not every 10 texels): a
+    2 x 3 dark knot with a lit lip under it, at 18-30 %, 45-62 % and (sometimes) 74-86 % of its length."""
     mat = np.full(m.shape, None, dtype=object)
     inner = _erode(m, 1)
     ys, xs = np.nonzero(inner)
-    for k in range(len(ys)):
-        y, x = ys[k], xs[k]
-        if (y + org[0]) % 10 != int(_hash(x // 6, 3, seed) * 4):
-            continue
+    if len(ys) < 20:
+        return t, half, mat
+    pts = np.stack([ys, xs], 1).astype(float)
+    c0 = pts.mean(0)
+    u, sv, vt = np.linalg.svd(pts - c0, full_matrices=False)
+    ax = vt[0]
+    proj = (pts - c0) @ ax
+    lo, hi = proj.min(), proj.max()
+    spots = [0.18 + 0.12 * _hash(1, 1, seed), 0.45 + 0.17 * _hash(2, 1, seed)]
+    if _hash(3, 1, seed) > 0.4:
+        spots.append(0.74 + 0.12 * _hash(3, 2, seed))
+    for f in spots:
+        target = lo + (hi - lo) * f
+        k = int(np.argmin(np.abs(proj - target)))
+        y, x = int(ys[k]), int(xs[k])
         cells = [(y + a, x + b) for a in range(3) for b in range(2)]
         if not all(0 <= a < m.shape[0] and 0 <= b < m.shape[1] and inner[a, b] for a, b in cells):
-            continue
+            x -= 1
+            cells = [(y + a, x + b) for a in range(3) for b in range(2)]
+            if not all(0 <= a < m.shape[0] and 0 <= b < m.shape[1] and inner[a, b] for a, b in cells):
+                continue
         for b in range(2):
             t[y, x + b] = max(1, t[y, x + b] - 1)
             t[y + 1, x + b] = max(1, t[y + 1, x + b] - 1)
@@ -389,6 +406,7 @@ def wood(t, half, m, org, seed=29):
     return t, half, mat
 
 
-DETAIL = {"ashfur": fur, "plum": cloth, "oldstone": stone, "bronze": bronze2, "gobskin": skin, "leather": leather2,
+DETAIL = {"ashfur": fur, "plum": cloth, "oldstone": stone, "bronze": bronze, "gobskin": skin, "leather": leather,
           "wood": wood}
+TAKES_LOW = {"bronze", "leather", "wood"}  # functions that draw only shape-relative marks below the shins
 MIN_AREA = 120  # texels

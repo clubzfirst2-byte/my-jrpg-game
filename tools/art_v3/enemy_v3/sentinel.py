@@ -78,6 +78,7 @@ def draw(p):
     hip_y = 40 + dy
     top = 21 + dy  # shoulders
     r.anchor = (cx, top)  # v3 round 2: the surface detail moves with the body
+    r.ground_split = G - 7  # v3 round 3: the boots: shape-relative marks only
     # far arm (small, bronze and stone, hangs behind)
     r.limb(cx - 7, top + 3, cx - 9, top + 13, 2.4, 2.2, "bronze", dark=1, soft=1)
     r.add(r.m_rect(cx - 12, top + 13, cx - 6, top + 18), "oldstone", dark=1)

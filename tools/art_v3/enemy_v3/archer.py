@@ -80,6 +80,7 @@ def draw(p):
     X, dy = p.x, p.dy
     hip = (15 + X, 41 + dy)
     r.anchor = hip  # v3 round 2: the surface detail moves with the body
+    r.ground_split = G - 6  # v3 round 3: the feet: shape-relative marks only
     sh = (16 + X + p.lean, 29 + dy + abs(p.lean) * 0.3)
     hx_, hy = sh[0] + 2 + p.lean * 0.6 + p.head[0], sh[1] - 7 + p.head[1]
     # far arm and the staff when it is held behind (hold / raise)
@@ -114,7 +115,7 @@ def draw(p):
     # a lower lip lit, one tusk (lit left, shaded right)
     r.add(r.m_limb(hx_ + 3.6, hy - 0.8, hx_ + 8.8, hy + 2.4, 0.5, 0.4), "gobskin", tone=3, cast=False)
     r.tstamp(hx_ + 7.8, hy + 2.6, ["00", "0."], {"0": ("gobskin", 0)})
-    r.tstamp(hx_ + 0.2, hy - 2.8, ["00000000", ".0ggbbc0", "..0bbcd0", "...0cd0.", "....00.."],
+    r.tstamp(hx_ - 0.3, hy - 3.0, ["000000000", ".0ggbbbc0", "..0gbbcd0", "..0bbccd0", "...0ccd0.", "....000.."],
              {"0": ("gobskin", 0), "g": ("eye", 4), "b": ("eye", 3), "c": ("eye", 2), "d": ("eye", 1)})
     r.shade(r.m_ellipse(hx_ + 1.6, hy + 1.0, 1.8, 0.9), lambda t: 2.5 if 1 <= t <= 2 else t)
     my = hy + 3 + p.mouth
