@@ -98,9 +98,9 @@ def snow_caps(c, mats, depth=(2, 4), seed=0, min_thick=0):
     return c
 
 
-def drop_small_snow(c, n):
-    """Round 7: snow pieces under n texels (crumbs at the forks) go back to bark."""
-    ks, kb = c.mid("snow"), c.mid("bark")
+def drop_small_snow(c, n, back="bark"):
+    """Round 7: snow pieces under n texels (crumbs at the forks) go back to bark (round 9: or `back`)."""
+    ks, kb = c.mid("snow"), c.mid(back)
     m = c.mat == ks
     seen = np.zeros_like(m)
     for y in range(c.h):
@@ -257,6 +257,7 @@ def pine(season, frame):
                     c.tone[y + dy, x + dx] = min(6, t + 1) if lit else max(1, t - 1)
     if season == "winter":
         snow_caps(c, ("pine",), depth=(2, 5), seed=3)
+        drop_small_snow(c, 4, back="pine")  # round 9: no 1-3 texel snow crumbs on the needles
     return finish(c, loose=())
 
 
@@ -613,13 +614,39 @@ TREES = {"oak_l": lambda s, f: broadleaf("oak_l", s, f), "oak_m": lambda s, f: b
          "sapling": lambda s, f: broadleaf("sapling", s, f), "pine": pine}
 
 
+def lone_snow_to_needles(img):
+    """Round 9: clean_isolated turns a few lone snow texels on the pine's silhouette steps into the
+    needle outline and leaves the snow outline texel above them alone (1-texel snow pieces). A snow
+    texel with no snow texel beside it (4-neighbourhood) takes its darkest opaque neighbour's colour."""
+    a = np.array(img.convert("RGBA"))
+    snow = {tuple(int(v) for v in c) for c in SNOW}
+    H, W = a.shape[:2]
+    m = np.zeros((H, W), bool)
+    for y in range(H):
+        for x in range(W):
+            m[y, x] = a[y, x, 3] == 255 and tuple(int(v) for v in a[y, x, :3]) in snow
+    b = a.copy()
+    for y, x in zip(*np.nonzero(m)):
+        nb = [(y + dy, x + dx) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)) if 0 <= y + dy < H and 0 <= x + dx < W]
+        if any(m[p] for p in nb):
+            continue
+        opq = [a[p] for p in nb if a[p][3] == 255]
+        if opq:
+            b[y, x] = min(opq, key=lambda c: int(c[0]) + int(c[1]) + int(c[2]))
+    from PIL import Image
+    return Image.fromarray(b, "RGBA")
+
+
 def write(season):
     pre = PREFIX[season]
     out = []
     for kind, fn in TREES.items():
         frames = 1 if (season == "winter" and kind != "pine") else 3
         for f in range(frames):
-            out.append(save(clean_isolated(fn(season, f).image()), os.path.join(OUT, f"{pre}plains.tree.v3.{kind}.{f}.png")))
+            img = clean_isolated(fn(season, f).image())
+            if season == "winter" and kind == "pine":
+                img = lone_snow_to_needles(img)
+            out.append(save(img, os.path.join(OUT, f"{pre}plains.tree.v3.{kind}.{f}.png")))
     for kind, (fn, frames) in PROPS.items():
         for f in range(frames):
             out.append(save(clean_isolated(fn(season, f).image()), os.path.join(OUT, f"{pre}plains.prop.v3.{kind}.{f}.png")))

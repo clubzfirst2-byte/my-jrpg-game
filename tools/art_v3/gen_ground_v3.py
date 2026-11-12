@@ -386,7 +386,7 @@ def _push(t, d):
     return np.sin(np.pi * t) ** 2 * np.clip(1 - d, 0, 1)  # (symmetric along the side: mirrors join)
 
 
-def flow_field(bits, variant, raw=False):
+def flow_field(bits, variant, raw=False, sset=""):
     """The corners' bilinear blend + a weak wobble every tile shares + for each crossed side a push of
     +0.26 (state 1) or -0.26 (state 0) reaching the middle of the tile + an inner shape (0 on the
     tile's edges). Both tiles sharing a side compute the same value along it (the other sides' pushes
@@ -405,7 +405,7 @@ def flow_field(bits, variant, raw=False):
         shape, states = 0, {sd: (variant >> i) & 1 for i, sd in enumerate(SIDES)}
     else:
         shape, states = variant >> 2, {sides[0]: variant & 1, sides[1]: (variant >> 1) & 1}
-    amp = 0.20 if bits == "1111" else 0.35
+    amp = 0.20 if bits == "1111" else (0.24 if bits in STRAIGHT else 0.35)  # round 9: calmer straight sets
     shared = _tile_noise(901)
     shared = (shared + shared[:, ::-1]) / 2  # left-right symmetric, so a mirrored tile meets the others
     F = f + 0.08 * shared + amp * inner * edge_fade * _tile_noise(1000 + shape * 37 + int(bits, 2))
@@ -414,45 +414,129 @@ def flow_field(bits, variant, raw=False):
     for sd, on in states.items():
         t, d = {"N": (u, v), "S": (u, 1 - v), "W": (v, u), "E": (v, 1 - u)}[sd]
         F = F + (0.26 if on else -0.26) * _push(t, d)
-    if bits in STRAIGHT and not raw:  # round 8: the middle set to its own width (see STRAIGHT)
-        F = F + _middle_step(bits, variant) * inner * edge_fade
+    if bits in STRAIGHT and not raw:  # round 9: the patch's width set per variant (see STRAIGHT)
+        F = F + _middle_step(bits, variant, sset) * _straight_bump(bits)
     return F
 
 
-# Round 8: the straight sets (border across 2 OPPOSITE sides; 0110 is the mirror of 1001). Their middles
-# clustered at 34-42 texels in 6 of the 12 variants, so a column of them read as a ruled edge. Each
-# variant's middle (the patch's width across rows 20-43 of F > 0.5, from the patch side) is now set to
-#     32 + 6 * (s(A) + s(B) - 1) + (-14, 0, +14)[inner shape]
-# i.e. 12..52 texels; down a column the inner shape cycles (tx + 2 ty) % 3, so 3 tiles in a row always
-# hold 3 different middles >= 8 texels apart.
+# Round 9 (round 8 moved only rows 20-43 and split 12 fields): the straight sets (border across 2
+# OPPOSITE sides; 0110 is the mirror of 1001). Each variant's patch width is set to
+#     WANT = 32 + 4 * (s(A) + s(B) - 1) + (-12, 0, +12)[inner shape]      (16..48 texels)
+# by adding step * bump. The bump is flat along the border (rows ~12-51) and 0 on all four sides, so
+# the whole outline moves, not only the middle. Width = median over rows 8-55 of the outermost F > 0.5
+# texel from the patch side. Only steps whose F > 0.5 is ONE piece touching both crossed sides (and
+# whose F <= 0.5 is one piece too) are taken; among them the one nearest WANT, then the smallest.
+# Down a column the inner shape cycles (tx + 2 ty) % 3, so 3 tiles in a row hold all 3 inner shapes.
 STRAIGHT = {"1001": "W", "1100": "N", "0011": "S"}  # the patch's side
 
 
-def _patch_width(F, side):
-    a = F > 0.5
+def _orient(a, side):
+    """-> rows along the border, columns from the patch side."""
     if side in ("N", "S"):
         a = a.T
-    cov = a[20:44].mean(0)
     if side in ("E", "S"):
-        cov = cov[::-1]
-    ok = np.nonzero(cov >= 0.4)[0]
-    return int(ok.max()) + 1 if len(ok) else 0
+        a = a[:, ::-1]
+    return a
 
 
-@functools.lru_cache(maxsize=None)
-def _middle_step(bits, variant):
-    sA, sB, shape = variant & 1, (variant >> 1) & 1, variant >> 2
-    want = 32 + 6 * (sA + sB - 1) + (-14, 0, 14)[shape]
-    F0 = flow_field(bits, variant, raw=True)
+def _straight_bump(bits):
     yy, xx = np.mgrid[0:64, 0:64]
     u, v = (xx + 0.5) / 64, (yy + 0.5) / 64
     edge_fade = np.clip(np.minimum(np.minimum(xx + 0.5, 63.5 - xx), np.minimum(yy + 0.5, 63.5 - yy)) / 6, 0, 1)
-    bump = np.sin(np.pi * u) * np.sin(np.pi * v) * edge_fade
-    steps = [i / 100 for i in range(-150, 151)]  # the smallest step whose width is nearest the want
-    return min(steps, key=lambda c: (abs(_patch_width(F0 + c * bump, STRAIGHT[bits]) - want), abs(c)))
+    along, across = (v, u) if STRAIGHT[bits] in ("W", "E") else (u, v)
+    return np.clip(1.8 * np.sin(np.pi * along), 0, 1) * np.sin(np.pi * across) * edge_fade
 
 
-def flow_shape(sset, bits, variant):
+def _patch_width(F, side):
+    a = _orient(F > 0.5, side)[8:56]
+    out = [int(np.nonzero(r)[0].max()) + 1 if r.any() else 0 for r in a]
+    return float(np.median(out))
+
+
+def _pieces(m):
+    """Number of 4-connected pieces of the True texels."""
+    seen = np.zeros(m.shape, bool)
+    n = 0
+    H, W = m.shape
+    for y0, x0 in zip(*np.nonzero(m)):
+        if seen[y0, x0]:
+            continue
+        n += 1
+        st = [(y0, x0)]
+        seen[y0, x0] = True
+        while st:
+            y, x = st.pop()
+            for yy, xx in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)):
+                if 0 <= yy < H and 0 <= xx < W and m[yy, xx] and not seen[yy, xx]:
+                    seen[yy, xx] = True
+                    st.append((yy, xx))
+    return n
+
+
+def _whole(F, bits):
+    a = _orient(F > 0.5, STRAIGHT[bits])  # rows along the border: row 0 and row 63 are the crossed sides
+    return _pieces(a) == 1 and a[0].any() and a[-1].any() and _pieces(~a) == 1
+
+
+def straight_want(variant):
+    sA, sB, shape = variant & 1, (variant >> 1) & 1, variant >> 2
+    return 32 + 4 * (sA + sB - 1) + (-12, 0, 12)[shape]
+
+
+def _step_for(F0, bump, bits, target):
+    steps = sorted((abs(_patch_width(F0 + c * bump, STRAIGHT[bits]) - target), abs(c), c)
+                   for c in (i / 100 for i in range(-200, 201)))
+    for _, _, c in steps:
+        if _whole(F0 + c * bump, bits):
+            return c
+    return 0.0
+
+
+def drawn_width(m, side):
+    """The DRAWN width of a straight shape (opaque mask m), from the patch side: (A, B, E) with
+    A = median over rows 20-43 of the outermost texel (6-row running extreme) + 1 and
+    B = the last column (5-column mean of rows 20-43) holding >= 40 % of the patch side's own cover + 1."""
+    m = _orient(m, side)
+    xs = np.array([np.nonzero(r)[0].max() if r.any() else np.nan for r in m], float)
+    run = [np.nanmax(xs[max(0, y - 3):y + 3]) if np.isfinite(xs[max(0, y - 3):y + 3]).any() else np.nan for y in range(64)]
+    a = float(np.nanmedian(run[20:44])) + 1
+    c = np.convolve(m[20:44].mean(0), np.ones(5) / 5, "same")
+    ref = c[:16].mean() if c[:16].mean() > 0.05 else c.max()
+    ok = np.nonzero(c >= 0.4 * ref)[0]
+    b = float(ok.max()) + 1 if len(ok) else 0.0
+    cs = m[4:60].sum(0).astype(float)  # E: the column holding 95 % of the marks of rows 4-59 (the eye's edge)
+    e = float(np.searchsorted(np.cumsum(cs) / max(1.0, cs.sum()), 0.95)) + 1
+    return a, b, e
+
+
+@functools.lru_cache(maxsize=None)
+def _middle_step(bits, variant, sset=""):
+    """The step for one straight shape of one set: field widths ("aims") 8..56 every 4 texels, then
+    every texel around the best, are drawn and measured; the step whose DRAWN widths (A and B, the
+    larger miss) are nearest WANT (round 9: and E, the 95 % edge of rows 4-59); when still more than 4 off, the steps within 0.1 of it are tried
+    (then the smaller step) is kept."""
+    want = straight_want(variant)
+    F0 = flow_field(bits, variant, raw=True)
+    bump = _straight_bump(bits)
+    got = {}
+
+    def score(aim, c=None):
+        c = _step_for(F0, bump, bits, aim) if c is None else c
+        if c not in got:
+            sh = flow_shape(sset, bits, variant, F=F0 + c * bump)
+            got[c] = max(abs(w - want) for w in drawn_width(sh.mat != 0, STRAIGHT[bits]))
+        return got[c], abs(c), c
+    best = min(score(a) for a in range(8, 57, 4))
+    near = [a for a in range(8, 57, 4) if score(a) == best][0]
+    best = min([best] + [score(a) for a in range(near - 3, near + 4)])
+    if best[0] > 4:  # still off: every step 0.01 apart within 0.1 of it (whole fields only)
+        c0 = best[2]
+        more = [round(c0 + i / 100, 2) for i in range(-10, 11)]
+        best = min([best] + [score(None, c) for c in more if _whole(F0 + c * bump, bits)])
+    return best[2]
+
+
+def flow_shape(sset, bits, variant, F=None):
     """One flow SHAPE tile (grey on transparent): bundles of 2-3 blades (summer / autumn set) or drift
     streaks (winter set), placed stratified over the tile and 5 rows below it, inside the patch of
     flow_field; then the rows / columns evened out (only growing existing marks or trimming without
@@ -460,14 +544,28 @@ def flow_shape(sset, bits, variant):
     c = Canvas(64, 64, {"shape": [(0, 0, 0)] * 4 + [(SHAPE_BODY,) * 3, (234,) * 3, (SHAPE_TIP,) * 3]})
     seed = hsh(int(bits, 2), variant, 5 if sset else 4) & 0xFFFFFF
     rng = random.Random(seed)
-    F = flow_field(bits, variant)
+    if F is None:
+        F = flow_field(bits, variant, sset=sset)
     k = c.mid("shape")
     BODY, TIP = 4, 6
+
+    soft = F > 0.38
+    if bits in STRAIGHT:  # round 9: the soft rim only 2 texels wide (the flat step leaves wide 0.38-0.5 tongues)
+        core = F > 0.5
+        near = core.copy()
+        for _ in range(2):
+            g = near.copy()
+            g[1:] |= near[:-1]
+            g[:-1] |= near[1:]
+            g[:, 1:] |= near[:, :-1]
+            g[:, :-1] |= near[:, 1:]
+            near = g
+        soft = soft & near
 
     def inside(x, y):
         xi, yi = min(63, max(0, int(x))), min(63, max(0, int(y)))
         val = F[yi, xi]
-        return val > 0.5 or (val > 0.38 and rng.random() < 0.35)
+        return val > 0.5 or (soft[yi, xi] and rng.random() < 0.35)
     winter = bool(sset)
     N = 88 if not winter else 64  # winter: as many streaks as round 6, softer colour (FLOW_TINT)
     perm = list(range(N))
