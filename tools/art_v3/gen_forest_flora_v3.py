@@ -52,24 +52,29 @@ def canvas(w, h, season, extra=None):
 
 # ------------------------------------------------------------------ conifers
 
-CONIFERS = {  # W, H, tiers, crown top, crown bottom (fraction of H), half width at the bottom, trunk hw, droop
-    "pine_s": (64, 120, 5, 0.02, 0.80, 30, 3.5, 0.0, 21),
-    "pine_l": (128, 256, 8, 0.01, 0.80, 62, 7.0, 0.0, 22),
-    "spruce": (80, 208, 9, 0.01, 0.84, 34, 4.0, 1.0, 23),
+CONIFERS = {  # W, H, tiers, crown top, crown bottom (fraction of H), half width at the bottom, trunk hw, droop, seed, gap
+    # round 2 (P2-6): the three are told apart at 1x -- pine_s the plain cone; pine_l fewer tiers with
+    # the trunk showing between them (a tall old pine); spruce many fine tiers whose tips hang down,
+    # in a darker, bluer green
+    "pine_s": (64, 120, 5, 0.02, 0.80, 30, 3.5, 0.0, 21, 0.0),
+    "pine_l": (128, 256, 6, 0.01, 0.74, 56, 7.0, 0.0, 22, 0.45),
+    "spruce": (80, 208, 12, 0.01, 0.86, 32, 4.0, 2.5, 23, 0.0),
 }
+SPRUCE = lift_ramp(["#061214", "#0e2426", "#122e30", "#163834", "#1c4238", "#244c44", "#365e56"])
 
 
 def conifer(kind, season, frame):
     """The plains pine's way (tiers with jagged hanging edges, shaded as one cone, a shadow under
     each tier, needle sprays as 2-texel strokes, snow on the tiers in winter), made general: size,
     number of tiers, width and (spruce) tiers hanging down."""
-    W, H, n, top, bot, hw_bot, tw, droop, seed = CONIFERS[kind]
+    W, H, n, top, bot, hw_bot, tw, droop, seed, gap = CONIFERS[kind]
     rng = random.Random(seed)
-    c = canvas(W, H, season)
+    c = canvas(W, H, season, {"pine": SPRUCE} if kind == "spruce" else None)
     G = H - 3
     cx = W / 2
     yb_last = int(H * bot)
-    trunk = c.m_poly([(cx - tw, G), (cx - tw * 0.8, yb_last - 12), (cx + tw * 0.8, yb_last - 12), (cx + tw, G)])
+    ttop = (int(H * top) + 20) if gap else (yb_last - 12)  # pine_l: the trunk runs up between the tiers
+    trunk = c.m_poly([(cx - tw, G), (cx - tw * 0.8, ttop + 12), (cx - 1.5, ttop), (cx + 1.5, ttop), (cx + tw * 0.8, ttop + 12), (cx + tw, G)])
     flare = lock(c, (cx - tw * 0.9, G - 5), (cx - tw * 3, G + 1), tw * 2, -1.5, 2) | \
         lock(c, (cx + tw * 0.9, G - 5), (cx + tw * 3, G + 1), tw * 2, 1.5, 2)
     c.fill(trunk | flare, "bark")
@@ -87,6 +92,8 @@ def conifer(kind, season, frame):
         skew = rng.uniform(-0.12, 0.12)
         cxi = cx + off + round(sway * (1 - i / (n - 1)))
         yt = y_top if i == 0 else int(y_top + (yb_last - y_top) * (0.12 + 0.88 * (i / n) ** 1.1)) - int(H * 0.04)
+        if gap and i:  # a gap above each tier (the trunk shows)
+            yt = int(yt + (yb - yt) * gap)
         pts = [(cxi + skew * 10, yt)]
         if i:
             pts.append((cxi + hw * 0.5, yb - H * 0.055))
@@ -124,34 +131,92 @@ def conifer(kind, season, frame):
     return FL.finish(c, loose=())
 
 
-# ------------------------------------------------------------------ birch
+# ------------------------------------------------------------------ birch (round 2: its own form)
+
+BIRCH_BRANCHES = [  # (height on the trunk 0..1 from the foot, side -1 left / 1 right, length, rise in degrees)
+    (0.36, 1, 22, 38), (0.45, -1, 26, 46), (0.55, 1, 28, 52), (0.63, -1, 20, 58), (0.71, 1, 22, 62),
+    (0.79, -1, 16, 66), (0.86, 1, 14, 70)]
+BIRCH_CLUMPS = [  # leaf clusters at branch tips and up the trunk: (branch index or -1 = trunk, t along, rx, ry)
+    (0, 1.0, 11, 8), (1, 1.0, 12, 9), (1, 0.55, 8, 6), (2, 1.0, 12, 9), (2, 0.5, 9, 7), (3, 1.0, 10, 8),
+    (4, 1.0, 10, 8), (5, 1.0, 9, 7), (6, 1.0, 8, 7), (-1, 0.97, 9, 8), (-1, 0.84, 8, 6), (4, 0.5, 7, 6)]
+
 
 def birch(season, frame):
-    """The plains oak's passed drawing (leaf masses with clear light / shade faces, the trunk tapering
-    into the crown; winter bare with snow on the thick limbs) in birch colours: white bark with dark
-    horizontal marks (2-4 wide, 2 high) and a light crown (autumn: yellow). 112 x 160 (the oak_m frame)."""
+    """Round 2 (inspection P1-1: the round-1 birch was the plains oak recoloured): a birch of its own.
+    A tall slender trunk (7 -> 2 texels, leaning a little to the right, 80 % of the height), 7 thin
+    branches rising at 38-70 degrees, alternating sides at uneven heights, short at the top; small
+    light leaf clusters (rx 7-12) at the branch tips and up the trunk, more on the right (asymmetric),
+    shaded the broadleaf way (leaf_masses). Winter: the same skeleton bare, twigs off the branch tips,
+    snow only on the thick parts. 112 x 160, the foot at the bottom centre."""
+    W, H = 112, 160
     ramps = {"bark": BIRCH_BARK}
     if season in BIRCH_LEAF:
         ramps["leaf"] = BIRCH_LEAF[season]
-    old = FL.canvas
-    FL.canvas = lambda w, h, s: canvas(w, h, s, ramps)
-    try:
-        c = FL.broadleaf("oak_m", season, frame)
-    finally:
-        FL.canvas = old
-    kb = c.mid("bark")
-    rng = random.Random(41)
-    ys, xs = np.nonzero(c.mat == kb)
-    for y, x in zip(ys, xs):  # the birch's dark marks: short dashes across the bark, on its wide parts
-        if (y + 3 * (x // 5)) % 9 or rng.random() > 0.5:
+    c = canvas(W, H, season, ramps)
+    rng = random.Random(43)
+    G = H - 3
+    top = int(H * 0.12)
+
+    def trunk_at(t):  # t 0 = foot, 1 = top
+        return (W / 2 - 2 + 6 * t * t, G - (G - top) * t)
+    pts = [trunk_at(i / 10) for i in range(11)]
+    trunk = np.zeros((H, W), bool)
+    for i in range(10):
+        trunk |= lock(c, pts[i], pts[i + 1], 7.5 - 5.2 * i / 10, 0, 7.5 - 5.2 * (i + 1) / 10)
+    roots = lock(c, trunk_at(0.02), (W / 2 - 12, G + 1), 6, -1, 2) | lock(c, trunk_at(0.02), (W / 2 + 9, G + 1), 6, 1, 2)
+    sway = SWAY[frame]
+    tips = []
+    branches = np.zeros((H, W), bool)
+    for (t, side, ln, rise) in BIRCH_BRANCHES:
+        bx, by = trunk_at(t)
+        a = math.radians(rise)
+        sw = sway * t  # the upper branches move more
+        tip = (bx + side * math.cos(a) * ln + sw, by - math.sin(a) * ln)
+        branches |= lock(c, (bx, by), tip, 4.0 - 1.5 * t, side * 2, 1.4)
+        tips.append(((bx, by), tip))
+    wood = trunk | roots | branches
+    if season == "winter":
+        twigs = np.zeros((H, W), bool)
+        for (b0, tip) in tips:
+            for k in range(2):
+                ang = math.radians(rng.uniform(50, 85))
+                side = 1 if tip[0] > b0[0] else -1
+                ln = rng.uniform(7, 12)
+                twigs |= lock(c, tip, (tip[0] + side * math.cos(ang) * ln * (0.4 + 0.6 * k), tip[1] - math.sin(ang) * ln), 2.2, 0.5, 1.0)
+        wood |= twigs
+    c.fill(wood, "bark")
+    c.shade_part(wood, tones=(2, 3, 4, 5, 6), light=(-0.8, -0.3, 0.5), norm=True)
+    # the birch's marks: short dark dashes across the trunk (2-4 wide, 2 high), uneven
+    ys, xs = np.nonzero(trunk)
+    for y, x in zip(ys, xs):
+        if (y * 7 + (x // 3) * 3) % 13 or rng.random() > 0.55:
             continue
         w = rng.randint(2, 4)
-        if all(c.mat[y, x + d] == kb and c.mat[y + 1, x + d] == kb for d in range(w) if x + d < c.w and y + 1 < c.h):
+        if all(trunk[y, x + d] and trunk[y + 1, x + d] for d in range(w) if x + d < W and y + 1 < H):
             for d in range(w):
-                if x + d < c.w and y + 1 < c.h:
+                if x + d < W and y + 1 < H:
                     c.tone[y, x + d] = 1
                     c.tone[y + 1, x + d] = 1
-    return c
+    if season == "winter":
+        FL.snow_caps(c, ("bark",), depth=(2, 2), seed=7, min_thick=5)
+        FL.drop_small_snow(c, 10)
+        return FL.finish(c, loose=("bark", "snow"))
+    clumps = []
+    for (bi, t, rx, ry) in BIRCH_CLUMPS:
+        if bi < 0:
+            x, y = trunk_at(t)
+            x += sway * t
+        else:
+            (b0, tip) = tips[bi]
+            x, y = b0[0] + (tip[0] - b0[0]) * t, b0[1] + (tip[1] - b0[1]) * t
+        clumps.append((x, y - 2, rx, ry))
+    crown = np.zeros((H, W), bool)
+    for (x, y, rx, ry) in clumps:
+        crown |= c.m_ellipse(x, y, rx + 4, ry + 4)
+    back = np.zeros((H, W), bool)  # no dark inside behind the clusters: the birch is airy (gaps show)
+    from gen_nature_v3 import leaf_masses
+    leaf_masses(c, clumps, rng, crown, back, before=None)
+    return FL.finish(c)
 
 
 # ------------------------------------------------------------------ props
@@ -164,9 +229,9 @@ def fern(season, frame):
     G = H - 2
     k = c.mid("fern")
     fronds = [(-1.9, 26), (-1.35, 30), (-1.0, 24), (-1.57, 32), (-2.15, 24), (-0.7, 20), (-2.5, 19)]
+    if season == "winter":  # round 2: three dry frond tips standing out of a snow mound (no brown smudge)
+        fronds = [(-1.75, 22), (-1.3, 20), (-2.0, 17)]
     for i, (a, ln) in enumerate(fronds):
-        if season == "winter":
-            ln = int(ln * 0.7)
         for d in range(ln):
             t = d / ln
             bend = 0.9 * t * t * (1 if math.cos(a) > 0 else -1)
@@ -184,8 +249,10 @@ def fern(season, frame):
                         if 1 <= X < W - 1 and 1 <= Y < H - 1:
                             c.mat[Y, X], c.tone[Y, X] = k, 5 if s < 0 else 2
     if season == "winter":
-        FL.snow_caps(c, ("fern",), depth=(2, 2), seed=31)
-        FL.drop_small_snow(c, 4, back="fern")
+        mound = c.m_ellipse(W / 2, G + 2, 15, 8) & c.m_rect(0, 0, W - 1, G)
+        c.fill(mound, "snow")
+        c.shade_part(mound, tones=(3, 4, 5, 6), light=(-0.5, -0.8, 0.5), norm=True)
+        return FL.finish(c, loose=("fern", "snow"))
     return FL.finish(c, loose=("fern",))
 
 
@@ -301,11 +368,18 @@ SNOW_RGB = [tuple(int(v) for v in c) for c in FL.SNOW]
 
 
 def clean_snow(img, n=4):
+    """Both passes (round 2): all snow tones 1-6, then only the bright ones (4-6): a bright piece of
+    2-3 texels inside the shaded snow is a crumb too (inspection P3)."""
+    img = _clean_snow(_clean_snow(img, n, SNOW_RGB[1:]), n, SNOW_RGB[4:])
+    return _clean_snow(img, n, SNOW_RGB[1:])  # what the bright pass leaves (a shaded piece) goes too
+
+
+def _clean_snow(img, n, tones):
     """A last pass on the picture: a piece of snow (snow tones 1-6, not the outline) smaller than n
     texels takes the commonest neighbouring colour that is not snow (no crumbs: STYLE 7.1b)."""
     a = np.array(img.convert("RGBA"))
     H, W = a.shape[:2]
-    snow = set(SNOW_RGB[1:])
+    snow = set(tones)
     m = np.zeros((H, W), bool)
     for y, x in zip(*np.nonzero(a[..., 3] == 255)):
         m[y, x] = tuple(int(v) for v in a[y, x, :3]) in snow

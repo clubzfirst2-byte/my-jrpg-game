@@ -223,7 +223,7 @@ def flow_shape(sset, bits, variant, F=None):
     def inside(x, y):
         xi, yi = min(63, max(0, int(x))), min(63, max(0, int(y)))
         return F[yi, xi] > 0.5 or (soft[yi, xi] and rng.random() < 0.35)
-    N = 64 if winter else 70
+    N = 64 if winter else 40  # round 2: fewer, bigger cushions (fewer edges: no "scribble")
     perm = list(range(N))
     rng.shuffle(perm)
     pts = [((perm[i] + rng.random()) / N * 67 - 2.5, (i + rng.random()) / N * 69) for i in range(N)]
@@ -239,7 +239,7 @@ def flow_shape(sset, bits, variant, F=None):
                         c.mat[Y, X] = k
                         c.tone[Y, X] = BODY if j == 0 else TIP
             continue
-        w, h = rng.choice(((3, 2), (4, 2), (5, 3), (6, 3), (4, 3)))
+        w, h = rng.choice(((6, 3), (7, 3), (8, 4), (9, 4), (6, 4)))
         for dy in range(h):
             for dx in range(w):
                 if dy == h - 1 and w >= 4 and dx in (0, w - 1):
@@ -247,12 +247,13 @@ def flow_shape(sset, bits, variant, F=None):
                 X, Y = int(x) + dx, int(y) - dy
                 if 0 <= X < 64 and 0 <= Y < 64:
                     c.mat[Y, X] = k
-                    c.tone[Y, X] = TIP if dy == h - 1 else BODY
+                    c.tone[Y, X] = TIP  # round 2: one flat grey per cushion (no inner tip / body edge)
     ins = F > 0.5
     G.GROW_H[0] = winter
-    G._balance(c, ins, k, BODY, rng, 0.12)
+    grow = BODY if winter else TIP
+    G._balance(c, ins, k, grow, rng, 0.12)
     G._drop_small(c, 2)
-    G._fill_thin(c, ins, k, BODY, rng)
+    G._fill_thin(c, ins, k, grow, rng)
     G._drop_small(c, 3)  # round 1: no pieces of 1-3 texels away from the tile's edge
     return c
 
@@ -284,17 +285,14 @@ def write_flow():
 
 
 def flow_tints(season):
-    """FOREST_FLOW_TINT[season][kind] (the tip = the colour, the body 214 / 255 of it):
-    summer d = the moss's tone 1 (deep shade under the canopy), l = the sunny moss's tone 5 (a sun
-    fleck); autumn d = the autumn moss tone 2, l = an old-gold leaf litter; winter = the plains winter
-    tints (blue shade drifts, bright snow)."""
-    r = ramps_for(season)
-    hx = lambda c: "#%02x%02x%02x" % tuple(c)  # noqa: E731
-    if season == "summer":
-        return {"d": hx(r["moss"][1]), "l": hx(r["sunny"][5])}
-    if season == "autumn":
-        return {"d": hx(r["moss"][2]), "l": "#8a7a3a"}
-    return {"d": "#aabcd6", "l": "#fafcff"}
+    """FOREST_FLOW_TINT[season][kind] (round 2: the summer / autumn cushions are ONE flat grey, 255,
+    so the shape is the tint itself; winter keeps the plains' drift streaks, body 214 / tip 255).
+    Chosen so the patch reads (colour difference to the plain moss ΔE 1.4-2.4) without grain (texel
+    pairs more than 15 apart in brightness: 3-5 % on full patches):
+      summer d #1a382a (deep shade), l #2d5632 (a sun fleck); autumn d #4a3c20 (browner, not darker),
+      l #544c28 (old gold, near the moss's brightness); winter: the plains winter tints."""
+    return {"summer": {"d": "#1a382a", "l": "#2d5632"}, "autumn": {"d": "#4a3c20", "l": "#544c28"},
+            "winter": {"d": "#aabcd6", "l": "#fafcff"}}[season]
 
 
 def ground_tile(tx, ty, season="summer", load=None):
@@ -319,7 +317,8 @@ def edge_overlay(season, mask, variant):
     """Forest moss over a lower ground (the v2 curve at 2x, gen_ground_v3.edge_inside): moss with
     cushions inside, a cushion lip 3 texels (lit facing up / left: 4-5, shaded: 1-2), moss tufts
     (2 x 2 / 3 x 2) right over the border, not on the 2 outer rows / columns; winter: the plains winter
-    drift lip (no tufts, a blue shade under a drift lying above)."""
+    snow with no rim and no shade line (round 2: snow meets snow, no line round the border), no tufts. In winter the game draws THIS edge over the plains snow at a forest / plains
+    border (the pair's priority swapped in winter only, FOREST.md 1), so that border has no line."""
     T = G._v2_transitions()
     F, inside = G.edge_inside(mask, variant)
     c = Canvas(64, 64, ramps_for(season))
@@ -327,7 +326,18 @@ def edge_overlay(season, mask, variant):
     c.mat[inside] = k
     c.tone[inside] = 3
     rng0 = random.Random(mask * 17 + variant + 7)
-    clumps_in(c, inside, "moss", 4, 0.7, rng0, mask * 3 + variant, n=64)
+    # round 2: the inside like the base (a few small mottles and litter marks, winter in the "fine"
+    # ramp), not a field of cushions: the border tiles must not show as blocks next to the base
+    mott = "fine" if season == "winter" else "moss"
+    for i in range(10):
+        r = rng0.uniform(3, 6)
+        m_ = G.blob(64, rng0.uniform(0, 64), rng0.uniform(0, 64), r, r * rng0.uniform(0.5, 0.9), mask * 101 + variant * 7 + i)
+        clumps_in(c, m_ & inside, mott, 2 if rng0.random() < 0.6 else 4, 0.8, rng0, mask * 3 + variant + i, n=64)
+    kinds = {"summer": (0, 2), "autumn": (0, 3), "winter": (5,)}[season]
+    for (x, y) in G.scatter(rng0, 64, 4, 14, 8):
+        if inside[int(y), int(x)] and inside[min(63, int(y) + 3), int(x)]:
+            litter(c, x, y, rng0.choice(kinds), 3, rng0, season)
+    c.mat[~inside] = 0
     outside = ~inside
     d = np.full((64, 64), 9)
     d[outside] = 0
@@ -345,8 +355,8 @@ def edge_overlay(season, mask, variant):
                 continue
             gx, gy = T.gradient(mask, (x + 0.5) / 2 - 0.5, (y + 0.5) / 2 - 0.5)
             lit = (gx + gy) > 0.05
-            if season == "winter":
-                c.tone[y, x] = (6 if d[y, x] == 1 else 5) if lit else (3 if d[y, x] == 1 else 4)
+            if season == "winter":  # round 2: no rim at all (snow meeting snow: no line round the border)
+                c.tone[y, x] = 3
             else:
                 c.tone[y, x] = (5 if d[y, x] == 1 else 4) if lit else (1 if d[y, x] == 1 else 2)
     do = np.full((64, 64), 9)
@@ -360,13 +370,7 @@ def edge_overlay(season, mask, variant):
         grow[:, :-1] |= prev[:, 1:]
         do[grow & (do == 9)] = step
     if season == "winter":
-        for y in range(2, 62):
-            for x in range(2, 62):
-                if not inside[y, x] and do[y, x] == 1:
-                    gx, gy = T.gradient(mask, (x + 0.5) / 2 - 0.5, (y + 0.5) / 2 - 0.5)
-                    if gy < -0.05:
-                        c.mat[y, x] = k
-                        c.tone[y, x] = 2
+        pass  # round 2: no 1-texel blue shade outside the drift (it read as a line round the border)
     else:  # moss tufts over the border: 2 x 2 / 3 x 2 clumps whose base touches the moss
         rng = random.Random(mask * 31 + variant * 7 + len(season))
         for y in range(3, 60):

@@ -5,8 +5,9 @@ A map 48 x 24 tiles: forest moss on the right two thirds, the plains grass on th
 Both are drawn with the v2 dual-grid rule (NAMES.md 2): per display tile the base of the lowest terrain
 (forest moss) and, where plains corners are present, the plains edge overlay <prefix>.edge.<mask>.<v>
 (the variant from tools/terrain_v2/render_ref.edge_variant). v3: the forest base + the flow layer
-(only on display tiles whose 3 x 3 neighbourhood is all forest: the flow fades out before a border, as
-the game does), the plains v3 base + flow, the plains v3 edges over the forest; trees and props.
+(round 2: per corner, as the game does: a corner with any non-forest cell around it is "m", on the
+plains side too); winter: at the forest / plains border the forest's winter edge is drawn over the plains
+snow (the pair's priority swapped in winter, FOREST.md 1), the plains v3 base + flow, the plains v3 edges over the forest; trees and props.
 Current: v2 base tiles (render_ref.calm_number) and v2 plains edges; the v1 forest.pine at the same feet.
   <season>_15pro_now_k2.png / <season>_15pro_v3_k2.png   2556 x 1179 (1 game px = 8 px)
   <season>_se_now_k1.png / <season>_se_v3_k1.png         1334 x 750 (1 game px = 4 px)
@@ -50,8 +51,54 @@ def grid():
     return rows
 
 
-def all_forest(g, i, j):
-    return all(RR.terr(g, x, y) == "moss" for y in range(j - 1, j + 3) for x in range(i - 1, i + 3))
+def masked_flow_key(g, terrain, tx, ty):
+    """The game's rule (NAMES.md 3.1): a corner is 'm' when any map cell around it is not this ground,
+    then gen_ground_v3.flow_key's rule with those corners (round 2: per corner, both grounds)."""
+    def corner(cx, cy):
+        if any(RR.terr(g, cx + dx, cy + dy) != terrain for dx in (-1, 0, 1) for dy in (-1, 0, 1)):
+            return "m"
+        return G.flow_corner(cx, cy)
+    cs = [corner(tx, ty), corner(tx + 1, ty), corner(tx + 1, ty + 1), corner(tx, ty + 1)]
+    kinds = {k for k in cs if k != "m"}
+    if not kinds:
+        return None
+    if all(c == G.flow_corner(x, y) for c, (x, y) in zip(cs, ((tx, ty), (tx + 1, ty), (tx + 1, ty + 1), (tx, ty + 1)))):
+        return G.flow_key(tx, ty)
+    kind = kinds.pop()
+    bits = "".join("1" if k == kind else "0" for k in cs)
+    flip = bits in G.MIRROR
+    stored = G.MIRROR.get(bits, bits)
+
+    def st(side):
+        if flip and side in ("E", "W"):
+            side = "W" if side == "E" else "E"
+        return G.side_state(tx, ty, side)
+    sides = G.crossed(stored)
+    if not sides:
+        return kind, stored, G.full_v(tx, ty), bool((G.hsh(tx, ty, 35) >> 2) & 1)
+    if len(sides) == 4:
+        return kind, stored, st("N") + 2 * st("E") + 4 * st("S") + 8 * st("W"), flip
+    return kind, stored, st(sides[0]) + 2 * st(sides[1]) + 4 * ((tx + 2 * ty) % G.INNER_SHAPES), flip
+
+
+def tile_v3(g, terrain, i, j, season):
+    """A v3 base tile with its flow (masked at the corners)."""
+    from PIL import ImageOps
+    pre = PRE[season]
+    if terrain == "moss":
+        t = ld(os.path.join(V3T, f"{pre}forest.grass.v3.{G.macro_of(i // 4, j // 4)}{j % 4}{i % 4}.png")).copy()
+        sset, name, tint = F.FLOW_SETS[season], "forest", F.flow_tints(season)
+    else:
+        t = ld(os.path.join(V3T, f"{pre}plains.grass.v3.{G.macro_of(i // 4, j // 4)}{j % 4}{i % 4}.png")).copy()
+        sset, name, tint = G.FLOW_SETS[season], "plains", G.flow_tints(season)
+    fk = masked_flow_key(g, terrain, i, j)
+    if fk:
+        kind, bits, v, flip = fk
+        sh = ld(os.path.join(V3T, f"{sset}{name}.grassflow.v3.{bits}.{v}.png"))
+        if flip:
+            sh = ImageOps.mirror(sh)
+        t.alpha_composite(G.tinted(sh, tint[kind]))
+    return t
 
 
 def ground(ver, season):
@@ -68,11 +115,16 @@ def ground(ver, season):
                 n = RR.calm_number(i, j) % 32
                 base = ld(os.path.join(V2T, f"{pre}{'forest' if lowest == 'm' else 'plains'}.grass.{n}.png"))
             else:
-                if lowest == "m":
-                    base = F.ground_tile(i, j, season, load=ld) if all_forest(g, i, j) else \
-                        ld(os.path.join(V3T, f"{pre}forest.grass.v3.{G.macro_of(i // 4, j // 4)}{j % 4}{i % 4}.png"))
-                else:
-                    base = G.ground_tile(i, j, season, load=ld)
+                swap = season == "winter" and "moss" in ts and "plains" in ts  # winter: forest edge over plains snow
+                if swap:
+                    base = tile_v3(g, "plains", i, j, season)
+                    m = sum(b for b, t in zip((1, 2, 4, 8), ts) if t == "moss")
+                    v = RR.edge_variant(g, "moss", m, i, j)
+                    base = base.copy()
+                    base.alpha_composite(ld(os.path.join(V3T, f"{pre}forest.grass.v3.edge.{m}.{v}.png")))
+                    im.alpha_composite(base, (i * T, j * T))
+                    continue
+                base = tile_v3(g, "moss" if lowest == "m" else "plains", i, j, season)
             im.alpha_composite(base, (i * T, j * T))
             if lowest == "m" and "plains" in ts:
                 m = sum(b for b, t in zip((1, 2, 4, 8), ts) if t == "plains")

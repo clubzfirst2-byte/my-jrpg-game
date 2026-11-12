@@ -147,16 +147,19 @@ def main():
     # winter snow crumbs
     # the snow tones 1-6 (tone 0 is the snow's outline, not a piece of snow)
     snow_rgb = {tuple(int(v) for v in c) for c in F.G.lift_ramp(["#3a4866", "#7a8cae", "#99abc7", "#b8c8e0", "#cadbe9", "#dce6f2", "#f8fbff"])[1:]}
-    crumbs = 0
+    bright = set(list(F.G.lift_ramp(["#3a4866", "#7a8cae", "#99abc7", "#b8c8e0", "#cadbe9", "#dce6f2", "#f8fbff"]))[4:])
+    bright = {tuple(int(v) for v in c) for c in bright}
+    crumbs = {"tones 1-6": 0, "bright tones 4-6 only": 0}
     for f in files:
         s, g = group(f)
         if s != "winter" or g not in ("tree", "prop"):
             continue
         a = np.array(Image.open(os.path.join(T, f)).convert("RGBA"))
-        m = np.zeros(a.shape[:2], bool)
-        for y, x in zip(*np.nonzero(a[..., 3] == 255)):
-            m[y, x] = tuple(int(v) for v in a[y, x, :3]) in snow_rgb
-        crumbs += sum(1 for n, e in pieces(m) if n < 4)
+        for name, S in (("tones 1-6", snow_rgb), ("bright tones 4-6 only", bright)):
+            m = np.zeros(a.shape[:2], bool)
+            for y, x in zip(*np.nonzero(a[..., 3] == 255)):
+                m[y, x] = tuple(int(v) for v in a[y, x, :3]) in S
+            crumbs[name] += sum(1 for n, e in pieces(m) if n < 4)
     print(f"\nwinter trees / props: snow pieces under 4 texels: {crumbs}")
     # memory: one season resident
     print("\nGPU memory, one season resident (RGBA, +10 % packing):")
