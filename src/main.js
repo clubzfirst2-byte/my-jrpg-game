@@ -269,29 +269,22 @@ async function boot() {
     });
     performance.mark('title');
     await afterPaint(); // the title on screen before the world's work starts
+    performance.mark('titleShown');
   }
   // W4: the HUD's and menus' frames, now that the title is up — at once (gfx v2 integration: a start
   // pressed now waits for them, beginPlay; they are small and decode off the main thread)
   await uiSkinLoad; // (with ?map=, no title: the v2 UI's frames are listed by now)
   const uiOtherArt = uiFrames ? loadOtherUiArt(uiFrames) : Promise.resolve();
   hurryUiArt();
-  // gfx v2 integration (start-up): the world's art sheets are fetched (and decoded, off the main thread)
-  // from now on, while the title shows
+  // gfx v2 integration (start-up): the world's art sheets (preloaded by the page alongside the title)
+  // are read and decoded, off the main thread, while the title shows
   const worldArtLoad = Promise.all(artGroups.filter((g) => g !== uiArtGroup).map((g) => releaseFrames(g)));
   /** With the title up, a break between the world's steps, so a tap on the title is answered meanwhile (a task, not a frame: frames are slow while the world is prepared). */
   const breathe = () => (withTitle ? new Promise((resolve) => setTimeout(resolve, 0)) : Promise.resolve());
-  for (const frames of await worldArtLoad) for (const [k, v] of frames) artOverrides.set(k, v);
-  //   gfx W3: the enemies' frame counts and speeds come from their art's frames.json — the table of
-  //   the enemy art that was just loaded (v1, or v2 from src/art-release-v2/enemy; enemyFrames.js)
-  useEnemyFrameTable(tableForArt((k) => artOverrides.has(k)));
-  await breathe();
-  const uiV2 = await uiSkinLoad;
-  // W4: plays so far, this one included. A play is counted when it starts (startGame: はじめから /
-  // つづきから), not on each page load; the title shows what the next play will be. Without the title
-  // (?map=…) the page load is the start. (The v1 UI stores nothing new.)
-  let sessions = !uiV2 ? 1 : params.get('map') === null ? peekSessions() + 1 : countSession();
-  installItemIcons(artOverrides); // the menus' item icons, from the same art
-  const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 ? ART_SCALE : 1;
+  // gfx v2 integration (start-up): the renderer and the game state need no art, so they are made while
+  // the sheets decode (off the main thread). The art density is that of the art being loaded: 2 pixels
+  // per game pixel with any real art (the release groups asked for, src/art), else 1 (?hd=0).
+  const artDensity = hdParam === '0' ? 1 : hdParam === '1' || artOverrides.size > 0 || artGroups.some((g) => g !== uiArtGroup) ? ART_SCALE : 1;
 
   /** @type {import('pixi.js').Application} */
   let app;
@@ -309,6 +302,25 @@ async function boot() {
   }
   const fpsCap = intParam('fps', 0);
   if (fpsCap > 0) app.ticker.maxFPS = fpsCap; // e.g. ?fps=30 to verify 30fps behaviour
+
+  // Without ?map= the game starts at the title on the first island and saves its progress (above).
+  // P8: a new game is the whole world (the island and the regions south of it).
+  const mapName = /** @type {keyof typeof MAPS} */ (mapParam ?? 'world');
+  const state = createGameState(MAPS[mapName] ?? MAPS.world);
+  performance.mark('world');
+  await breathe();
+  for (const frames of await worldArtLoad) for (const [k, v] of frames) artOverrides.set(k, v);
+  performance.mark('worldArt');
+  //   gfx W3: the enemies' frame counts and speeds come from their art's frames.json — the table of
+  //   the enemy art that was just loaded (v1, or v2 from src/art-release-v2/enemy; enemyFrames.js)
+  useEnemyFrameTable(tableForArt((k) => artOverrides.has(k)));
+  await breathe();
+  const uiV2 = await uiSkinLoad;
+  // W4: plays so far, this one included. A play is counted when it starts (startGame: はじめから /
+  // つづきから), not on each page load; the title shows what the next play will be. Without the title
+  // (?map=…) the page load is the start. (The v1 UI stores nothing new.)
+  let sessions = !uiV2 ? 1 : params.get('map') === null ? peekSessions() + 1 : countSession();
+  installItemIcons(artOverrides); // the menus' item icons, from the same art
 
   // --- assets / logic / view ---
   const assets = new AssetManager();
@@ -340,11 +352,7 @@ async function boot() {
   await assets.load('placeholder');
   performance.mark('art');
   await breathe();
-  // Without ?map= the game starts at the title on the first island and saves its progress (above).
-  // P8: a new game is the whole world (the island and the regions south of it).
-  const mapName = /** @type {keyof typeof MAPS} */ (mapParam ?? 'world');
-  const state = createGameState(MAPS[mapName] ?? MAPS.world);
-  performance.mark('world');
+
   // gfx W5: light, shadow and effects — on, or the look before them with ?fx=v1 / ?v2=0 (fxSwitch.js)
   const view = new GameView(app, assets, state, { fx: fxVersion(params) });
   view.presetDeepWater(await deepEarly);
@@ -367,6 +375,7 @@ async function boot() {
   view.camera.setZoom(artDensity);
   const zoomParam = Number.parseFloat(params.get('zoom') ?? '');
   if (Number.isFinite(zoomParam)) view.camera.setZoom(zoomParam * artDensity); // e.g. ?zoom=2 (zoom is adjustable later)
+  performance.mark('viewSetup');
   const loop = new FixedStepLoop();
   const input = new InputManager(uiRoot);
   const hud = new HeartsHud(uiRoot);
