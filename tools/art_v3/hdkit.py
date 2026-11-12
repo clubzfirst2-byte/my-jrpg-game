@@ -136,7 +136,7 @@ def hand_stamp(c, mat, wrist, side, tones=(1, 2, 3, 4, 5)):
             c.put(x0 + i, y0 + j, mat, t)
 
 
-def gauntlet(c, g, a, b, mid=None):  # mid: unused (kept for the callers)
+def gauntlet(c, g, a, b, mid=None, shares=(0.10, 0.30)):  # mid: unused (kept for the callers)
     """v1's dark iron gauntlet on the forearm mask g, from the elbow a to the wrist b (hero round 2):
     mostly the dark grey (tone 0), a mid-grey strip on the lit side (tone 1), the light grey only as
     one line on the lit edge (tone 3) along the upper part; the 2 metal bands are dark grooves with
@@ -159,7 +159,7 @@ def gauntlet(c, g, a, b, mid=None):  # mid: unused (kept for the callers)
     order = np.argsort(-d, kind="stable")
     n = len(order)
     tone = np.zeros(n, np.int8)
-    lit_n, mid_n = int(round(0.10 * n)), int(round(0.30 * n))
+    lit_n, mid_n = int(round(shares[0] * n)), int(round(shares[1] * n))
     top = order[:lit_n + mid_n]
     tone[top] = 1
     lit = [k for k in order[:lit_n * 2] if t[k] < 0.75][:lit_n]

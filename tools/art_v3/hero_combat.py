@@ -97,7 +97,7 @@ def V(x):
 
 # ---------------------------------------------------------------- arms and props (wide canvas)
 
-def arm_to(c, shoulder, hand, view, darker=False, sleeve="cloak", mid_x=32.0):
+def arm_to(c, shoulder, hand, view, darker=False, sleeve="cloak", mid_x=32.0, shares=(0.10, 0.30)):
     """A two-bone arm: the sleeve from the shoulder to the elbow, the grey gauntlet (v1's 3 greys, 2
     metal bands) to the wrist, the leather fist at the hand."""
     sx, sy = shoulder
@@ -132,7 +132,7 @@ def arm_to(c, shoulder, hand, view, darker=False, sleeve="cloak", mid_x=32.0):
     c.shade_part(upper, tones=(1, 2, 3, 4) if sleeve == "cloak" else (2, 3, 3, 4), norm=True)
     g = capsule(c, (ex, ey), (wx, wy), 3.7)
     c.fill(g, "shirt")
-    gauntlet(c, g, (ex, ey), (wx, wy))
+    gauntlet(c, g, (ex, ey), (wx, wy), shares=shares)
     fist = c.m_ellipse(hx, hy, 3.7, 3.9)
     if darker:  # the far arm: the sleeve one tone down, the gauntlet's light line to mid grey
         c.set_tone(upper & (c.mat == c.mid(sleeve)), 1)  # (not the gauntlet where the two overlap)
@@ -152,7 +152,7 @@ def draw_fist(c, fist, darker=False):
                 c.put(x, my, "leather", 1)
 
 
-def sword(c, hx, hy, ang, length):
+def sword(c, hx, hy, ang, length, no_spike=False):
     """v1's sword at 2x: pommel, grip, cross-guard with the gem, the blade with a lit and a shaded edge."""
     a = math.radians(ang)
     ux, uy = math.cos(a), math.sin(a)
@@ -175,6 +175,12 @@ def sword(c, hx, hy, ang, length):
     c.fill(c.m_ellipse(gx, gy, 1.3, 1.3), "gem", 3)
     b0 = 5.0
     core = c.m_line([(hx + ux * b0, hy + uy * b0), (hx + ux * (L - 3), hy + uy * (L - 3))], 3.0)
+    # round 5: a lone texel of the blade standing out of its edge (neither side neighbour in the blade)
+    # is left out: at a shallow angle the 3-wide line rounds to a 1-texel bump
+    if no_spike:  # (only where the inspection asked: attack 1 up 1; the other frames are kept as approved)
+        spike = core & ~np.roll(core, 1, 1) & ~np.roll(core, -1, 1) & ~np.roll(core, 1, 0) & np.roll(core, -1, 0)
+        spike |= core & ~np.roll(core, 1, 1) & ~np.roll(core, -1, 1) & np.roll(core, 1, 0) & ~np.roll(core, -1, 0)
+        core = core & ~spike
     c.fill(core, "steel", 3)
     lit = c.m_line([(hx + ux * b0 + px * 1.0, hy + uy * b0 + py * 1.0), (hx + ux * (L - 3) + px * 1.0, hy + uy * (L - 3) + py * 1.0)], 1.1)
     shd = c.m_line([(hx + ux * b0 - px * 1.0, hy + uy * b0 - py * 1.0), (hx + ux * (L - 3) - px * 1.0, hy + uy * (L - 3) - py * 1.0)], 1.1)
@@ -182,7 +188,9 @@ def sword(c, hx, hy, ang, length):
     c.set_tone(shd & core, 1)
     tip = c.m_line([(hx + ux * (L - 3), hy + uy * (L - 3)), (hx + ux * L, hy + uy * L)], 1.6)
     c.fill(tip, "steel", 4)
-    c.put(int(hx + ux * (b0 + 3) + px), int(hy + uy * (b0 + 3) + py), "steel", 5)  # the glint
+    gx_, gy_ = int(hx + ux * (b0 + 3) + px), int(hy + uy * (b0 + 3) + py)
+    if 0 <= gx_ < c.w and 0 <= gy_ < c.h and core[gy_, gx_]:
+        c.put(gx_, gy_, "steel", 5)
 
 
 def bow(c, hx, hy, ang, draw, arrow=True, reach=10, nock_at=None):
@@ -283,6 +291,9 @@ def tweak(action, v, i, hands, sh, lean, oy):
         hands["R"] = (min(x, 60.0), y)
     if v != "side":
         return
+    if action == "attack2" and i == 2 and "R" in hands and sh["R"][0] > sh["L"][0]:
+        x, y = hands["R"]  # round 5: the sword arm over the shoulder 6 higher, along the jaw: no collar
+        hands["R"] = (x, y - 6)  # piece is left cut off between the arm and the head (facing right)
     if action == "bow" and "L" in hands:  # the bow below the face, in front of the chest
         x, y = hands["L"]
         hands["L"] = (x, y + 8)
@@ -314,7 +325,8 @@ def build(action, view, i, H, HV):
         body = H.frame(oy=oy, sway=sway, feet=(-2 * far[1], -2 * near[1]), no_arms=off, finish=False, blink=blink)
     elif v == "up":
         off = {s for s, k in ((-1, "L"), (1, "R")) if k not in own}
-        body = HV.back_frame(H.RAMPS, oy=oy, sway=sway, feet=(2 * far[1], 2 * near[1]), no_arms=off, finish=False)
+        body = HV.back_frame(H.RAMPS, oy=oy, sway=sway, feet=(2 * far[1], 2 * near[1]), no_arms=off, finish=False,
+                             gshares=(0.30, 0.40) if action == "guard" else (0.10, 0.30))
     else:
         nk, fk = ("L", "R") if left else ("R", "L")
         off = {s for s, k in ((0, fk), (1, nk)) if k not in own}
@@ -359,18 +371,18 @@ def build(action, view, i, H, HV):
         hidden_back = v == "up" and abs(hp[0] - 32) < 15 and hp[1] > s[1] - 2  # an arm in front of him, seen from behind
         if action in ARMS_IN_FRONT:
             raised = hidden_back = False
-            if v == "side" and hp[1] < s[1] - 8:  # round 4 (v1): the raised forearm stands upright in front
-                hx_ = min(55.0 + min(lean, 4) * 0.5, width - 9.0 - ox)  # of the forehead (a grey
-                hp = (hx_, 10.0 + oy)  # tube 14 texels tall), the fist above it; the upper arm goes behind the head
+            if v == "side" and hp[1] < s[1] - 8:  # round 5 (v1's L): the upper arm forward from the
+                hx_ = min(55.0 + min(lean, 4) * 0.5, width - 9.0 - ox)  # shoulder, the elbow bent in
+                hp = (hx_, 40.0 + oy)  # front of the chest, the forearm up to the fist at the mouth / nose
                 hands[k] = hp
-                behind.append(("arm", k, s, (hx_, 30.0 + oy), far_arm))
                 front.append(("raised", k, s, hp, far_arm))
                 continue
         if hidden_back and action in A_SHARED_BACK:  # v1: a small hand shows at the side of the cloak
             front.append(("fist", k, s, (10.0 if hp[0] < 32 else 54.0, hp[1]), True))
             continue
         layer = behind if (far_arm or raised or hidden_back) else front
-        darker = far_arm or (v == "down" and k == "L") or (v == "up" and k == "R")
+        darker = far_arm or (v == "down" and k == "L") or (v == "up" and k == "R" and action != "guard")
+        # (round 5: the guard's arm seen from behind keeps v1's gauntlet light, as the other views)
         # front view, the bow hand in front of the body: the arm stays under the cloak, only the fist shows
         bow_hand = v == "down" and any(pr["kind"] == "bow" and pr["key"] == k for pr in p["props"])
         # seen from behind, a hand reaching across to the other side: the arm is in front of him (hidden)
@@ -388,11 +400,19 @@ def build(action, view, i, H, HV):
     def run(items):
         fists = []
         for it in items:
-            if it[0] == "raised":  # the upright forearm in front of the forehead and its fist
+            if it[0] == "raised":  # round 5: v1's L-shaped raised arm (side view)
+                sx_, sy_ = it[2][0] + ox, it[2][1]
                 hx_, hy_ = it[3][0] + ox, it[3][1]
-                g = capsule(c, (hx_, hy_ + 20), (hx_, hy_ + 4), 3.4)
+                ex_, ey_ = hx_ - 6.0, sy_ + 4.0  # the elbow: in front of the chest, below the shoulder
+                up_ = capsule(c, (sx_, sy_), (ex_, ey_), 3.6)
+                c.fill(up_, "cloak")
+                c.shade_part(up_, tones=(1, 2, 3, 4), norm=True)
+                g = capsule(c, (ex_, ey_), (hx_ - 1.0, hy_ + 3.0), 3.7)  # the same width as the other gauntlets
                 c.fill(g, "shirt")
-                gauntlet(c, g, (hx_, hy_ + 20), (hx_, hy_ + 4))
+                gauntlet(c, g, (ex_, ey_), (hx_ - 1.0, hy_ + 3.0))
+                if it[4]:
+                    c.set_tone(up_ & (c.mat == c.mid("cloak")), 1)
+                    c.tone[g & (c.tone == 3) & (c.mat == c.mid("shirt"))] = 1
                 fists.append((c.m_ellipse(hx_, hy_, 3.6, 3.8), it[4]))
                 continue
             if it[0] == "fist":
@@ -401,7 +421,11 @@ def build(action, view, i, H, HV):
             if it[0] == "arm":
                 _, k, s, hp, darker = it
                 fists.append((arm_to(c, (s[0] + ox, s[1]), (hp[0] + ox, hp[1]), v, darker,
-                                     sleeve="cloak", mid_x=32.0 + ox), darker))  # round 3: the upper arm stays in the cloak
+                                     sleeve="cloak", mid_x=32.0 + ox,
+                                     # round 5: the guard's shield arm seen from behind shows little of its
+                                     # gauntlet (the shield covers its lit side): more light and mid there
+                                     shares=(0.30, 0.40) if (action == "guard" and v == "up") else (0.10, 0.30)),
+                              darker))  # round 3: the upper arm stays in the cloak
         for it in items:
             if it[0] != "prop":
                 continue
@@ -409,7 +433,8 @@ def build(action, view, i, H, HV):
             kind = pr["kind"]
             if kind == "sword":
                 hx, hy = hands[pr["key"]] if pr["key"] in hands else T(pr["key"] or "R", pr["x"], pr["y"])
-                sword(c, hx + ox, hy, pr["ang"], pr["length"])  # (hands already moved by tweak())
+                sword(c, hx + ox, hy, pr["ang"], pr["length"],  # (hands already moved by tweak())
+                      no_spike=(action, v, i) == ("attack1", "up", 1))
             elif kind == "bow":
                 hx, hy = hands.get("L") or T("L", pr["x"], pr["y"])
                 nock = None

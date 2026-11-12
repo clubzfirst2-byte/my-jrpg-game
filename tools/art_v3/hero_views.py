@@ -297,7 +297,8 @@ def side_frame(R, EYE, BLUSH, MOUTH, oy=0, lag=0, sway=0, legs=((0, 0, 0), (0, 0
 
 # ---------------------------------------------------------------- back view (facing up)
 
-def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, bent=0.0, no_arms=False, finish=True):
+def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, bent=0.0, no_arms=False, finish=True,
+               gshares=(0.10, 0.30)):
     """The back: the hair as one big mass with locks falling to the nape, the cloak from the shoulders
     to the hem with the gold star between the shoulder blades, the grey gauntlets at the sides, the
     boots' heels below the hem. feet: lift of the left / right foot (the sole shows when lifted)."""
@@ -332,7 +333,7 @@ def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, b
         wx += 3 * s * side  # hero round 2: the arm swings, the hand moving 3 texels sideways too (v1)
         g = capsule(c, (ex, ey), (wx, wy), 3.8)
         c.fill(g, "shirt")
-        gauntlet(c, g, (ex, ey), (wx, wy), mid=-0.1)  # seen from behind the arm shows its lit side wider
+        gauntlet(c, g, (ex, ey), (wx, wy), mid=-0.1, shares=gshares)  # gshares: round 5, the guard (hero_combat)
         fist = c.m_ellipse(wx, wy + 4, 4, 4.2)
         c.fill(fist, "leather")
         c.shade_part(fist, tones=(1, 2, 3, 4), norm=True)

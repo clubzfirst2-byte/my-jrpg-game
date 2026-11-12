@@ -451,18 +451,20 @@ def _check(cv, name):
         CUT.append((name, "stray pieces", st))
     # hero round 4: counted on the finished frame, where only slivers of 1-5 texels were cleaned up: a
     # cut-off piece of the cloak of 6-40 texels below the shoulders (row 56) stops the generator
-    isl = [(n, box) for n, box, _ in cloth_islands(cv, min_size=6, below=56)]
+    isl = [(n, box) for n, box, _ in cloth_islands(cv, min_size=6)]  # round 5: at any height
     if isl:
         CUT.append((name, "cloak / gold pieces cut off", isl))
 
 
 def main():
-    out = []
+    """Every frame is built and checked first; the files are written only when every check passes
+    (round 5: a failing check leaves the folder as it was)."""
+    todo = []
     for view in ("down", "right", "up"):
         for action in ("idle", "walk", "run"):
             for i, cv in enumerate(frames_for(view, action)):
                 _check(cv, f"hero.{action}.{view}.{i}")
-                out.append(save(cv, os.path.join(OUT, f"hero.{action}.{view}.{i}.png")))
+                todo.append((cv.image(), f"hero.{action}.{view}.{i}.png"))
     import hero_combat as HC
     import hero_views as HV
     from PIL import Image
@@ -474,14 +476,15 @@ def main():
                 img = cv.image()
                 if view == "left":
                     img = img.transpose(Image.FLIP_LEFT_RIGHT)
-                out.append(save(img, os.path.join(OUT, f"hero.{action}.{view}.{i}.png")))
-    print(f"{len(out)} files")
+                todo.append((img, f"hero.{action}.{view}.{i}.png"))
     if CUT:
-        print("edge check:", f"{len(CUT)} frames cut: {CUT}")
+        print("check failed, nothing written:", f"{len(CUT)} frames: {CUT}")
         sys.exit(1)
-    print("edge check: no frame has a texel other than an outline on its top row or side columns "
+    out = [save(img, os.path.join(OUT, name)) for img, name in todo]
+    print(f"{len(out)} files")
+    print("checks: no frame has a texel other than an outline on its top row or side columns "
           "(the gauntlet's dark grey counted as a cut); no stray piece of 40 texels or fewer; "
-          "no piece of the cloak's green / gold of 6-40 texels below row 56 cut off from the cloak "
+          "no piece of the cloak's green / gold of 6-40 texels cut off from the cloak, at any height "
           "(counted before any fill; only 1-5 texel slivers are cleaned)")
 
 
