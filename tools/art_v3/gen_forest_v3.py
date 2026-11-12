@@ -255,6 +255,21 @@ def flow_shape(sset, bits, variant, F=None):
     G._drop_small(c, 2)
     G._fill_thin(c, ins, k, grow, rng)
     G._drop_small(c, 3)  # round 1: no pieces of 1-3 texels away from the tile's edge
+    if not winter and not (c.mat == k).any() and ins.any():
+        # round 3 (P3): a small corner patch where no placement point landed (forest.grassflow.v3.1000.0
+        # was empty): two cushions inside the patch, round its centre (the other tiles are unchanged)
+        ys, xs = np.nonzero(ins)
+        cx, cy = xs.mean(), ys.mean()
+        for (x, y, w, h) in ((cx - 7, cy + 1, 8, 4), (cx + 1, cy - 4, 7, 3)):
+            for dy in range(h):
+                for dx in range(w):
+                    if dy == h - 1 and dx in (0, w - 1):
+                        continue
+                    X, Y = int(x) + dx, int(y) - dy
+                    if 0 <= X < 64 and 0 <= Y < 64 and F[Y, X] > 0.38:
+                        c.mat[Y, X] = k
+                        c.tone[Y, X] = TIP
+        G._drop_small(c, 3)
     return c
 
 
