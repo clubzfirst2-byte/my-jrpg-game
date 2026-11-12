@@ -111,8 +111,8 @@ for (const screen of [PRO, SE]) {
     const cam = await api(page, 'camera');
     for (const v of [cam.origin.x * cam.zoom, cam.origin.y * cam.zoom]) expect(Math.abs(v - Math.round(v))).toBeLessThan(1e-6);
 
-    // v3 art where it is (the hero standing, the slime, the village woman), density 2 blown up 2×2
-    // elsewhere (e.g. his walk to the right)
+    // v3 art where it is (the hero, the slime, the village woman), density 2 blown up 2×2 elsewhere
+    // (e.g. the hero's approved climb, the stand-in until his v3 climb is loaded)
     const v3 = await api(page, 'v3');
     expect(v3.on).toBe(true);
     expect(v3.groups).toEqual(expect.arrayContaining(['v3/hero', 'v3/npc', 'v3/enemy', 'v3/terrain', 'v3/objects']));
@@ -120,7 +120,9 @@ for (const screen of [PRO, SE]) {
     // (the enemies' v3 frames: a bundle per kind, loaded with the regions where it spawns — the island: beasts, archers)
     await expect.poll(() => api(page, 'textureDensity', 'enemy.beast.idle.0')).toBe(4);
     expect(await api(page, 'textureDensity', 'npc.woman.idle.down.0')).toBe(4);
-    expect(await api(page, 'textureDensity', 'hero.walk.right.0')).toBe(2);
+    expect(await api(page, 'textureDensity', 'hero.walk.right.0')).toBe(4);
+    expect(await api(page, 'textureDensity', 'hero.climb.right.0')).toBe(null);
+    expect(await api(page, 'textureDensity', 'v1.hero.climb.right.0')).toBe(2);
     expect(v3.hero.density).toBe(4);
     // memory: no CPU-side copies kept, no chunk caches
     expect(v3.cpu.total).toBe(0);
@@ -464,6 +466,208 @@ test('?v3=1: the normal enemies — v3 frames by kind, the plains loading only i
     names = (await api(page, 'stream')).bundleNames.filter((n) => n.startsWith('v3:enemy:'));
     expect(names).not.toContain('v3:enemy:slime');
     expect(names).not.toContain('v3:enemy:sentinel');
+    expect(errors).toEqual([]);
+    await context.close();
+  }
+});
+
+// Graphics v3: the hero at density 4 (src/art-release-v3/hero, NAMES.md 5, STYLE.md 10.2, heroV3.js)
+
+/** Records the hero's drawn frame every animation frame (short actions show a few frames only). */
+const recordHero = (page) =>
+  page.evaluate(() => {
+    const w = /** @type {any} */ (window);
+    w.__hero = [];
+    const tick = () => {
+      const h = w.__debugApi.v3().hero;
+      w.__hero.push({ key: h.key, drawn: h.drawn, density: h.density, mirrored: h.mirrored, place: w.__debugApi.heroPlace() });
+      w.__heroRaf = requestAnimationFrame(tick);
+    };
+    tick();
+  });
+const heroSeen = (page) => page.evaluate(() => /** @type {any} */ (window).__hero);
+
+/** The hero's place and his effects' places relative to his feet (game px), for one frame. */
+const relPlace = (p) => ({
+  anchor: p.anchor,
+  w: p.w,
+  h: p.h,
+  k: p.k,
+  ...Object.fromEntries(['glider', 'shield', 'bow', 'slash', 'shadow'].map((n) => [n, p[n].visible ? [p[n].x - p.x, p[n].y - p.y] : null])),
+});
+
+test('?v3=1: the v3 hero — every action at density 4; left = right mirrored except attack 1-3, bow and guard; feet, size and effects where ?v3=0 has them', async ({ browser }) => {
+  /** @type {Record<string, Record<string, any>>} */
+  const byMode = {};
+  for (const q of ['&v3=0', '&v3=1']) {
+    const { context, page, errors } = await open(browser, PRO, q);
+    await api(page, 'teleport', 52, 100);
+    await page.waitForTimeout(800);
+    await recordHero(page);
+    // idle in the 4 directions, a walk to the left, the sword / shield / bow facing left and right
+    for (const dir of ['down', 'up', 'right', 'left']) {
+      await api(page, 'face', dir);
+      await page.waitForTimeout(250);
+    }
+    await page.keyboard.down('ArrowLeft');
+    await page.waitForTimeout(500);
+    await page.keyboard.up('ArrowLeft');
+    for (const [dir, key] of [['left', 'ArrowLeft'], ['right', 'ArrowRight']]) {
+      await page.keyboard.down(key);
+      await page.waitForTimeout(80);
+      await page.keyboard.up(key);
+      for (const press of ['KeyJ', 'KeyJ', 'KeyJ']) {
+        await page.keyboard.press(press);
+        await page.waitForTimeout(260);
+      }
+      const idle = () => expect.poll(async () => (await api(page, 'heroPose')).action, { timeout: 5000 }).toBe('idle');
+      const shown = (re) => expect.poll(async () => (await heroSeen(page)).some((x) => re.test(x.key ?? '')), { message: String(re), timeout: 5000 }).toBe(true);
+      await idle();
+      await page.keyboard.down('KeyI');
+      await shown(new RegExp(`^hero\\.guard\\.${dir}\\.1$`));
+      await page.keyboard.up('KeyI');
+      await idle();
+      await page.keyboard.down('KeyU');
+      await shown(new RegExp(`^hero\\.bow\\.${dir}\\.3$`));
+      await page.keyboard.up('KeyU');
+      await idle();
+    }
+    const seen = await heroSeen(page);
+    /** @type {Record<string, any>} */
+    const out = {};
+    for (const s of seen) if (s.key && !out[s.key]) out[s.key] = s;
+    byMode[q] = out;
+    expect(errors).toEqual([]);
+    await context.close();
+  }
+  const v0 = byMode['&v3=0'];
+  const v1 = byMode['&v3=1'];
+  // the actions asked for were drawn in both modes
+  for (const re of [/^hero\.idle\.left\./, /^hero\.walk\.left\./, /^hero\.attack1\.left\./, /^hero\.attack2\.left\./, /^hero\.guard\.left\.1$/, /^hero\.bow\.left\.3$/, /^hero\.attack1\.right\./, /^hero\.guard\.right\.1$/, /^hero\.bow\.right\.3$/]) {
+    expect(Object.keys(v1).some((k) => re.test(k)), `v3=1 ${re}`).toBe(true);
+    expect(Object.keys(v0).some((k) => re.test(k)), `v3=0 ${re}`).toBe(true);
+  }
+  for (const [key, s] of Object.entries(v1)) {
+    const action = key.split('.')[1];
+    // every hero frame from the v3 art (never the old art beside the new)
+    expect(s.density, key).toBe(4);
+    expect(s.drawn, key).toBe(key);
+    // NAMES.md 5: left = the right frame mirrored, except the actions with a held prop (their own left frames)
+    const own = ['attack1', 'attack2', 'attack3', 'bow', 'guard'].includes(action);
+    expect(s.mirrored, key).toBe(key.includes('.left.') && !own);
+  }
+  for (const [key, s] of Object.entries(v0)) {
+    expect(s.density, key).toBe(2);
+    expect(s.mirrored, key).toBe(false);
+  }
+  // the same feet (anchor), game size, heroK and effect offsets as ?v3=0, frame for frame
+  let compared = 0;
+  for (const key of Object.keys(v1)) {
+    if (!v0[key]) continue;
+    const a = relPlace(v0[key].place);
+    const b = relPlace(v1[key].place);
+    for (const n of ['glider', 'shield', 'bow', 'slash', 'shadow']) if (a[n] === null || b[n] === null) a[n] = b[n] = null; // (shown at different moments of the action)
+    expect(b, key).toEqual(a);
+    compared++;
+  }
+  expect(compared).toBeGreaterThan(15);
+});
+
+test('?v3=1: climb, swim and glide load when used — the approved frames meanwhile (never a missing hero), density 4 once loaded, let go after; memory', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: PRO.width, height: PRO.height }, deviceScaleFactor: PRO.dpr, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/?map=height&v3=1');
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 30_000 });
+  await api(page, 'clearEnemies');
+  // at the start: the hero's kept bundle only (under 6.0 MB), the move bundle not loaded
+  let names = (await api(page, 'stream')).bundleNames;
+  expect(names).toContain('v3:hero');
+  expect(names).not.toContain('v3:hero:move');
+  const kept = await api(page, 'bundleBytes', 'v3:hero');
+  expect(kept).toBeLessThanOrEqual(6.0e6);
+  expect((await api(page, 'v3')).hero.move).toBe('out');
+  expect(await api(page, 'textureDensity', 'hero.swim.up.0')).toBe(null);
+  // swim: the pond's south shore, swim north
+  await api(page, 'teleport', 33, 11);
+  await page.waitForTimeout(300);
+  await recordHero(page);
+  await page.keyboard.down('ArrowUp');
+  await expect.poll(async () => (await api(page, 'player')).swimming, { timeout: 4000, intervals: [30] }).toBe(true);
+  await expect.poll(async () => (await api(page, 'v3')).hero.move, { timeout: 8000 }).toBe('in');
+  await page.waitForTimeout(400);
+  await page.keyboard.up('ArrowUp');
+  const seen = await heroSeen(page);
+  const swim = seen.filter((s) => s.key?.startsWith('hero.swim.'));
+  expect(swim.length).toBeGreaterThan(0);
+  // every frame of the swim drew a hero frame: the approved one (density 2) until the v3 one (density 4)
+  for (const s of swim) {
+    expect(s.drawn === s.key || s.drawn === `v1.${s.key}`, `${s.key} drawn ${s.drawn}`).toBe(true);
+    expect(s.density, s.drawn).toBe(s.drawn.startsWith('v1.') ? 2 : 4);
+    expect(s.place.h, s.drawn).toBe(28);
+  }
+  expect(swim.at(-1).density).toBe(4);
+  expect(seen.every((s) => s.key !== null)).toBe(true);
+  const move = await api(page, 'bundleBytes', 'v3:hero:move');
+  expect(move).toBeLessThan(1.2 * 2 ** 20);
+  // left = right mirrored for the swim too
+  await api(page, 'face', 'left');
+  await page.keyboard.down('ArrowLeft');
+  await page.waitForTimeout(300);
+  await page.keyboard.up('ArrowLeft');
+  const h = (await api(page, 'v3')).hero;
+  if (h.key?.startsWith('hero.swim.left.')) expect(h.mirrored).toBe(true);
+  // out of the water and the keep time over: the move bundle goes, the hero is drawn from the kept bundle
+  await api(page, 'setHeroMoveKeep', 300);
+  await api(page, 'teleport', 33, 13);
+  await expect.poll(async () => (await api(page, 'v3')).hero.move, { timeout: 8000 }).toBe('out');
+  names = (await api(page, 'stream')).bundleNames;
+  expect(names).not.toContain('v3:hero:move');
+  const after = (await api(page, 'v3')).hero;
+  expect(after.density).toBe(4);
+  expect(after.moveUnloads).toBe(1);
+  // climb: the move bundle comes back (frames drawn all along)
+  await page.evaluate(() => cancelAnimationFrame(/** @type {any} */ (window).__heroRaf));
+  await recordHero(page);
+  await api(page, 'setHeroMoveKeep', 20_000);
+  await api(page, 'teleport', 14, 22);
+  await page.keyboard.down('ArrowUp');
+  await expect.poll(async () => (await api(page, 'player')).climbing, { timeout: 4000 }).toBe(true);
+  await expect.poll(async () => (await api(page, 'v3')).hero.move, { timeout: 8000 }).toBe('in');
+  await page.keyboard.up('ArrowUp');
+  const climb = (await heroSeen(page)).filter((s) => s.key?.startsWith('hero.climb.'));
+  expect(climb.length).toBeGreaterThan(0);
+  for (const s of climb) expect(s.drawn === s.key || s.drawn === `v1.${s.key}`, `${s.key} drawn ${s.drawn}`).toBe(true);
+  expect((await api(page, 'v3')).hero.moveLoads).toBe(2);
+  expect((await api(page, 'v3')).cpu.total).toBe(0);
+  expect(errors).toEqual([]);
+  await context.close();
+});
+
+test('?v3=0: the hero as before — no v3 hero bundles, no stand-ins, the approved frames', async ({ browser }) => {
+  for (const q of ['', '&v3=0']) {
+    const context = await browser.newContext({ viewport: { width: PRO.width, height: PRO.height }, deviceScaleFactor: PRO.dpr, isMobile: true, hasTouch: true });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(`/?map=height${q}`);
+    await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 30_000 });
+    await api(page, 'clearEnemies');
+    const names = (await api(page, 'stream')).bundleNames;
+    expect(names.filter((n) => n.startsWith('v3:'))).toEqual([]);
+    for (const k of ['hero.idle.down.0', 'hero.walk.left.0', 'hero.attack1.left.0', 'hero.swim.up.0', 'hero.climb.right.0', 'hero.glide.left.0']) expect(await api(page, 'textureDensity', k), k).toBe(2);
+    expect(await api(page, 'textureDensity', 'v1.hero.swim.up.0')).toBe(null);
+    await api(page, 'teleport', 33, 11);
+    await page.keyboard.down('ArrowUp');
+    await expect.poll(async () => (await api(page, 'player')).swimming, { timeout: 4000, intervals: [30] }).toBe(true);
+    await page.waitForTimeout(200);
+    await page.keyboard.up('ArrowUp');
+    const h = (await api(page, 'v3')).hero;
+    expect(h.key).toMatch(/^hero\.swim\.up\.\d$/);
+    expect(h.drawn).toBe(h.key);
+    expect(h.density).toBe(2);
+    expect(h.move).toBe(undefined);
     expect(errors).toEqual([]);
     await context.close();
   }

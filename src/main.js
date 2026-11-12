@@ -28,6 +28,7 @@ import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
 import { availableV1Groups, availableV2Groups, availableV3Groups, prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
 import { V3_DENSITY, V3_TARGET_HEIGHT, chooseToastSlot, v3ArtGroups, v3Enabled } from './view/assets/artV3.js';
 import { releaseSheetsLazily, dropIdleSheets, sameMirrored, freeAtlasCanvases, cpuImageBytes } from './view/assets/v3Memory.js';
+import { HERO_V3_BUNDLE, HERO_V3_LAZY, HERO_V3_MOVE_BUNDLE, heroActionOf, heroCoveredByV3, heroFallbackKey, heroV3Parts } from './view/assets/heroV3.js';
 import { resolveArtGroups } from './view/assets/artV2.js';
 import { GROUND_RUIN_BUNDLE, ISLAND_EDGES_BUNDLE, ISLAND_STEPS_BUNDLE, TERRAIN_GROUP, releaseTerrainEntries, v2BundleParts, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
@@ -172,7 +173,19 @@ async function boot() {
   // decoded only while a bundle is being built (v3Memory.js)
   const v3Groups = v3 && hdParam !== '0' ? v3ArtGroups(params, availableV3Groups()) : [];
   // (the v3 enemies' shots and minimal frames are not used: enemyV3.js)
-  for (const frames of await Promise.all(v3Groups.map((g) => releaseFrames(g)))) for (const [k, v] of frames) if (!v3EnemyUnused(k)) artOverrides.set(k, v);
+  const v3Frames = await Promise.all(v3Groups.map((g) => releaseFrames(g)));
+  // Graphics v3 (heroV3.js): the hero's v3 frames go in bundles of their own; the approved frames of
+  // climb, swim and glide stay in the base bundle as "v1.<key>", drawn while the v3 ones load
+  /** @type {Set<string>} */
+  const v3HeroKeys = new Set();
+  for (const frames of v3Frames) for (const [k, v] of frames) if (heroActionOf(k) && densityOf(v) === V3_DENSITY) v3HeroKeys.add(k);
+  if (v3HeroKeys.size) {
+    for (const [k, v] of [...artOverrides]) {
+      const a = heroActionOf(k);
+      if (a && HERO_V3_LAZY.includes(a)) artOverrides.set(heroFallbackKey(k), v);
+    }
+  }
+  for (const frames of v3Frames) for (const [k, v] of frames) if (!v3EnemyUnused(k)) artOverrides.set(k, v);
   if (v3) releaseSheetsLazily(artOverrides);
   installItemIcons(artOverrides); // the menus' item icons, from the same art
   // (graphics v3: the canvas has 4 pixels per game pixel, whatever art is loaded)
@@ -210,8 +223,13 @@ async function boot() {
   // gfx W1: the v2 ground's island grounds and water (terrainArt.js "common:ground") go in the base atlas,
   // packed tallest first so that it stays 2048×1024 (no second atlas). Without the v2 ground: as before.
   const groundV2Entries = releaseTerrainEntries('common:ground', artOverrides);
+  // (graphics v3: the frames the v3 hero draws are not in the base bundle; the approved climb, swim and
+  // glide are, as their stand-ins "v1.<key>")
+  const baseHeroEntries = v3HeroKeys.size
+    ? [...releaseHeroEntries(artOverrides).filter((e) => !heroCoveredByV3(e.key, v3HeroKeys)), ...[...artOverrides.keys()].filter((k) => k.startsWith('v1.hero.')).map((key) => ({ key, rows: ['.'], anchor: /** @type {[number, number]} */ ([0.5, 1]) }))]
+    : releaseHeroEntries(artOverrides);
   assets.register('placeholder', () =>
-    buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides), ...releaseEnemyEntries(artOverrides).filter((e) => !(v3 && v3EnemyKindOf(e.key) && densityOf(/** @type {any} */ (artOverrides.get(e.key))) === V3_DENSITY)), ...releaseTerrainEntries('placeholder', artOverrides), ...groundV2Entries], artOverrides, {
+    buildPlaceholderPack([...placeholderEntries(), ...baseHeroEntries, ...releaseNpcEntries(artOverrides), ...releaseEnemyEntries(artOverrides).filter((e) => !(v3 && v3EnemyKindOf(e.key) && densityOf(/** @type {any} */ (artOverrides.get(e.key))) === V3_DENSITY)), ...releaseTerrainEntries('placeholder', artOverrides), ...groundV2Entries], artOverrides, {
       tallestFirst: groundV2Entries.length > 0,
       ...packOpts,
     }),
@@ -256,13 +274,21 @@ async function boot() {
       if (entries.length) assets.register(v3EnemyBundle(kind), () => buildPlaceholderPack(entries, artOverrides, { ...packOpts, tallestFirst: true, exactHeight: true, trim: true }));
     }
   }
+  // Graphics v3 (heroV3.js): the hero's v3 frames, trimmed, in two bundles: all but climb / swim / glide
+  // (kept all the time) and those three (loaded when used: gameView.updateHeroMove)
+  for (const bundle of [HERO_V3_BUNDLE, HERO_V3_MOVE_BUNDLE]) {
+    const { keys, mirrorOf } = heroV3Parts(v3HeroKeys, bundle);
+    const entries = keys.map((key) => ({ key, rows: ['.'], anchor: /** @type {[number, number]} */ ([0.5, 1]) }));
+    if (entries.length) assets.register(bundle, () => buildPlaceholderPack(entries, artOverrides, { ...packOpts, tallestFirst: true, exactHeight: true, trim: true, mirrorOf }));
+  }
   // Graphics v3: the plains' v3 ground, trees and props, one bundle per season (summer's in spring), loaded
   // by the chunks that have plains (gameView.v3PlainsBundleOf), packed tallest first on atlases of their own
   for (const season of /** @type {const} */ (['summer', 'autumn', 'winter', 'flow'])) {
     const entries = v3 ? v3PlainsEntries(season, artOverrides) : [];
     if (entries.length) assets.register(v3PlainsBundleName(season), () => buildPlaceholderPack(entries, artOverrides, { ...packOpts, tallestFirst: true, exactHeight: true }));
   }
-  await assets.load('placeholder');
+  // (graphics v3: the hero's v3 bundle, held for the whole game, is built beside the base bundle)
+  await Promise.all(['placeholder', HERO_V3_BUNDLE].filter((b) => assets.builders.has(b)).map((b) => assets.load(b)));
   if (v3) dropIdleSheets(); // graphics v3: the sheets no bundle is cut from now (v3Memory.js)
   performance.mark('art');
   // Without ?map= the game starts at the title on the first island and saves its progress.
@@ -276,7 +302,7 @@ async function boot() {
   // so a save never names them: game/world/villageProps.js)
   if (v3 && v3Village) addVillageProps(state);
   performance.mark('world');
-  const view = new GameView(app, assets, state, { v3, v3Opaque: params.get('v3opaque') === '1', v3Cache: params.get('v3cache') !== '0' });
+  const view = new GameView(app, assets, state, { v3, v3Opaque: params.get('v3opaque') === '1', v3Cache: params.get('v3cache') !== '0', v3HeroMove: assets.builders.has(HERO_V3_MOVE_BUNDLE) });
   performance.mark('view');
   // Test / check helpers: ?time=20 (hour) and ?weather=rain|storm|cloudy|clear.
   const timeParam = Number.parseFloat(params.get('time') ?? '');
@@ -1204,13 +1230,44 @@ async function boot() {
       cpu: cpuImageBytes(artOverrides, assets),
       gpu: gpuTextureBytes(),
       /** the drawn hero: its texture's art density and whether it is mirrored (a left frame drawn from the right one) */
-      hero: { key: view.heroKey, density: view.player.texture.source.resolution, mirrored: view.player.scale.x < 0 },
+      hero: { key: view.heroKey, drawn: view.heroDrawn, density: view.player.texture.source.resolution, mirrored: view.player.scale.x < 0, ...view.heroMoveStats() },
       viewRect: state.viewRect ?? null,
       /** the plains' v3 trees and props on the loaded chunks, and their sway frames now (gameView.v3Stats) */
       plains: v3 ? view.v3Stats() : null,
       /** the ground cache (groundCache.js): its texture's bytes, how often it was drawn, the time spent */
       cache: view.groundCache ? { bytes: view.groundCache.bytes(), rect: view.groundCache.rect, ...view.groundCache.stats } : null,
     }),
+    /**
+     * Graphics v3: where the hero and the effects placed by his body are, in game px (world): the sprite's
+     * feet, anchor, size and mirroring, heroK, and the glider, shield, bow and sword slash (same for any art).
+     */
+    heroPlace: () => {
+      const at = (/** @type {any} */ s) => ({ visible: s.visible, x: s.position.x, y: s.position.y });
+      const t = view.player.texture;
+      return {
+        x: view.player.position.x,
+        y: view.player.position.y,
+        anchor: [view.player.anchor.x, view.player.anchor.y],
+        flip: view.player.scale.x < 0,
+        w: t.width,
+        h: t.height,
+        k: view.heroK,
+        glider: at(view.glider),
+        shield: at(view.shield),
+        bow: at(view.bow),
+        slash: at(view.slash),
+        shadow: at(view.shadow),
+      };
+    },
+    /** Graphics v3 (tests): how long the hero's climb / swim / glide bundle stays after its last use, ms. */
+    setHeroMoveKeep: (/** @type {number} */ ms) => {
+      if (view.heroMove) view.heroMove.keepMs = ms;
+    },
+    /** Graphics v3: a loaded bundle's GPU texture bytes (its atlases), or null when it is not loaded. */
+    bundleBytes: (/** @type {string} */ name) => {
+      const e = assets.loaded.get(name);
+      return e ? (e.bundle.canvases ?? []).reduce((n, { source }) => n + source.pixelWidth * source.pixelHeight * 4, 0) : null;
+    },
     /** Graphics v3: a loaded texture's art density (texture px per game px), or null. */
     textureDensity: (/** @type {string} */ key) => (assets.hasTexture(key) ? assets.texture(key).source.resolution : null),
     /** P11.5: the art in use (density, how many real-art sprites) and the drawn hero's size in game px. */

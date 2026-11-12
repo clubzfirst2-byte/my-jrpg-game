@@ -63,8 +63,10 @@ function releaseArt() {
       const v3Parts = (/** @type {string} */ group) =>
         SEASON_PARTS.map((part) => ({ dir: join(rootV3, group), name: `v3/${group}${part && `.${part}`}`, file: `v3-${group}${part && `.${part}`}`, keep: (/** @type {string} */ n) => seasonPartOf(n) === part })).filter((g) => readdirSync(g.dir).some((f) => f.endsWith('.png') && g.keep(f.slice(0, -4))));
       const all = [...releaseGroups(root).map((group) => ({ dir: join(root, group), name: group, file: group })), ...releaseGroups(rootV2).map((group) => ({ dir: join(rootV2, group), name: `v2/${group}`, file: `v2-${group}` })), ...releaseGroups(rootV3).flatMap(v3Parts)];
+      // (graphics v3: the tables give each frame's opaque box, so a bundle is packed without its
+      // frames' transparent margins without reading their pixels back: placeholderPack trim)
       const groups = all.map(({ dir, name, file, keep }) => {
-        const { png, table, files } = packGroup(dir, keep);
+        const { png, table, files } = packGroup(dir, keep, { opaque: name.startsWith('v3/') });
         for (const f of files) this.addWatchFile(f);
         const sheet = this.emitFile({ type: 'asset', name: `release-${file}.png`, source: png });
         const frames = this.emitFile({ type: 'asset', name: `release-${file}.json`, source: JSON.stringify(table) });

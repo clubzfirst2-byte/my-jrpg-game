@@ -259,13 +259,38 @@ export function releaseGroups(root) {
 }
 
 /**
+ * Graphics v3 (memory): the box of a frame's opaque pixels (alpha > 0) in the frame, or a 1×1 box when it
+ * has none (the same box as placeholderPack.opaqueBox, worked out here once so the game need not read
+ * the pixels back to pack a frame without its transparent margins).
+ * @param {RgbaImage} img @returns {FrameRect}
+ */
+export function opaqueRect(img) {
+  let x0 = img.width;
+  let y0 = img.height;
+  let x1 = -1;
+  let y1 = -1;
+  for (let y = 0; y < img.height; y++) {
+    for (let x = 0; x < img.width; x++) {
+      if (!img.data[(y * img.width + x) * 4 + 3]) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+  }
+  return x1 < 0 ? { x: 0, y: 0, w: 1, h: 1 } : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
+
+/**
  * Packs one group folder: every *.png in it (lowercase ".png" only — the dev server's glob is
  * case-sensitive too, so both see the same files), named by its file name without ".png" (the same names
  * releaseFrames gave before packing).
  * @param {string} dir @param {(name: string) => boolean} [keep] only these frames (seasonPartOf)
- * @returns {{ png: Buffer, table: { width: number, height: number, frames: Record<string, FrameRect> }, files: string[] }}
+ * @param {{ opaque?: boolean }} [opts] opaque: graphics v3, the table also gives each frame's opaque box
+ *   (`opaque`, by name, in the frame's own pixels: opaqueRect)
+ * @returns {{ png: Buffer, table: { width: number, height: number, frames: Record<string, FrameRect>, opaque?: Record<string, FrameRect> }, files: string[] }}
  */
-export function packGroup(dir, keep = () => true) {
+export function packGroup(dir, keep = () => true, { opaque = false } = {}) {
   const files = readdirSync(dir)
     .filter((f) => f.endsWith('.png')) // lowercase only, like the dev server's glob (*.png)
     .filter((f) => keep(f.slice(0, -'.png'.length)))
@@ -274,7 +299,10 @@ export function packGroup(dir, keep = () => true) {
   const frames = new Map();
   for (const f of files) frames.set(f.slice(0, -'.png'.length), decodePng(readFileSync(join(dir, f)), join(dir, f)));
   const { image, frames: rects } = packSheet(frames);
-  return { png: encodePng(image), table: { width: image.width, height: image.height, frames: rects }, files: files.map((f) => join(dir, f)) };
+  /** @type {{ width: number, height: number, frames: Record<string, FrameRect>, opaque?: Record<string, FrameRect> }} */
+  const table = { width: image.width, height: image.height, frames: rects };
+  if (opaque) table.opaque = Object.fromEntries(Object.keys(rects).map((name) => [name, opaqueRect(/** @type {RgbaImage} */ (frames.get(name)))]));
+  return { png: encodePng(image), table, files: files.map((f) => join(dir, f)) };
 }
 
 /** Graphics v3: the season parts of a v3 group (its autumn / winter frames on sheets of their own). */

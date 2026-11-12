@@ -42,6 +42,7 @@ import { frameFight } from './assets/artV3.js';
 import { GroundCache } from './groundCache.js';
 import { V3_OBJECTS_WINTER, V3_VILLAGE_TYPES, V3_WINTER_OBJECTS, v3VillageBundle } from './assets/villageV3.js';
 import { V3_ENEMY_KINDS, kindsByRegion, v3EnemyBundle } from './assets/enemyV3.js';
+import { HERO_V3_LAZY, HERO_V3_MOVE_BUNDLE, HERO_V3_MOVE_KEEP_MS, heroDrawKey } from './assets/heroV3.js';
 import { MacroGrid, PROPS, PROP_SWAY, TREE_SWAY, baseKey as v3BaseKey, edgeKey as v3EdgeKey, floraFrames, floraKey, flowCorner, flowKey, flowLook, openProp, plainsTreeLook, seasonPrefix, swayFrame, swayStep, treeFootProp, v3PlainsBundles } from './v3Plains.js';
 import { activeBoss } from '../game/entities/bosses.js';
 import { hash01, valueNoise } from './placement.js';
@@ -133,7 +134,7 @@ export class GameView {
    * @param {import('pixi.js').Application} app
    * @param {import('./assets/assetManager.js').AssetManager} assets
    * @param {import('../game/state.js').GameState} state
-   * @param {{ v3?: boolean, v3Opaque?: boolean, v3Cache?: boolean }} [opts] v3: graphics v3 and its narrow view (?v3=1, assets/artV3.js)
+   * @param {{ v3?: boolean, v3Opaque?: boolean, v3Cache?: boolean, v3HeroMove?: boolean }} [opts] v3: graphics v3 and its narrow view (?v3=1, assets/artV3.js)
    */
   constructor(app, assets, state, opts = {}) {
     this.app = app;
@@ -405,6 +406,51 @@ export class GameView {
     this.heroPose = null;
     /** The release texture drawn for the hero (null: the placeholder hero). @type {string | null} */
     this.heroKey = null;
+    /** The texture actually shown for heroKey (graphics v3: its approved stand-in "v1.<key>" while the move bundle loads). @type {string | null} */
+    this.heroDrawn = null;
+    /**
+     * Graphics v3 (heroV3.js): the hero's climb / swim / glide frames, loaded when one of them starts and let
+     * go HERO_V3_MOVE_KEEP_MS after the last use. state: 'out' | 'loading' | 'in'.
+     */
+    this.heroMove = opts.v3HeroMove ? { state: /** @type {'out' | 'loading' | 'in'} */ ('out'), lastUseMs: -Infinity, keepMs: HERO_V3_MOVE_KEEP_MS, loads: 0, unloads: 0, loadMs: /** @type {number | null} */ (null), fallbackFrames: 0 } : null;
+  }
+
+  /**
+   * Graphics v3 (heroV3.js): loads the hero's climb / swim / glide bundle when one of those actions is
+   * shown, and lets it go a while after the last use (before the frame is set, so no sprite keeps one of
+   * its textures). @param {string} action the pose's action @param {number} nowMs real time
+   */
+  updateHeroMove(action, nowMs) {
+    const m = this.heroMove;
+    if (!m) return;
+    const using = HERO_V3_LAZY.includes(action);
+    if (using) m.lastUseMs = nowMs;
+    if (using && m.state === 'out') {
+      m.state = 'loading';
+      const t0 = performance.now();
+      this.assets.load(HERO_V3_MOVE_BUNDLE).then(
+        () => {
+          m.state = 'in';
+          m.loads++;
+          m.loadMs = Math.round(performance.now() - t0);
+        },
+        () => {
+          m.state = 'out';
+        },
+      );
+    } else if (!using && m.state === 'in' && nowMs - m.lastUseMs > m.keepMs) {
+      // (the hero shows another action from this frame on; the hidden silhouette lets go of its texture too)
+      this.silhouette.texture = Texture.EMPTY;
+      this.assets.unload(HERO_V3_MOVE_BUNDLE);
+      m.state = 'out';
+      m.unloads++;
+    }
+  }
+
+  /** Graphics v3: the hero's move bundle (tests, ?debug). */
+  heroMoveStats() {
+    const m = this.heroMove;
+    return m ? { move: m.state, moveLoads: m.loads, moveUnloads: m.unloads, moveLoadMs: m.loadMs, fallbackFrames: m.fallbackFrames } : {};
   }
 
   /** The texture name for the current season (P10.2: e.g. "obj.tree" -> "autumn.obj.tree"). @param {string} key */
@@ -2116,10 +2162,16 @@ export class GameView {
     // Release art (hero.<action>.<dir>.<frame>): the full animation set when it is loaded.
     const pose = this.heroAnim.update(p, state, timeSec, dtSec * 1000);
     this.heroPose = pose;
-    const releaseKey = this.heroAnim.textureKey(pose, p.facing, p.moving, (k) => this.assets.hasTexture(k));
+    // (graphics v3: climb / swim / glide come from a bundle loaded on use; meanwhile their approved frames)
+    this.updateHeroMove(pose.action, performance.now());
+    const has = this.heroMove ? (/** @type {string} */ k) => heroDrawKey(k, (x) => this.assets.hasTexture(x)) !== null : (/** @type {string} */ k) => this.assets.hasTexture(k);
+    const releaseKey = this.heroAnim.textureKey(pose, p.facing, p.moving, has);
     this.heroKey = releaseKey;
+    const drawKey = releaseKey && this.heroMove ? heroDrawKey(releaseKey, (x) => this.assets.hasTexture(x)) : releaseKey;
+    if (this.heroMove && drawKey !== releaseKey) this.heroMove.fallbackFrames++;
+    this.heroDrawn = drawKey;
     // Otherwise the placeholder hero. Swimming: head and shoulders above the water, ripples alternate.
-    const heroFrame = releaseKey ?? (p.swimming ? `player.swim.${p.facing}.${Math.floor(p.walkTime * (p.moving ? 6 : 2)) % 2}` : `player.walk.${p.facing}.${frame}`);
+    const heroFrame = drawKey ?? (p.swimming ? `player.swim.${p.facing}.${Math.floor(p.walkTime * (p.moving ? 6 : 2)) % 2}` : `player.walk.${p.facing}.${frame}`);
     setFrame(this.player, this.assets, heroFrame); // (graphics v3: a left frame may be its right frame mirrored)
     const tex = this.player.texture;
     // P11.5: the glider, the hidden-player check, the stamina wheel, the shield and the bow sit

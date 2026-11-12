@@ -97,7 +97,9 @@ export async function releaseFrames(group, sheets = releaseSheets) {
       const [sheet, table] = await Promise.all([loadSheet(packed.sheet), fetch(packed.table).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Could not load ${packed.table}`))))]);
       const frames = /** @type {Record<string, { x: number, y: number, w: number, h: number }>} */ (table.frames);
       const density = group.startsWith('v3/') ? V3_DENSITY : undefined;
-      return new Map(Object.entries(frames).map(([name, r]) => [name, density ? { sheet, x: r.x, y: r.y, w: r.w, h: r.h, density } : { sheet, x: r.x, y: r.y, w: r.w, h: r.h }]));
+      // (graphics v3: each frame's opaque box, from the build: placeholderPack trim reads it instead of the pixels)
+      const opaque = /** @type {Record<string, { x: number, y: number, w: number, h: number }> | undefined} */ (table.opaque);
+      return new Map(Object.entries(frames).map(([name, r]) => [name, density ? { sheet, x: r.x, y: r.y, w: r.w, h: r.h, density, ...(opaque?.[name] ? { opaque: opaque[name] } : {}) } : { sheet, x: r.x, y: r.y, w: r.w, h: r.h }]));
     } catch (err) {
       console.warn(`art: release ${group}: ${String(err)}; using the placeholders`);
       return new Map();

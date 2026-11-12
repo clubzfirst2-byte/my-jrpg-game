@@ -408,6 +408,16 @@ export function opaqueBox(rgba, w, h) {
   return x1 < 0 ? { x: 0, y: 0, w: 1, h: 1 } : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
 }
 
+/**
+ * Graphics v3: a frame's opaque box as the build gave it (SheetFrame.opaque), when it fits the image, else null.
+ * @param {ArtSource | undefined} src @param {{ width: number, height: number }} image
+ */
+export function knownOpaqueBox(src, image) {
+  const b = src && typeof src === 'object' && 'opaque' in src ? src.opaque : undefined;
+  if (!b || b.x < 0 || b.y < 0 || b.w < 1 || b.h < 1 || b.x + b.w > image.width || b.y + b.h > image.height) return null;
+  return { x: b.x, y: b.y, w: b.w, h: b.h };
+}
+
 /** @param {HTMLImageElement | HTMLCanvasElement} image */
 function opaqueBoxOf(image) {
   const c = document.createElement('canvas');
@@ -503,7 +513,9 @@ function loadImage(url) {
  * One frame of a packed release sheet (docs/perf/release-art-packing.md): the sheet's image and
  * where the frame sits on it, in its pixels. `density`: art px per game px when it is not ART_SCALE
  * (graphics v3: 4, artV3.js).
- * @typedef {{ sheet: CanvasImageSource | SheetRef, x: number, y: number, w: number, h: number, density?: number }} SheetFrame
+ * `opaque`: graphics v3, the box of the frame's opaque pixels in the frame, from the build (trim uses it
+ * instead of reading the pixels back: release-art-pack.opaqueRect).
+ * @typedef {{ sheet: CanvasImageSource | SheetRef, x: number, y: number, w: number, h: number, density?: number, opaque?: { x: number, y: number, w: number, h: number } }} SheetFrame
  */
 /**
  * Where a sprite's art comes from: its own PNG's URL, its place on a packed sheet, or (graphics v3 in
@@ -643,18 +655,22 @@ export function mirroredFrames(all, mirror) {
 /**
  * @param {{ key: string, rows: string[], anchor: [number, number] }[]} [entries]
  * @param {Map<string, ArtSource>} [overrides] the real art (P11.5), by logical name
- * @param {{ tallestFirst?: boolean, mirror?: MirrorOptions, exactHeight?: boolean, trim?: boolean }} [opts] tallestFirst: pack the real art
+ * @param {{ tallestFirst?: boolean, mirror?: MirrorOptions, exactHeight?: boolean, trim?: boolean, mirrorOf?: Map<string, string> }} [opts] tallestFirst: pack the real art
  *   tallest first (gfx W1); mirror: graphics v3, left frames drawn as their right frames mirrored;
  *   exactHeight: graphics v3, the real art's atlases only as high as they are used (atlasSizeFor);
- *   trim: graphics v3, the real art's sprites (not tiles) packed without their transparent margins (opaqueBox)
+ *   trim: graphics v3, the real art's sprites (not tiles) packed without their transparent margins (opaqueBox);
+ *   mirrorOf: graphics v3, left frames that have no art of their own, each drawn as the given right frame
+ *   of the pack mirrored (heroV3.js: the v3 hero stores no left frame for an action without a held prop)
  * @returns {Promise<import('./assetManager.js').BuiltBundle>}
  */
-export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map(), { tallestFirst = false, mirror, exactHeight = false, trim = false } = {}) {
+export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map(), { tallestFirst = false, mirror, exactHeight = false, trim = false, mirrorOf } = {}) {
   let all = await withOverrides(entries, overrides);
   // (graphics v3: the real art packed without its transparent margins)
-  if (trim) all = all.map((e) => (e.image && !mustKeepSize(e.anchor) ? { ...e, trim: opaqueBoxOf(e.image) } : e));
+  // (the box from the build when the sheet's table gives it: reading the pixels back is slow while the GPU draws)
+  if (trim) all = all.map((e) => (e.image && !mustKeepSize(e.anchor) ? { ...e, trim: knownOpaqueBox(overrides.get(e.key), e.image) ?? opaqueBoxOf(e.image) } : e));
   const mirrored = mirror ? mirroredFrames(all, mirror) : new Map();
   if (mirrored.size) all = all.filter((e) => !mirrored.has(e.key));
+  for (const [left, right] of mirrorOf ?? []) if (!mirrored.has(left)) mirrored.set(left, right);
   // The placeholders and the real art are packed apart: the real art's atlas has 2 pixels per unit
   // (graphics v3: and the v3 art's, 4, on an atlas of its own; artV3.js).
   const plain = all.filter((e) => !e.image);
