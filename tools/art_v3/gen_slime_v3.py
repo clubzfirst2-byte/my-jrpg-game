@@ -26,6 +26,8 @@ G = 54  # the foot's bottom row
 RAMPS = {
     "jelly": ["#2e1a3e", "#3a2150", "#47295f", "#573271", "#6e4490", "#9a70c0", "#c4a0e4"],
     "core": ["#4a1050", "#6a1e6a", "#8e2c8e", "#b040b0", "#e070e0", "#ffc8ff"],
+    # hero round (inspection P3-17): the bubbles in their own cool light purple, apart from the eyes' pink
+    "bubble": ["#2e1a3e", "#3a2150", "#5a5498", "#7a76bc", "#9a98d8", "#bcbcf0", "#dcdcff"],
     "glow": ["#3a2150", "#55306f", "#62387e", "#70428e", "#80509e", "#9a70c0"],
 }
 EYE, EYE_D, EYE_W, PUPIL = "#e070e0", "#b040b0", "#ffd8ff", "#3a1a44"
@@ -125,8 +127,8 @@ def frame(i):
         if (halo | cry)[y0:y0 + 3, x0:x0 + 3].any():
             continue
         for dx, dy in ((0, 0), (1, 0), (0, 1)):
-            c.put(x0 + dx, y0 + dy, "jelly", 6)
-        c.put(x0 + 1, y0 + 1, "jelly", 5)
+            c.put(x0 + dx, y0 + dy, "bubble", 5)
+        c.put(x0 + 1, y0 + 1, "bubble", 4)
         c.put(x0 + 1, y0 + 2, "jelly", 1)
         c.put(x0 + 2, y0 + 2, "jelly", 1)
     despeckle(c)

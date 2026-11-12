@@ -91,7 +91,31 @@ def head(c, oy, lag):
     bangs = [((20, 13 + oy), (17, 29 + oy), 8, 2.0), ((27, 13 + oy), (24, 28 + oy + lag), 8, 1.5),
              ((32, 13 + oy), (31, 26 + oy), 7, -0.5), ((38, 13 + oy), (40, 28 + oy + lag), 8, -1.5),
              ((44, 13 + oy), (48, 29 + oy), 8, -2.0)]
-    for root, tip, w, bend in side + crown + spikes + bangs:
+    # the top of the head (hero round, inspection P3-15): the crown and spike locks are drawn first;
+    # each keeps its own light/dark facet but no dark lower band (which stacked into horizontal lines
+    # across the crown), and each has one groove running out from the crown along it (1 texel darker,
+    # stopping before the tip). Then the face-framing side locks and bangs in front, as before.
+    top = np.zeros((H, W), bool)
+    for root, tip, w, bend in crown + spikes:
+        m = lock(c, root, tip, w, bend)
+        top |= m
+        c.fill(m, "hair")
+        c.shade_part(m, tones=(3, 3, 4, 4, 5), norm=True, global_mask=mass, gmix=0.6)
+    for root, tip, w, bend in crown + spikes:
+        (x0, y0), (x1, y1) = root, tip
+        L = math.hypot(x1 - x0, y1 - y0) or 1
+        nx, ny = -(y1 - y0) / L, (x1 - x0) / L
+        if ny < 0 or (ny == 0 and nx < 0):  # the groove on the lock's lower / right side (away from the light)
+            nx, ny = -nx, -ny
+        pts = []
+        for i in range(1, 8):
+            t = i / 10
+            off = bend * math.sin(math.pi * t) + w * 0.2 * (1 - t)
+            pts.append((x0 + (x1 - x0) * t + nx * off, y0 + (y1 - y0) * t + ny * off))
+        g = c.m_line(pts, 0.9) & top
+        for y, x in zip(*np.nonzero(g)):
+            c.tone[y, x] = 2
+    for root, tip, w, bend in side + bangs:
         m = lock(c, root, tip, w, bend)
         c.fill(m, "hair")
         c.shade_part(m, tones=(2, 3, 3, 4, 5), norm=True, global_mask=mass, gmix=0.35)
@@ -112,9 +136,11 @@ def features(c, oy):
             for i, ch in enumerate(row):
                 if ch != ".":
                     c.dot(ex + i, 32 + oy + j, EYE[ch])
-    for x, y in ((17, 29), (18, 29), (19, 29), (20, 29), (15, 30), (16, 30), (17, 30), (14, 31), (15, 31),
-                 (37, 29), (38, 29), (39, 29), (40, 29), (40, 30), (41, 30), (42, 30), (42, 31), (43, 31)):
-        c.put(x, y + oy, "hair", 1)
+    # brows (hero round): v1's 2-row band, one row lower than the pilot, sloping down to the outer side
+    for xs, y in ((range(17, 22), 30), (range(16, 21), 31)):  # 1 texel of skin from the side hair
+        for x in xs:
+            c.put(x, y + oy, "hair", 1)
+            c.put(57 - x, y + oy, "hair", 1)
     for x, y in ((27, 38), (28, 38), (27, 39), (28, 39)):  # nose: v1's dot at 2x (2 x 2 of shade)
         c.put(x, y + oy, "skin", 2)
     for bx in (18, 41):  # cheeks: inside the face, under the eyes' outer corners
@@ -274,7 +300,7 @@ def arm(c, side, swing, oy):
         wrist = (sx + side * (-0.5 * swing), ey + 11 + 2.5 * swing)
     g = capsule(c, elbow, wrist, 3.7)
     c.fill(g, "shirt")  # v1's gauntlet greys (#4a4640 #a8a296 #e4e0d6): metal in 3 tones + a light
-    c.shade_part(g, tones=(0, 1, 1, 2, 3), norm=True, light=(-0.9, -0.2, 0.4))
+    c.shade_part(g, tones=(0, 0, 1, 1, 3), norm=True, light=(-0.9, -0.2, 0.4))  # v1's darkness (hero round)
     ex, eyy = elbow
     wx, wy = wrist
     for t in (0.18, 0.62):  # two metal bands with a lit top edge
@@ -282,7 +308,7 @@ def arm(c, side, swing, oy):
         band = c.m_line([(bx - 4, by), (bx + 4, by)], 1.2) & g
         c.set_tone(band, 0)
         up = c.m_line([(bx - 4, by - 1), (bx + 4, by - 1)], 1.0) & g
-        c.set_tone(up, 3)
+        c.set_tone(up, 3 if t < 0.5 else 1)
     c.put(int(round(ex - 2)), int(round(eyy + 2)), "shirt", 4)  # the metal's glint (2 texels)
     c.put(int(round(ex - 2)), int(round(eyy + 3)), "shirt", 3)
     hand_stamp(c, "leather", (wx, wy + 1), side if swing <= 0 else -side, tones=(1, 2, 3, 4, 5))
@@ -326,12 +352,63 @@ WALK = [  # left foot / right foot lift, arm swing (left, right), bob, cloak swa
 ]
 
 
+RUN = [  # down: both fists pumping in front of the belly (v1's run), feet lifted high, the body up on the float frames
+    dict(feet=(0, -3), swing=(0.8, 0.2), oy=1, sway=1, lag=1),
+    dict(feet=(0, -6), swing=(1.0, 0.1), oy=-1, sway=2, lag=0),
+    dict(feet=(-2, -4), swing=(0.6, 0.4), oy=0, sway=1, lag=1),
+    dict(feet=(-3, 0), swing=(0.2, 0.8), oy=1, sway=-1, lag=1),
+    dict(feet=(-6, 0), swing=(0.1, 1.0), oy=-1, sway=-2, lag=0),
+    dict(feet=(-4, -2), swing=(0.4, 0.6), oy=0, sway=-1, lag=1),
+]
+
+# side (facing right): legs = ((foot dx, heel lift, knee bend) far, near), arms = (far, near) swing
+S_IDLE = [dict(breath=0), dict(breath=1, arms=(-0.1, -0.1)), dict(breath=2, lag=1, oy=1, arms=(-0.15, -0.15)),
+          dict(breath=1, lag=1, arms=(-0.05, -0.05))]
+S_WALK = [
+    dict(legs=((-8, 0, 0), (8, 2, 1)), arms=(0.7, -0.7), oy=0, sway=1, lag=1),
+    dict(legs=((-4, 4, -2), (3, 0, 1)), arms=(0.3, -0.3), oy=2, sway=1, lag=0),
+    dict(legs=((2, 6, -3), (-2, 0, 0)), arms=(-0.2, 0.2), oy=1, sway=0, lag=1),
+    dict(legs=((8, 2, 1), (-8, 0, 0)), arms=(-0.7, 0.7), oy=0, sway=-1, lag=1),
+    dict(legs=((3, 0, 1), (-4, 4, -2)), arms=(-0.3, 0.3), oy=2, sway=-1, lag=0),
+    dict(legs=((-2, 0, 0), (2, 6, -3)), arms=(0.2, -0.2), oy=1, sway=0, lag=1),
+]
+S_RUN = [
+    dict(legs=((-12, 2, -2), (11, 3, 2)), arms=(0.8, -0.8), oy=1, lean=3, bent=0.8, cloak_fly=0.6, lag=1),
+    dict(legs=((-8, 10, -6), (6, 6, 2)), arms=(0.5, -0.4), oy=-1, lean=3, bent=0.8, cloak_fly=0.9, lag=0),
+    dict(legs=((2, 12, -6), (-6, 4, 0)), arms=(-0.3, 0.3), oy=0, lean=3, bent=0.8, cloak_fly=0.7, lag=1),
+    dict(legs=((11, 3, 2), (-12, 2, -2)), arms=(-0.8, 0.8), oy=1, lean=3, bent=0.8, cloak_fly=0.6, lag=1),
+    dict(legs=((6, 6, 2), (-8, 10, -6)), arms=(-0.4, 0.5), oy=-1, lean=3, bent=0.8, cloak_fly=0.9, lag=0),
+    dict(legs=((-6, 4, 0), (2, 12, -6)), arms=(0.3, -0.3), oy=0, lean=3, bent=0.8, cloak_fly=0.7, lag=1),
+]
+# back (facing up): feet = heel lift left / right, arms = swing left / right
+B_IDLE = [dict(breath=0), dict(breath=1), dict(breath=2, lag=1, oy=1), dict(breath=1, lag=1)]
+B_WALK = [dict(feet=(0, 3), arms=(0.5, -0.5), oy=0, sway=1, lag=1), dict(feet=(0, 6), arms=(0.8, -0.8), oy=2, sway=1),
+          dict(feet=(1, 3), arms=(0.4, -0.4), oy=1, sway=0, lag=1), dict(feet=(3, 0), arms=(-0.5, 0.5), oy=0, sway=-1, lag=1),
+          dict(feet=(6, 0), arms=(-0.8, 0.8), oy=2, sway=-1), dict(feet=(3, 1), arms=(-0.4, 0.4), oy=1, sway=0, lag=1)]
+B_RUN = [dict(feet=(0, 5), arms=(0.9, -0.9), oy=1, sway=2, lag=1, bent=0.7), dict(feet=(0, 9), arms=(1.0, -1.0), oy=-1, sway=2, bent=0.7),
+         dict(feet=(3, 5), arms=(0.4, -0.4), oy=0, sway=1, lag=1, bent=0.7), dict(feet=(5, 0), arms=(-0.9, 0.9), oy=1, sway=-2, lag=1, bent=0.7),
+         dict(feet=(9, 0), arms=(-1.0, 1.0), oy=-1, sway=-2, bent=0.7), dict(feet=(5, 3), arms=(-0.4, 0.4), oy=0, sway=-1, lag=1, bent=0.7)]
+
+
+def frames_for(view, action):
+    """The Canvas for every frame of (view, action): view down / right / up."""
+    import hero_views as HV
+    if view == "down":
+        return [frame(**p) for p in {"idle": IDLE, "walk": WALK, "run": RUN}[action]]
+    if view == "right":
+        return [HV.side_frame(RAMPS, EYE, BLUSH, MOUTH, **p) for p in {"idle": S_IDLE, "walk": S_WALK, "run": S_RUN}[action]]
+    return [HV.back_frame(RAMPS, **p) for p in {"idle": B_IDLE, "walk": B_WALK, "run": B_RUN}[action]]
+
+
+# Facing left is not stored: the game draws facing right mirrored (v1's left frames are exact mirrors
+# of its right frames for every action without a held prop).
 def main():
     out = []
-    for name, poses in (("idle", IDLE), ("walk", WALK)):
-        for i, p in enumerate(poses):
-            out.append(save(frame(**p), os.path.join(OUT, f"hero.{name}.down.{i}.png")))
-    print("\n".join(os.path.relpath(p, ROOT) for p in out))
+    for view in ("down", "right", "up"):
+        for action in ("idle", "walk", "run"):
+            for i, cv in enumerate(frames_for(view, action)):
+                out.append(save(cv, os.path.join(OUT, f"hero.{action}.{view}.{i}.png")))
+    print(f"{len(out)} files")
 
 
 if __name__ == "__main__":

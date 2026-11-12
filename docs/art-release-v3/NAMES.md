@@ -112,3 +112,15 @@ autumn (only the tint changes); winter loads its own set.
   `flowers_yellow` (f 0–1, sway), `bush_berry`, `bush`, `shrub`, `stump`, `rock_s`, `rock_m`,
   `pebbles`, `log`, `mushrooms`, `clover` (f 0).
 - Anchor: the bottom centre (the foot on the bottom row).
+
+## 5. Hero (production order 2)
+
+- `hero.<action>.<dir>.<n>` in `src/art-release-v3/hero/`, the same actions, frame counts, fps and keys as
+  the approved hero (`src/art-release/hero`, `src/view/heroAnim.js`). 64×112 (the actions v1 draws 48 wide:
+  96×112). Anchor: the bottom row's centre (v1's bottom-centre anchor ×2).
+- dir `down`, `up`, `right` are stored. **`left` is not stored for actions without a held prop**: the game
+  draws `right` mirrored (scale.x = −1 about the frame's centre). v1's left frames are exact mirrors of its
+  right frames for every such action. Actions with a prop in one hand (attack1–3, bow, guard) store `left`
+  too.
+- Done so far: idle 4, walk 6, run 6 for down / right / up (48 files).
+

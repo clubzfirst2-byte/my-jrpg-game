@@ -99,6 +99,7 @@ class Canvas:
         return inside
 
     def m_rect(self, x0, y0, x1, y1):
+        x0, y0, x1, y1 = (int(round(v)) for v in (x0, y0, x1, y1))
         m = np.zeros((self.h, self.w), bool)
         m[max(0, y0):max(0, y1 + 1), max(0, x0):max(0, x1 + 1)] = True
         return m
