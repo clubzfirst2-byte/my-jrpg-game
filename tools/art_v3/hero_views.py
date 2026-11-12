@@ -165,7 +165,7 @@ def side_frame(R, EYE, BLUSH, MOUTH, oy=0, lag=0, sway=0, legs=((0, 0, 0), (0, 0
             continue
         side_leg(c, hip, (27 + dx, 111 - lift), max(0, lift // 2), False, bend)
     # the cloak behind (from the shoulders to the hem, flaring back; cloak_fly lifts it in the run)
-    hem = 92 + oy
+    hem = min(92 + oy, 106)  # crouching / kneeling: the cloak lies on the ground
     back = c.m_poly([(26 + lean, 46 + oy - breath), (36 + lean, 46 + oy - breath), (34 + lean * 0.5, 60 + oy),
                      (30, 86 + oy), (29 + sway, hem - cloak_fly * 3), (16 + sway - cloak_fly * 6, hem - cloak_fly * 8),
                      (6 + sway - cloak_fly * 10, hem - 2 - cloak_fly * 12), (8 - cloak_fly * 6, 72 + oy - cloak_fly * 6),
@@ -276,7 +276,7 @@ def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, b
         c.fill(fist, "leather")
         c.shade_part(fist, tones=(1, 2, 3, 4), norm=True)
     # the cloak
-    hem = 92 + oy
+    hem = min(92 + oy, 106)  # crouching / kneeling: the cloak lies on the ground
     body = c.m_poly([(20, 44 + oy - breath), (44, 44 + oy - breath), (52, 52 + oy), (54, 70 + oy),
                      (56 + sway, hem - 1), (8 + sway, hem - 1), (10, 70 + oy), (12, 52 + oy)])
     c.fill(body, "cloak", 3)

@@ -31,7 +31,9 @@ from v3lib import Canvas, despeckle  # noqa: E402
 V1_TOOLS = [os.path.join(HERE, "..", "art_proto"), os.path.join(HERE, "..", "hero_release")]
 
 COMBAT = {"attack1": 4, "attack2": 4, "attack3": 6, "bow": 4, "guard": 2, "dodge": 4, "hurt": 2}
-WIDE_ACTIONS = {"attack1", "attack2", "attack3", "bow", "guard", "hurt"}  # v1: 48 wide
+WIDE_ACTIONS = {"attack1", "attack2", "attack3", "bow", "guard", "hurt", "jump", "down"}  # v1: 48 wide
+REST = {"jump": 2, "land": 2, "glide": 4, "climb": 4, "swim": 4, "down": 4}  # milestone 3
+ARMS_IN_FRONT = {"glide", "climb"}  # raised arms seen whole (v1 stage 5: the face kept clear)
 OWN_LEFT = {"attack1", "attack2", "attack3", "bow", "guard"}
 
 
@@ -53,6 +55,11 @@ def v1_pose(action, view, i, left=False):
         p["hands"] = {{"R": "L", "L": "R"}[k]: xy for k, xy in (p.get("hands") or {}).items()}
     else:
         p = dict(fn(v, i))
+    if p.pop("_back", False) and v != "side":  # climbing: he faces the wall in the down view too (v1)
+        p = dict(fn("up", i))
+        p.pop("_back", None)
+        p["_view"] = "up"
+    p.pop("_up", None)
     if left:
         p = A.for_left(p, action, i)
     props = []
@@ -60,10 +67,27 @@ def v1_pose(action, view, i, left=False):
         when, fn_, key = pr[0], pr[1], (pr[2] if len(pr) > 2 else None)
         names = fn_.__code__.co_names
         cl = dict(zip(fn_.__code__.co_freevars, [c.cell_contents for c in (fn_.__closure__ or ())]))
-        kind = "sword" if "sword" in names else ("bow" if "bow" in names else ("shield" if "shield" in names else "dots"))
+        kind = "sword" if "sword" in names else ("bow" if "bow" in names else ("shield" if "shield" in names else
+                                                   ("ripple" if "ripples" in names else "dots")))
         props.append(dict(kind=kind, when=when, key=key, **cl))
     p["props"] = props
     return p
+
+
+A_SHARED_BACK = {"jump", "land", "dodge", "hurt", "down"}  # v1 actions.SHARED_BACK
+
+
+def ripples(c, cx, y, half, phase):
+    """v1's water line at 2x: a broken ring of light round the swimmer, moving with the strokes."""
+    for k in range(-half - 4, half + 5):
+        ry = y + (2 if abs(k) > half - 2 else 0)
+        lit = ((k // 2) + phase) % 4 in (0, 1)
+        for d in (0, 1):
+            c.put(int(cx + k), int(ry + d), "water", (4 if lit else 3) if d == 0 else 2)
+    for k in (-half - 8, half + 8):
+        if (k > 0) == (phase % 2 == 0):
+            c.put(int(cx + k), y + 2, "water", 4)
+            c.put(int(cx + k + 1), y + 2, "water", 4)
 
 
 def V(x):
@@ -162,10 +186,12 @@ def bow(c, hx, hy, ang, draw, arrow=True, reach=10, nock_at=None):
         t = k / R
         bend = 4.8 * (1 - t * t) - 1.6 * (abs(t) > 0.8)
         pts.append((hx + ux * bend + px * k, hy + uy * bend + py * k))
-    c.fill(c.m_line(pts, 3.4), "wood", 1)  # a dark edge round the limbs (they read over the tunic)
-    limb = c.m_line(pts, 1.8)
-    c.fill(limb, "wood", 3)
-    c.set_tone(limb & c.m_line(pts[: len(pts) // 2 + 1], 1.8), 4)
+    # a dark edge round the limbs, then the limb in the darker browns: the bow reads over the white
+    # tunic (inspection, milestone 2: the front bow was lost in the clothes)
+    c.fill(c.m_line(pts, 4.2), "wood", 0)
+    limb = c.m_line(pts, 2.2)
+    c.fill(limb, "wood", 2)
+    c.set_tone(limb & c.m_line(pts[: len(pts) // 2 + 1], 2.2), 3)
     top, bot = pts[0], pts[-1]
     nock = nock_at or (hx - ux * (2 + 14 * draw), hy - uy * (2 + 14 * draw))
     string = c.m_line([top, nock], 1.0) | c.m_line([bot, nock], 1.0)
@@ -243,7 +269,7 @@ def build(action, view, i, H, HV):
     near, far = p.get("near", (0, 0)), p.get("far", (0, 0))
     lean = 2 * p.get("lean", 0)
     sway = p.get("sway", 0)
-    v = "side" if view in ("right", "left") else view
+    v = p.get("_view") or ("side" if view in ("right", "left") else view)
     # an arm whose v1 pose is "down" (hanging) is the body's own arm (the same as idle); the others
     # are drawn to their hands below
     poses = p.get("arms") or {}
@@ -281,6 +307,17 @@ def build(action, view, i, H, HV):
             far_arm = False
             raised = hp[1] < s[1] - 10
         hidden_back = v == "up" and abs(hp[0] - 32) < 15 and hp[1] > s[1] - 2  # an arm in front of him, seen from behind
+        if action in ARMS_IN_FRONT:
+            raised = hidden_back = False
+            if v == "side" and hp[1] < s[1] - 8:  # a raised arm passes behind the head (the face kept
+                hp = (max(hp[0], 58.0 + lean), hp[1])  # clear, as v1): the fist ahead of the face shows
+                hands[k] = hp
+                behind.append(("arm", k, s, hp, far_arm))
+                front.append(("fist", k, s, hp, far_arm))
+                continue
+        if hidden_back and action in A_SHARED_BACK:  # v1: a small hand shows at the side of the cloak
+            front.append(("fist", k, s, (10.0 if hp[0] < 32 else 54.0, hp[1]), True))
+            continue
         layer = behind if (far_arm or raised or hidden_back) else front
         darker = far_arm or (v == "down" and k == "L") or (v == "up" and k == "R")
         # front view, the bow hand in front of the body: the arm stays under the cloak, only the fist shows
@@ -322,6 +359,8 @@ def build(action, view, i, H, HV):
                 bow(c, hx + ox, hy, pr["ang"], pr["draw"], pr.get("arrow", True), pr.get("reach", 10), nock)
             elif kind == "shield":
                 shield(c, V(pr["x"]) + ox, V(pr["y"] + bob), pr["rx"], pr["ry"])
+            elif kind == "ripple":
+                pass  # drawn after the water line cuts the body (below)
             elif kind == "dots":  # the front view's arrow point at the bow (pointing out of the picture)
                 c.fill(c.m_ellipse(V(16) + ox, V(31 + bob), 1.6, 1.6), "steel", 4)
                 if i:
@@ -332,6 +371,19 @@ def build(action, view, i, H, HV):
     run(behind)
     paste(c, body, ox)
     run(front)
+    if action == "glide":  # the glider's cords from both fists, up out of the frame's top
+        for it in front:
+            if it[0] in ("arm", "fist"):
+                hx, hy = it[3][0] + ox, it[3][1]
+                c.fill(c.m_line([(hx, hy - 3), (hx + (2 if hx > 32 + ox else -2), 0)], 1.0) & (c.mat == 0), "bone", 3)
+    if p.get("water") is not None:  # swimming: nothing below the water line, then the ripples ring him
+        wl = V(p["water"]) - 1
+        c.mat[wl:, :] = 0
+        for (x, y) in [xy for xy in c.ink if xy[1] >= wl]:
+            del c.ink[(x, y)]
+        for pr in p["props"]:
+            if pr["kind"] == "ripple":
+                ripples(c, V(pr["cx"]) + ox, wl, 2 * pr["half"], pr["phase"])
     despeckle(c, loose=("hair", "cloak"))
     edge_band(c, "cloak", 1)
     c.outline()
@@ -342,7 +394,7 @@ def build(action, view, i, H, HV):
 def frames_for(action, view, H, HV):
     """view: down, right, up, left (left only for OWN_LEFT; returned mirrored)."""
     out = []
-    for i in range(COMBAT[action]):
+    for i in range({**COMBAT, **REST}[action]):
         cv = build(action, view if view != "left" else "left", i, H, HV)
         out.append(cv)
     return out

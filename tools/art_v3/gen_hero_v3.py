@@ -40,6 +40,7 @@ V1 = {
     "wood": ["#1e1008", "#4a2c16", "#6e4424", "#906038", "#b07e50"],
     "steel": ["#1a1e26", "#4a5260", "#7a8494", "#a8b2c0", "#e0e6ee"],
     "bone": ["#3a3226", "#9a8c70", "#d0c4a4", "#e8dec4", "#fff8e4"],
+    "water": ["#0e3050", "#2a6a9a", "#5aa0d0", "#a8dcf8", "#f4fcff"],
 }
 RAMPS = {k: ramp6(v) for k, v in V1.items()}
 EYE = {"L": "#24223a", "D": "#1a3c86", "I": "#2a78d0", "B": "#4ea2ec", "K": "#13285e", "W": "#f0fbff",
@@ -169,7 +170,7 @@ def features(c, oy, blink=False):
 
 
 def cloak(c, oy, sway, breath):
-    hem = 93 + oy
+    hem = min(93 + oy, 106)  # crouching / kneeling: the cloak lies on the ground
     # outer silhouette (shoulders breathe, hem sways), dips at the folds' grooves
     L = [(12, 46 + oy - breath), (7, 56 + oy), (6, 74 + oy), (5 + sway, hem - 1), (10 + sway, hem + 1),
          (16 + sway, hem), (22 + sway, hem + 1)]
@@ -438,7 +439,7 @@ def main():
     import hero_views as HV
     from PIL import Image
     me = sys.modules[__name__]
-    for action in HC.COMBAT:
+    for action in list(HC.COMBAT) + list(HC.REST):
         for view in ("down", "right", "up") + (("left",) if action in HC.OWN_LEFT else ()):
             for i, cv in enumerate(HC.frames_for(action, view, me, HV)):
                 img = cv.image()

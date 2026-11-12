@@ -124,5 +124,6 @@ autumn (only the tint changes); winter loads its own set.
   too.
 - Done so far: idle 4, walk 6, run 6 for down / right / up (48 files); attack1 4, attack2 4, attack3 6, bow 4,
   guard 2 for down / right / up / left, dodge 4 and hurt 2 for down / right / up (98 files).
+- jump 2, land 2, glide 4, climb 4, swim 4, down 4 for down / right / up (60 files). All 206 stored frames are done.
 - climb, swim and glide are loaded only when used (decision 2026-11-12, STYLE 10.2).
 
