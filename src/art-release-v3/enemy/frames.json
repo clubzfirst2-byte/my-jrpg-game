@@ -1,0 +1,244 @@
+{
+ "version": 3,
+ "density": 4,
+ "note": "v3 normal enemies and shots (gen_enemy_v3.py). Same kinds, actions, frame counts and fps as v2 (src/art-release-v2/enemy/frames.json); every size is 2x v2 (the same game size). Bosses: v2.",
+ "minimal": {
+  "enemy.beast.0": "enemy.beast.idle.0",
+  "enemy.beast.1": "enemy.beast.move.0",
+  "enemy.archer.0": "enemy.archer.idle.0",
+  "enemy.archer.1": "enemy.archer.move.0"
+ },
+ "kinds": {
+  "beast": {
+   "facing": "right",
+   "actions": {
+    "idle": {
+     "frames": 4,
+     "size": [
+      88,
+      64
+     ]
+    },
+    "move": {
+     "frames": 8,
+     "size": [
+      88,
+      64
+     ]
+    },
+    "windup": {
+     "frames": 4,
+     "size": [
+      88,
+      64
+     ]
+    },
+    "attack": {
+     "frames": 5,
+     "size": [
+      88,
+      64
+     ]
+    },
+    "hurt": {
+     "frames": 3,
+     "size": [
+      88,
+      64
+     ]
+    },
+    "defeat": {
+     "frames": 6,
+     "size": [
+      88,
+      64
+     ]
+    }
+   }
+  },
+  "archer": {
+   "facing": "right",
+   "actions": {
+    "idle": {
+     "frames": 4,
+     "size": [
+      64,
+      112
+     ]
+    },
+    "move": {
+     "frames": 8,
+     "size": [
+      64,
+      112
+     ]
+    },
+    "windup": {
+     "frames": 4,
+     "size": [
+      64,
+      112
+     ]
+    },
+    "attack": {
+     "frames": 5,
+     "size": [
+      64,
+      112
+     ]
+    },
+    "hurt": {
+     "frames": 3,
+     "size": [
+      64,
+      112
+     ]
+    },
+    "defeat": {
+     "frames": 6,
+     "size": [
+      64,
+      112
+     ]
+    }
+   }
+  },
+  "slime": {
+   "facing": "right",
+   "actions": {
+    "idle": {
+     "frames": 4,
+     "size": [
+      64,
+      56
+     ]
+    },
+    "move": {
+     "frames": 8,
+     "size": [
+      64,
+      56
+     ]
+    },
+    "windup": {
+     "frames": 4,
+     "size": [
+      64,
+      56
+     ]
+    },
+    "attack": {
+     "frames": 5,
+     "size": [
+      64,
+      56
+     ]
+    },
+    "hurt": {
+     "frames": 3,
+     "size": [
+      64,
+      56
+     ]
+    },
+    "defeat": {
+     "frames": 6,
+     "size": [
+      64,
+      56
+     ]
+    }
+   }
+  },
+  "sentinel": {
+   "facing": "right",
+   "actions": {
+    "idle": {
+     "frames": 4,
+     "size": [
+      80,
+      112
+     ]
+    },
+    "move": {
+     "frames": 8,
+     "size": [
+      80,
+      112
+     ]
+    },
+    "windup": {
+     "frames": 4,
+     "size": [
+      80,
+      112
+     ]
+    },
+    "attack": {
+     "frames": 5,
+     "size": [
+      80,
+      112
+     ]
+    },
+    "hurt": {
+     "frames": 3,
+     "size": [
+      80,
+      112
+     ]
+    },
+    "defeat": {
+     "frames": 6,
+     "size": [
+      80,
+      112
+     ]
+    }
+   }
+  },
+  "shot": {
+   "facing": "right",
+   "actions": {
+    "orb": {
+     "frames": 4,
+     "size": [
+      24,
+      24
+     ]
+    },
+    "ice": {
+     "frames": 4,
+     "size": [
+      24,
+      24
+     ]
+    },
+    "sand": {
+     "frames": 4,
+     "size": [
+      24,
+      24
+     ]
+    },
+    "spark": {
+     "frames": 4,
+     "size": [
+      24,
+      24
+     ]
+    }
+   }
+  }
+ },
+ "anchor": "feet = bottom centre (shots: centre)",
+ "fps_hint_ms": {
+  "idle": 180,
+  "move": 90,
+  "windup": "split the wind-up time evenly",
+  "attack": 80,
+  "hurt": 90,
+  "defeat": 140,
+  "shot": 90
+ }
+}
