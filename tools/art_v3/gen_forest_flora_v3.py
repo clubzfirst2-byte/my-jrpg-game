@@ -83,6 +83,7 @@ def conifer(kind, season, frame):
     y_top = int(H * top) + 1
     whole = c.m_poly([(cx, y_top), (cx + hw_bot + 2, yb_last + 4), (cx - hw_bot - 2, yb_last + 4)])
     prev = None
+    shelves, tiers = [], []  # (round 3) the winter spruce's snow shelves
     sway = SWAY[frame]
     for i in range(n):
         f = (i + 1) / n
@@ -114,6 +115,8 @@ def conifer(kind, season, frame):
             sh &= m & ~prev
             for y, x in zip(*np.nonzero(sh)):
                 c.tone[y, x] = max(1, int(c.tone[y, x]) - 2)
+            shelves.append((i, sh, cxi, hw))
+        tiers.append(m)
         prev = m if prev is None else (prev | m)
     kp = c.mid("pine")
     for y in range(2, H - 3):
@@ -126,9 +129,37 @@ def conifer(kind, season, frame):
                 if c.mat[y + dy, x + dx] == kp:
                     c.tone[y + dy, x + dx] = min(6, t + 1) if lit else max(1, t - 1)
     if season == "winter":
+        if kind == "spruce":
+            spruce_shelves(c, shelves, tiers, seed)
         FL.snow_caps(c, ("pine",), depth=(2, 5), seed=seed)
         FL.drop_small_snow(c, 4, back="pine")
     return FL.finish(c, loose=())
+
+
+def spruce_shelves(c, shelves, tiers, seed):
+    """Round 3 (inspection P2-2: the winter spruce had almost no snow, 0.9 %): its drooping tiers
+    overlap, so snow_caps finds almost no top surface. The snow lies instead on each tier's upper
+    face where it shows under the tier above (the 3 rows under the hanging edge, the summer's shade
+    band): a shelf 1-2 rows deep on the outer part of each layer (lit left: 6, some columns over 5; the shaded
+    right: 5 over 4, with gaps), the middle of the tree left green. Pieces
+    under 4 texels go back to pine (drop_small_snow)."""
+    kp, ks = c.mid("pine"), c.mid("snow")
+    rng = random.Random(seed * 7 + 3)
+    for i, sh, cxi, hw in shelves:
+        later = np.zeros_like(sh)
+        for m in tiers[i + 1:]:
+            later |= m
+        vis = sh & ~later & (c.mat == kp)
+        lo, hi = 0.42 + 0.1 * rng.random(), 0.78 + 0.08 * rng.random()  # the outer part of the branch layer
+        for y, x in zip(*np.nonzero(vis)):
+            r = (x + 0.5 - cxi) / hw
+            if not (lo < abs(r) < hi) or (r > 0 and hsh(x // 2, i, seed + 9) % 2 == 0):
+                continue  # the shaded right side holds less
+            top = y - 1 < 0 or not vis[y - 1, x]
+            if not top and not (hsh(x, i, seed + 5) % 3 == 0 and (y - 2 < 0 or not vis[y - 2, x])):
+                continue  # 1 row, or 2 on a third of the columns
+            c.mat[y, x] = ks
+            c.tone[y, x] = (6 if top else 5) if r < 0 else (5 if top else 4)
 
 
 # ------------------------------------------------------------------ birch (round 2: its own form)
