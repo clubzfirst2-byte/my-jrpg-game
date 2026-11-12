@@ -140,5 +140,5 @@ autumn (only the tint changes); winter loads its own set.
   mirrors of its right frames); **princess and smith have no `left` files: the engine draws their `right`
   mirrored** (scale.x = −1), as for the hero (decision 2026-11-12).
 - Done so far: woman (40 files; idle down 0-3 are the approved pilot frames, unchanged); princess and smith
-  (30 files each: down / right / up).
+  (30 files each: down / right / up); child, cook and elder (40 files each).
 

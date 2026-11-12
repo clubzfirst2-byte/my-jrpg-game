@@ -14,6 +14,7 @@ sys.path.insert(0, HERE)
 from PIL import Image  # noqa: E402
 
 import npc_batch2  # noqa: E402
+import npc_batch3  # noqa: E402
 import npc_woman  # noqa: E402
 from v3lib import ROOT, edge_cuts, save, stray_pieces  # noqa: E402
 
@@ -28,6 +29,9 @@ def main():
     # princess and smith: no left files (the game mirrors their right frames, decision 2026-11-12)
     jobs += [(who, action, view, (lambda w=who, a=action, v=view: npc_batch2.frames(w, a, v)))
              for who in ("princess", "smith") for action in ("idle", "walk") for view in ("down", "right", "up")]
+    jobs += [(who, action, view, (lambda w=who, a=action, v=view: npc_batch3.frames(w, a, v)))
+             for who in ("child", "cook", "elder") for action in ("idle", "walk")
+             for view in ("down", "right", "up", "left")]
     for who, action, view, make in jobs:
         if True:
             for i, cv in enumerate(make()):
@@ -40,11 +44,12 @@ def main():
                     img = cv.image()
                     if view == "left":
                         img = img.transpose(Image.FLIP_LEFT_RIGHT)
-                    out.append(save(img, os.path.join(OUT, name + ".png")))
-    print(f"{len(out)} files")
-    if bad:
-        print("check failed:", bad)
+                    out.append((img, name))
+    if bad:  # every frame is checked before any is written
+        print("check failed, nothing written:", bad)
         sys.exit(1)
+    out = [save(img, os.path.join(OUT, name + ".png")) for img, name in out]
+    print(f"{len(out)} files")
     print("check: no frame cut by the edge, no stray piece of 40 texels or fewer")
 
 
