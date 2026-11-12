@@ -122,5 +122,7 @@ autumn (only the tint changes); winter loads its own set.
   draws `right` mirrored (scale.x = −1 about the frame's centre). v1's left frames are exact mirrors of its
   right frames for every such action. Actions with a prop in one hand (attack1–3, bow, guard) store `left`
   too.
-- Done so far: idle 4, walk 6, run 6 for down / right / up (48 files).
+- Done so far: idle 4, walk 6, run 6 for down / right / up (48 files); attack1 4, attack2 4, attack3 6, bow 4,
+  guard 2 for down / right / up / left, dodge 4 and hurt 2 for down / right / up (98 files).
+- climb, swim and glide are loaded only when used (decision 2026-11-12, STYLE 10.2).
 

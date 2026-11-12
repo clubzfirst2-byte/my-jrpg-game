@@ -26,6 +26,11 @@ EYE_SIDE = [  # the eye seen from the side (7 x 6): v1's side eye at 2x (the fro
 ]
 
 
+def _off(no_arms, side):
+    """no_arms: True, False, or a set of the arms left out (side view: 0 far, 1 near; back: -1 / +1)."""
+    return no_arms is True or (not isinstance(no_arms, bool) and side in no_arms)
+
+
 def _shade_lock_set(c, locks, mass, lit_tones=(2, 3, 3, 4, 5)):
     for root, tip, w, bend in locks:
         m = lock(c, root, tip, w, bend)
@@ -36,7 +41,7 @@ def _shade_lock_set(c, locks, mass, lit_tones=(2, 3, 3, 4, 5)):
 
 # ---------------------------------------------------------------- side view (facing right)
 
-def side_head(c, oy, lag, EYE, BLUSH, MOUTH, lean=0):
+def side_head(c, oy, lag, EYE, BLUSH, MOUTH, lean=0, blink=False):
     """Profile: the big hair mass at the back (left), spikes up and back, the face on the right with
     one eye, a small nose step and the mouth at the front edge."""
     X = lean
@@ -75,7 +80,7 @@ def side_head(c, oy, lag, EYE, BLUSH, MOUTH, lean=0):
             c.tone[y, x] = 3
     # the eye (toward the front), the brow (2-row band) above it, the nose step, cheek, mouth
     ex, ey = 42 + X, 31 + oy
-    for j, row in enumerate(EYE_SIDE):
+    for j, row in enumerate(EYE_SIDE if not blink else ["", "", ".LLLLL.", "..LLL..", ""]):
         for i, ch in enumerate(row):
             if ch != ".":
                 c.dot(ex + i, ey + j, EYE[ch])
@@ -147,13 +152,14 @@ def side_arm(c, shoulder, swing, near, oy, bent=0.0):
 
 
 def side_frame(R, EYE, BLUSH, MOUTH, oy=0, lag=0, sway=0, legs=((0, 0, 0), (0, 0, 0)), arms=(0.0, 0.0),
-               lean=0, bent=0.0, cloak_fly=0.0, breath=0):
+               lean=0, bent=0.0, cloak_fly=0.0, breath=0, no_arms=False, finish=True, blink=False):
     """legs: (dx of the foot from the body line, lift of the heel, knee bend) for the far and near leg.
     arms: swing of the far and near arm. lean: the upper body forward (run)."""
     c = Canvas(W, H, R)
     hip = (32 + lean * 0.3, 78 + oy)
     # the far arm (behind the body), the far leg
-    side_arm(c, (30 + lean, 52 + oy - breath), arms[0], False, oy, bent)
+    if not _off(no_arms, 0):
+        side_arm(c, (30 + lean, 52 + oy - breath), arms[0], False, oy, bent)
     for k, (dx, lift, bend) in enumerate(legs):
         if k == 1:
             continue
@@ -184,9 +190,11 @@ def side_frame(R, EYE, BLUSH, MOUTH, oy=0, lag=0, sway=0, legs=((0, 0, 0), (0, 0
     c.fill(hemm, "gold", 3)
     for y, x in zip(*np.nonzero(hemm)):
         c.tone[y, x] = 4 if not hemm[y - 1, x] else (1 if not (y + 1 < H and hemm[y + 1, x]) else 3)
-    # the near leg
+    # the near leg (crouching, oy >= 8: drawn after the torso, the knee bent forward in front of it)
     dx, lift, bend = legs[1]
-    side_leg(c, hip, (29 + dx, 111 - lift), max(0, lift // 2), True, bend)
+    crouch = oy >= 8
+    if not crouch:
+        side_leg(c, hip, (29 + dx, 111 - lift), max(0, lift // 2), True, bend)
     # the torso: the tunic front, the belt and pouch, the pendant at the chest's front edge
     torso = c.m_poly([(28 + lean, 48 + oy - breath), (41 + lean, 48 + oy - breath), (43 + lean, 58 + oy),
                       (42 + lean * 0.6, 70 + oy), (41, 82 + oy), (27, 82 + oy), (27 + lean * 0.5, 62 + oy)])
@@ -211,9 +219,14 @@ def side_frame(R, EYE, BLUSH, MOUTH, oy=0, lag=0, sway=0, legs=((0, 0, 0), (0, 0
     c.fill(gem, "gem", 3)
     c.put(gx - 1, gy - 1, "gem", 5)
     c.put(gx + 1, gy + 1, "gem", 2)
+    if crouch:
+        side_leg(c, (hip[0] + 2, hip[1] - 4), (29 + dx, 111 - lift), max(0, lift // 2), True, bend + 6)
     # the near arm in front
-    side_arm(c, (32 + lean, 52 + oy - breath), arms[1], True, oy, bent)
-    side_head(c, oy, lag, EYE, BLUSH, MOUTH, lean=lean)
+    if not _off(no_arms, 1):
+        side_arm(c, (32 + lean, 52 + oy - breath), arms[1], True, oy, bent)
+    side_head(c, oy, lag, EYE, BLUSH, MOUTH, lean=lean, blink=blink)
+    if not finish:
+        return c
     despeckle(c, loose=("hair", "cloak"))
     edge_band(c, "cloak", 1)
     c.outline()
@@ -223,7 +236,7 @@ def side_frame(R, EYE, BLUSH, MOUTH, oy=0, lag=0, sway=0, legs=((0, 0, 0), (0, 0
 
 # ---------------------------------------------------------------- back view (facing up)
 
-def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, bent=0.0):
+def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, bent=0.0, no_arms=False, finish=True):
     """The back: the hair as one big mass with locks falling to the nape, the cloak from the shoulders
     to the hem with the gold star between the shoulder blades, the grey gauntlets at the sides, the
     boots' heels below the hem. feet: lift of the left / right foot (the sole shows when lifted)."""
@@ -247,6 +260,8 @@ def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, b
         c.fill(tr & (c.mat == 0), "trousers", 2)
     # the arms at the sides (gauntlet + hand), mostly outside the cloak
     for side, s in ((-1, arms[0]), (1, arms[1])):
+        if _off(no_arms, side):
+            continue
         sx = 31.5 + side * 22
         ex, ey = sx, 58 + oy
         wx, wy = sx - side * 1.0 * bent * 6, ey + 12 - 3 * abs(s) - 4 * bent
@@ -315,6 +330,8 @@ def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, b
     _shade_lock_set(c, spikes + locks, mass)
     c.put(cr[0], cr[1], "hair", 1)  # the whorl
     c.put(cr[0] + 1, cr[1] + 1, "hair", 1)
+    if not finish:
+        return c
     despeckle(c, loose=("hair", "cloak"))
     edge_band(c, "cloak", 1)
     c.outline()

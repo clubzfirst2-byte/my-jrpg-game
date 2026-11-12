@@ -36,6 +36,10 @@ V1 = {
     "trousers": ["#14141c", "#22222e", "#323244", "#44445a", "#585872"],
     "gold": ["#5a4018", "#a07a30", "#e8c060", "#f8dc88", "#fff4c8"],
     "gem": ["#0e2a60", "#1a5cb8", "#2a8de2", "#78c8ff", "#e0f6ff"],
+    # the props' v1 ramps (tools/art_proto/pixel.py BASE_RAMPS)
+    "wood": ["#1e1008", "#4a2c16", "#6e4424", "#906038", "#b07e50"],
+    "steel": ["#1a1e26", "#4a5260", "#7a8494", "#a8b2c0", "#e0e6ee"],
+    "bone": ["#3a3226", "#9a8c70", "#d0c4a4", "#e8dec4", "#fff8e4"],
 }
 RAMPS = {k: ramp6(v) for k, v in V1.items()}
 EYE = {"L": "#24223a", "D": "#1a3c86", "I": "#2a78d0", "B": "#4ea2ec", "K": "#13285e", "W": "#f0fbff",
@@ -62,7 +66,14 @@ EYE_R = [  # the image-right eye: the lid slants down to the outer (right) corne
 ]
 
 
-def head(c, oy, lag):
+EYE_SHUT = [  # the image-left eye shut (8 x 3)
+    "L.......",
+    ".LLLLLL.",
+    "..LLLL..",
+]
+
+
+def head(c, oy, lag, blink=False):
     """Hair (back mass, then tapered locks from the crown), the face, then the features.
     Round 3: v1's outline (side hair ending in points just below the ears, spikes on top and out at
     the sides, not a helmet), curved pointed locks, a flat-lit face (shade only under the bangs and
@@ -125,13 +136,19 @@ def head(c, oy, lag):
     for y, x in zip(*np.nonzero(skin)):  # the bangs' shade: 1-2 rows under the hair
         if y >= 2 and (hairm[y - 1, x] or hairm[y - 2, x]) and y < 34 + oy:
             c.tone[y, x] = 3
-    features(c, oy)
+    features(c, oy, blink)
 
 
-def features(c, oy):
+def features(c, oy, blink=False):
     """v1's expression at 2x: narrow eyes under a thick slanted lid, short brows close above them
     sloping down to the outer side, a nose, cheeks inside the face under the eyes, a 6 x 2 mouth."""
     for ex, rows in ((14, EYE_L), (36, EYE_R)):
+        if blink:  # shut tight (hurt): the lid as a thick line bending down, lashes at the outer end
+            for j, row in enumerate(EYE_SHUT if ex < 30 else [r[::-1] for r in EYE_SHUT]):
+                for i, ch in enumerate(row):
+                    if ch != ".":
+                        c.dot(ex + i, 33 + oy + j, EYE[ch])
+            continue
         for j, row in enumerate(rows):
             for i, ch in enumerate(row):
                 if ch != ".":
@@ -314,11 +331,18 @@ def arm(c, side, swing, oy):
     hand_stamp(c, "leather", (wx, wy + 1), side if swing <= 0 else -side, tones=(1, 2, 3, 4, 5))
 
 
-def frame(oy=0, breath=0, sway=0, lag=0, feet=(0, 0), swing=(0.0, 0.0)):
+def arm_off(no_arms, side):
+    """no_arms: True (no arms), False, or a set of the sides (-1 image left, +1 image right) left out."""
+    return no_arms is True or (not isinstance(no_arms, bool) and side in no_arms)
+
+
+def frame(oy=0, breath=0, sway=0, lag=0, feet=(0, 0), swing=(0.0, 0.0), no_arms=False, finish=True, blink=False):
+    """The front view. no_arms / finish=False: the body only, unfinished (hero_combat.py adds the
+    arms and the props on a wider canvas, then finishes)."""
     c = Canvas(W, H, RAMPS)
     # arms swung back go behind the cloak
     for side, s in ((-1, swing[0]), (1, swing[1])):
-        if s < -0.45:
+        if s < -0.45 and not arm_off(no_arms, side):
             arm(c, side, s, oy)
     # legs (the lifted one behind)
     order = sorted(((-1, feet[0]), (1, feet[1])), key=lambda f: f[1])
@@ -330,9 +354,11 @@ def frame(oy=0, breath=0, sway=0, lag=0, feet=(0, 0), swing=(0.0, 0.0)):
     cloak(c, oy, sway, breath)
     shirt(c, oy, breath)
     for side, s in ((-1, swing[0]), (1, swing[1])):
-        if s >= -0.45:
+        if s >= -0.45 and not arm_off(no_arms, side):
             arm(c, side, s, oy)
-    head(c, oy, lag)
+    head(c, oy, lag, blink)
+    if not finish:
+        return c
     despeckle(c, loose=("hair", "cloak"))
     edge_band(c, "cloak", 1)
     c.outline()
@@ -408,6 +434,17 @@ def main():
         for action in ("idle", "walk", "run"):
             for i, cv in enumerate(frames_for(view, action)):
                 out.append(save(cv, os.path.join(OUT, f"hero.{action}.{view}.{i}.png")))
+    import hero_combat as HC
+    import hero_views as HV
+    from PIL import Image
+    me = sys.modules[__name__]
+    for action in HC.COMBAT:
+        for view in ("down", "right", "up") + (("left",) if action in HC.OWN_LEFT else ()):
+            for i, cv in enumerate(HC.frames_for(action, view, me, HV)):
+                img = cv.image()
+                if view == "left":
+                    img = img.transpose(Image.FLIP_LEFT_RIGHT)
+                out.append(save(img, os.path.join(OUT, f"hero.{action}.{view}.{i}.png")))
     print(f"{len(out)} files")
 
 
