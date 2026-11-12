@@ -611,7 +611,7 @@ def _pieces_of(m):
     return comps
 
 
-def cloth_islands(c, cloth="cloak", trim=("gold",), limit=40):
+def cloth_islands(c, cloth="cloak", trim=("gold",), limit=40, min_size=1, below=0):
     """Hero round 3: pieces of the cloak's green (with its gold trim) cut off from the rest of the
     cloak by what was drawn over it, of `limit` texels or fewer. [(size, (x0, y0, x1, y1))]."""
     if cloth not in c.names:
@@ -624,9 +624,11 @@ def cloth_islands(c, cloth="cloak", trim=("gold",), limit=40):
     big = max(comps, key=len)
     out = []
     for p in comps:
-        if p is big or len(p) > limit:
+        if p is big or len(p) > limit or len(p) < min_size:
             continue
         ys, xs = zip(*p)
+        if min(ys) < below:
+            continue
         out.append((len(p), (min(xs), min(ys), max(xs), max(ys)), p))
     return out
 
@@ -650,3 +652,25 @@ def absorb_cloth_islands(c, **kw):
                     c.mat[y, x], c.tone[y, x] = m, t
                     todo.discard((y, x))
 
+
+
+def smooth_lone(c, skip=("_ink",)):
+    """Hero round 4: a texel unlike all 4 neighbours (material and tone) that has 2+ neighbours of its
+    own material takes the most common tone among those (the lone dots left where a blade, a band or
+    a fold crosses another part). Inks (eyes) and materials in `skip` stay."""
+    sk = {c.mid(n) for n in skip if n in c.names} | {0}
+    m, t = c.mat, c.tone
+    ch = []
+    for y in range(1, c.h - 1):
+        for x in range(1, c.w - 1):
+            k = m[y, x]
+            if k in sk:
+                continue
+            nb = [(m[y + dy, x + dx], t[y + dy, x + dx]) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))]
+            if any(nk == k and nt == t[y, x] for nk, nt in nb):
+                continue
+            same = [nt for nk, nt in nb if nk == k]
+            if len(same) >= 2:
+                ch.append((y, x, max(set(same), key=same.count)))
+    for y, x, tt in ch:
+        t[y, x] = tt

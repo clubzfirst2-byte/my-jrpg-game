@@ -26,7 +26,7 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from hdkit import capsule, edge_band, gauntlet  # noqa: E402
-from v3lib import Canvas, absorb_cloth_islands, despeckle  # noqa: E402
+from v3lib import Canvas, absorb_cloth_islands, despeckle, smooth_lone  # noqa: E402
 
 V1_TOOLS = [os.path.join(HERE, "..", "art_proto"), os.path.join(HERE, "..", "hero_release")]
 
@@ -278,6 +278,9 @@ def shoulders_v1(view, lean, left=False):
 
 def tweak(action, v, i, hands, sh, lean, oy):
     """Hero round 3 (inspection P2): hands moved where the v3 head is bigger than v1's x 2."""
+    if v == "up" and action in ("attack1", "attack2") and i == 1 and "R" in hands:
+        x, y = hands["R"]  # round 4: the fist 3-4 texels further in, so 10+ texels of blade show
+        hands["R"] = (min(x, 60.0), y)
     if v != "side":
         return
     if action == "bow" and "L" in hands:  # the bow below the face, in front of the chest
@@ -286,10 +289,7 @@ def tweak(action, v, i, hands, sh, lean, oy):
     if action == "attack3" and i in (1, 2) and "R" in hands:  # fist and blade ahead of the profile
         x, y = hands["R"]
         hands["R"] = (max(x, 60.0 + lean), y)
-    if action in ("glide", "climb"):  # a raised fist above the forehead, never on the nose
-        for k, (x, y) in list(hands.items()):
-            if y < sh[k][1] - 8:
-                hands[k] = (max(x, 54.0 + lean), min(y, 12.0 + oy))
+
 
 
 def build(action, view, i, H, HV):
@@ -299,7 +299,7 @@ def build(action, view, i, H, HV):
     width = 96 if action in WIDE_ACTIONS else 64
     ox = (width - 64) // 2
     bob = p.get("bob", 0)
-    oy = max(2 * bob, -2)  # hero round 3: a hop lifts the body 2 texels at most (the crown stays inside)
+    oy = max(2 * bob, -1)  # a hop lifts the body 1 texel at most (round 4: v1's crown reaches row 2)
     blink = bool(p.get("blink", False))
     near, far = p.get("near", (0, 0)), p.get("far", (0, 0))
     lean = 2 * p.get("lean", 0)
@@ -359,11 +359,12 @@ def build(action, view, i, H, HV):
         hidden_back = v == "up" and abs(hp[0] - 32) < 15 and hp[1] > s[1] - 2  # an arm in front of him, seen from behind
         if action in ARMS_IN_FRONT:
             raised = hidden_back = False
-            if v == "side" and hp[1] < s[1] - 8:  # a raised arm passes behind the head (the face kept
-                hp = (max(hp[0], 58.0 + lean), hp[1])  # clear, as v1): the fist ahead of the face shows
+            if v == "side" and hp[1] < s[1] - 8:  # round 4 (v1): the raised forearm stands upright in front
+                hx_ = min(55.0 + min(lean, 4) * 0.5, width - 9.0 - ox)  # of the forehead (a grey
+                hp = (hx_, 10.0 + oy)  # tube 14 texels tall), the fist above it; the upper arm goes behind the head
                 hands[k] = hp
-                behind.append(("arm", k, s, hp, far_arm))
-                front.append(("fist", k, s, hp, far_arm))
+                behind.append(("arm", k, s, (hx_, 30.0 + oy), far_arm))
+                front.append(("raised", k, s, hp, far_arm))
                 continue
         if hidden_back and action in A_SHARED_BACK:  # v1: a small hand shows at the side of the cloak
             front.append(("fist", k, s, (10.0 if hp[0] < 32 else 54.0, hp[1]), True))
@@ -387,6 +388,13 @@ def build(action, view, i, H, HV):
     def run(items):
         fists = []
         for it in items:
+            if it[0] == "raised":  # the upright forearm in front of the forehead and its fist
+                hx_, hy_ = it[3][0] + ox, it[3][1]
+                g = capsule(c, (hx_, hy_ + 20), (hx_, hy_ + 4), 3.4)
+                c.fill(g, "shirt")
+                gauntlet(c, g, (hx_, hy_ + 20), (hx_, hy_ + 4))
+                fists.append((c.m_ellipse(hx_, hy_, 3.6, 3.8), it[4]))
+                continue
             if it[0] == "fist":
                 fx = min(max(it[3][0] + ox, 6.0), c.w - 7.0)
                 fists.append((c.m_ellipse(fx, it[3][1], 3.7, 3.9), it[4]))
@@ -426,7 +434,7 @@ def build(action, view, i, H, HV):
     run(front)
     if action == "glide":  # the glider's cords from both fists, up out of the frame's top
         for it in front:
-            if it[0] in ("arm", "fist"):
+            if it[0] in ("arm", "fist", "raised"):
                 hx, hy = it[3][0] + ox, it[3][1]
                 c.fill(c.m_line([(hx, hy - 3), (hx + (2 if hx > 32 + ox else -2), 3)], 1.0) & (c.mat == 0), "bone", 3)
     if p.get("water") is not None:  # swimming: nothing below the water line, then the ripples ring him
@@ -437,11 +445,12 @@ def build(action, view, i, H, HV):
         for pr in p["props"]:
             if pr["kind"] == "ripple":
                 ripples(c, V(pr["cx"]) + ox, wl, 2 * pr["half"], pr["phase"])
-    absorb_cloth_islands(c)  # round 3: no cloak piece cut off by a leg / arm drawn over it
+    absorb_cloth_islands(c, limit=5)  # round 4: only 1-5 texel slivers are cleaned; a bigger piece stops the generator
     despeckle(c, loose=("hair", "cloak"))
     edge_band(c, "cloak", 1)
     c.outline()
     c.shadow_band()
+    smooth_lone(c)  # round 4: fewer lone texels (the swings had up to 5.4 %)
     return c
 
 

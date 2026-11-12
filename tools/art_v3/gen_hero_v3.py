@@ -145,6 +145,8 @@ def head(c, oy, lag, blink=False):
     _yy = np.mgrid[0:c.h, 0:c.w][0]
     _out = (c.mat == c.mid("hair")) & ~(mass | _spk) & (_yy < 16 + oy)
     c.mat[_out] = 0
+    import hero_views as _HV
+    _HV.keep_to_outline(c, "down", oy)  # round 4: the hair keeps to v1's outline (spikes, chin locks)
     hairm = c.mat == c.mid("hair")
     skin = c.mat == c.mid("skin")
     for y, x in zip(*np.nonzero(skin)):  # the bangs' shade: 1-2 rows under the hair
@@ -364,7 +366,7 @@ def frame(oy=0, breath=0, sway=0, lag=0, feet=(0, 0), swing=(0.0, 0.0), no_arms=
     head(c, oy, lag, blink)
     if not finish:
         return c
-    absorb_cloth_islands(c)  # round 3: no cloak piece cut off by a leg / arm drawn over it
+    absorb_cloth_islands(c, limit=5)  # round 4: only 1-5 texel slivers are cleaned; a bigger piece stops the generator
     despeckle(c, loose=("hair", "cloak"))
     edge_band(c, "cloak", 1)
     c.outline()
@@ -447,7 +449,9 @@ def _check(cv, name):
     st = stray_pieces(cv)
     if st:
         CUT.append((name, "stray pieces", st))
-    isl = [(n, box) for n, box, _ in cloth_islands(cv)]
+    # hero round 4: counted on the finished frame, where only slivers of 1-5 texels were cleaned up: a
+    # cut-off piece of the cloak of 6-40 texels below the shoulders (row 56) stops the generator
+    isl = [(n, box) for n, box, _ in cloth_islands(cv, min_size=6, below=56)]
     if isl:
         CUT.append((name, "cloak / gold pieces cut off", isl))
 
@@ -477,7 +481,8 @@ def main():
         sys.exit(1)
     print("edge check: no frame has a texel other than an outline on its top row or side columns "
           "(the gauntlet's dark grey counted as a cut); no stray piece of 40 texels or fewer; "
-          "no piece of the cloak's green / gold of 40 texels or fewer cut off from the cloak")
+          "no piece of the cloak's green / gold of 6-40 texels below row 56 cut off from the cloak "
+          "(counted before any fill; only 1-5 texel slivers are cleaned)")
 
 
 if __name__ == "__main__":

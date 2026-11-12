@@ -72,11 +72,15 @@ def side_head(c, oy, lag, EYE, BLUSH, MOUTH, lean=0, blink=False):
     bangs = [((40 + X, 14 + oy), (52 + X, 27 + oy), 8, -2.0), ((34 + X, 15 + oy), (40 + X, 28 + oy + lag), 8, -1.5),
              ((28 + X, 16 + oy), (27 + X, 30 + oy + lag), 7, 1.0)]
     _shade_lock_set(c, back + top, mass)
-    fore = c.m_poly([(27 + X, 14 + oy), (52 + X, 15 + oy), (54 + X, 22 + oy), (46 + X, 26 + oy), (36 + X, 27 + oy),
-                     (28 + X, 26 + oy)])  # the fringe over the forehead (v1: the hair comes down to the brow)
+    # the fringe over the forehead (round 4: its lower edge falls toward the front in 4 slanted locks, v1)
+    fore = c.m_poly([(27 + X, 14 + oy), (52 + X, 15 + oy), (55 + X, 24 + oy), (53 + X, 30 + oy), (50 + X, 26 + oy),
+                     (47 + X, 29 + oy), (43 + X, 24 + oy), (40 + X, 27 + oy), (36 + X, 22 + oy), (32 + X, 25 + oy),
+                     (28 + X, 22 + oy)])
     c.fill(fore, "hair", 2)
-    bangs = bangs + [((47 + X, 15 + oy), (55 + X, 27 + oy), 7, -1.5), ((44 + X, 16 + oy), (47 + X, 29 + oy + lag), 7, -1.0)]
+    bangs = bangs + [((47 + X, 15 + oy), (54 + X, 30 + oy), 7, -1.5), ((44 + X, 16 + oy), (47 + X, 29 + oy + lag), 7, -1.0)]
     _shade_lock_set(c, bangs, mass)
+    _shade_lock_set(c, [((26 + X, 26 + oy), (16 + X, 47 + oy + lag), 9, 1.5)], mass)  # the lock down the nape (v1)
+    keep_to_outline(c, "right", oy, X)  # round 4: v1's outline (3 top spikes, the nape lock)
     # the ear (hero round 2: drawn over the back hair, 4 x 6, its inside one tone darker)
     ear = c.m_ellipse(30.5 + X, 35 + oy, 2.6, 3.6)
     c.fill(ear, "skin", 3)
@@ -226,10 +230,12 @@ def side_frame(R, EYE, BLUSH, MOUTH, oy=0, lag=0, sway=0, legs=((0, 0, 0), (0, 0
     # the cloak behind (from the shoulders to the hem, flaring back; cloak_fly lifts it in the run)
     hem = min(92 + oy, 106)  # crouching / kneeling: the cloak lies on the ground
     back = c.m_poly([(26 + lean, 46 + oy - breath), (36 + lean, 46 + oy - breath), (34 + lean * 0.5, 60 + oy),
-                     (30, 86 + oy), (29 + sway, hem - cloak_fly * 3), (16 + sway - cloak_fly * 6, hem - cloak_fly * 8),
+                     (26, 86 + oy), (25 + sway, hem - cloak_fly * 3), (16 + sway - cloak_fly * 6, hem - cloak_fly * 8),
                      (9 + sway - cloak_fly * 6, hem - 2 - cloak_fly * 12), (10 - cloak_fly * 5, 72 + oy - cloak_fly * 6),
                      (14 + lean * 0.5, 54 + oy), (20 + lean, 47 + oy)])
-    back = _largest(back)  # hero round 2: no stray piece of the cloak (run 4 had one between the legs)
+    back = _largest(back)  # hero round 2: no stray piece of the cloak
+    # (round 4: its front edge below the hip is 4 texels further back, behind the legs: run 4's green
+    # piece between the knees came from here)
     c.fill(back, "cloak", 3)
     yy, xx = np.nonzero(back)
     for y, x in zip(yy, xx):
@@ -281,7 +287,7 @@ def side_frame(R, EYE, BLUSH, MOUTH, oy=0, lag=0, sway=0, legs=((0, 0, 0), (0, 0
     side_head(c, oy, lag, EYE, BLUSH, MOUTH, lean=min(lean, 4), blink=blink)  # round 3: the nose stays 3 inside
     if not finish:
         return c
-    absorb_cloth_islands(c)  # round 3: no cloak piece cut off by a leg / arm drawn over it
+    absorb_cloth_islands(c, limit=5)  # round 4: only 1-5 texel slivers are cleaned; a bigger piece stops the generator
     despeckle(c, loose=("hair", "cloak"))
     edge_band(c, "cloak", 1)
     c.outline()
@@ -379,14 +385,15 @@ def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, b
     c.fill(mass, "hair")
     c.shade_part(mass, tones=(1, 2, 2, 3, 3), norm=True)
     cr = (31, 10 + oy)
-    locks = [((10, 14 + oy), (8, 38 + oy + L), 9, 1.0), ((17, 10 + oy), (14, 42 + oy + L), 10, 1.0),
-             ((24, 8 + oy), (22, 45 + oy + L), 10, 0.5), ((31, 8 + oy), (30, 46 + oy + L), 10, 0.0),
-             ((38, 8 + oy), (38, 45 + oy + L), 10, -0.5), ((45, 10 + oy), (47, 43 + oy + L), 10, -1.0),
-             ((52, 14 + oy), (55, 39 + oy + L), 9, -1.0)]
+    # round 4: 5 thick locks of different widths and lengths, slanting, not even stripes (v1's back)
+    locks = [((12, 14 + oy), (7, 37 + oy + L), 13, 2.0), ((22, 9 + oy), (17, 44 + oy + L), 14, 1.5),
+             ((32, 8 + oy), (31, 46 + oy), 15, -0.5), ((42, 9 + oy), (45, 42 + oy + L), 14, -1.5),
+             ((52, 14 + oy), (56, 36 + oy + L), 12, -2.0)]
     spikes = [((32, 13 + oy), (32, 3 + oy), 9, 0.3), ((26, 13 + oy), (21, 8 + oy), 8, 1.0),
               ((38, 13 + oy), (43, 8 + oy), 8, -1.0), ((13, 17 + oy), (5, 18 + oy), 8, 1.5),
               ((51, 17 + oy), (59, 20 + oy), 8, -1.5)]
     _shade_lock_set(c, spikes + locks, mass)
+    keep_to_outline(c, "up", oy)  # round 4: v1's outline
     # hero round 3: above row 16 the hair keeps to the onion (the mass) and the spikes only — the
     # crown locks' wide roots no longer square the top off
     _spk = np.zeros(c.mat.shape, bool)
@@ -399,9 +406,89 @@ def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, b
     c.put(cr[0] + 1, cr[1] + 1, "hair", 1)
     if not finish:
         return c
-    absorb_cloth_islands(c)  # round 3: no cloak piece cut off by a leg / arm drawn over it
+    absorb_cloth_islands(c, limit=5)  # round 4: only 1-5 texel slivers are cleaned; a bigger piece stops the generator
     despeckle(c, loose=("hair", "cloak"))
     edge_band(c, "cloak", 1)
     c.outline()
     c.shadow_band()
     return c
+
+
+# ---------------------------------------------------------------- the head's outline from v1 (round 4)
+
+_V1_OUTLINE = {}
+
+
+def _scale2x(m):
+    """EPX / Scale2x on a boolean mask: 2x, with the diagonal steps smoothed (no 2x2 staircase)."""
+    h, w = m.shape
+    P = np.pad(m, 1)
+    A, B, C, D = P[:-2, 1:-1], P[1:-1, 2:], P[1:-1, :-2], P[2:, 1:-1]  # up, right, left, down
+    out = np.zeros((2 * h, 2 * w), bool)
+    out[0::2, 0::2] = np.where((C == A) & (C != D) & (A != B), A, m)
+    out[0::2, 1::2] = np.where((A == B) & (A != C) & (B != D), B, m)
+    out[1::2, 0::2] = np.where((D == C) & (D != B) & (C != A), C, m)
+    out[1::2, 1::2] = np.where((B == D) & (B != A) & (D != C), D, m)
+    return out
+
+
+def v1_head_outline(view):
+    """Hero round 4 (inspection P1-1): the outer outline of v1's head (hair + face, its own outline
+    left out) in v1's idle frame 0 of this view, at 2x with Scale2x — the stencil the v3 hair keeps to:
+    v1's three top spikes, the pointed locks down to the chin (front), the lock down the nape (side)."""
+    if view in _V1_OUTLINE:
+        return _V1_OUTLINE[view]
+    from PIL import Image
+    import os
+    here = os.path.dirname(os.path.abspath(__file__))
+    p = os.path.join(here, "..", "..", "src", "art-release", "hero", f"hero.idle.{view}.0.png")
+    a = np.array(Image.open(p).convert("RGBA")).astype(int)
+    key = a[..., 0] * 65536 + a[..., 1] * 256 + a[..., 2]
+    def hexes(*cs):
+        return [int(c[1:], 16) for c in cs]
+    hair = np.isin(key, hexes("#4e2e1a", "#7a4a2a", "#a8703f", "#d09a62"))
+    skin = np.isin(key, hexes("#c8906a", "#f2c49b", "#ffdcbc", "#fff0e0"))
+    eye = np.isin(key, hexes("#24223a", "#1a3c86", "#2a78d0", "#f0fbff", "#d8cfc6", "#a8584e", "#f0a888"))
+    rows = np.arange(a.shape[0])[:, None]
+    m = (hair | ((skin | eye) & (rows <= 22))) & (a[..., 3] == 255) & (rows <= 24)
+    # fill the holes (enclosed empty texels)
+    outside = np.zeros(m.shape, bool)
+    st = [(y, x) for y in range(m.shape[0]) for x in (0, m.shape[1] - 1)] + [(0, x) for x in range(m.shape[1])]
+    while st:
+        y, x = st.pop()
+        if 0 <= y < m.shape[0] and 0 <= x < m.shape[1] and not m[y, x] and not outside[y, x]:
+            outside[y, x] = True
+            st += [(y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)]
+    m = ~outside
+    m[25:, :] = False
+    out = _scale2x(m)
+    # the v3 outline is 1 texel where v1's (x 2) is 2: the spikes above row 10 are thinned by 1 texel a
+    # side, so with its outline the v3 head covers v1's x 2 outline, not more
+    top = out[:10].copy()
+    thin = top & np.roll(top, 1, 1) & np.roll(top, -1, 1)
+    out[:10] = thin
+    _V1_OUTLINE[view] = out
+    return out
+
+
+def keep_to_outline(c, view, oy, dx=0, rows=50):
+    """Hair outside v1's outline goes; empty texels inside it (above the face's bottom) become hair
+    (tone 2, the mass); the outline moves with the body (oy) and the lean (dx)."""
+    o = v1_head_outline(view)
+    sh = np.zeros(c.mat.shape, bool)
+    H_, W_ = o.shape
+    for y in range(min(H_, c.h)):
+        yy = y + oy
+        if not (0 <= yy < c.h):
+            continue
+        xs = np.nonzero(o[y])[0] + dx
+        xs = xs[(xs >= 0) & (xs < c.w)]
+        sh[yy, xs] = True
+    hair = c.mid("hair")
+    yy = np.mgrid[0:c.h, 0:c.w][0]
+    top = yy < rows + oy
+    c.mat[(c.mat == hair) & ~sh & top] = 0
+    fill = sh & (c.mat == 0) & top
+    c.mat[fill] = hair
+    c.tone[fill] = 2
+    return sh
