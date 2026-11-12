@@ -13,6 +13,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from PIL import Image  # noqa: E402
 
+import npc_batch2  # noqa: E402
 import npc_woman  # noqa: E402
 from v3lib import ROOT, edge_cuts, save, stray_pieces  # noqa: E402
 
@@ -22,10 +23,14 @@ WHO = {"woman": npc_woman}
 
 def main():
     out, bad = [], []
-    for who, mod in WHO.items():
-        for action in ("idle", "walk"):
-            for view in ("down", "right", "up", "left"):
-                for i, cv in enumerate(mod.frames(action, view)):
+    jobs = [(who, action, view, (lambda m=mod, a=action, v=view: m.frames(a, v)))
+            for who, mod in WHO.items() for action in ("idle", "walk") for view in ("down", "right", "up", "left")]
+    # princess and smith: no left files (the game mirrors their right frames, decision 2026-11-12)
+    jobs += [(who, action, view, (lambda w=who, a=action, v=view: npc_batch2.frames(w, a, v)))
+             for who in ("princess", "smith") for action in ("idle", "walk") for view in ("down", "right", "up")]
+    for who, action, view, make in jobs:
+        if True:
+            for i, cv in enumerate(make()):
                     name = f"npc.{who}.{action}.{view}.{i}"
                     if edge_cuts(cv):
                         bad.append((name, "edge", edge_cuts(cv)))
