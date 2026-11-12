@@ -138,3 +138,31 @@ describe('splitForAtlas: at most 2048×1024 per real-art atlas (gfx v2 integrati
     expect(rest.width * rest.height).toBeLessThanOrEqual(2048 * 64);
   });
 });
+
+describe('skylinePlaces: the base atlas with the ground v2 and the enemy v2 on one 2048×1024 (gfx v2 integration)', async () => {
+  const { skylinePlaces, atlasSizeFor } = await import('../../src/view/assets/placeholderPack.js');
+  const img = (/** @type {number} */ w, /** @type {number} */ h) => ({ rows: ['.'], image: { width: w, height: h } });
+  // the base bundle's real art sizes (counts), tallest then widest: 1385 frames
+  const SIZES = [[32, 64, 1], [48, 56, 112], [40, 56, 30], [32, 56, 529], [48, 52, 2], [24, 48, 1], [32, 40, 2], [24, 40, 2], [20, 36, 2], [24, 36, 1], [44, 32, 32], [32, 32, 477], [24, 32, 6], [32, 28, 37], [24, 28, 4], [32, 24, 2], [20, 24, 1], [10, 24, 1], [28, 20, 2], [44, 20, 1], [20, 20, 28], [16, 18, 1], [32, 16, 52], [12, 12, 2], [32, 8, 52]];
+  const entries = SIZES.flatMap(([w, h, n]) => Array.from({ length: n }, () => img(w, h)));
+  it('shelves need more than 1024 rows (a second atlas); the skyline fits 2048×1024', () => {
+    expect(atlasSizeFor(entries).height).toBeGreaterThan(1024);
+    const { used } = skylinePlaces(entries, 2048);
+    expect(used).toBeLessThanOrEqual(1024);
+  });
+  it('no two frames overlap or touch (1 px apart), all inside the atlas', () => {
+    const { places } = skylinePlaces(entries, 2048);
+    const rects = places.map((p, i) => ({ ...p, w: entries[i].image.width, h: entries[i].image.height }));
+    for (const r of rects) {
+      expect(r.x).toBeGreaterThanOrEqual(0);
+      expect(r.x + r.w).toBeLessThanOrEqual(2048);
+    }
+    for (let i = 0; i < rects.length; i++)
+      for (let j = i + 1; j < rects.length; j++) {
+        const a = rects[i];
+        const b = rects[j];
+        const apart = a.x + a.w + 1 <= b.x || b.x + b.w + 1 <= a.x || a.y + a.h + 1 <= b.y || b.y + b.h + 1 <= a.y;
+        expect(apart).toBe(true);
+      }
+  });
+});

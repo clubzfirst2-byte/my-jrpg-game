@@ -29,6 +29,7 @@ import { GROUND_RUIN_BUNDLE, ISLAND_EDGES_BUNDLE, ISLAND_STEPS_BUNDLE, TERRAIN_G
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
 import { GameView } from './view/gameView.js';
 import { fxVersion } from './view/fxSwitch.js';
+import { atlasStats } from './view/pixelAtlas.js';
 import { Bench } from './view/bench.js';
 import { InputManager } from './platform/inputManager.js';
 import { installLifecycle } from './platform/lifecycle.js';
@@ -996,6 +997,8 @@ async function boot() {
     fx: (/** @type {string} */ name, /** @type {boolean} */ on) => view.setFx(name, on),
     /** gfx W5: what the effects draw now (version, groups on, sprites showing). */
     fxInfo: () => view.fxDebug(),
+    /** gfx v2 integ: the effects' shared mask sheet (pixelAtlas.js): frames, rows used, sheet size. */
+    pixelAtlas: () => atlasStats(),
     /** gfx W5 (capturing a still): hold the hit effects where they are / let them go on. */
     fxHold: (/** @type {boolean} */ on) => {
       view.fxHold = on;

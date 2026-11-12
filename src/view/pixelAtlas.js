@@ -3,11 +3,17 @@
 // the hit rings' frames, the mist bands. Each was its own canvas texture (about 15 more textures on a
 // village screen), and sprites on different textures batch less well (a draw call breaks every 16
 // textures, and each texture switch costs the renderer CPU time). Now each mask is a frame on one
-// 512×512 canvas (one texel per game px, nearest-neighbour), packed in shelves and drawn once, when
-// first asked for. If the canvas is ever full, a mask gets a canvas of its own (as before).
+// canvas 512 texels wide (one texel per game px, nearest-neighbour), packed in shelves and drawn once,
+// when first asked for. If the canvas is ever full (512 rows), a mask gets a canvas of its own (as before).
+// gfx v2 integration: the canvas is only as tall as its shelves (it grows when a shelf is added; the
+// frames keep their place), so ~15 masks cost 512×41 texels (80 KB) instead of 512×512 (1 MB): the
+// 35 MB image guide with the ground v2 and the enemy v2.
 import { Rectangle, Texture } from 'pixi.js';
 
 export const ATLAS_SIZE = 512;
+
+/** The rows a sheet needs for what is packed on it (its shelves, gap included), at least 1. @param {{ y: number, shelf: number }} at */
+export const sheetRows = (at) => Math.max(1, Math.min(ATLAS_SIZE, at.y + at.shelf));
 /** Empty texels between frames (nearest-neighbour sampling never reaches a neighbour, but a margin is free). */
 const GAP = 1;
 
@@ -60,7 +66,8 @@ export function atlasFrame(key, w, h, paint) {
   if (typeof document === 'undefined' || typeof document.createElement !== 'function') return Texture.WHITE;
   if (!sheet || sheet.source.destroyed) {
     const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = ATLAS_SIZE;
+    canvas.width = ATLAS_SIZE;
+    canvas.height = 1; // (grows with its shelves: below)
     const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
     const source = Texture.from(canvas).source;
     source.scaleMode = 'nearest';
@@ -71,6 +78,13 @@ export function atlasFrame(key, w, h, paint) {
   /** @type {Texture} */
   let tex;
   if (spot) {
+    const rows = sheetRows(sheet.at);
+    if (rows > sheet.canvas.height) {
+      // a taller canvas, the frames drawn so far kept where they are (the textures' UVs follow the resize)
+      const old = canvasOf(sheet.ctx.getImageData(0, 0, sheet.canvas.width, sheet.canvas.height).data, sheet.canvas.width, sheet.canvas.height);
+      sheet.source.resize(ATLAS_SIZE, rows);
+      sheet.ctx.drawImage(old, 0, 0);
+    }
     sheet.ctx.drawImage(canvasOf(paint(), w, h), spot.x, spot.y);
     sheet.source.update();
     tex = new Texture({ source: sheet.source, frame: new Rectangle(spot.x, spot.y, w, h) });
@@ -96,4 +110,4 @@ export function whiteRGBA(alpha, n) {
 }
 
 /** Frames made so far (tests, measuring). */
-export const atlasStats = () => ({ frames: frames.size, shelfY: sheet?.at.y ?? 0 });
+export const atlasStats = () => ({ frames: frames.size, shelfY: sheet?.at.y ?? 0, shelf: sheet?.at.shelf ?? 0, x: sheet?.at.x ?? 0, size: sheet ? [sheet.canvas.width, sheet.canvas.height] : null });

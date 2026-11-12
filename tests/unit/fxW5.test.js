@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 import { ambientKinds, AmbientParticles, AMBIENT, MIST_DAWN, MIST_ALPHA, MIST_BANDS, mistBand } from '../../src/view/ambientParticles.js';
 import { HitFx, fxFor, FX_POOL, RING_FRAMES, SPARK_STEPS, ringPixels, ringPixelsInOrder, sparkStep } from '../../src/view/hitFx.js';
-import { packShelf, ATLAS_SIZE } from '../../src/view/pixelAtlas.js';
+import { packShelf, sheetRows, ATLAS_SIZE } from '../../src/view/pixelAtlas.js';
 import { rimAlpha, RIM_FLASH } from '../../src/view/flashOverlay.js';
 import { RAIN, rainLayer, splashTexture } from '../../src/view/weatherView.js';
 import { fxVersion } from '../../src/view/fxSwitch.js';
@@ -493,5 +493,17 @@ describe('finishing touches', () => {
       }
     }
     expect(packShelf({ x: 0, y: 0, shelf: 0 }, ATLAS_SIZE + 1, 4)).toBe(null);
+  });
+});
+
+describe('the mask sheet is only as tall as its shelves (gfx v2 integration: the 35 MB guide)', () => {
+  it('rows = the shelves packed so far, gap included; at most the full sheet', () => {
+    const at = { x: 0, y: 0, shelf: 0 };
+    expect(sheetRows(at)).toBe(1);
+    packShelf(at, 100, 39);
+    expect(sheetRows(at)).toBe(40);
+    packShelf(at, 500, 10); // a new shelf below
+    expect(sheetRows(at)).toBe(51);
+    expect(sheetRows({ x: 0, y: 600, shelf: 40 })).toBe(ATLAS_SIZE);
   });
 });

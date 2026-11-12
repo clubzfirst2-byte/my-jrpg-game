@@ -439,6 +439,77 @@ export function splitForAtlas(entries) {
   return [entries.slice(0, n), ...splitForAtlas(entries.slice(n))];
 }
 
+/** The smallest power-of-two height (64 .. max) for `used` rows. @param {number} used @param {number} max */
+const potHeight = (used, max) => {
+  let height = 64;
+  while (height < used) height *= 2;
+  return Math.min(height, max);
+};
+
+/** Tallest first, then widest (same size: as given). @template {{ rows: string[], image?: { width: number, height: number } }} E @param {E[]} entries @returns {E[]} */
+const byHeightThenWidth = (entries) =>
+  entries.map((e, i) => ({ e, i, ...sizeOf(e) })).sort((a, b) => b.h - a.h || b.w - a.w || a.i - b.i).map((x) => x.e);
+
+/**
+ * gfx v2 integration: places on an atlas `width` wide by the skyline (bottom-left): each entry goes where
+ * its top edge ends lowest, so the short pieces fill the space beside and above the tall ones that shelf
+ * packing leaves empty. With the ground v2 and the enemy v2 the base bundle's real art then needs 1015
+ * rows (one 2048×1024 atlas) where shelves need 1043 (a second atlas). 1 px apart, like the shelves.
+ * Pure.
+ * @template {{ rows: string[], image?: { width: number, height: number } }} E
+ * @param {E[]} entries in the order to place them @param {number} width
+ * @returns {{ entries: E[], places: { x: number, y: number }[], used: number }}
+ */
+export function skylinePlaces(entries, width) {
+  const PAD = 1;
+  /** segments of the skyline, left to right: [x, width, y] */
+  let sky = [[0, width + PAD, 0]];
+  /** @type {{ x: number, y: number }[]} */
+  const places = [];
+  let used = 0;
+  for (const e of entries) {
+    const { w, h } = sizeOf(e);
+    const w1 = w + PAD;
+    let best = null;
+    for (let i = 0; i < sky.length; i++) {
+      const x = sky[i][0];
+      if (x + w1 > width + PAD) break;
+      let y = 0;
+      let left = w1;
+      for (let j = i; left > 0 && j < sky.length; j++) {
+        y = Math.max(y, sky[j][2]);
+        left -= sky[j][1];
+      }
+      if (left > 0) continue;
+      if (!best || y + h < best.y + h || (y === best.y && x < best.x)) best = { x, y };
+    }
+    if (!best) throw new Error(`Too wide for the atlas: ${w}`);
+    places.push(best);
+    used = Math.max(used, best.y + h);
+    const { x, y } = best;
+    /** @type {number[][]} */
+    const next = [];
+    for (const [sx, sw, sy] of sky) {
+      const ex = sx + sw;
+      if (ex <= x || sx >= x + w1) {
+        next.push([sx, sw, sy]);
+        continue;
+      }
+      if (sx < x) next.push([sx, x - sx, sy]);
+      if (ex > x + w1) next.push([x + w1, ex - (x + w1), sy]);
+    }
+    next.push([x, w1, y + h + PAD]);
+    next.sort((a, b) => a[0] - b[0]);
+    sky = [];
+    for (const s of next) {
+      const last = sky[sky.length - 1];
+      if (last && last[2] === s[2] && last[0] + last[1] === s[0]) last[1] += s[1];
+      else sky.push(s);
+    }
+  }
+  return { entries, places, used };
+}
+
 /**
  * P11.5 standard: the real art (src/art) has 2 art pixels per game pixel — tiles 32×32, characters
  * 32×56 (docs/ART.md). It is shown at half its pixel size, so it covers the same ground as the
@@ -516,7 +587,8 @@ export async function withOverrides(entries, overrides) {
 /**
  * @param {{ key: string, rows: string[], anchor: [number, number] }[]} [entries]
  * @param {Map<string, ArtSource>} [overrides] the real art (P11.5), by logical name
- * @param {{ tallestFirst?: boolean }} [opts] tallestFirst: pack the real art tallest first (gfx W1)
+ * @param {{ tallestFirst?: boolean }} [opts] tallestFirst: pack the real art tallest first (gfx W1), by the
+ *   skyline (skylinePlaces) when that keeps it on one 2048×1024 atlas
  * @returns {Promise<import('./assetManager.js').BuiltBundle>}
  */
 export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map(), { tallestFirst = false } = {}) {
@@ -525,7 +597,9 @@ export async function buildPlaceholderPack(entries = placeholderEntries(), overr
   const plain = all.filter((e) => !e.image);
   const real = tallestFirst ? tallestFirstOrder(all.filter((e) => e.image)) : all.filter((e) => e.image);
   const packs = [packAtlas(plain, atlasSizeFor(plain), 1)];
-  if (real.length) for (const part of splitForAtlas(real)) packs.push(packAtlas(part, atlasSizeFor(part), ART_SCALE));
+  const sky = tallestFirst && real.length ? skylinePlaces(byHeightThenWidth(real), ATLAS_MAX.width) : null;
+  if (sky && sky.used <= ATLAS_MAX.height) packs.push(packAtlas(sky.entries, { width: ATLAS_MAX.width, height: potHeight(sky.used, ATLAS_MAX.width) }, ART_SCALE, sky.places));
+  else if (real.length) for (const part of splitForAtlas(real)) packs.push(packAtlas(part, atlasSizeFor(part), ART_SCALE));
   return mergePacks(packs);
 }
 
@@ -545,9 +619,10 @@ function mergePacks(packs) {
  * @param {{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement | HTMLCanvasElement }[]} entries
  * @param {{ width: number, height: number }} atlasSize from atlasSizeFor
  * @param {number} resolution pixels per game pixel (1 for placeholders, ART_SCALE for the real art)
+ * @param {{ x: number, y: number }[]} [places] where each entry goes (skylinePlaces); else shelves
  * @returns {import('./assetManager.js').BuiltBundle}
  */
-function packAtlas(entries, atlasSize, resolution) {
+function packAtlas(entries, atlasSize, resolution, places) {
   const { width: ATLAS_W, height: ATLAS_H } = atlasSize;
   const PAD = 1;
   const canvas = document.createElement('canvas');
@@ -560,9 +635,12 @@ function packAtlas(entries, atlasSize, resolution) {
   let x = 0;
   let y = 0;
   let shelf = 0;
-  for (const e of entries) {
+  for (const [i, e] of entries.entries()) {
     const { w, h } = sizeOf(e);
-    if (x + w > ATLAS_W) {
+    if (places) {
+      ({ x, y } = places[i]);
+      shelf = 0;
+    } else if (x + w > ATLAS_W) {
       x = 0;
       y += shelf + PAD;
       shelf = 0;
