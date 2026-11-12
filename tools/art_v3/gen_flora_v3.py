@@ -98,6 +98,29 @@ def snow_caps(c, mats, depth=(2, 4), seed=0, min_thick=0):
     return c
 
 
+def drop_small_snow(c, n):
+    """Round 7: snow pieces under n texels (crumbs at the forks) go back to bark."""
+    ks, kb = c.mid("snow"), c.mid("bark")
+    m = c.mat == ks
+    seen = np.zeros_like(m)
+    for y in range(c.h):
+        for x in range(c.w):
+            if not m[y, x] or seen[y, x]:
+                continue
+            comp, stack = [], [(x, y)]
+            seen[y, x] = True
+            while stack:
+                p, q = stack.pop()
+                comp.append((p, q))
+                for a, b in ((p + 1, q), (p - 1, q), (p, q + 1), (p, q - 1)):
+                    if 0 <= a < c.w and 0 <= b < c.h and m[b, a] and not seen[b, a]:
+                        seen[b, a] = True
+                        stack.append((a, b))
+            if len(comp) < n:
+                for p, q in comp:
+                    c.mat[q, p], c.tone[q, p] = kb, 3
+
+
 # ------------------------------------------------------------------ broadleaf trees
 
 OAK_CLUMPS = [(80, 50, 24, 20), (52, 70, 22, 18), (108, 68, 22, 18), (80, 94, 30, 23), (36, 108, 22, 19),
@@ -180,6 +203,7 @@ def bare(c, trunk, roots, branches, P, L, s, rng, kind):
     c.shade_part(wood, tones=(1, 2, 3, 4, 5), light=(-0.8, -0.3, 0.5), norm=True)
     bark_texture(c, trunk, period=max(3, int(5 * s + 0.5)))
     snow_caps(c, ("bark",), depth=(2, 2), seed=7, min_thick=5)
+    drop_small_snow(c, 4)
     return finish(c, loose=("bark", "snow"))
 
 
@@ -283,8 +307,9 @@ def flowers(season, frame, scheme):
                  "yellow": [(9, 17, 0.6), (17, 15, -0.4), (25, 18, 0.5), (33, 16, -0.6), (40, 19, 0.4)]}[scheme]
         cols = cols[: len(heads)]
     for i, ((fx, fy, bend), col) in enumerate(zip(heads, cols)):
-        fx = fx + frame * (1 if fy < 15 else 0)
-        base_x = fx - bend * 2 - frame * (1 if fy < 15 else 0)
+        tall = fy < (21 if season == "winter" else 15)  # round 7: the winter sets sway too
+        fx = fx + frame * (1 if tall else 0)
+        base_x = fx - bend * 2 - frame * (1 if tall else 0)
         pts = [(base_x + (fx - base_x) * k / 8 + bend * 1.2 * math.sin(math.pi * k / 8), G - (G - fy - 2) * k / 8)
                for k in range(9)]
         stem = c.m_line(pts, 2.0 if i % 2 else 1.7)
