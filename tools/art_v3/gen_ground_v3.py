@@ -29,7 +29,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import numpy as np  # noqa: E402
 
-from v3lib import ROOT, Canvas, despeckle, lift_ramp, save, shift  # noqa: E402
+from v3lib import ROOT, Canvas, despeckle, lift_ramp, save, shift  # noqa: E402,F401
 
 OUT = os.path.join(ROOT, "src", "art-release-v3", "terrain")
 PATTERNS = "abcdefgh"  # 8 base patterns
@@ -261,6 +261,25 @@ def flow_corner(cx, cy):
 
 SIDES = ("N", "E", "S", "W")
 
+# ---- round 7 (production check 3 + the coordinator's memory decision: plains grass <= 5 MB / season)
+# The flow tiles are SHAPES: grey blades (body 214, tip 255) on transparent, shared by the thick
+# grass (d) and the sunny grass (l); the game multiplies them by a colour from FLOW_TINT (per season
+# and kind). Summer and autumn share one shape set, winter has its own (drift streaks).
+# Mirror pairs are stored once: the game draws the partner flipped left-right (MIRROR / flow_key).
+SHAPE_BODY, SHAPE_TIP = 214, 255
+FLOW_SETS = {"summer": "", "autumn": "", "winter": "winter."}
+
+
+def flip_bits(bits):
+    """Corner bits (TL, TR, BR, BL) of the left-right mirror of a tile."""
+    return bits[1] + bits[0] + bits[3] + bits[2]
+
+
+STORED = ("1000", "0001", "1001", "1110", "0111", "1100", "0011", "1010", "1111")  # the rest are mirrors
+MIRROR = {flip_bits(b): b for b in STORED if flip_bits(b) not in STORED}  # 0100->1000, 0110->1001 ...
+INNER_SHAPES = 3  # inner shapes of a tile whose border crosses 2 sides (0 on the tile's edges)
+FULL_SHAPES = 4  # stored variants of the full tile 1111 (and each may be drawn flipped: 8 looks)
+
 
 def crossed(bits):
     """The sides a patch border crosses (their 2 corners differ). bits: TL, TR, BR, BL."""
@@ -269,9 +288,12 @@ def crossed(bits):
 
 
 def n_flow_variants(bits):
-    """2 sides crossed: 4 side-state combinations x 2 inner shapes = 8; else 2 inner shapes."""
     cs = crossed(bits)
-    return 2 if (len(cs) == 4 or not cs) else 8
+    if not cs:
+        return FULL_SHAPES
+    if len(cs) == 4:
+        return 16  # 4 side states
+    return 4 * INNER_SHAPES  # 2 side states x the inner shapes
 
 
 def side_state(tx, ty, side):
@@ -283,24 +305,40 @@ def side_state(tx, ty, side):
 
 
 def flow_key(tx, ty):
-    """(kind, corner bits, variant) of tile (tx, ty), or None: corners TL, TR, BR, BL.
-    Round 6: the variant comes from the states of the sides the border crosses (as v2's transitions):
-    v = s(first crossed side) + 2 s(second), sides in the order N, E, S, W; a tile whose border
-    crosses all 4 sides, or no side, takes v = hsh(tx, ty, 33) % 2. With 2 crossed sides, v also adds
-    4 * (hsh(tx, ty, 34) % 2): one of 2 inner shapes (they are 0 on the tile's edges). Neighbours sharing a side agree on
-    where the border crosses it, so a column of equal tiles does not repeat one shape."""
+    """What the game draws on tile (tx, ty) for the flow layer, or None:
+         (kind, bits, v, flip)
+    kind  'd' (thick grass) or 'l' (sunny grass): only the colour (FLOW_TINT[season][kind])
+    bits  the STORED corner bits (TL, TR, BR, BL), one of STORED
+    v     the stored variant of that shape
+    flip  True: draw the shape mirrored left-right (scale.x = -1 about the tile's centre)
+    File: <set.>plains.grassflow.v3.<bits>.<v>.png, set = "" (summer, autumn) or "winter.".
+    Rule (round 7):
+      * the tile's own corner bits b; if b is a mirror (in MIRROR), the shape is MIRROR[b], flip = True
+        and the side states are read mirrored (the stored tile's W side is the world tile's E side)
+      * border crosses 2 sides (A, B in the order N, E, S, W of the STORED tile):
+          v = s(A) + 2 s(B) + 4 * ((tx + 2 ty) % 3)   (the inner shape: never the same as the tile
+          above or beside it, so a column / row of equal corner sets does not line up)
+      * border crosses 4 sides (1010; 0101 is its mirror): v = s(N) + 2 s(E) + 4 s(S) + 8 s(W)
+      * full patch 1111: v = hsh(tx, ty, 33) % 4, flip = bit 2 of hsh(tx, ty, 35)"""
     cs = [flow_corner(tx, ty), flow_corner(tx + 1, ty), flow_corner(tx + 1, ty + 1), flow_corner(tx, ty + 1)]
     kinds = {k for k in cs if k != "m"}
     if not kinds:
         return None
     kind = kinds.pop()
     bits = "".join("1" if k == kind else "0" for k in cs)
-    sides = crossed(bits)
-    if len(sides) == 2:  # + 4 x a free choice of the inner shape (0 on the edges, so it always joins)
-        v = side_state(tx, ty, sides[0]) + 2 * side_state(tx, ty, sides[1]) + 4 * (hsh(tx, ty, 34) % 2)
-    else:
-        v = hsh(tx, ty, 33) % 2
-    return kind, bits, v
+    flip = bits in MIRROR
+    stored = MIRROR.get(bits, bits)
+
+    def st(side):  # the state of the STORED tile's side, read from the world tile
+        if flip and side in ("E", "W"):
+            side = "W" if side == "E" else "E"
+        return side_state(tx, ty, side)
+    sides = crossed(stored)
+    if not sides:
+        return kind, stored, hsh(tx, ty, 33) % FULL_SHAPES, bool((hsh(tx, ty, 35) >> 2) & 1)
+    if len(sides) == 4:
+        return kind, stored, st("N") + 2 * st("E") + 4 * st("S") + 8 * st("W"), flip
+    return kind, stored, st(sides[0]) + 2 * st(sides[1]) + 4 * ((tx + 2 * ty) % INNER_SHAPES), flip
 
 
 def _tile_noise(seed, n=64):
@@ -318,107 +356,182 @@ def _tile_noise(seed, n=64):
     return v / np.abs(v).max()
 
 
-def _bump(t, d):
-    """t: 0-1 along a side, d: 0-1 away from it; 0 at the side's ends and from d = 0.45 on."""
-    fall = np.clip(1 - d / 0.45, 0, 1) ** 2
-    return 0.30 * np.sin(np.pi * t) ** 2 * (1 + 0.5 * np.sin(2 * np.pi * t + 0.6)) * fall
+def _push(t, d):
+    """Round 7: a side's push, as wide as the tile: 0 at the side's ends, full at the side and fading
+    LINEARLY to 0 at the opposite side (so the middle of the tile moves too, not only the rim)."""
+    return np.sin(np.pi * t) ** 2 * np.clip(1 - d, 0, 1)  # (symmetric along the side: mirrors join)
 
 
 def flow_field(bits, variant):
-    """Round 6: the corners' bilinear blend + a weak wobble every tile shares + a variant's inner
-    noise (0 on the tile's edges) + a BUMP on each crossed side whose state is 1 (the border crosses
-    that side about 7 texels away from state 0). The variant is s(first side) + 2 s(second side)."""
+    """The corners' bilinear blend + a weak wobble every tile shares + for each crossed side a push of
+    +0.26 (state 1) or -0.26 (state 0) reaching the middle of the tile + an inner shape (0 on the
+    tile's edges). Both tiles sharing a side compute the same value along it (the other sides' pushes
+    are 0 there), so the border joins; down a column of equal corner sets the crossings and the middle
+    move with the side states and the inner shape (no straight line)."""
     w = [int(b) for b in bits]  # TL, TR, BR, BL
     yy, xx = np.mgrid[0:64, 0:64]
     u, v = (xx + 0.5) / 64, (yy + 0.5) / 64
     f = w[0] * (1 - u) * (1 - v) + w[1] * u * (1 - v) + w[2] * u * v + w[3] * (1 - u) * v
     inner = np.sin(np.pi * u) * np.sin(np.pi * v)
     edge_fade = np.clip(np.minimum(np.minimum(xx + 0.5, 63.5 - xx), np.minimum(yy + 0.5, 63.5 - yy)) / 6, 0, 1)
-    amp = 0.20 if bits == "1111" else 0.60  # a full patch stays whole (no holes, an even cover)
-    F = f + 0.10 * _tile_noise(901) + amp * inner * edge_fade * _tile_noise(1000 + variant * 37 + int(bits, 2))
     sides = crossed(bits)
-    if len(sides) == 2:
-        st = {sides[0]: variant & 1, sides[1]: (variant >> 1) & 1}  # (bit 2: the inner shape)
-        for sd, on in st.items():
-            if not on:
-                continue
-            t, d = {"N": (u, v), "S": (u, 1 - v), "W": (v, u), "E": (v, 1 - u)}[sd]
-            # the same push on both tiles that share the side, so the border meets itself there
-            F = F + _bump(t, d)
+    if not sides:
+        shape, states = variant, {}
+    elif len(sides) == 4:
+        shape, states = 0, {sd: (variant >> i) & 1 for i, sd in enumerate(SIDES)}
+    else:
+        shape, states = variant >> 2, {sides[0]: variant & 1, sides[1]: (variant >> 1) & 1}
+    amp = 0.20 if bits == "1111" else 0.35
+    shared = _tile_noise(901)
+    shared = (shared + shared[:, ::-1]) / 2  # left-right symmetric, so a mirrored tile meets the others
+    F = f + 0.08 * shared + amp * inner * edge_fade * _tile_noise(1000 + shape * 37 + int(bits, 2))
+    if len(sides) == 2:  # each inner shape also moves the middle by its own step (-0.3 / 0 / +0.3)
+        F = F + (-0.3, 0.0, 0.3, 0.1)[shape] * inner * edge_fade
+    for sd, on in states.items():
+        t, d = {"N": (u, v), "S": (u, 1 - v), "W": (v, u), "E": (v, 1 - u)}[sd]
+        F = F + (0.26 if on else -0.26) * _push(t, d)
     return F
 
 
-def flow_tile(season, kind, bits, variant):
-    """Round 5 (the 1a inspection): marks in BUNDLES (2-3 blades) over about 22% of a full patch,
-    placed by dart throwing over the tile AND 5 rows below it (so the bottom row is as covered as the
-    middle), inside a patch whose edge is a free curve (flow_field). Winter: wind-swept drift strokes
-    instead of blades. Seeds are fixed numbers (the same files every run)."""
-    c = Canvas(64, 64, ramps_for(season))
-    seed = hsh(int(bits, 2), variant, 3 if kind == "d" else 4) & 0xFFFFFF
+def flow_shape(sset, bits, variant):
+    """One flow SHAPE tile (grey on transparent): bundles of 2-3 blades (summer / autumn set) or drift
+    streaks (winter set), placed stratified over the tile and 5 rows below it, inside the patch of
+    flow_field; then the rows / columns evened out (only growing existing marks or trimming without
+    leaving a dot), small clumps of 1-2 texels away from the tile's edge removed."""
+    c = Canvas(64, 64, {"shape": [(0, 0, 0)] * 4 + [(SHAPE_BODY,) * 3, (234,) * 3, (SHAPE_TIP,) * 3]})
+    seed = hsh(int(bits, 2), variant, 5 if sset else 4) & 0xFFFFFF
     rng = random.Random(seed)
     F = flow_field(bits, variant)
-    mat = "grass" if kind == "d" else "sunny"
-    k = c.mid(mat)
+    k = c.mid("shape")
+    BODY, TIP = 4, 6
 
     def inside(x, y):
         xi, yi = min(63, max(0, int(x))), min(63, max(0, int(y)))
         val = F[yi, xi]
         return val > 0.5 or (val > 0.38 and rng.random() < 0.35)
-
-    # round 6: stratified placement (a Latin hypercube): the bundles' rows and columns are spread
-    # evenly over the tile and the 5 rows below it, so every row and column gets the same cover
-    # without filling in afterwards (filling in added grain)
-    N = 88 if season != "winter" else 64
+    winter = bool(sset)
+    N = 88 if not winter else 64  # winter: as many streaks as round 6, softer colour (FLOW_TINT)
     perm = list(range(N))
     rng.shuffle(perm)
     pts = [((perm[i] + rng.random()) / N * 67 - 2.5, (i + rng.random()) / N * 69) for i in range(N)]
     for (x, y) in pts:
         if not inside(x, min(y, 63.0)):
             continue
-        if season == "winter":  # a drift streak: 5-8 wide, 1-2 rows, a lit or a shaded one
+        if winter:  # a drift streak: 5-8 wide, its top row lit (tip), the row under it (body)
             ln = rng.randint(5, 8)
             for i in range(ln):
-                for j in range(1 + (i > 0 and i < ln - 1)):
+                for j in range(1 + (0 < i < ln - 1)):
                     X, Y = int(x) + i, int(y) - j
                     if 0 <= X < 64 and 0 <= Y < 64:
                         c.mat[Y, X] = k
-                        c.tone[Y, X] = (2 if j == 0 else 1) if kind == "d" else (6 if j == 0 else 5)
+                        c.tone[Y, X] = BODY if j == 0 else TIP
             continue
         nb = rng.choice((2, 3))
         lean = rng.choice((-1, 0, 1))
-        for bi in range(nb):  # the bundle: blades 1 apart, the middle one tallest
+        for bi in range(nb):  # the bundle: blades 1 apart, the middle one tallest; tips 2 texels
             h = rng.randint(3, 5) + (1 if bi == 1 else 0)
             for d in range(h):
                 X = int(x) + bi + (lean if d >= h - 2 else 0)
                 Y = int(y) - d
                 if 0 <= X < 64 and 0 <= Y < 64:
                     c.mat[Y, X] = k
-                    if kind == "d":
-                        c.tone[Y, X] = 2 if (season == "autumn" or d >= 2) else 1
-                    elif season == "autumn":  # round 6: closer to the ground's brightness (less grain)
-                        c.tone[Y, X] = 4 if d >= h - 2 else 3
-                    else:
-                        c.tone[Y, X] = 5 if d >= h - 2 else 4
-    _balance(c, F > 0.5, k, kind, season, rng, 0.12)
-    _drop_lone(c)
-    _fill_thin(c, F > 0.5, k, kind, season, rng)
-    despeckle(c, loose=(mat,))
+                    c.tone[Y, X] = TIP if d >= h - 2 else BODY
+    ins = F > 0.5
+    GROW_H[0] = winter
+    _balance(c, ins, k, BODY, rng, 0.12)
+    _drop_small(c, 2)
+    _fill_thin(c, ins, k, BODY, rng)
+    _drop_small(c, 1)
     return c
 
 
-def _fill_thin(c, inside, k, kind, season, rng):
-    """A last pass: a row or column of the patch over 108% of the patch's cover loses texels whose
-    removal leaves no dot alone; one under 92% gets texels grown from the marks already in it (never a
-    new dot). Rows, columns, 3 times."""
-    m = c.mat
-    tone_add = (2 if kind == "d" else 6) if season == "winter" else (2 if kind == "d" else 4)
-    t = ((m == k) & inside).sum() / max(1, inside.sum())
+def _drop_small(c, size):
+    """Remove single texels, and clumps of <= size texels that do not touch the tile's edge (a clump
+    at the edge may be the cut end of a mark that goes on in the next tile)."""
+    filled = c.mat != 0
+    seen = np.zeros_like(filled)
+    for y in range(64):
+        for x in range(64):
+            if not filled[y, x] or seen[y, x]:
+                continue
+            comp, stack = [], [(x, y)]
+            seen[y, x] = True
+            while stack:
+                p, q = stack.pop()
+                comp.append((p, q))
+                for a, b in ((p + 1, q), (p - 1, q), (p, q + 1), (p, q - 1)):
+                    if 0 <= a < 64 and 0 <= b < 64 and filled[b, a] and not seen[b, a]:
+                        seen[b, a] = True
+                        stack.append((a, b))
+            if len(comp) == 1 or (len(comp) <= size and not any(p in (0, 63) or q in (0, 63) for p, q in comp)):
+                for p, q in comp:
+                    c.mat[q, p] = 0
 
-    def deg(y, x):
-        return sum(1 for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0))
-                   if 0 <= y + dy < 64 and 0 <= x + dx < 64 and m[y + dy, x + dx] == k)
+
+def _deg(m, k, y, x):
+    return sum(1 for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0))
+               if 0 <= y + dy < 64 and 0 <= x + dx < 64 and m[y + dy, x + dx] == k)
+
+
+GROW_H = [False]  # winter streaks grow only sideways (set by flow_shape)
+
+
+def _can_grow(m, k, y, x):
+    """A texel may be added next to a mark: beside it (and, except for winter streaks, above / below)."""
+    dirs = ((1, 0), (-1, 0)) if GROW_H[0] else ((0, 1), (0, -1), (1, 0), (-1, 0))
+    return any(0 <= y + dy < 64 and 0 <= x + dx < 64 and m[y + dy, x + dx] == k for dx, dy in dirs)
+
+
+def _balance(c, inside, k, tone_add, rng, tol=0.12):
+    """Even out the cover per row and column (round 7: it only GROWS existing marks, never starts a
+    new one, and trims only where no texel is left alone)."""
+    m = c.mat
+    t = ((m == k) & inside).sum() / max(1, inside.sum())
+    for _ in range(30):
+        for axis in (0, 1):
+            for i in range(64):
+                line_in = inside[i, :] if axis == 0 else inside[:, i]
+                n = line_in.sum()
+                if n < 12:
+                    continue
+                line = (m[i, :] == k) if axis == 0 else (m[:, i] == k)
+                have = (line & line_in).sum()
+                want = t * n
+                slack = max(1.0, tol * want)
+                idx = [j for j in range(64) if line_in[j]]
+                rng.shuffle(idx)
+                if have < want - slack:
+                    need = int(want - have)
+                    for j in idx:
+                        if need <= 0:
+                            break
+                        y, x = (i, j) if axis == 0 else (j, i)
+                        if m[y, x] != k and _can_grow(m, k, y, x):
+                            m[y, x] = k
+                            c.tone[y, x] = tone_add
+                            need -= 1
+                elif have > want + slack:
+                    extra = int(have - want)
+                    for j in idx:
+                        if extra <= 0:
+                            break
+                        y, x = (i, j) if axis == 0 else (j, i)
+                        if m[y, x] != k:
+                            continue
+                        same = [(y + dy, x + dx) for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0))
+                                if 0 <= y + dy < 64 and 0 <= x + dx < 64 and m[y + dy, x + dx] == k]
+                        if same and all(_deg(m, k, *q) >= 2 for q in same):
+                            m[y, x] = 0
+                            extra -= 1
+
+
+def _fill_thin(c, inside, k, tone_add, rng):
+    """A last pass: a row or column of the patch over 108% of the cover loses texels whose removal
+    leaves no texel alone; one under 92% grows texels from the marks in it. Rows, columns, 3 times."""
+    m = c.mat
+    t = ((m == k) & inside).sum() / max(1, inside.sum())
     for axis in (0, 1, 0, 1, 0, 1):
-        for i in range(64):  # thick lines first lose texels whose removal leaves no dot alone
+        for i in range(64):
             line_in = inside[i, :] if axis == 0 else inside[:, i]
             n = line_in.sum()
             if n < 12:
@@ -432,107 +545,50 @@ def _fill_thin(c, inside, k, kind, season, rng):
                 y, x = (i, j) if axis == 0 else (j, i)
                 if m[y, x] != k:
                     continue
-                nb = [(y + dy, x + dx) for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0))
-                      if 0 <= y + dy < 64 and 0 <= x + dx < 64 and m[y + dy, x + dx] == k]
-                if nb and all(deg(*q) >= 2 for q in nb):
+                same = [(y + dy, x + dx) for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0))
+                        if 0 <= y + dy < 64 and 0 <= x + dx < 64 and m[y + dy, x + dx] == k]
+                if same and all(_deg(m, k, *q) >= 2 for q in same):
                     m[y, x] = 0
-        for i in range(64):
-            line_in = inside[i, :] if axis == 0 else inside[:, i]
-            n = line_in.sum()
-            if n < 12:
-                continue
-            idx = [j for j in range(64) if line_in[j]]
-            rng.shuffle(idx)
             for j in idx:
                 line = (m[i, :] == k) if axis == 0 else (m[:, i] == k)
                 if (line & line_in).sum() >= 0.92 * t * n:
                     break
                 y, x = (i, j) if axis == 0 else (j, i)
-                if m[y, x] == k:
-                    continue
-                if any(0 <= y + dy < 64 and 0 <= x + dx < 64 and m[y + dy, x + dx] == k
-                       for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0))):
+                if m[y, x] != k and _can_grow(m, k, y, x):
                     m[y, x] = k
                     c.tone[y, x] = tone_add
+            if GROW_H[0] and axis == 0:  # winter: a thin row may also get a new 3-texel streak
+                for x0 in idx:
+                    if ((m[i, :] == k) & line_in).sum() >= 0.92 * t * n:
+                        break
+                    xs = range(x0, x0 + 3)
+                    if x0 + 2 < 64 and all(m[i, x] != k and line_in[x] for x in xs) and \
+                            not any((i > 0 and m[i - 1, x] == k) or (i < 63 and m[i + 1, x] == k) for x in range(x0 - 1, x0 + 4) if 0 <= x < 64):
+                        for x in xs:
+                            m[i, x] = k
+                            c.tone[i, x] = tone_add
 
 
-def _drop_lone(c):
-    """Round 6: remove opaque texels with no opaque 4-neighbour (lone dots of the flow layer)."""
-    filled = c.mat != 0
-    nb = np.zeros_like(filled)
-    nb[1:, :] |= filled[:-1, :]
-    nb[:-1, :] |= filled[1:, :]
-    nb[:, 1:] |= filled[:, :-1]
-    nb[:, :-1] |= filled[:, 1:]
-    lone = filled & ~nb
-    c.mat[lone] = 0
+def flow_tints(season):
+    """FLOW_TINT[season][kind]: the colour the game multiplies a shape by (the tip = this colour, the
+    body = 214/255 of it). d: the ground's tone 2 (thick, darker grass); l: the sunny ramp's tone 5
+    (summer), 3 (autumn: calm, less grain), the snow's tone 5 (winter: softer than white)."""
+    r = ramps_for(season)
+    d = r["grass"][2]
+    lt = {"summer": r["sunny"][5], "autumn": r["sunny"][3], "winter": r["grass"][5]}[season]
+    return {"d": "#%02x%02x%02x" % tuple(d), "l": "#%02x%02x%02x" % tuple(lt)}
 
 
-def _balance(c, inside, k, kind, season, rng, tol=0.08):
-    """Even out the cover so no row and no column of the patch is thinner or thicker than the patch
-    as a whole (the 64-px grid of the 1a inspection came from a thin bottom row). Round 6: a thin
-    line gets texels next to existing marks, or a new 2-texel mark (never a lone dot); a thick line
-    loses texels at the end of a mark, never leaving a lone dot behind."""
-    m = c.mat
-    tone_add = (2 if kind == "d" else 6) if season == "winter" else (2 if kind == "d" else 4)
+FLOW_TINT = None  # filled lazily: {season: {"d": "#rrggbb", "l": "#rrggbb"}}
 
-    def nbrs(y, x):
-        return [(y + dy, x + dx) for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0)) if 0 <= y + dy < 64 and 0 <= x + dx < 64]
 
-    def deg(y, x):
-        return sum(1 for q in nbrs(y, x) if m[q] == k)
-
-    cov = (m == k) & inside
-    t = cov.sum() / max(1, inside.sum())
-    for _ in range(30):
-        for axis in (0, 1):
-            for i in range(64):
-                line_in = inside[i, :] if axis == 0 else inside[:, i]
-                n = line_in.sum()
-                if n < 12:
-                    continue
-                line = (m[i, :] == k) if axis == 0 else (m[:, i] == k)
-                have = (line & line_in).sum()
-                want = t * n
-                idx = [j for j in range(64) if line_in[j]]
-                rng.shuffle(idx)
-                slack = max(1.0, tol * want)
-                if have < want - slack:
-                    need = int(want - have)
-                    for j in idx:
-                        if need <= 0:
-                            break
-                        y, x = (i, j) if axis == 0 else (j, i)
-                        if m[y, x] == k:
-                            continue
-                        if deg(y, x):
-                            m[y, x] = k
-                            c.tone[y, x] = tone_add
-                            need -= 1
-                        else:  # a new 2-texel mark along the line (horizontal in winter, else vertical)
-                            q = (y, x + 1) if season == "winter" else (y - 1, x)
-                            if 0 <= q[0] < 64 and 0 <= q[1] < 64 and m[q] != k:
-                                m[y, x] = m[q] = k
-                                c.tone[y, x] = c.tone[q] = tone_add
-                                need -= 1
-                elif have > want + slack:
-                    extra = int(have - want)
-                    for j in idx:
-                        if extra <= 0:
-                            break
-                        y, x = (i, j) if axis == 0 else (j, i)
-                        if m[y, x] != k:
-                            continue
-                        same = [q for q in nbrs(y, x) if m[q] == k]
-                        if len(same) == 1 and deg(*same[0]) == 1:  # a 2-texel mark: take it away whole
-                            q = same[0]
-                            m[y, x] = m[q] = 0
-                            extra -= 2 if (q[0] == y if axis == 0 else q[1] == x) else 1
-                            continue
-                        if any(deg(*q) < 2 for q in same):
-                            continue  # a neighbour would be left alone
-                        m[y, x] = 0
-                        extra -= 1
+def tinted(shape_img, tint_hex):
+    """What the game draws: the grey shape multiplied by the tint (alpha kept)."""
+    from PIL import Image
+    a = np.array(shape_img.convert("RGBA")).astype(np.float64)
+    t = np.array([int(tint_hex[i:i + 2], 16) for i in (1, 3, 5)], dtype=np.float64)
+    a[..., :3] = np.round(a[..., :3] / 255.0 * t)
+    return Image.fromarray(a.astype(np.uint8), "RGBA")
 
 
 def write(season):
@@ -544,24 +600,33 @@ def write(season):
             for col in range(4):
                 out.append(save(big.crop((col * 64, r * 64, col * 64 + 64, r * 64 + 64)),
                                 os.path.join(OUT, f"{pre}plains.grass.v3.{name}{r}{col}.png")))
-    for kind in "dl":
-        for i in range(1, 16):
-            bits = format(i, "04b")
+    return out
+
+
+def write_flow():
+    """The 2 shape sets (summer/autumn "" and winter "winter."), STORED masks only."""
+    out = []
+    for sset in ("", "winter."):
+        for bits in STORED:
             for v in range(n_flow_variants(bits)):
-                out.append(save(flow_tile(season, kind, bits, v),
-                                os.path.join(OUT, f"{pre}plains.grassflow.v3.{kind}{bits}.{v}.png")))
+                out.append(save(flow_shape(sset, bits, v), os.path.join(OUT, f"{sset}plains.grassflow.v3.{bits}.{v}.png")))
     return out
 
 
 def ground_tile(tx, ty, season="summer", load=None):
-    """The picture of one ground tile, the 2 layers composed (what the game draws)."""
-    from PIL import Image
+    """The picture of one ground tile, the 2 layers composed (what the game draws): the base tile,
+    then the flow shape (flipped if flow_key says so) multiplied by FLOW_TINT[season][kind]."""
+    from PIL import Image, ImageOps
     pre = SEASONS[season]["prefix"]
     load = load or (lambda p: Image.open(p).convert("RGBA"))
     t = load(os.path.join(OUT, f"{pre}plains.grass.v3.{macro_of(tx // 4, ty // 4)}{ty % 4}{tx % 4}.png")).copy()
     fk = flow_key(tx, ty)
     if fk:
-        t.alpha_composite(load(os.path.join(OUT, f"{pre}plains.grassflow.v3.{fk[0]}{fk[1]}.{fk[2]}.png")))
+        kind, bits, v, flip = fk
+        sh = load(os.path.join(OUT, f"{FLOW_SETS[season]}plains.grassflow.v3.{bits}.{v}.png"))
+        if flip:
+            sh = ImageOps.mirror(sh)
+        t.alpha_composite(tinted(sh, flow_tints(season)[kind]))
     return t
 
 
@@ -572,6 +637,7 @@ def main(which, edges=True):
         n += len(write(s))
         if edges:
             n += len(write_edges(s))
+    n += len(write_flow())
     print(f"{n} files")
 
 
