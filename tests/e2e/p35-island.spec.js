@@ -94,6 +94,7 @@ test('はじめから over an existing save asks first', async ({ page }) => {
   await openChest(page, 'camp');
   expect(await api(page, 'saveNow')).toBe(true);
   await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 40_000 }); // (the title comes before the world is ready: gfx v2 start-up)
   await expect(page.locator('#title-screen')).toBeVisible();
   await page.click('#title-new');
   await expect(page.locator('.title-confirm')).toBeVisible();
@@ -133,6 +134,7 @@ test('a damaged latest save falls back to the previous one', async ({ page }) =>
       }),
   );
   await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 40_000 }); // (the title comes before the world is ready: gfx v2 start-up)
   await expect(page.locator('.title-note')).toContainText('ひとつ前');
   await page.click('#title-continue');
   const pr = await api(page, 'progress');

@@ -179,17 +179,24 @@ export function loadOtherUiArt(frames) {
   const decoded = [];
   return new Promise((resolve) => {
     // when the page is idle (not during the title's first frames), a few at a time
-    const step = () => {
-      for (const url of rest.splice(0, 12)) {
+    const step = (/** @type {number} */ n = 12) => {
+      for (const url of rest.splice(0, n)) {
         const img = load(url);
         decoded.push(typeof img.decode === 'function' ? img.decode().catch(() => {}) : Promise.resolve());
       }
-      if (rest.length) later(step);
+      if (rest.length) later(() => step());
       else void Promise.all(decoded).then(() => resolve());
     };
-    later(step);
+    hurryOther = () => {
+      if (rest.length) step(rest.length);
+    };
+    later(() => step());
   });
 }
+
+/** Starts what loadOtherUiArt has not started yet, at once (the game is starting: they are needed now). */
+let hurryOther = () => {};
+export const hurryUiArt = () => hurryOther();
 
 /** Runs `fn` when the main thread is idle (or after a short wait where that is not offered). @param {() => void} fn */
 function later(fn) {

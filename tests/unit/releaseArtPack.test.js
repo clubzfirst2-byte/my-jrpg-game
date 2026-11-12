@@ -157,14 +157,25 @@ describe('sheet frames in the game', () => {
     }
   }
 
-  it('withOverrides cuts a sheet frame into an image of its own size (no smoothing)', async () => {
-    vi.stubGlobal('document', { createElement: () => new FakeCanvas() });
-    const { withOverrides, placeholderEntries } = await import('../../src/view/assets/placeholderPack.js');
+  it('withOverrides gives a sheet frame its own size, and the atlas gets exactly its pixels (1:1 from its place on the sheet)', async () => {
+    const { withOverrides, placeholderEntries, drawEntryImage } = await import('../../src/view/assets/placeholderPack.js');
     const entries = placeholderEntries().filter((e) => e.key === 'obj.rock');
     const sheetImage = { width: 1024, height: 569 };
     const [out] = await withOverrides(entries, new Map([['obj.rock', { sheet: sheetImage, x: 49, y: 57, w: 48, h: 56 }]]));
     expect(out.image).toMatchObject({ width: 48, height: 56 });
-    expect(out.image.calls).toEqual([[sheetImage, 49, 57, 48, 56, 0, 0, 48, 56]]);
+    // (gfx v2 integration, start-up: drawn straight from the sheet by the atlas, not cut out first)
+    const atlas = new FakeCanvas();
+    drawEntryImage(/** @type {any} */ (atlas.getContext()), /** @type {any} */ (out.image), 300, 120);
+    expect(atlas.calls).toEqual([[sheetImage, 49, 57, 48, 56, 300, 120, 48, 56]]);
+  });
+
+  it('cutSheetFrame still cuts a frame into an image of its own size (no smoothing)', async () => {
+    vi.stubGlobal('document', { createElement: () => new FakeCanvas() });
+    const { cutSheetFrame } = await import('../../src/view/assets/placeholderPack.js');
+    const sheetImage = { width: 1024, height: 569 };
+    const out = /** @type {any} */ (cutSheetFrame(/** @type {any} */ ({ sheet: sheetImage, x: 49, y: 57, w: 48, h: 56 })));
+    expect(out).toMatchObject({ width: 48, height: 56 });
+    expect(out.calls).toEqual([[sheetImage, 49, 57, 48, 56, 0, 0, 48, 56]]);
   });
 
   it('releaseFrames reads the built sheet + table and keeps the frame names (sorted, as before)', async () => {

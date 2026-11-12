@@ -120,6 +120,7 @@ test('a broken jar stays broken after つづきから (the world is saved as dif
     .not.toBe('jar');
   expect(await api(page, 'saveNow')).toBe(true);
   await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 40_000 }); // (the title comes before the world is ready: gfx v2 start-up)
   await expect(page.locator('#title-continue')).toBeEnabled({ timeout: 10_000 });
   await page.click('#title-continue');
   expect((await api(page, 'envTile', 73, 36)).material).not.toBe('jar');

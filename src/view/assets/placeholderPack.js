@@ -566,6 +566,25 @@ function loadImage(url) {
 /** Where a sprite's art comes from: its own PNG's URL, or its place on a packed sheet. @typedef {string | SheetFrame} ArtSource */
 
 /**
+ * gfx v2 integration (start-up): a packed sheet's frame as an atlas entry's image, without copying it
+ * to a canvas of its own (cutSheetFrame did that for every frame: about a third of the start-up's
+ * atlas work); packAtlas draws it straight from the sheet, pixel for pixel the same.
+ * @param {SheetFrame} f @returns {SheetImage}
+ */
+export const sheetImage = (f) => ({ width: f.w, height: f.h, sheet: f.sheet, sx: f.x, sy: f.y });
+/** @typedef {{ width: number, height: number, sheet: CanvasImageSource, sx: number, sy: number }} SheetImage */
+
+/**
+ * Draws an entry's image at (x, y) on an atlas, at its own size: a sheet frame straight from its sheet
+ * (sheetImage), pixel for pixel; an image or canvas as it is.
+ * @param {CanvasRenderingContext2D} ctx @param {HTMLImageElement | HTMLCanvasElement | SheetImage} image @param {number} x @param {number} y
+ */
+export function drawEntryImage(ctx, image, x, y) {
+  if ('sheet' in image) ctx.drawImage(image.sheet, image.sx, image.sy, image.width, image.height, x, y, image.width, image.height);
+  else ctx.drawImage(image, x, y);
+}
+
+/**
  * Copies a frame off its sheet into its own canvas, pixel for pixel, so it is drawn exactly as its
  * own PNG would be. @param {SheetFrame} f @returns {HTMLCanvasElement}
  */
@@ -584,7 +603,7 @@ export function cutSheetFrame(f) {
  * A tile of the wrong size is left as the placeholder (it would not fit the grid) and reported.
  * @param {{ key: string, rows: string[], anchor: [number, number] }[]} entries
  * @param {Map<string, ArtSource>} overrides logical name → PNG URL (artOverrides.js) or sheet frame
- * @returns {Promise<{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement | HTMLCanvasElement }[]>}
+ * @returns {Promise<{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement | HTMLCanvasElement | SheetImage }[]>}
  */
 export async function withOverrides(entries, overrides) {
   if (overrides.size === 0) return entries;
@@ -593,7 +612,8 @@ export async function withOverrides(entries, overrides) {
       const url = overrides.get(e.key);
       if (!url) return e;
       try {
-        const image = typeof url === 'string' ? await loadImage(url) : cutSheetFrame(url);
+        // (a frame of a packed sheet is drawn straight from the sheet by packAtlas: no canvas of its own)
+        const image = typeof url === 'string' ? await loadImage(url) : sheetImage(url);
         const [w, h] = [e.rows[0].length * ART_SCALE, e.rows.length * ART_SCALE];
         if (mustKeepSize(e.anchor) && (image.width !== w || image.height !== h)) {
           console.warn(`art: ${e.key}.png must be ${w}x${h} (is ${image.width}x${image.height}); using the placeholder`);
@@ -642,7 +662,7 @@ function mergePacks(packs) {
 }
 
 /**
- * @param {{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement | HTMLCanvasElement }[]} entries
+ * @param {{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement | HTMLCanvasElement | SheetImage }[]} entries
  * @param {{ width: number, height: number }} atlasSize from atlasSizeFor
  * @param {number} resolution pixels per game pixel (1 for placeholders, ART_SCALE for the real art)
  * @param {{ x: number, y: number }[]} [places] where each entry goes (skylinePlaces); else shelves
@@ -655,6 +675,7 @@ function packAtlas(entries, atlasSize, resolution, places) {
   canvas.width = ATLAS_W;
   canvas.height = ATLAS_H;
   const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
+  ctx.imageSmoothingEnabled = false; // (frames are drawn 1:1; never blended)
 
   /** @type {Map<string, { x: number, y: number, w: number, h: number }>} */
   const rects = new Map();
@@ -673,7 +694,7 @@ function packAtlas(entries, atlasSize, resolution, places) {
     }
     if (y + h > ATLAS_H) throw new Error('Placeholder atlas is full');
     if (e.image) {
-      ctx.drawImage(e.image, x, y);
+      drawEntryImage(ctx, e.image, x, y);
       rects.set(e.key, { x, y, w, h });
       x += w + PAD;
       shelf = Math.max(shelf, h);

@@ -63,7 +63,8 @@ export function availableV1Groups(sheets = releaseSheets) {
 function loadSheet(url) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve(img);
+    // decoded off the main thread before it is drawn from (gfx v2 integ: start-up), else as loaded
+    img.onload = () => (typeof img.decode === 'function' ? img.decode().catch(() => {}) : Promise.resolve()).then(() => resolve(img));
     img.onerror = () => reject(new Error(`Could not load ${url}`));
     img.src = url;
   });

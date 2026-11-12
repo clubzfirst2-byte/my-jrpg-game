@@ -52,6 +52,7 @@ test('saving and continuing work as before with the effects on (drawing only)', 
   const before = await api(page, 'progress');
   expect(await api(page, 'saveNow')).toBe(true);
   await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 40_000 }); // (the title comes before the world is ready: gfx v2 start-up)
   await expect(page.locator('#title-continue')).toBeEnabled({ timeout: 40_000 });
   await page.click('#title-continue');
   await settle(page);

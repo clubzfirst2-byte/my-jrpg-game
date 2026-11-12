@@ -24,7 +24,7 @@ import { testHeroFrames } from './debug/testHero.js';
 import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
 import { availableV1Groups, availableV2Groups, prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
 import { resolveArtGroups, v2Name } from './view/assets/artV2.js';
-import { installUiSkin, loadOtherUiArt, loadTitleArt, showButtonLabels } from './ui/uiSkin.js';
+import { hurryUiArt, installUiSkin, loadOtherUiArt, loadTitleArt, showButtonLabels } from './ui/uiSkin.js';
 import { GROUND_RUIN_BUNDLE, ISLAND_EDGES_BUNDLE, ISLAND_STEPS_BUNDLE, TERRAIN_GROUP, releaseTerrainEntries, v2BundleParts, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
 import { objectsReleaseGroups, installItemIcons, objectsDebugApi } from './view/assets/objectsArt.js';
 import { GameView } from './view/gameView.js';
@@ -92,6 +92,28 @@ function countDisplayObjects(node) {
   let n = 1;
   for (const child of node.children) n += countDisplayObjects(child);
   return n;
+}
+
+/**
+ * gfx v2 integration (start-up): the deep-water map of a map definition, from a worker (deepWorker.js);
+ * null when no worker can do it (the view then works it out itself).
+ * @param {any} def @returns {Promise<Uint8Array | null>}
+ */
+function deepMapInWorker(def) {
+  return new Promise((resolve) => {
+    try {
+      const w = new Worker(new URL('./view/deepWorker.js', import.meta.url), { type: 'module' });
+      const done = (/** @type {Uint8Array | null} */ v) => {
+        w.terminate();
+        resolve(v);
+      };
+      w.onmessage = (e) => done(e.data instanceof Uint8Array ? e.data : null);
+      w.onerror = () => done(null);
+      w.postMessage(Array.isArray(def) ? { ground: def } : { ground: def.ground, height: def.height });
+    } catch {
+      resolve(null);
+    }
+  });
 }
 
 /** Resolves once the page has painted (a frame, then a task), or after 100 ms when no frame comes (a hidden page). */
@@ -196,6 +218,9 @@ async function boot() {
         })
         .catch((err) => (console.warn(`art: v2 ui: ${String(err)}; using the v1 UI`), false))
     : Promise.resolve(false);
+  // gfx v2 integration (start-up): the v2 ground's deep-water map is worked out in a worker from now on
+  // (another thread: it does not hold the title back), ready by the time the view draws (deepWorker.js)
+  const deepEarly = artGroups.includes(v2Name('terrain')) ? deepMapInWorker(MAPS[/** @type {keyof typeof MAPS} */ (params.get('map') ?? 'world')] ?? MAPS.world) : Promise.resolve(null);
   // gfx v2 integration (start-up): the title first. Without ?map= the page shows the title as soon as
   // its own art and the save are read, and only then prepares the world (the art sheets, the atlases,
   // the view, the HUD), which the title does not need (with the v2 art that work held the title back by
@@ -245,9 +270,17 @@ async function boot() {
     performance.mark('title');
     await afterPaint(); // the title on screen before the world's work starts
   }
-  /** With the title up, a frame between the world's steps, so the title keeps being drawn (and answers taps). */
-  const breathe = () => (withTitle ? afterPaint() : Promise.resolve());
-  for (const frames of await Promise.all(artGroups.filter((g) => g !== uiArtGroup).map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
+  // W4: the HUD's and menus' frames, now that the title is up — at once (gfx v2 integration: a start
+  // pressed now waits for them, beginPlay; they are small and decode off the main thread)
+  await uiSkinLoad; // (with ?map=, no title: the v2 UI's frames are listed by now)
+  const uiOtherArt = uiFrames ? loadOtherUiArt(uiFrames) : Promise.resolve();
+  hurryUiArt();
+  // gfx v2 integration (start-up): the world's art sheets are fetched (and decoded, off the main thread)
+  // from now on, while the title shows
+  const worldArtLoad = Promise.all(artGroups.filter((g) => g !== uiArtGroup).map((g) => releaseFrames(g)));
+  /** With the title up, a break between the world's steps, so a tap on the title is answered meanwhile (a task, not a frame: frames are slow while the world is prepared). */
+  const breathe = () => (withTitle ? new Promise((resolve) => setTimeout(resolve, 0)) : Promise.resolve());
+  for (const frames of await worldArtLoad) for (const [k, v] of frames) artOverrides.set(k, v);
   //   gfx W3: the enemies' frame counts and speeds come from their art's frames.json — the table of
   //   the enemy art that was just loaded (v1, or v2 from src/art-release-v2/enemy; enemyFrames.js)
   useEnemyFrameTable(tableForArt((k) => artOverrides.has(k)));
@@ -314,6 +347,10 @@ async function boot() {
   performance.mark('world');
   // gfx W5: light, shadow and effects — on, or the look before them with ?fx=v1 / ?v2=0 (fxSwitch.js)
   const view = new GameView(app, assets, state, { fx: fxVersion(params) });
+  view.presetDeepWater(await deepEarly);
+  // gfx v2 integration (start-up): behind the title, one chunk a frame (a tap on the title is answered
+  // meanwhile); all at once from the start press on (beginPlay)
+  if (withTitle) view.chunkBudget = 1;
   performance.mark('view');
   await breathe();
   // Test / check helpers: ?time=20 (hour) and ?weather=rain|storm|cloudy|clear.
@@ -448,9 +485,7 @@ async function boot() {
     } else if (e.code === 'Escape' && menu.isOpen) menu.close();
     else if (e.code === 'KeyR' && !inTitle && !menu.isOpen) cycleAbility(state);
   });
-  // (the title is up already: above)
-  // W4: the HUD's and menus' frames, now that the title is up
-  const uiOtherArt = uiFrames ? loadOtherUiArt(uiFrames) : Promise.resolve();
+  // (the title is up already, and the HUD's frames are loading: above)
   /** @param {boolean} fromSave */
   function startGame(fromSave) {
     if (fromSave && loaded.status === 'ok') {
@@ -477,8 +512,9 @@ async function boot() {
     }
   }
   /**
-   * gfx v2 integration: resolves once the start area is drawn with all its art — no chunk waiting for
-   * its art bundles, two frames drawn so — and the HUD's frames are in.
+   * gfx v2 integration: resolves once the start area is drawn with all its art — a frame drawn with no
+   * chunk waiting for its art bundles (the chunks are built and drawn in the same frame) — and the HUD's
+   * frames are in.
    * @returns {Promise<void>}
    */
   const worldDrawn = () =>
@@ -489,7 +525,7 @@ async function boot() {
         const check = () => {
           const s = view.streamStats();
           frames = s.pending === 0 && s.chunks > 0 ? frames + 1 : 0;
-          if (frames >= 2) resolve(undefined);
+          if (frames >= 1) resolve(undefined);
           else requestAnimationFrame(check);
         };
         requestAnimationFrame(check);
@@ -501,8 +537,12 @@ async function boot() {
    */
   const beginPlay = (fromSave) => {
     holding = true;
+    performance.mark('beginPlay');
+    view.chunkBudget = Infinity; // (the start was pressed: what is left is built at once)
+    hurryUiArt(); // (and the HUD's frames are asked for at once, not when the page is idle)
     startGame(fromSave);
     void worldDrawn().then(() => {
+      performance.mark('drawn');
       holding = false; // (keys held meanwhile are kept: startGame cleared the press that started it)
       loop.reset();
       startLoading.hide();
@@ -511,7 +551,7 @@ async function boot() {
   // v1.0 (C9): a tap or a key skips the opening.
   // The tap that skips it goes no further (not to the attack button or the stick).
   const skipOpeningNow = (/** @type {Event} */ e) => {
-    if (!state.opening || inTitle || holding) return;
+    if (!state.opening || inTitle) return; // (also behind the loading note: the first tap skips it, as before the note)
     skipOpening(state);
     e.preventDefault();
     e.stopPropagation();
@@ -1243,6 +1283,7 @@ async function boot() {
   // gfx v2 integration: the world is ready; a start pressed on the title meanwhile goes on now
   startWhenReady = beginPlay;
   if (startAsked !== null) beginPlay(startAsked);
+  performance.mark('ready');
   document.body.dataset.ready = 'true';
 }
 

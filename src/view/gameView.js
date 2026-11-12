@@ -10,6 +10,7 @@
 // and in front of it when south of it.
 import { Container, Graphics, Rectangle, Sprite, Texture, TexturePool } from 'pixi.js';
 import { WaterAtlas, waterQuads } from './waterLayer.js';
+import { hash } from './tileHash.js';
 import { chunkRange, CHUNK_KEEP_MARGIN_TILES, CHUNK_LOAD_MARGIN_TILES } from './chunkRange.js';
 import { Ground, Shape, LEVEL_PX, inBounds, northEdgeHeight, southEdgeHeight } from '../game/world/tilemap.js';
 import { lerp } from '../game/core/math.js';
@@ -211,6 +212,8 @@ export class GameView {
     this.v2Pictures = null;
     /** @type {{ x: number, y: number, w: number, h: number } | null} */
     this.viewRect = null;
+    /** gfx v2 integration (start-up): chunks built per frame at most (updateChunks); no limit in play. */
+    this.chunkBudget = Infinity;
     this.sandUnderTrees = new Set(
       this.releaseTerrain
         ? (state.map.objects ?? [])
@@ -619,6 +622,14 @@ export class GameView {
   }
 
   /** W1: the deep-water map, computed on first use. */
+  /**
+   * gfx v2 integration (start-up): the deep map worked out off the main thread (deepWorker.js), taken
+   * when it is for this map and none is made yet. @param {Uint8Array | null} deep
+   */
+  presetDeepWater(deep) {
+    if (!this.deepWater && deep && deep.length === this.map.width * this.map.height) this.deepWater = deep;
+  }
+
   deepAt(/** @type {number} */ x, /** @type {number} */ y) {
     const map = this.map;
     // (inspection R2: the deep areas' border wanders and their corners are round: groundV2.deepMapShaped)
@@ -1402,6 +1413,10 @@ export class GameView {
     }
     this.chunkStats.updates++;
     let pending = 0;
+    // gfx v2 integration (start-up): at most chunkBudget chunks built per frame (main.js: 1 while the
+    // title or the loading note is up, so no frame holds the page for long and a tap is answered); the
+    // rest wait for the next frames and count as pending
+    let budget = this.chunkBudget;
     // the bundles of chunks still waiting for others (gfx W1: a chunk may wait on several bundles that
     // are not a region's, e.g. a region's pictures and the next region's ground: none is let go meanwhile)
     /** @type {Set<string>} */
@@ -1418,6 +1433,12 @@ export class GameView {
           pending++;
           continue;
         }
+        if (budget <= 0) {
+          for (const b of bundles) waiting.add(b); // (its bundles are kept for it)
+          pending++;
+          continue;
+        }
+        budget--;
         for (const b of bundles) this.assets.retain(b);
         this.chunks.set(key, this.buildChunk(cx, cy));
       }
@@ -2443,9 +2464,3 @@ function edgeQuarterOffset(key, size) {
   return [quarter.endsWith('e') ? size / 2 : 0, quarter.startsWith('s') ? size / 2 : 0];
 }
 
-/** Stable per-tile variation. @param {number} x @param {number} y */
-function hash(x, y) {
-  let h = (x * 374761393 + y * 668265263) >>> 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
-  return (h ^ (h >>> 16)) >>> 0;
-}

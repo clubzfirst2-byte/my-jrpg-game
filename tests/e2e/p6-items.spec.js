@@ -96,6 +96,7 @@ test('the bag is saved and comes back with つづきから', async ({ page }) =>
   await api(page, 'addMoney', 42);
   expect(await api(page, 'saveNow')).toBe(true);
   await page.reload();
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 40_000 }); // (the title comes before the world is ready: gfx v2 start-up)
   await expect(page.locator('#title-continue')).toBeEnabled({ timeout: 20_000 });
   await page.click('#title-continue');
   const inv = await api(page, 'inventory');
