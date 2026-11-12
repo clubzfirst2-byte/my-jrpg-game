@@ -15,6 +15,7 @@ from PIL import Image  # noqa: E402
 
 import npc_batch2  # noqa: E402
 import npc_batch3  # noqa: E402
+import npc_batch4  # noqa: E402
 import npc_woman  # noqa: E402
 from v3lib import ROOT, edge_cuts, save, stray_pieces  # noqa: E402
 
@@ -31,6 +32,9 @@ def main():
              for who in ("princess", "smith") for action in ("idle", "walk") for view in ("down", "right", "up")]
     jobs += [(who, action, view, (lambda w=who, a=action, v=view: npc_batch3.frames(w, a, v)))
              for who in ("child", "cook", "elder") for action in ("idle", "walk")
+             for view in ("down", "right", "up", "left")]
+    jobs += [(who, action, view, (lambda w=who, a=action, v=view: npc_batch4.frames(w, a, v)))
+             for who in ("guard", "merchant", "traveller") for action in ("idle", "walk")
              for view in ("down", "right", "up", "left")]
     for who, action, view, make in jobs:
         if True:
