@@ -93,6 +93,7 @@ import { sourceFrames, starRingSprite } from './sourceArt.js';
 import { ICON_ANCHORS } from './iconAnchors.js';
 import { releaseTerrainEntries } from './terrainArt.js';
 import { v3RegionOf } from './artV3.js';
+import { v3PlainsSeasonOf } from '../v3Plains.js';
 
 const FEET = /** @type {[number, number]} */ ([0.5, 1]);
 const TOP_LEFT = /** @type {[number, number]} */ ([0, 0]);
@@ -306,7 +307,23 @@ export function releaseV3RegionEntries(region, overrides) {
   return [...overrides.keys()]
     .filter((k) => v3RegionOf(k) === region)
     .sort()
-    .map((key) => (/\.v3\.\d\d$/.test(key) ? { key, rows: Array(16).fill('.'.repeat(16)), anchor: TOP_LEFT } : { key, rows: ['.'], anchor: FEET }));
+    .map((key) => ({ key, rows: ['.'], anchor: FEET }));
+}
+
+/**
+ * Graphics v3 (STYLE.md 6, 7.1b, 7.2; memory 10.1 (1)): the plains' v3 art of one season — its ground
+ * (the 8 base patterns' 128 tiles, the flow tiles, the grass edges: 64×64, on the 16 px grid), its trees
+ * and props (on their feet) — a bundle of its own, "v3:plains:<season>" (v3Plains.v3PlainsBundle), loaded
+ * by the chunks that have plains in that season only (summer's in spring). Only the names are read.
+ * @param {'summer' | 'autumn' | 'winter'} season @param {Map<string, ArtSource> | Set<string>} [overrides]
+ * @returns {{ key: string, rows: string[], anchor: [number, number] }[]}
+ */
+export function v3PlainsEntries(season, overrides) {
+  if (!overrides?.size) return [];
+  return [...overrides.keys()]
+    .filter((k) => v3PlainsSeasonOf(k) === season)
+    .sort()
+    .map((key) => (/plains\.(?:grass|grassflow)\.v3\./.test(key) ? { key, rows: Array(16).fill('.'.repeat(16)), anchor: TOP_LEFT } : { key, rows: ['.'], anchor: FEET }));
 }
 
 /** Enemy release frames: enemy.<kind>.<action>.<n> (docs/art-release/enemy/frames.json on the art branch). */
@@ -384,10 +401,14 @@ export function tallestFirstOrder(entries) {
  * then the smallest power-of-two height (64 .. that width) the packed shelves actually use, so an
  * atlas that fills only the top of its square is not given the empty rest (perf v1: the base atlas
  * of the release art went from 2048×2048 to 2048×1024).
+ * Graphics v3 (`exactHeight`): the height the shelves use, rounded up to 4 px, not to a power of two (WebGL
+ * 2 and WebGL 1 without mipmaps take any size): a v3 season's plains art uses 1100-odd rows of a 2048 ×
+ * 2048 square, which a power of two would round to 2048 (16 MB) instead of about 9.
  * @param {{ rows: string[], image?: { width: number, height: number } }[]} entries
+ * @param {{ exactHeight?: boolean }} [opts]
  * @returns {{ width: number, height: number }}
  */
-export function atlasSizeFor(entries) {
+export function atlasSizeFor(entries, { exactHeight = false } = {}) {
   for (const size of [64, 128, 256, 512, 1024, 2048]) {
     let x = 0;
     let y = 0;
@@ -409,6 +430,7 @@ export function atlasSizeFor(entries) {
     }
     if (!fits) continue;
     const used = y + shelf;
+    if (exactHeight) return { width: size, height: Math.min(size, Math.max(4, Math.ceil(used / 4) * 4)) };
     let height = 64;
     while (height < used) height *= 2;
     return { width: size, height: Math.min(height, size) };
@@ -584,11 +606,12 @@ export function mirroredFrames(all, mirror) {
 /**
  * @param {{ key: string, rows: string[], anchor: [number, number] }[]} [entries]
  * @param {Map<string, ArtSource>} [overrides] the real art (P11.5), by logical name
- * @param {{ tallestFirst?: boolean, mirror?: MirrorOptions }} [opts] tallestFirst: pack the real art
- *   tallest first (gfx W1); mirror: graphics v3, left frames drawn as their right frames mirrored
+ * @param {{ tallestFirst?: boolean, mirror?: MirrorOptions, exactHeight?: boolean }} [opts] tallestFirst: pack the real art
+ *   tallest first (gfx W1); mirror: graphics v3, left frames drawn as their right frames mirrored;
+ *   exactHeight: graphics v3, the real art's atlases only as high as they are used (atlasSizeFor)
  * @returns {Promise<import('./assetManager.js').BuiltBundle>}
  */
-export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map(), { tallestFirst = false, mirror } = {}) {
+export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map(), { tallestFirst = false, mirror, exactHeight = false } = {}) {
   let all = await withOverrides(entries, overrides);
   const mirrored = mirror ? mirroredFrames(all, mirror) : new Map();
   if (mirrored.size) all = all.filter((e) => !mirrored.has(e.key));
@@ -600,7 +623,7 @@ export async function buildPlaceholderPack(entries = placeholderEntries(), overr
   for (const d of densities) {
     const of = all.filter((e) => e.image && (e.density ?? ART_SCALE) === d);
     const real = tallestFirst ? tallestFirstOrder(of) : of;
-    packs.push(packAtlas(real, atlasSizeFor(real), d));
+    packs.push(packAtlas(real, atlasSizeFor(real, { exactHeight }), d));
   }
   const pack = mergePacks(packs);
   // a mirrored left frame: its right frame's texture, flipped by the view (SpriteMeta.flipX)

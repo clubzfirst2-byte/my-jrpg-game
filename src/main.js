@@ -18,7 +18,8 @@ import { storyDebugApi } from './debug/storyDebug.js';
 import { startOpening, skipOpening, finishEnding, endingLine, ENDING } from './game/story/story.js';
 import { EndingScreen } from './ui/ending.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
-import { ART_SCALE, acquireSheet, releaseSheet } from './view/assets/placeholderPack.js';
+import { ART_SCALE, acquireSheet, releaseSheet, v3PlainsEntries } from './view/assets/placeholderPack.js';
+import { v3PlainsBundle } from './view/v3Plains.js';
 import { testHeroFrames } from './debug/testHero.js';
 import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
 import { availableV1Groups, availableV2Groups, availableV3Groups, prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
@@ -228,6 +229,12 @@ async function boot() {
     if (entries.length) assets.register(name, () => buildPlaceholderPack(entries, artOverrides, packOpts));
   }
   assets.register(SOURCE_BUNDLE, () => buildPlaceholderPack(sourceEntries(), artOverrides, packOpts));
+  // Graphics v3: the plains' v3 ground, trees and props, one bundle per season (summer's in spring), loaded
+  // by the chunks that have plains (gameView.v3PlainsBundleOf), packed tallest first on atlases of their own
+  for (const season of /** @type {const} */ (['summer', 'autumn', 'winter'])) {
+    const entries = v3 ? v3PlainsEntries(season, artOverrides) : [];
+    if (entries.length) assets.register(v3PlainsBundle(season), () => buildPlaceholderPack(entries, artOverrides, { ...packOpts, tallestFirst: true, exactHeight: true }));
+  }
   await assets.load('placeholder');
   if (v3) dropIdleSheets(); // graphics v3: the sheets no bundle is cut from now (v3Memory.js)
   performance.mark('art');
@@ -239,7 +246,7 @@ async function boot() {
   const mapName = /** @type {keyof typeof MAPS} */ (mapParam ?? 'world');
   const state = createGameState(MAPS[mapName] ?? MAPS.world);
   performance.mark('world');
-  const view = new GameView(app, assets, state, { v3 });
+  const view = new GameView(app, assets, state, { v3, v3Opaque: params.get('v3opaque') === '1' });
   performance.mark('view');
   // Test / check helpers: ?time=20 (hour) and ?weather=rain|storm|cloudy|clear.
   const timeParam = Number.parseFloat(params.get('time') ?? '');
@@ -1166,6 +1173,8 @@ async function boot() {
       /** the drawn hero: its texture's art density and whether it is mirrored (a left frame drawn from the right one) */
       hero: { key: view.heroKey, density: view.player.texture.source.resolution, mirrored: view.player.scale.x < 0 },
       viewRect: state.viewRect ?? null,
+      /** the plains' v3 trees and props on the loaded chunks, and their sway frames now (gameView.v3Stats) */
+      plains: v3 ? view.v3Stats() : null,
     }),
     /** Graphics v3: a loaded texture's art density (texture px per game px), or null. */
     textureDensity: (/** @type {string} */ key) => (assets.hasTexture(key) ? assets.texture(key).source.resolution : null),
@@ -1181,6 +1190,21 @@ async function boot() {
       visualTime = t;
     },
     assets: () => assets.stats(),
+    /**
+     * Performance checks: the layers of the stage and of the world (by label, else "stage.<n>" /
+     * "world.<n>"), with the ones named in `hide` hidden and the rest shown. Returns every layer's name.
+     */
+    layers: (/** @type {string[]} */ hide = []) => {
+      const out = [];
+      for (const [name, parent] of /** @type {const} */ ([['stage', app.stage], ['world', view.world]])) {
+        parent.children.forEach((c, n) => {
+          const id = c.label && c.label !== 'Container' ? c.label : `${name}.${n}`;
+          if (c !== view.world) c.visible = !hide.includes(id);
+          out.push(id);
+        });
+      }
+      return out;
+    },
   };
   Object.assign(api, finalBossDebugApi(state, api.teleport)); // v1.0: the source (flags, arena, seats)
   Object.assign(api, storyDebugApi(state)); // v1.0: the opening and the ending

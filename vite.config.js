@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { packGroup, releaseGroups } from './tools/release-art-pack.mjs';
+import { SEASON_PARTS, packGroup, releaseGroups, seasonPartOf } from './tools/release-art-pack.mjs';
 import { precacheFiles, hasV2Pair, preloadReleaseGroup, preloadSwitchScript, releaseGroupOf } from './tools/precache.mjs';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
@@ -58,9 +58,13 @@ function releaseArt() {
     load(id) {
       if (id !== `\0${ID}`) return undefined;
       if (!build) return 'export default null;';
-      const all = [...releaseGroups(root).map((group) => ({ dir: join(root, group), name: group, file: group })), ...releaseGroups(rootV2).map((group) => ({ dir: join(rootV2, group), name: `v2/${group}`, file: `v2-${group}` })), ...releaseGroups(rootV3).map((group) => ({ dir: join(rootV3, group), name: `v3/${group}`, file: `v3-${group}` }))];
-      const groups = all.map(({ dir, name, file }) => {
-        const { png, table, files } = packGroup(dir);
+      // (graphics v3: a group's autumn and winter frames on sheets of their own, "v3/<group>.<season>":
+      // building one season's bundle decodes only its sheet; release-art-pack.seasonPartOf)
+      const v3Parts = (/** @type {string} */ group) =>
+        SEASON_PARTS.map((part) => ({ dir: join(rootV3, group), name: `v3/${group}${part && `.${part}`}`, file: `v3-${group}${part && `.${part}`}`, keep: (/** @type {string} */ n) => seasonPartOf(n) === part })).filter((g) => readdirSync(g.dir).some((f) => f.endsWith('.png') && g.keep(f.slice(0, -4))));
+      const all = [...releaseGroups(root).map((group) => ({ dir: join(root, group), name: group, file: group })), ...releaseGroups(rootV2).map((group) => ({ dir: join(rootV2, group), name: `v2/${group}`, file: `v2-${group}` })), ...releaseGroups(rootV3).flatMap(v3Parts)];
+      const groups = all.map(({ dir, name, file, keep }) => {
+        const { png, table, files } = packGroup(dir, keep);
         for (const f of files) this.addWatchFile(f);
         const sheet = this.emitFile({ type: 'asset', name: `release-${file}.png`, source: png });
         const frames = this.emitFile({ type: 'asset', name: `release-${file}.json`, source: JSON.stringify(table) });

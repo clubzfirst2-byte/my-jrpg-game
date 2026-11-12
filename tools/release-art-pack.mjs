@@ -262,12 +262,13 @@ export function releaseGroups(root) {
  * Packs one group folder: every *.png in it (lowercase ".png" only — the dev server's glob is
  * case-sensitive too, so both see the same files), named by its file name without ".png" (the same names
  * releaseFrames gave before packing).
- * @param {string} dir
+ * @param {string} dir @param {(name: string) => boolean} [keep] only these frames (seasonPartOf)
  * @returns {{ png: Buffer, table: { width: number, height: number, frames: Record<string, FrameRect> }, files: string[] }}
  */
-export function packGroup(dir) {
+export function packGroup(dir, keep = () => true) {
   const files = readdirSync(dir)
     .filter((f) => f.endsWith('.png')) // lowercase only, like the dev server's glob (*.png)
+    .filter((f) => keep(f.slice(0, -'.png'.length)))
     .sort();
   /** @type {Map<string, RgbaImage>} */
   const frames = new Map();
@@ -275,3 +276,14 @@ export function packGroup(dir) {
   const { image, frames: rects } = packSheet(frames);
   return { png: encodePng(image), table: { width: image.width, height: image.height, frames: rects }, files: files.map((f) => join(dir, f)) };
 }
+
+/** Graphics v3: the season parts of a v3 group (its autumn / winter frames on sheets of their own). */
+export const SEASON_PARTS = Object.freeze(['', 'autumn', 'winter']);
+
+/**
+ * Graphics v3 (memory, STYLE.md 10.1 (1) and (6)): a v3 group is packed as one sheet per season — its
+ * "autumn." and "winter." frames apart ("v3/terrain.autumn", "v3/terrain.winter"), the rest as the group
+ * ("v3/terrain") — so building one season's bundle decodes only that season's sheet. The part of a frame
+ * name: "autumn", "winter" or "" (the rest). @param {string} name
+ */
+export const seasonPartOf = (name) => /^(autumn|winter)\./.exec(name)?.[1] ?? '';

@@ -48,25 +48,22 @@ export function v3Enabled(params) {
  */
 export function v3ArtGroups(params, available) {
   if (!v3Enabled(params)) return [];
-  return [...available].filter((g) => params.get(g) !== 'v2' && params.get(g) !== 'v1').sort().map(v3Name);
+  // (a group's season sheets, "terrain.autumn", go with it: release-art-pack.seasonPartOf)
+  const off = (/** @type {string} */ g) => ['v1', 'v2'].includes(params.get(g.split('.')[0]) ?? '');
+  return [...available].filter((g) => !off(g)).sort().map(v3Name);
 }
 
 /**
  * Which region bundle a v3 key goes in (memory: STYLE.md 10.1 (1), a region's art only near it), or null
- * for the base bundle (hero, villagers, enemies: they keep their v1 frames' place). The pilot's terrain
- * and objects are the plains' (its grass, trees, flowers and the village's stone house).
+ * (hero, villagers, enemies: the base bundle, where they keep their v1 frames' place; the plains' ground,
+ * trees and props: their own bundle per season, v3Plains.v3PlainsSeasonOf / placeholderPack.v3PlainsEntries;
+ * the pilot's tree, flowers and stump, replaced by the production art, are not packed). The pilot's stone
+ * house is the plains'.
  * @param {string} key
  */
 export function v3RegionOf(key) {
-  if (/^plains\.grass\.v3\.\d\d$/.test(key)) return 'region:plains';
-  if (/^(?:obj|prop)\.v3\./.test(key)) return 'region:plains';
+  if (key === 'obj.v3.house_stone') return 'region:plains';
   return null;
-}
-
-/** A v3 ground tile of a 4×4 picture, by display tile (STYLE.md 6: `(ty % 4, tx % 4)`). @param {string} prefix e.g. "plains.grass" @param {number} i @param {number} j */
-export function v3GroundKey(prefix, i, j) {
-  const m = (/** @type {number} */ v) => ((v % 4) + 4) % 4;
-  return `${prefix}.v3.${m(j)}${m(i)}`;
 }
 
 /**

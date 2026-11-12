@@ -1,13 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync } from 'node:fs';
-import { chooseToastSlot, V3_DEFAULT, V3_DENSITY, V3_TARGET_HEIGHT, v3Enabled, v3ArtGroups, v3RegionOf, v3GroundKey, mirrorSourceOf, frameFight, onScreen } from '../../src/view/assets/artV3.js';
+import { chooseToastSlot, V3_DEFAULT, V3_DENSITY, V3_TARGET_HEIGHT, v3Enabled, v3ArtGroups, v3RegionOf, mirrorSourceOf, frameFight, onScreen } from '../../src/view/assets/artV3.js';
 import { computeView } from '../../src/view/resolution.js';
 import { GameView, CHUNK } from '../../src/view/gameView.js';
 import { createGameState, MAPS } from '../../src/game/state.js';
 import { createEnemy, updateEnemy } from '../../src/game/entities/enemies.js';
 import { inSeason } from '../../src/game/env/weather.js';
-import { REGION_ENTRIES, mirroredFrames, releaseV3RegionEntries, densityOf, ART_SCALE, SheetRef, acquireSheet, releaseSheet } from '../../src/view/assets/placeholderPack.js';
-import { v2BundleParts } from '../../src/view/assets/terrainArt.js';
+import { REGION_ENTRIES, mirroredFrames, releaseV3RegionEntries, v3PlainsEntries, atlasSizeFor, densityOf, ART_SCALE, SheetRef, acquireSheet, releaseSheet } from '../../src/view/assets/placeholderPack.js';
 import { onDemandReleaseGroup, precacheFiles } from '../../tools/precache.mjs';
 
 // Graphics v3 (docs/art-release-v3/STYLE.md, ?v3=1): density 4, the narrow integer view, the play
@@ -72,30 +71,38 @@ describe('art', () => {
     expect(densityOf({ sheet: /** @type {any} */ ({}), x: 0, y: 0, w: 1, h: 1 })).toBe(ART_SCALE);
     expect(densityOf({ sheet: /** @type {any} */ ({}), x: 0, y: 0, w: 1, h: 1, density: 4 })).toBe(4);
   });
-  it('the v3 plains art goes in the plains bundle (its grass in "ground:plains"), the characters in the base one', () => {
+  it('the v3 plains art: one bundle per season (summer for spring too), the stone house in the plains bundle, the characters in the base one', () => {
     const files = readdirSync(new URL('../../src/art-release-v3/terrain/', import.meta.url)).map((f) => f.slice(0, -4));
     const objects = readdirSync(new URL('../../src/art-release-v3/objects/', import.meta.url)).map((f) => f.slice(0, -4));
     const overrides = new Map([...files, ...objects, 'hero.idle.down.0', 'enemy.slime.idle.0'].map((k) => [k, { url: `${k}.png`, density: 4 }]));
     expect(v3RegionOf('hero.idle.down.0')).toBe(null);
     expect(v3RegionOf('npc.woman.idle.down.0')).toBe(null);
-    const entries = releaseV3RegionEntries('region:plains', overrides);
-    expect(entries.map((e) => e.key).sort()).toEqual([...files, ...objects].sort());
+    expect(releaseV3RegionEntries('region:plains', overrides).map((e) => e.key)).toEqual(['obj.v3.house_stone']);
     expect(releaseV3RegionEntries('region:forest', overrides)).toEqual([]);
-    for (const e of entries) {
-      if (/\.v3\.\d\d$/.test(e.key)) expect(e.anchor).toEqual([0, 0]);
-      else expect(e.anchor).toEqual([0.5, 1]);
+    const seasons = /** @type {const} */ (['summer', 'autumn', 'winter']);
+    const all = seasons.flatMap((s) => v3PlainsEntries(s, overrides).map((e) => e.key));
+    expect(new Set(all).size).toBe(all.length);
+    // every production file is in exactly one season's bundle; the pilot's tree / flowers / stump in none
+    expect(all.sort()).toEqual(files.filter((f) => /plains\.(?:grass|grassflow|tree|prop)\.v3\./.test(f)).sort());
+    for (const s of seasons) {
+      const e = v3PlainsEntries(s, overrides);
+      expect(e.filter((x) => /grass\.v3\.[a-h]\d\d$/.test(x.key)).length).toBe(128);
+      expect(e.filter((x) => x.key.includes('grassflow')).length).toBe(204);
+      expect(e.filter((x) => x.key.includes('.edge.')).length).toBe(52);
+      for (const x of e) expect(x.anchor).toEqual(/grass(?:flow)?\.v3\./.test(x.key) ? [0, 0] : [0.5, 1]);
+      if (s !== 'summer') expect(e.every((x) => x.key.startsWith(`${s}.`))).toBe(true);
     }
-    const parts = /** @type {[string, (k: string) => boolean][]} */ (v2BundleParts('region:plains'));
-    const where = (k) => parts.filter(([, keep]) => keep(k)).map(([n]) => n);
-    expect(where('plains.grass.v3.00')).toEqual(['ground:plains']);
-    expect(where('obj.v3.oak')).toEqual(['region:plains']);
-    expect(where('obj.v3.house_stone')).toEqual(['region:plains']);
     expect(REGION_ENTRIES['region:plains']).toBeTypeOf('function');
   });
-  it('a ground tile of the 4×4 picture by display tile (ty % 4, tx % 4)', () => {
-    expect(v3GroundKey('plains.grass', 0, 0)).toBe('plains.grass.v3.00');
-    expect(v3GroundKey('plains.grass', 5, 2)).toBe('plains.grass.v3.21');
-    expect(v3GroundKey('plains.grass', -1, -1)).toBe('plains.grass.v3.33');
+  it('a v3 atlas is only as high as it is used (exactHeight), a season of plains art fits 2048 × about 1100', () => {
+    const tile = { rows: [], image: { width: 64, height: 64 } };
+    const tree = { rows: [], image: { width: 160, height: 224 } };
+    const set = [...Array(12).fill(tree), ...Array(384).fill(tile)];
+    expect(atlasSizeFor(set)).toEqual({ width: 2048, height: 2048 });
+    const exact = atlasSizeFor(set, { exactHeight: true });
+    expect(exact.width).toBe(2048);
+    expect(exact.height % 4).toBe(0);
+    expect(exact.height).toBeLessThan(1200);
   });
 });
 
@@ -267,7 +274,7 @@ describe('v3 ground (no chunk cache)', () => {
     const n = new Map();
     for (const cy of cys) for (const cx of cxs) for (const p of v.groundPiecesV2(cx, cy)) {
       if (p.anim) continue;
-      const k = `${p.x},${p.y},${p.key.replace(/\.v3\.\d\d$/, '.v3')},${p.quarter}`;
+      const k = `${p.x},${p.y},${p.key.replace(/\.v3\..*$/, '.v3')},${p.quarter}`;
       n.set(k, (n.get(k) ?? 0) + 1);
     }
     return n;
@@ -285,7 +292,7 @@ describe('v3 ground (no chunk cache)', () => {
     const after = landPieces(v, cxs, cys);
     expect([...after.values()].every((c) => c === 1)).toBe(true);
     const w = worldView(false);
-    w.v3GroundAt = () => null;
+    w.v3PlainsGround = () => false;
     const before = landPieces(w, cxs, cys);
     // the same set of positions (v3 only swaps the key of a one-ground display tile)
     // (the first sampled chunk row's north overhang belongs to the row above it, not sampled)
@@ -293,15 +300,18 @@ describe('v3 ground (no chunk cache)', () => {
     const pos = (m) => new Set([...m.keys()].filter((k) => Number(k.split(',')[1]) >= y0).map((k) => k.split(',').slice(0, 2).join(',') + ',' + k.split(',')[3]));
     expect(pos(after)).toEqual(pos(before));
   });
-  it('?v3=1: the plains grass is the v3 4×4 picture in summer, the v2 art in autumn and winter', () => {
-    for (const [season, expectV3] of [['summer', true], ['autumn', false], ['winter', false]]) {
+  it('?v3=1: the plains grass is the v3 ground in every season (base, flow, grass edges; spring = summer)', () => {
+    for (const [season, pre] of [['summer', ''], ['spring', ''], ['autumn', 'autumn.'], ['winter', 'winter.']]) {
       const v = worldView(true);
       v.updateSeason(inSeason(0, season));
       const keys = new Set();
       for (let cy = 2; cy <= 4; cy++) for (const cx of [0, 1]) for (const p of v.groundPiecesV2(cx, cy)) keys.add(p.key);
-      const v3keys = [...keys].filter((k) => /\.v3\.\d\d$/.test(k));
-      if (expectV3) expect(v3keys.length).toBe(16);
-      else expect(v3keys).toEqual([]);
+      const base = [...keys].filter((k) => new RegExp(`^${pre.replace('.', '\\.')}plains\\.grass\\.v3\\.[a-h]\\d\\d$`).test(k));
+      expect(base.length, season).toBeGreaterThan(100);
+      expect([...keys].some((k) => k.startsWith(`${pre}plains.grassflow.v3.`)), season).toBe(true);
+      expect([...keys].some((k) => k.startsWith(`${pre}plains.grass.v3.edge.`)), season).toBe(true);
+      // no v2 plains grass left on the flat ground
+      expect([...keys].filter((k) => /^plains\.grass\.(?:\d+|macro|edge)/.test(k)), season).toEqual([]);
     }
   });
   it('CHUNK is a whole number of v3 groups', () => {

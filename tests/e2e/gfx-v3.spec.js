@@ -123,12 +123,13 @@ for (const screen of [PRO, SE]) {
     expect(v3.cpu.total).toBe(0);
     expect(v3.gpu.render).toBeLessThan(1 << 20);
 
-    // the plains: v3 grass, trees, the stone house (in the plains' bundles)
+    // the plains: v3 ground, trees and props (the summer bundle), the stone house (the plains' bundle)
     await api(page, 'teleport', 28, 89);
     await page.waitForTimeout(1500);
-    expect(await api(page, 'textureDensity', 'plains.grass.v3.00')).toBe(4);
+    expect(await api(page, 'textureDensity', 'plains.grass.v3.a00')).toBe(4);
+    expect(await api(page, 'textureDensity', 'plains.grassflow.v3.d1111.0')).toBe(4);
+    expect(await api(page, 'textureDensity', 'plains.tree.v3.oak_l.0')).toBe(4);
     expect(await api(page, 'textureDensity', 'obj.v3.house_stone')).toBe(4);
-    expect(await api(page, 'textureDensity', 'obj.v3.oak')).toBe(4);
 
     // hero and enemies around him are not under the HUD or the buttons; taps ≥ 44 px, text ≥ 12 px
     const p = await api(page, 'player');
@@ -280,4 +281,48 @@ test('?v3=1 saves nothing of its own: settings and the save are as with ?v3=0', 
     await context.close();
   }
   expect(saved['&v3=1']).toEqual(saved['&v3=0']);
+});
+
+test('?v3=1: the plains in summer, autumn and winter — each season\'s own v3 bundle, its trees and props, swaying; memory under 35 MB', async ({ browser }) => {
+  for (const season of ['summer', 'autumn', 'winter']) {
+    const { context, page, errors } = await open(browser, SE, `&v3=1`);
+    await api(page, 'setSeason', season);
+    await api(page, 'teleport', 52, 100);
+    await page.waitForTimeout(2500);
+    const pre = season === 'summer' ? '' : `${season}.`;
+    const names = (await api(page, 'stream')).bundleNames;
+    expect(names).toContain(`v3:plains:${season}`);
+    expect(names.filter((n) => n.startsWith('v3:plains:'))).toEqual([`v3:plains:${season}`]);
+    expect(await api(page, 'textureDensity', `${pre}plains.grass.v3.a00`)).toBe(4);
+    const a = (await api(page, 'v3')).plains;
+    expect(a.season === season || (season === 'summer' && a.season === null)).toBe(true);
+    expect(Object.keys(a.trees).length).toBeGreaterThanOrEqual(3);
+    expect(Object.values(a.props).reduce((x, y) => x + y, 0)).toBeGreaterThan(20);
+    expect(a.foot).toBeGreaterThan(5);
+    // the sway moves on (trees: not in winter's bare broadleaves, but the pines; grass and flowers 2 frames)
+    await page.waitForTimeout(1600);
+    const b = (await api(page, 'v3')).plains;
+    expect(JSON.stringify(b.frames)).not.toBe(JSON.stringify(a.frames));
+    const mem = await api(page, 'v3');
+    expect(mem.gpu.total).toBeLessThan(35 * 2 ** 20);
+    expect(mem.cpu.total).toBe(0);
+    expect(errors).toEqual([]);
+    await context.close();
+  }
+});
+
+test('?v3=1: changing the season near the plains loads the next season\'s v3 art first and lets the old one go', async ({ browser }) => {
+  const { context, page, errors } = await open(browser, PRO, '&v3=1');
+  await api(page, 'teleport', 52, 100);
+  await page.waitForTimeout(2000);
+  expect((await api(page, 'stream')).bundleNames).toContain('v3:plains:summer');
+  await api(page, 'setSeason', 'autumn');
+  await expect.poll(async () => (await api(page, 'season')).view, { timeout: 15_000 }).toBe('autumn');
+  await page.waitForTimeout(1000);
+  const names = (await api(page, 'stream')).bundleNames;
+  expect(names).toContain('v3:plains:autumn');
+  expect(names).not.toContain('v3:plains:summer');
+  expect(await api(page, 'textureDensity', 'autumn.plains.tree.v3.oak_l.0')).toBe(4);
+  expect(errors).toEqual([]);
+  await context.close();
 });
