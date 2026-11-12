@@ -313,6 +313,22 @@ def ground_tile(tx, ty, season="summer", load=None):
 
 # ------------------------------------------------------------------ transitions
 
+_BASE_CACHE = {}
+
+
+def _base_canvas(name, season):
+    key = (name, season)
+    if key not in _BASE_CACHE:
+        _BASE_CACHE[key] = base_pattern(name, season)
+    return _BASE_CACHE[key]
+
+
+def edge_base_pick(mask, variant):
+    """The base tile an edge's inside is cut from: (pattern, row, column), fixed per (mask, v)."""
+    h = G.hsh(mask, variant, 77)
+    return PATTERNS[h % 8], (h >> 3) % 4, (h >> 5) % 4
+
+
 def edge_overlay(season, mask, variant):
     """Forest moss over a lower ground (the v2 curve at 2x, gen_ground_v3.edge_inside): moss with
     cushions inside, a cushion lip 3 texels (lit facing up / left: 4-5, shaded: 1-2), moss tufts
@@ -323,20 +339,20 @@ def edge_overlay(season, mask, variant):
     F, inside = G.edge_inside(mask, variant)
     c = Canvas(64, 64, ramps_for(season))
     k = c.mid("moss")
-    c.mat[inside] = k
-    c.tone[inside] = 3
-    rng0 = random.Random(mask * 17 + variant + 7)
-    # round 2: the inside like the base (a few small mottles and litter marks, winter in the "fine"
-    # ramp), not a field of cushions: the border tiles must not show as blocks next to the base
-    mott = "fine" if season == "winter" else "moss"
-    for i in range(10):
-        r = rng0.uniform(3, 6)
-        m_ = G.blob(64, rng0.uniform(0, 64), rng0.uniform(0, 64), r, r * rng0.uniform(0.5, 0.9), mask * 101 + variant * 7 + i)
-        clumps_in(c, m_ & inside, mott, 2 if rng0.random() < 0.6 else 4, 0.8, rng0, mask * 3 + variant + i, n=64)
-    kinds = {"summer": (0, 2), "autumn": (0, 3), "winter": (5,)}[season]
-    for (x, y) in G.scatter(rng0, 64, 4, 14, 8):
-        if inside[int(y), int(x)] and inside[min(63, int(y) + 3), int(x)]:
-            litter(c, x, y, rng0.choice(kinds), 3, rng0, season)
+    # round 3: the inside IS a base tile (the same mottles, cushions and litter as the floor, so the
+    # same amount of pattern: no flat band along the border, no step on the tile lines). The tile is
+    # picked per (mask, v) from the 8 patterns x 16 tiles; it is cut by the curve, then the lip and
+    # the tufts are drawn as before.
+    src, sr, sc = edge_base_pick(mask, variant)
+    b = _base_canvas(src, season)
+    bm = b.mat[sr * 64:sr * 64 + 64, sc * 64:sc * 64 + 64]
+    bt = b.tone[sr * 64:sr * 64 + 64, sc * 64:sc * 64 + 64]
+    remap = np.zeros(len(b.names), np.int16)
+    for i, nm in enumerate(b.names):
+        if nm is not None:
+            remap[i] = c.mid(nm)
+    c.mat[:] = remap[bm]
+    c.tone[:] = bt
     c.mat[~inside] = 0
     outside = ~inside
     d = np.full((64, 64), 9)
@@ -355,10 +371,10 @@ def edge_overlay(season, mask, variant):
                 continue
             gx, gy = T.gradient(mask, (x + 0.5) / 2 - 0.5, (y + 0.5) / 2 - 0.5)
             lit = (gx + gy) > 0.05
-            if season == "winter":  # round 2: no rim at all (snow meeting snow: no line round the border)
-                c.tone[y, x] = 3
-            else:
-                c.tone[y, x] = (5 if d[y, x] == 1 else 4) if lit else (1 if d[y, x] == 1 else 2)
+            if season == "winter":  # round 2: no rim at all (snow meeting snow: no line round the border);
+                continue  # round 3: the base's snow pattern runs up to the cut
+            c.mat[y, x] = k
+            c.tone[y, x] = (5 if d[y, x] == 1 else 4) if lit else (1 if d[y, x] == 1 else 2)
     do = np.full((64, 64), 9)
     do[inside] = 0
     for step in range(1, 3):
@@ -384,9 +400,51 @@ def edge_overlay(season, mask, variant):
                         if 2 <= X < 62 and 2 <= Y < 62 and not inside[Y, X]:
                             c.mat[Y, X] = k
                             c.tone[Y, X] = 4 if dy == 0 else 2
+    kg = c.mid("grass")
     G._fill_holes(c)
-    c.mat[(c.mat != 0) & (c.mat != k)] = k  # _fill_holes fills with "grass"; the forest's is "moss"
+    c.mat[c.mat == kg] = k  # _fill_holes fills with "grass"; the forest's is "moss"
+    _drop_cut_pieces(c, inside, season)
+    despeckle(c, loose=("moss", "fine"))
     return c
+
+
+def _drop_cut_pieces(c, inside, season):
+    """Pieces of the base's marks cut by the curve: a run of 1-3 texels of one colour left against the
+    transparent part takes the colour of its inner neighbour (no crumbs on the border)."""
+    H, W = c.mat.shape
+    col = c.mat.astype(np.int32) * 16 + c.tone.astype(np.int32)
+    seen = np.zeros((H, W), bool)
+    op = c.mat != 0
+    for y0 in range(H):
+        for x0 in range(W):
+            if not op[y0, x0] or seen[y0, x0]:
+                continue
+            st, comp = [(y0, x0)], []
+            seen[y0, x0] = True
+            while st:
+                y, x = st.pop()
+                comp.append((y, x))
+                for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    Y, X = y + dy, x + dx
+                    if 0 <= Y < H and 0 <= X < W and op[Y, X] and not seen[Y, X] and col[Y, X] == col[y0, x0]:
+                        seen[Y, X] = True
+                        st.append((Y, X))
+            if len(comp) > 3 or not all(inside[y, x] for y, x in comp):
+                continue  # (the tufts over the border are left as drawn)
+            touches_cut = any(0 <= y + dy < H and 0 <= x + dx < W and not op[y + dy, x + dx]
+                              for y, x in comp for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+            if not touches_cut:
+                continue
+            nb = {}
+            for y, x in comp:
+                for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    Y, X = y + dy, x + dx
+                    if 0 <= Y < H and 0 <= X < W and op[Y, X] and col[Y, X] != col[y0, x0]:
+                        nb[col[Y, X]] = nb.get(col[Y, X], 0) + 1
+            if nb:
+                best = max(sorted(nb), key=lambda q: nb[q])
+                for y, x in comp:
+                    c.mat[y, x], c.tone[y, x] = best // 16, best % 16
 
 
 def write_edges(season):
