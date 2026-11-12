@@ -134,3 +134,37 @@ def hand_stamp(c, mat, wrist, side, tones=(1, 2, 3, 4, 5)):
             if side > 0 and ch == "t":
                 t = tones[2]  # the thumb on the far side of the light
             c.put(x0 + i, y0 + j, mat, t)
+
+
+def gauntlet(c, g, a, b, mid=0.25):
+    """v1's dark iron gauntlet on the forearm mask g, from the elbow a to the wrist b (hero round 2):
+    mostly the dark grey (tone 0), a mid-grey strip on the lit side (tone 1), the light grey only as
+    one line on the lit edge (tone 3) along the upper part; the 2 metal bands are dark grooves with
+    a single lit texel at their lit end (not light stripes). v1: dark ~72 %, mid ~21 %, light ~8 %."""
+    (ax, ay), (bx, by) = a, b
+    L = math.hypot(bx - ax, by - ay) or 1.0
+    ux, uy = (bx - ax) / L, (by - ay) / L
+    nx, ny = -uy, ux
+    if nx * -0.8 + ny * -0.6 < 0:  # n points to the light (top left)
+        nx, ny = -nx, -ny
+    ys, xs = np.nonzero(g)
+    if not len(ys):
+        return
+    px, py = xs + 0.5 - ax, ys + 0.5 - ay
+    t = (px * ux + py * uy) / L
+    d = px * nx + py * ny
+    r = max(1.0, float(d.max()))
+    tone = np.zeros(len(ys), np.int8)
+    tone[(d > mid * r) & (d <= 0.75 * r)] = 1
+    lit = (d > 0.75 * r) & (t < 0.7)
+    tone[lit] = 3
+    tone[(d > 0.75 * r) & ~lit] = 1
+    for tb in (0.3, 0.72):  # the bands: a dark groove across, one lit texel at its lit end
+        band = np.abs(t - tb) < 0.6 / L * 2
+        tone[band] = 0
+    c.tone[ys, xs] = tone
+    for tb in (0.3, 0.72):
+        cx, cy = ax + (bx - ax) * (tb - 1.4 / L), ay + (by - ay) * (tb - 1.4 / L)
+        x, y = int(cx + nx * r * 0.8), int(cy + ny * r * 0.8)
+        if 0 <= x < c.w and 0 <= y < c.h and g[y, x]:
+            c.tone[y, x] = 3

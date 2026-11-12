@@ -19,8 +19,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import numpy as np  # noqa: E402
 
-from hdkit import capsule, edge_band, grooves, hand, hand_stamp, lock  # noqa: E402
-from v3lib import ROOT, Canvas, despeckle, erode, hx, ramp6, save  # noqa: E402
+from hdkit import capsule, edge_band, gauntlet, grooves, hand, hand_stamp, lock  # noqa: E402
+from v3lib import ROOT, Canvas, despeckle, edge_cuts, erode, hx, ramp6, save  # noqa: E402
 
 OUT = os.path.join(ROOT, "src", "art-release-v3", "hero")
 W, H = 64, 112
@@ -317,18 +317,9 @@ def arm(c, side, swing, oy):
         elbow = (sx, ey)
         wrist = (sx + side * (-0.5 * swing), ey + 11 + 2.5 * swing)
     g = capsule(c, elbow, wrist, 3.7)
-    c.fill(g, "shirt")  # v1's gauntlet greys (#4a4640 #a8a296 #e4e0d6): metal in 3 tones + a light
-    c.shade_part(g, tones=(0, 0, 1, 1, 3), norm=True, light=(-0.9, -0.2, 0.4))  # v1's darkness (hero round)
-    ex, eyy = elbow
+    c.fill(g, "shirt")  # v1's gauntlet greys (#4a4640 #a8a296 #e4e0d6), v1's darkness (hdkit.gauntlet)
     wx, wy = wrist
-    for t in (0.18, 0.62):  # two metal bands with a lit top edge
-        bx, by = ex + (wx - ex) * t, eyy + (wy - eyy) * t
-        band = c.m_line([(bx - 4, by), (bx + 4, by)], 1.2) & g
-        c.set_tone(band, 0)
-        up = c.m_line([(bx - 4, by - 1), (bx + 4, by - 1)], 1.0) & g
-        c.set_tone(up, 3 if t < 0.5 else 1)
-    c.put(int(round(ex - 2)), int(round(eyy + 2)), "shirt", 4)  # the metal's glint (2 texels)
-    c.put(int(round(ex - 2)), int(round(eyy + 3)), "shirt", 3)
+    gauntlet(c, g, elbow, wrist)
     hand_stamp(c, "leather", (wx, wy + 1), side if swing <= 0 else -side, tones=(1, 2, 3, 4, 5))
 
 
@@ -341,6 +332,7 @@ def frame(oy=0, breath=0, sway=0, lag=0, feet=(0, 0), swing=(0.0, 0.0), no_arms=
     """The front view. no_arms / finish=False: the body only, unfinished (hero_combat.py adds the
     arms and the props on a wider canvas, then finishes)."""
     c = Canvas(W, H, RAMPS)
+    c.keep_in = (2, 2, c.w - 3)  # hero round 2: nothing cut by the frame edge (hair tips, the flying cloak)
     # arms swung back go behind the cloak
     for side, s in ((-1, swing[0]), (1, swing[1])):
         if s < -0.45 and not arm_off(no_arms, side):
@@ -367,8 +359,9 @@ def frame(oy=0, breath=0, sway=0, lag=0, feet=(0, 0), swing=(0.0, 0.0), no_arms=
     return c
 
 
-IDLE = [dict(breath=0, swing=(0.0, 0.0)), dict(breath=1, lag=0, swing=(-0.15, -0.15), oy=0),
-        dict(breath=2, lag=1, swing=(-0.25, -0.25), oy=1), dict(breath=1, lag=1, swing=(-0.1, -0.1))]
+IDLE = [  # hero round 2: the breath as in v1 — head and shoulders 2 texels down, held for 2 frames
+    dict(breath=0, swing=(0.0, 0.0)), dict(breath=0, lag=0, swing=(-0.15, -0.15), oy=0),
+    dict(breath=0, lag=1, swing=(-0.25, -0.25), oy=2), dict(breath=0, lag=1, swing=(-0.1, -0.1), oy=2)]
 WALK = [  # left foot / right foot lift, arm swing (left, right), bob, cloak sway
     dict(feet=(0, -2), swing=(0.3, -0.3), oy=0, sway=0, lag=1),
     dict(feet=(0, -4), swing=(0.9, -0.8), oy=2, sway=1, lag=0),
@@ -389,8 +382,8 @@ RUN = [  # down: both fists pumping in front of the belly (v1's run), feet lifte
 ]
 
 # side (facing right): legs = ((foot dx, heel lift, knee bend) far, near), arms = (far, near) swing
-S_IDLE = [dict(breath=0), dict(breath=1, arms=(-0.1, -0.1)), dict(breath=2, lag=1, oy=1, arms=(-0.15, -0.15)),
-          dict(breath=1, lag=1, arms=(-0.05, -0.05))]
+S_IDLE = [dict(breath=0), dict(breath=0, arms=(-0.1, -0.1)), dict(breath=0, lag=1, oy=2, arms=(-0.15, -0.15)),
+          dict(breath=0, lag=1, oy=2, arms=(-0.05, -0.05))]
 S_WALK = [
     dict(legs=((-8, 0, 0), (8, 2, 1)), arms=(0.7, -0.7), oy=0, sway=1, lag=1),
     dict(legs=((-4, 4, -2), (3, 0, 1)), arms=(0.3, -0.3), oy=2, sway=1, lag=0),
@@ -399,16 +392,16 @@ S_WALK = [
     dict(legs=((3, 0, 1), (-4, 4, -2)), arms=(-0.3, 0.3), oy=2, sway=-1, lag=0),
     dict(legs=((-2, 0, 0), (2, 6, -3)), arms=(0.2, -0.2), oy=1, sway=0, lag=1),
 ]
-S_RUN = [
-    dict(legs=((-12, 2, -2), (11, 3, 2)), arms=(0.8, -0.8), oy=1, lean=3, bent=0.8, cloak_fly=0.6, lag=1),
-    dict(legs=((-8, 10, -6), (6, 6, 2)), arms=(0.5, -0.4), oy=-1, lean=3, bent=0.8, cloak_fly=0.9, lag=0),
-    dict(legs=((2, 12, -6), (-6, 4, 0)), arms=(-0.3, 0.3), oy=0, lean=3, bent=0.8, cloak_fly=0.7, lag=1),
-    dict(legs=((11, 3, 2), (-12, 2, -2)), arms=(-0.8, 0.8), oy=1, lean=3, bent=0.8, cloak_fly=0.6, lag=1),
-    dict(legs=((6, 6, 2), (-8, 10, -6)), arms=(-0.4, 0.5), oy=-1, lean=3, bent=0.8, cloak_fly=0.9, lag=0),
-    dict(legs=((-6, 4, 0), (2, 12, -6)), arms=(0.3, -0.3), oy=0, lean=3, bent=0.8, cloak_fly=0.7, lag=1),
+S_RUN = [  # hero round 2: the feet 3 lower, so frames 0 and 3 stand on the bottom row (the float kept)
+    dict(legs=((-12, 0, -2), (11, 0, 2)), arms=(0.8, -0.8), oy=1, lean=3, bent=0.8, cloak_fly=0.6, lag=1),
+    dict(legs=((-8, 9, -6), (6, 5, 2)), arms=(0.5, -0.4), oy=-1, lean=3, bent=0.8, cloak_fly=0.9, lag=0),
+    dict(legs=((2, 10, -6), (-6, 3, 0)), arms=(-0.3, 0.3), oy=0, lean=3, bent=0.8, cloak_fly=0.7, lag=1),
+    dict(legs=((11, 0, 2), (-12, 0, -2)), arms=(-0.8, 0.8), oy=1, lean=3, bent=0.8, cloak_fly=0.6, lag=1),
+    dict(legs=((6, 5, 2), (-8, 9, -6)), arms=(-0.4, 0.5), oy=-1, lean=3, bent=0.8, cloak_fly=0.9, lag=0),
+    dict(legs=((-6, 3, 0), (2, 10, -6)), arms=(0.3, -0.3), oy=0, lean=3, bent=0.8, cloak_fly=0.7, lag=1),
 ]
 # back (facing up): feet = heel lift left / right, arms = swing left / right
-B_IDLE = [dict(breath=0), dict(breath=1), dict(breath=2, lag=1, oy=1), dict(breath=1, lag=1)]
+B_IDLE = [dict(breath=0), dict(breath=0), dict(breath=0, lag=1, oy=2), dict(breath=0, lag=1, oy=2)]
 B_WALK = [dict(feet=(0, 3), arms=(0.5, -0.5), oy=0, sway=1, lag=1), dict(feet=(0, 6), arms=(0.8, -0.8), oy=2, sway=1),
           dict(feet=(1, 3), arms=(0.4, -0.4), oy=1, sway=0, lag=1), dict(feet=(3, 0), arms=(-0.5, 0.5), oy=0, sway=-1, lag=1),
           dict(feet=(6, 0), arms=(-0.8, 0.8), oy=2, sway=-1), dict(feet=(3, 1), arms=(-0.4, 0.4), oy=1, sway=0, lag=1)]
@@ -429,11 +422,23 @@ def frames_for(view, action):
 
 # Facing left is not stored: the game draws facing right mirrored (v1's left frames are exact mirrors
 # of its right frames for every action without a held prop).
+CUT = []
+
+
+def _check(cv, name):
+    """Hero round 2, the edge check: a texel that is not an outline (tone 0) on the top row or a side
+    column means a part is cut by the frame's edge."""
+    n = edge_cuts(cv)
+    if n:
+        CUT.append((name, n))
+
+
 def main():
     out = []
     for view in ("down", "right", "up"):
         for action in ("idle", "walk", "run"):
             for i, cv in enumerate(frames_for(view, action)):
+                _check(cv, f"hero.{action}.{view}.{i}")
                 out.append(save(cv, os.path.join(OUT, f"hero.{action}.{view}.{i}.png")))
     import hero_combat as HC
     import hero_views as HV
@@ -442,11 +447,16 @@ def main():
     for action in list(HC.COMBAT) + list(HC.REST):
         for view in ("down", "right", "up") + (("left",) if action in HC.OWN_LEFT else ()):
             for i, cv in enumerate(HC.frames_for(action, view, me, HV)):
+                _check(cv, f"hero.{action}.{view}.{i}")
                 img = cv.image()
                 if view == "left":
                     img = img.transpose(Image.FLIP_LEFT_RIGHT)
                 out.append(save(img, os.path.join(OUT, f"hero.{action}.{view}.{i}.png")))
     print(f"{len(out)} files")
+    if CUT:
+        print("edge check:", f"{len(CUT)} frames cut: {CUT[:8]}")
+        sys.exit(1)
+    print("edge check: no frame has a texel other than an outline on its top row or side columns")
 
 
 if __name__ == "__main__":

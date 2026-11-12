@@ -25,7 +25,7 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from hdkit import capsule, edge_band  # noqa: E402
+from hdkit import capsule, edge_band, gauntlet  # noqa: E402
 from v3lib import Canvas, despeckle  # noqa: E402
 
 V1_TOOLS = [os.path.join(HERE, "..", "art_proto"), os.path.join(HERE, "..", "hero_release")]
@@ -102,6 +102,7 @@ def arm_to(c, shoulder, hand, view, darker=False, sleeve="cloak", mid_x=32.0):
     metal bands) to the wrist, the leather fist at the hand."""
     sx, sy = shoulder
     hx, hy = hand
+    hx, hy = min(max(hx, 6.0), c.w - 7.0), max(hy, 6.0)  # hero round 2: the fist stays inside the frame
     d = math.hypot(hx - sx, hy - sy) or 1.0
     a, b = 11.0, 12.0
     if d > a + b - 1:
@@ -118,21 +119,18 @@ def arm_to(c, shoulder, hand, view, darker=False, sleeve="cloak", mid_x=32.0):
         if best is None or score > best[0]:
             best = (score, e)
     ex, ey = best[1]
+    ex = min(max(ex, 5.0), c.w - 6.0)  # the elbow too
     wx, wy = hx - ux * 3.0, hy - uy * 3.0
     upper = capsule(c, (sx, sy), (ex, ey), 3.6)
     c.fill(upper, sleeve)
     c.shade_part(upper, tones=(1, 2, 3, 4) if sleeve == "cloak" else (2, 3, 3, 4), norm=True)
     g = capsule(c, (ex, ey), (wx, wy), 3.7)
     c.fill(g, "shirt")
-    c.shade_part(g, tones=(0, 0, 1, 1, 3), norm=True, light=(-0.9, -0.2, 0.4))
-    L = math.hypot(wx - ex, wy - ey) or 1
-    px, py = -(wy - ey) / L, (wx - ex) / L
-    for t in (0.25, 0.7):
-        bx, by = ex + (wx - ex) * t, ey + (wy - ey) * t
-        c.set_tone(c.m_line([(bx - px * 4, by - py * 4), (bx + px * 4, by + py * 4)], 1.2) & g, 0)
+    gauntlet(c, g, (ex, ey), (wx, wy))
     fist = c.m_ellipse(hx, hy, 3.7, 3.9)
-    if darker:
-        c.set_tone(upper | g, 1)
+    if darker:  # the far arm: the sleeve one tone down, the gauntlet's light line to mid grey
+        c.set_tone(upper, 1)
+        c.tone[g & (c.tone == 3) & (c.mat == c.mid("shirt"))] = 1
     return fist
 
 
@@ -156,6 +154,11 @@ def sword(c, hx, hy, ang, length):
     if px * -0.6 + py * -0.8 < 0:  # the lit edge faces the top left
         px, py = -px, -py
     L = 2 * length
+    while L > 10:  # hero round 2: the point stays 2 texels inside the frame (no cut blade)
+        tx, ty = hx + ux * L, hy + uy * L
+        if 3 <= tx <= c.w - 4 and ty >= 3:
+            break
+        L -= 1
     c.fill(c.m_line([(hx - ux * 5, hy - uy * 5), (hx + ux * 1, hy + uy * 1)], 2.2), "leather", 2)  # grip
     c.fill(c.m_ellipse(hx - ux * 6, hy - uy * 6, 1.6, 1.6), "gold", 3)  # pommel
     c.put(int(round(hx - ux * 6 - 0.5)), int(round(hy - uy * 6 - 0.5)), "gold", 5)
@@ -287,6 +290,7 @@ def build(action, view, i, H, HV):
                              legs=((2 * far[0], 2 * far[1], 0), (2 * near[0], 2 * near[1], 0)),
                              cloak_fly=0.3 * p.get("flare", 0), no_arms=off, finish=False, blink=blink)
     c = Canvas(width, 112, H.RAMPS)
+    c.keep_in = (2, 2, c.w - 3)  # hero round 2: nothing cut by the frame edge (hair tips, the flying cloak)
     sh = shoulders(v, oy, lean)
     if left:  # facing left (drawn facing right, then mirrored): his left arm is the near one
         sh = {"R": sh["L"], "L": sh["R"]}
@@ -336,7 +340,8 @@ def build(action, view, i, H, HV):
         fists = []
         for it in items:
             if it[0] == "fist":
-                fists.append((c.m_ellipse(it[3][0] + ox, it[3][1], 3.7, 3.9), it[4]))
+                fx = min(max(it[3][0] + ox, 6.0), c.w - 7.0)
+                fists.append((c.m_ellipse(fx, it[3][1], 3.7, 3.9), it[4]))
             if it[0] == "arm":
                 _, k, s, hp, darker = it
                 fists.append((arm_to(c, (s[0] + ox, s[1]), (hp[0] + ox, hp[1]), v, darker,
@@ -375,7 +380,7 @@ def build(action, view, i, H, HV):
         for it in front:
             if it[0] in ("arm", "fist"):
                 hx, hy = it[3][0] + ox, it[3][1]
-                c.fill(c.m_line([(hx, hy - 3), (hx + (2 if hx > 32 + ox else -2), 0)], 1.0) & (c.mat == 0), "bone", 3)
+                c.fill(c.m_line([(hx, hy - 3), (hx + (2 if hx > 32 + ox else -2), 3)], 1.0) & (c.mat == 0), "bone", 3)
     if p.get("water") is not None:  # swimming: nothing below the water line, then the ripples ring him
         wl = V(p["water"]) - 1
         c.mat[wl:, :] = 0

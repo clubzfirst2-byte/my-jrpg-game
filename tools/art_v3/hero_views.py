@@ -10,7 +10,7 @@ import math
 
 import numpy as np
 
-from hdkit import capsule, edge_band, grooves, lock
+from hdkit import capsule, edge_band, gauntlet, grooves, lock
 from v3lib import Canvas, despeckle
 
 W, H = 64, 112
@@ -47,23 +47,23 @@ def side_head(c, oy, lag, EYE, BLUSH, MOUTH, lean=0, blink=False):
     X = lean
     mass = c.m_poly([(4 + X, 18 + oy), (8 + X, 8 + oy), (18 + X, 2 + oy), (30 + X, 0 + oy), (42 + X, 4 + oy),
                      (50 + X, 12 + oy), (54 + X, 20 + oy), (50 + X, 24 + oy), (28 + X, 26 + oy),
-                     (24 + X, 40 + oy + lag), (14 + X, 44 + oy + lag), (8 + X, 38 + oy)])
+                     (24 + X, 40 + oy + lag), (16 + X, 42 + oy + lag), (8 + X, 36 + oy)])
     c.fill(mass, "hair")
     c.shade_part(mass, tones=(1, 2, 2, 3, 3), norm=True)
-    face = c.m_poly([(26 + X, 22 + oy), (50 + X, 21 + oy), (53 + X, 27 + oy), (53 + X, 33 + oy), (55 + X, 37 + oy),
-                     (53 + X, 39 + oy), (52 + X, 43 + oy), (46 + X, 46 + oy), (36 + X, 46 + oy), (28 + X, 42 + oy)])
+    # hero round 2: the nose's tip is the frontmost point of the profile (v1), the mouth inside the face
+    face = c.m_poly([(26 + X, 22 + oy), (50 + X, 21 + oy), (53 + X, 27 + oy), (54 + X, 32 + oy), (57 + X, 36 + oy),
+                     (54 + X, 38 + oy), (53 + X, 41 + oy), (51 + X, 44 + oy), (46 + X, 46 + oy), (36 + X, 46 + oy),
+                     (28 + X, 42 + oy)])
     c.fill(face, "skin", 4)
     for y, x in zip(*np.nonzero(face)):  # the jaw and the back of the cheek in shade
         if y >= 44 + oy or x <= 29 + X:
             c.tone[y, x] = 3
-    # the ear (in front of the side hair), its inner shade
-    ear = c.m_ellipse(30.5 + X, 34 + oy, 2.6, 3.6)
-    c.fill(ear, "skin", 3)
-    c.put(31 + X, 34 + oy, "skin", 2)
-    c.put(31 + X, 35 + oy, "skin", 2)
     # locks: crown spikes up and back, the back locks flowing down the nape, bangs over the brow
-    back = [((22 + X, 8 + oy), (2 + X, 20 + oy), 12, 3.0), ((26 + X, 12 + oy), (6 + X, 36 + oy + lag), 12, 3.0),
-            ((24 + X, 20 + oy), (14 + X, 46 + oy + lag), 11, 2.0), ((28 + X, 6 + oy), (12 + X, 2 + oy), 9, 2.0)]
+    # hero round 2: the back hair is one mass behind the ear ending at the chin line, several short
+    # pointed tips (no long lock hanging down the nape: it read as a ponytail)
+    back = [((22 + X, 8 + oy), (2 + X, 20 + oy), 12, 3.0), ((26 + X, 12 + oy), (5 + X, 31 + oy + lag), 12, 3.0),
+            ((26 + X, 18 + oy), (10 + X, 39 + oy + lag), 11, 2.0), ((28 + X, 22 + oy), (19 + X, 42 + oy + lag), 9, 1.0),
+            ((28 + X, 6 + oy), (12 + X, 2 + oy), 9, 2.0)]
     top = [((32 + X, 6 + oy), (30 + X, -1 + oy), 9, 1.0), ((38 + X, 7 + oy), (46 + X, 0 + oy), 8, -1.5),
            ((44 + X, 12 + oy), (57 + X, 14 + oy), 8, -2.0)]
     bangs = [((40 + X, 14 + oy), (52 + X, 27 + oy), 8, -2.0), ((34 + X, 15 + oy), (40 + X, 28 + oy + lag), 8, -1.5),
@@ -74,6 +74,12 @@ def side_head(c, oy, lag, EYE, BLUSH, MOUTH, lean=0, blink=False):
     c.fill(fore, "hair", 2)
     bangs = bangs + [((47 + X, 15 + oy), (55 + X, 27 + oy), 7, -1.5), ((44 + X, 16 + oy), (47 + X, 29 + oy + lag), 7, -1.0)]
     _shade_lock_set(c, bangs, mass)
+    # the ear (hero round 2: drawn over the back hair, 4 x 6, its inside one tone darker)
+    ear = c.m_ellipse(30.5 + X, 35 + oy, 2.4, 3.4)
+    c.fill(ear, "skin", 3)
+    for yy in (34, 35, 36):
+        c.put(31 + X, yy + oy, "skin", 2)
+    c.put(29 + X, 35 + oy, "skin", 2)
     hairm = c.mat == c.mid("hair")
     for y, x in zip(*np.nonzero(c.mat == c.mid("skin"))):  # the bangs' shade on the face
         if y >= 2 and (hairm[y - 1, x] or hairm[y - 2, x]) and y < 34 + oy:
@@ -87,12 +93,12 @@ def side_head(c, oy, lag, EYE, BLUSH, MOUTH, lean=0, blink=False):
     for xs, y in ((range(43, 49), ey - 2), (range(42, 47), ey - 1)):
         for x in xs:
             c.put(x + X, y, "hair", 1)
-    c.put(54 + X, 38 + oy, "skin", 2)
+    if 55 + X <= c.w - 4:
+        c.put(55 + X, 37 + oy, "skin", 3)  # the nose's underside
     c.dot(46 + X, ey + 7, BLUSH)
     c.dot(47 + X, ey + 7, BLUSH)
-    for x in range(49, 53):
-        c.dot(x + X, 42 + oy, MOUTH)
-    c.dot(51 + X, 43 + oy, MOUTH)
+    c.dot(49 + X, 42 + oy, MOUTH)  # the mouth: 2 x 1 inside the face (v1)
+    c.dot(50 + X, 42 + oy, MOUTH)
 
 
 def side_leg(c, hip, foot, lift, near, bend=0.0):
@@ -132,15 +138,11 @@ def side_arm(c, shoulder, swing, near, oy, bent=0.0):
     c.fill(upper, "shirt", 3)
     c.shade_part(upper, tones=(2, 3, 3, 4), norm=True)
     g = capsule(c, (ex, ey), (wx, wy), 3.8)
+    under = (c.mat == c.mid("shirt")) & ~upper & ~g  # the tunic under the arm
     c.fill(g, "shirt")
-    c.shade_part(g, tones=(0, 0, 1, 1, 3), norm=True, light=(-0.9, -0.2, 0.4))
-    for t in (0.2, 0.65):
-        bx, by = ex + (wx - ex) * t, ey + (wy - ey) * t
-        dx, dy = wy - ey, -(wx - ex)
-        L = math.hypot(dx, dy) or 1
-        band = c.m_line([(bx - 4 * dx / L, by - 4 * dy / L), (bx + 4 * dx / L, by + 4 * dy / L)], 1.2) & g
-        c.set_tone(band, 0)
-    c.put(int(round(ex)), int(round(ey + 1)), "shirt", 4)
+    gauntlet(c, g, (ex, ey), (wx, wy))
+    ring = (np.roll(g, 1, 0) | np.roll(g, -1, 0) | np.roll(g, 1, 1) | np.roll(g, -1, 1)) & ~g & under
+    c.tone[ring] = 1  # hero round 2: a 1-texel line parts the gauntlet from the white tunic
     L = math.hypot(wx - ex, wy - ey) or 1
     ux, uy = (wx - ex) / L, (wy - ey) / L
     fist = c.m_ellipse(wx + ux * 3.5, wy + uy * 3.5, 3.6, 3.8)
@@ -151,11 +153,57 @@ def side_arm(c, shoulder, swing, near, oy, bent=0.0):
         c.set_tone(upper | g | fist, 1)
 
 
+def _largest(m):
+    """The largest 4-connected piece of mask m."""
+    lab = np.zeros(m.shape, np.int32)
+    n, best, bestn = 0, 0, 0
+    for y0, x0 in zip(*np.nonzero(m)):
+        if lab[y0, x0]:
+            continue
+        n += 1
+        st, cnt = [(y0, x0)], 0
+        lab[y0, x0] = n
+        while st:
+            y, x = st.pop()
+            cnt += 1
+            for yy, xx in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)):
+                if 0 <= yy < m.shape[0] and 0 <= xx < m.shape[1] and m[yy, xx] and not lab[yy, xx]:
+                    lab[yy, xx] = n
+                    st.append((yy, xx))
+        if cnt > bestn:
+            best, bestn = n, cnt
+    return lab == best if best else m
+
+
+def side_drape(c, oy, lean):
+    """Hero round 2 (v1's side view): the cloak's front part over the shoulder and the upper chest,
+    a gold edge along its lower side, and the gold cross clasp with the blue gem at the chest's front."""
+    drape = c.m_poly([(25 + lean, 45 + oy), (36 + lean, 45 + oy), (42 + lean, 49 + oy), (44 + lean, 55 + oy),
+                      (42 + lean, 60 + oy), (34 + lean, 62 + oy), (27 + lean, 61 + oy), (24 + lean, 54 + oy)])
+    c.fill(drape, "cloak", 3)
+    c.shade_part(drape, tones=(2, 3, 3, 4, 4), norm=True)
+    for y, x in zip(*np.nonzero(drape)):  # the lower edge: 2 rows of gold trim
+        if not drape[min(y + 2, c.h - 1), x] or not drape[min(y + 1, c.h - 1), x]:
+            c.mat[y, x] = c.mid("gold")
+            c.tone[y, x] = 3 if drape[min(y + 1, c.h - 1), x] else 1
+    gx, gy = 44 + lean, 53 + oy
+    cross = c.m_rect(gx - 4, gy - 1, gx + 4, gy) | c.m_rect(gx - 1, gy - 4, gx, gy + 4)
+    c.fill(cross, "gold", 3)
+    c.fill(c.m_rect(gx - 4, gy - 1, gx - 1, gy - 1) | c.m_rect(gx - 1, gy - 4, gx - 1, gy - 1), "gold", 4)
+    gem = c.m_rect(gx - 2, gy - 2, gx + 1, gy + 1)
+    c.fill(gem, "gem", 3)
+    c.put(gx - 2, gy - 2, "gem", 5)
+    c.put(gx - 1, gy - 2, "gem", 4)
+    c.put(gx + 1, gy + 1, "gem", 2)
+    c.put(gx, gy + 1, "gem", 2)
+
+
 def side_frame(R, EYE, BLUSH, MOUTH, oy=0, lag=0, sway=0, legs=((0, 0, 0), (0, 0, 0)), arms=(0.0, 0.0),
                lean=0, bent=0.0, cloak_fly=0.0, breath=0, no_arms=False, finish=True, blink=False):
     """legs: (dx of the foot from the body line, lift of the heel, knee bend) for the far and near leg.
     arms: swing of the far and near arm. lean: the upper body forward (run)."""
     c = Canvas(W, H, R)
+    c.keep_in = (2, 2, c.w - 3)  # hero round 2: nothing cut by the frame edge (hair tips, the flying cloak)
     hip = (32 + lean * 0.3, 78 + oy)
     # the far arm (behind the body), the far leg
     if not _off(no_arms, 0):
@@ -168,8 +216,9 @@ def side_frame(R, EYE, BLUSH, MOUTH, oy=0, lag=0, sway=0, legs=((0, 0, 0), (0, 0
     hem = min(92 + oy, 106)  # crouching / kneeling: the cloak lies on the ground
     back = c.m_poly([(26 + lean, 46 + oy - breath), (36 + lean, 46 + oy - breath), (34 + lean * 0.5, 60 + oy),
                      (30, 86 + oy), (29 + sway, hem - cloak_fly * 3), (16 + sway - cloak_fly * 6, hem - cloak_fly * 8),
-                     (6 + sway - cloak_fly * 10, hem - 2 - cloak_fly * 12), (8 - cloak_fly * 6, 72 + oy - cloak_fly * 6),
+                     (9 + sway - cloak_fly * 6, hem - 2 - cloak_fly * 12), (10 - cloak_fly * 5, 72 + oy - cloak_fly * 6),
                      (14 + lean * 0.5, 54 + oy), (20 + lean, 47 + oy)])
+    back = _largest(back)  # hero round 2: no stray piece of the cloak (run 4 had one between the legs)
     c.fill(back, "cloak", 3)
     yy, xx = np.nonzero(back)
     for y, x in zip(yy, xx):
@@ -212,18 +261,12 @@ def side_frame(R, EYE, BLUSH, MOUTH, oy=0, lag=0, sway=0, legs=((0, 0, 0), (0, 0
     hood = c.m_ellipse(31 + lean, 47 + oy - breath, 10, 4.2)
     c.fill(hood, "cloak")
     c.shade_part(hood, tones=(2, 3, 4, 4, 5), norm=True)
-    gy = 54 + oy
-    gx = 41 + lean
-    c.fill(c.m_poly([(gx, gy - 4), (gx + 4, gy), (gx, gy + 4), (gx - 3, gy)]), "gold", 2)
-    gem = c.m_poly([(gx, gy - 2.5), (gx + 2.5, gy), (gx, gy + 2.5), (gx - 2, gy)])
-    c.fill(gem, "gem", 3)
-    c.put(gx - 1, gy - 1, "gem", 5)
-    c.put(gx + 1, gy + 1, "gem", 2)
     if crouch:
         side_leg(c, (hip[0] + 2, hip[1] - 4), (29 + dx, 111 - lift), max(0, lift // 2), True, bend + 6)
     # the near arm in front
     if not _off(no_arms, 1):
         side_arm(c, (32 + lean, 52 + oy - breath), arms[1], True, oy, bent)
+    side_drape(c, oy - breath, lean)
     side_head(c, oy, lag, EYE, BLUSH, MOUTH, lean=lean, blink=blink)
     if not finish:
         return c
@@ -241,6 +284,7 @@ def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, b
     to the hem with the gold star between the shoulder blades, the grey gauntlets at the sides, the
     boots' heels below the hem. feet: lift of the left / right foot (the sole shows when lifted)."""
     c = Canvas(W, H, R)
+    c.keep_in = (2, 2, c.w - 3)  # hero round 2: nothing cut by the frame edge (hair tips, the flying cloak)
     # boots (behind the cloak's hem)
     for side, lift in ((-1, feet[0]), (1, feet[1])):
         x0 = 31.5 + side * 7
@@ -253,9 +297,11 @@ def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, b
         c.fill(c.m_rect(x0 - 6, bt, x0 + 6, bt), "leather", 5)
         c.fill(c.m_rect(x0 - 6, bt + 3, x0 + 6, bt + 3), "leather", 1)
         c.fill(c.m_rect(x0 + 2, bt + 5, x0 + 5, 109 - lift) & boot, "boot", 1)  # the back seam's shade
-        if lift > 1:  # the sole and heel show
-            c.fill(c.m_rect(x0 - 5, 106 - lift, x0 + 5, 111 - lift), "boot", 1)
-            c.fill(c.m_rect(x0 - 3, 108 - lift, x0 + 3, 110 - lift), "leather", 2)
+        if lift > 1:  # hero round 2: the lifted boot shows its heel (lit leather block) over a dark sole
+            c.fill(c.m_rect(x0 - 6, 109 - lift, x0 + 6, 111 - lift), "boot", 0)
+            c.fill(c.m_rect(x0 - 4, 104 - lift, x0 + 4, 108 - lift), "leather", 3)
+            c.fill(c.m_rect(x0 - 4, 104 - lift, x0 + 4, 104 - lift), "leather", 4)
+            c.fill(c.m_rect(x0 - 4, 108 - lift, x0 + 4, 108 - lift), "leather", 1)
         tr = c.m_rect(x0 - 4, 86 + oy, x0 + 4, bt)
         c.fill(tr & (c.mat == 0), "trousers", 2)
     # the arms at the sides (gauntlet + hand), mostly outside the cloak
@@ -266,12 +312,10 @@ def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, b
         ex, ey = sx, 58 + oy
         wx, wy = sx - side * 1.0 * bent * 6, ey + 12 - 3 * abs(s) - 4 * bent
         wy += -2 * s
+        wx += 3 * s * side  # hero round 2: the arm swings, the hand moving 3 texels sideways too (v1)
         g = capsule(c, (ex, ey), (wx, wy), 3.8)
         c.fill(g, "shirt")
-        c.shade_part(g, tones=(0, 0, 1, 1, 3), norm=True, light=(-0.9, -0.2, 0.4))
-        for t in (0.2, 0.65):
-            by = ey + (wy - ey) * t
-            c.set_tone(c.m_line([(ex - 5, by), (ex + 5, by)], 1.2) & g, 0)
+        gauntlet(c, g, (ex, ey), (wx, wy), mid=-0.1)  # seen from behind the arm shows its lit side wider
         fist = c.m_ellipse(wx, wy + 4, 4, 4.2)
         c.fill(fist, "leather")
         c.shade_part(fist, tones=(1, 2, 3, 4), norm=True)
@@ -314,16 +358,20 @@ def back_frame(R, oy=0, lag=0, sway=0, feet=(0, 0), arms=(0.0, 0.0), breath=0, b
     c.shade_part(hood, tones=(2, 3, 4, 4, 5), norm=True)
     grooves(c, hood, drop=1)
     # the hair from behind: one mass, locks falling from the crown to the nape, spikes on top
+    # hero round 2 (v1's back): vertical locks falling from the crown to the nape, each with its own
+    # pointed tip on the lower edge (a zigzag, not a smooth arc), no rays from the whorl
+    L = lag
     mass = c.m_poly([(3, 18 + oy), (10, 6 + oy), (22, 1 + oy), (34, 0 + oy), (46, 3 + oy), (55, 10 + oy), (60, 20 + oy),
-                     (58, 32 + oy), (52, 40 + oy + lag), (40, 44 + oy + lag), (24, 44 + oy + lag), (12, 40 + oy + lag),
-                     (6, 32 + oy)])
+                     (58, 32 + oy), (55, 39 + oy + L), (51, 36 + oy), (47, 43 + oy + L), (43, 38 + oy), (38, 45 + oy + L),
+                     (34, 39 + oy), (30, 46 + oy + L), (26, 39 + oy), (22, 45 + oy + L), (18, 37 + oy), (14, 42 + oy + L),
+                     (10, 35 + oy), (8, 38 + oy + L), (5, 30 + oy)])
     c.fill(mass, "hair")
     c.shade_part(mass, tones=(1, 2, 2, 3, 3), norm=True)
     cr = (31, 10 + oy)
-    locks = [((cr[0] - 3, cr[1]), (6, 34 + oy), 12, 3.0), ((cr[0] + 3, cr[1]), (57, 34 + oy), 12, -3.0),
-             ((cr[0] - 2, cr[1] + 2), (16, 42 + oy + lag), 11, 2.0), ((cr[0] + 2, cr[1] + 2), (47, 42 + oy + lag), 11, -2.0),
-             ((cr[0], cr[1] + 3), (30, 45 + oy + lag), 10, 0.5), ((cr[0] - 1, cr[1] + 3), (23, 44 + oy + lag), 9, 1.0),
-             ((cr[0] + 1, cr[1] + 3), (39, 44 + oy + lag), 9, -1.0)]
+    locks = [((10, 14 + oy), (8, 38 + oy + L), 9, 1.0), ((17, 10 + oy), (14, 42 + oy + L), 10, 1.0),
+             ((24, 8 + oy), (22, 45 + oy + L), 10, 0.5), ((31, 8 + oy), (30, 46 + oy + L), 10, 0.0),
+             ((38, 8 + oy), (38, 45 + oy + L), 10, -0.5), ((45, 10 + oy), (47, 43 + oy + L), 10, -1.0),
+             ((52, 14 + oy), (55, 39 + oy + L), 9, -1.0)]
     spikes = [((26, 10 + oy), (20, -1 + oy), 9, 1.5), ((32, 9 + oy), (33, -2 + oy), 9, 0.5),
               ((37, 10 + oy), (44, 0 + oy), 8, -1.5), ((12, 14 + oy), (1, 15 + oy), 8, 2.0),
               ((51, 14 + oy), (62, 19 + oy), 8, -2.0)]

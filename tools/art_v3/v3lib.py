@@ -73,6 +73,7 @@ class Canvas:
         self.ink = {}  # (x, y) -> rgb
         self.part = np.zeros((h, w), np.int32)  # which part drew it (for shading)
         self._parts = 0
+        self.keep_in = None  # (x0, y0, x1): polygons are kept inside x0..x1 and below y0 (hero: no edge cuts)
 
     def mid(self, name):
         if name not in self.names:
@@ -85,6 +86,15 @@ class Canvas:
         return ((xx + 0.5 - cx) / rx) ** 2 + ((yy + 0.5 - cy) / ry) ** 2 <= 1
 
     def m_poly(self, pts):
+        if self.keep_in is not None:
+            x0, y0, x1 = self.keep_in
+            # the band from y = -3 to y0 + 6 is squeezed into y0 .. y0 + 6 (the shapes keep their order and
+            # their pointed tips, only lower), so nothing reaches above y0
+            top = y0 + 6
+
+            def sq(y):
+                return y if y >= top else max(y0, y0 + (y + 3) * (top - y0) / (top + 3))
+            pts = [(min(max(x, x0), x1), sq(y)) for x, y in pts]
         yy, xx = np.mgrid[0:self.h, 0:self.w]
         xs, ys = xx + 0.5, yy + 0.5
         inside = np.zeros((self.h, self.w), bool)
@@ -541,3 +551,15 @@ def clean_isolated(img, passes=2):
         for y, x, v in ch:
             a[y, x] = v
     return Image.fromarray(a.astype(np.uint8), "RGBA")
+
+
+def edge_cuts(c):
+    """The texels on the top row and the left / right columns that are not an outline (tone 0): a part
+    cut by the frame's edge. Returns their count (0 = nothing cut)."""
+    m = c.mat != 0
+    bad = 0
+    for sel in (np.s_[0, :], np.s_[:, 0], np.s_[:, c.w - 1]):
+        bad += int((m[sel] & (c.tone[sel] != 0)).sum())
+    ink = sum(1 for (x, y) in c.ink if y == 0 or x in (0, c.w - 1))
+    return bad + ink
+

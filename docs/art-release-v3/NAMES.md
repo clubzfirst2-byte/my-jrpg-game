@@ -119,7 +119,12 @@ autumn (only the tint changes); winter loads its own set.
   the approved hero (`src/art-release/hero`, `src/view/heroAnim.js`). 64×112 (the actions v1 draws 48 wide:
   96×112). Anchor: the bottom row's centre (v1's bottom-centre anchor ×2).
 - dir `down`, `up`, `right` are stored. **`left` is not stored for actions without a held prop**: the game
-  draws `right` mirrored (scale.x = −1 about the frame's centre). v1's left frames are exact mirrors of its
+  draws `right` mirrored (scale.x = −1 about the frame's centre).
+  **The engine needs this step** (the v1 loader expects a `hero.<action>.left.<n>` file for every frame):
+  for idle, walk, run, jump, land, glide, climb, swim, dodge, hurt and down, when
+  `hero.<action>.left.<n>` is asked for, load `hero.<action>.right.<n>` and draw it with scale.x = −1
+  (the anchor, the bottom row's centre, stays on the feet). Only attack1–3, bow and guard have real
+  `left` files. v1's left frames are exact mirrors of its
   right frames for every such action. Actions with a prop in one hand (attack1–3, bow, guard) store `left`
   too.
 - Done so far: idle 4, walk 6, run 6 for down / right / up (48 files); attack1 4, attack2 4, attack3 6, bow 4,
