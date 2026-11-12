@@ -294,6 +294,9 @@ def write_flow():
             for bits in G.STORED:
                 for v in range(G.n_flow_variants(bits)):
                     sh = flow_shape(sset, bits, v, F=G.flow_field(bits, v, sset=sset))
+                    if not name:  # round 3 (P3): summer / autumn: no 4-6 texel scraps away from the edge
+                        G._drop_small(sh, 6)  # (the cushions are 6-9 wide). Only when writing: the widths
+                        # of the straight sets (_middle_step) are measured on the shapes as before
                     out.append(save(sh, os.path.join(OUT, f"{name}forest.grassflow.v3.{bits}.{v}.png")))
         return out
     return _with_forest_shapes(go)
