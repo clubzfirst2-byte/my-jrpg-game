@@ -290,8 +290,11 @@ export function sourceEntries() {
  */
 export function buildRegionPack(name, overrides, keep) {
   const entries = [...REGION_ENTRIES[name](), ...releaseBossEntries(name, overrides), ...releaseTerrainEntries(name, overrides)];
-  return buildPlaceholderPack(keep ? entries.filter(keep) : entries, overrides);
+  return buildPlaceholderPack(keep ? entries.filter(keep) : entries, overrides, { apart: isBossKey });
 }
+
+/** A core's frames (enemy.boss_<kind>.…): drawn only in its arena (buildPlaceholderPack's `apart`). @param {string} key */
+export const isBossKey = (key) => key.startsWith('enemy.boss_');
 
 /** Enemy release frames: enemy.<kind>.<action>.<n> (docs/art-release/enemy/frames.json on the art branch). */
 const ENEMY_ACTION_KEY = /^enemy\.([a-z_]+)\.([a-z0-9_]+)\.\d+$/;
@@ -511,6 +514,27 @@ export function skylinePlaces(entries, width) {
 }
 
 /**
+ * gfx v2 integration: the real art in one group, or in two when the entries `apart` picks (a region's
+ * core: drawn only in its arena) on an atlas of their own make the other atlas smaller. A texture is
+ * sent to the GPU only once something on it is drawn, so away from the arena the core's frames then
+ * cost no memory. (The mountains with the v2 frost core: 1024×512 + the core's atlas, instead of
+ * 1024×1024 everywhere in the region.) Otherwise one group, exactly as before.
+ * @template {{ key: string, rows: string[], image?: { width: number, height: number } }} E
+ * @param {E[]} entries @param {((key: string) => boolean) | undefined} apart @returns {E[][]}
+ */
+export function apartGroups(entries, apart) {
+  if (!apart) return [entries];
+  const own = entries.filter((e) => apart(e.key));
+  const rest = entries.filter((e) => !apart(e.key));
+  if (!own.length || !rest.length) return [entries];
+  const area = (/** @type {E[]} */ es) => {
+    const { width, height } = atlasSizeFor(es);
+    return width * height;
+  };
+  return area(rest) < area(entries) ? [rest, own] : [entries];
+}
+
+/**
  * P11.5 standard: the real art (src/art) has 2 art pixels per game pixel — tiles 32×32, characters
  * 32×56 (docs/ART.md). It is shown at half its pixel size, so it covers the same ground as the
  * placeholder while keeping its finer detail (the renderer draws 2 canvas pixels per game pixel).
@@ -587,11 +611,13 @@ export async function withOverrides(entries, overrides) {
 /**
  * @param {{ key: string, rows: string[], anchor: [number, number] }[]} [entries]
  * @param {Map<string, ArtSource>} [overrides] the real art (P11.5), by logical name
- * @param {{ tallestFirst?: boolean }} [opts] tallestFirst: pack the real art tallest first (gfx W1), by the
- *   skyline (skylinePlaces) when that keeps it on one 2048×1024 atlas
+ * @param {{ tallestFirst?: boolean, apart?: (key: string) => boolean }} [opts] tallestFirst: pack the real art
+ *   tallest first (gfx W1), by the skyline (skylinePlaces) when that keeps it on one 2048×1024 atlas;
+ *   apart: real art drawn only in some places (a region's core), on an atlas of its own when that makes
+ *   the other atlas smaller (apartGroups)
  * @returns {Promise<import('./assetManager.js').BuiltBundle>}
  */
-export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map(), { tallestFirst = false } = {}) {
+export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map(), { tallestFirst = false, apart } = {}) {
   const all = await withOverrides(entries, overrides);
   // The placeholders and the real art are packed apart: the real art's atlas has 2 pixels per unit.
   const plain = all.filter((e) => !e.image);
@@ -599,7 +625,7 @@ export async function buildPlaceholderPack(entries = placeholderEntries(), overr
   const packs = [packAtlas(plain, atlasSizeFor(plain), 1)];
   const sky = tallestFirst && real.length ? skylinePlaces(byHeightThenWidth(real), ATLAS_MAX.width) : null;
   if (sky && sky.used <= ATLAS_MAX.height) packs.push(packAtlas(sky.entries, { width: ATLAS_MAX.width, height: potHeight(sky.used, ATLAS_MAX.width) }, ART_SCALE, sky.places));
-  else if (real.length) for (const part of splitForAtlas(real)) packs.push(packAtlas(part, atlasSizeFor(part), ART_SCALE));
+  else if (real.length) for (const group of apartGroups(real, apart)) for (const part of splitForAtlas(group)) packs.push(packAtlas(part, atlasSizeFor(part), ART_SCALE));
   return mergePacks(packs);
 }
 

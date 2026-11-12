@@ -166,3 +166,17 @@ describe('skylinePlaces: the base atlas with the ground v2 and the enemy v2 on o
       }
   });
 });
+
+describe('apartGroups: a region core on its own atlas only when that makes the rest smaller (gfx v2 integration)', async () => {
+  const { apartGroups, isBossKey } = await import('../../src/view/assets/placeholderPack.js');
+  const img = (/** @type {string} */ key, /** @type {number} */ w, /** @type {number} */ h) => ({ key, rows: ['.'], image: { width: w, height: h } });
+  it('big core frames that double the region atlas go apart; small ones stay with the rest (as before)', () => {
+    const rest = Array.from({ length: 100 }, (_, i) => img(`tile.${i}`, 32, 32));
+    const bigCore = Array.from({ length: 40 }, (_, i) => img(`enemy.boss_frost.idle.${i}`, 96, 96));
+    const groups = apartGroups([...rest, ...bigCore], isBossKey);
+    expect(groups).toEqual([rest, bigCore]);
+    const smallCore = [img('enemy.boss_frost.0', 32, 32)];
+    expect(apartGroups([...rest, ...smallCore], isBossKey)).toEqual([[...rest, ...smallCore]]);
+    expect(apartGroups(rest, undefined)).toEqual([rest]);
+  });
+});
