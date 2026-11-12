@@ -381,8 +381,44 @@ export function releaseNpcEntries(overrides) {
   return [...overrides.keys()].filter((k) => /^npc\.[a-z]+\.(idle|walk)\.(down|up|right|left)\.\d+$/.test(k)).map((key) => ({ key, rows: ['.'], anchor: FEET }));
 }
 
-/** Width and height of an entry: its PNG when one replaces it, else the placeholder. @param {{ rows: string[], image?: { width: number, height: number } }} e */
-const sizeOf = (e) => (e.image ? { w: e.image.width, h: e.image.height } : { w: e.rows[0].length, h: e.rows.length });
+/** Width and height of an entry: its PNG when one replaces it (graphics v3: its opaque box when trimmed), else the placeholder. @param {{ rows: string[], image?: { width: number, height: number }, trim?: { w: number, h: number } }} e */
+const sizeOf = (e) => (e.trim ? { w: e.trim.w, h: e.trim.h } : e.image ? { w: e.image.width, h: e.image.height } : { w: e.rows[0].length, h: e.rows.length });
+
+/**
+ * Graphics v3 (memory): the box of an image's opaque pixels (alpha > 0), or a 1×1 box when it has none.
+ * The packed frame keeps only that box; its texture keeps the whole size (Pixi's orig / trim), so it is
+ * placed and anchored exactly as the whole frame. Pure apart from reading the pixels.
+ * @param {ArrayLike<number>} rgba @param {number} w @param {number} h
+ * @returns {{ x: number, y: number, w: number, h: number }}
+ */
+export function opaqueBox(rgba, w, h) {
+  let x0 = w;
+  let y0 = h;
+  let x1 = -1;
+  let y1 = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!rgba[(y * w + x) * 4 + 3]) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+  }
+  return x1 < 0 ? { x: 0, y: 0, w: 1, h: 1 } : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
+
+/** @param {HTMLImageElement | HTMLCanvasElement} image */
+function opaqueBoxOf(image) {
+  const c = document.createElement('canvas');
+  c.width = image.width;
+  c.height = image.height;
+  const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d', { willReadFrequently: true }));
+  ctx.drawImage(image, 0, 0);
+  const box = opaqueBox(ctx.getImageData(0, 0, c.width, c.height).data, c.width, c.height);
+  c.width = c.height = 0;
+  return box;
+}
 
 /**
  * gfx W1: the entries tallest first (same height: as given). Shelves of one height waste no rows, so the
@@ -607,13 +643,16 @@ export function mirroredFrames(all, mirror) {
 /**
  * @param {{ key: string, rows: string[], anchor: [number, number] }[]} [entries]
  * @param {Map<string, ArtSource>} [overrides] the real art (P11.5), by logical name
- * @param {{ tallestFirst?: boolean, mirror?: MirrorOptions, exactHeight?: boolean }} [opts] tallestFirst: pack the real art
+ * @param {{ tallestFirst?: boolean, mirror?: MirrorOptions, exactHeight?: boolean, trim?: boolean }} [opts] tallestFirst: pack the real art
  *   tallest first (gfx W1); mirror: graphics v3, left frames drawn as their right frames mirrored;
- *   exactHeight: graphics v3, the real art's atlases only as high as they are used (atlasSizeFor)
+ *   exactHeight: graphics v3, the real art's atlases only as high as they are used (atlasSizeFor);
+ *   trim: graphics v3, the real art's sprites (not tiles) packed without their transparent margins (opaqueBox)
  * @returns {Promise<import('./assetManager.js').BuiltBundle>}
  */
-export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map(), { tallestFirst = false, mirror, exactHeight = false } = {}) {
+export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map(), { tallestFirst = false, mirror, exactHeight = false, trim = false } = {}) {
   let all = await withOverrides(entries, overrides);
+  // (graphics v3: the real art packed without its transparent margins)
+  if (trim) all = all.map((e) => (e.image && !mustKeepSize(e.anchor) ? { ...e, trim: opaqueBoxOf(e.image) } : e));
   const mirrored = mirror ? mirroredFrames(all, mirror) : new Map();
   if (mirrored.size) all = all.filter((e) => !mirrored.has(e.key));
   // The placeholders and the real art are packed apart: the real art's atlas has 2 pixels per unit
@@ -652,7 +691,7 @@ function mergePacks(packs) {
 }
 
 /**
- * @param {{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement | HTMLCanvasElement }[]} entries
+ * @param {{ key: string, rows: string[], anchor: [number, number], image?: HTMLImageElement | HTMLCanvasElement, trim?: { x: number, y: number, w: number, h: number } }[]} entries
  * @param {{ width: number, height: number }} atlasSize from atlasSizeFor
  * @param {number} resolution pixels per game pixel (1 for placeholders, ART_SCALE for the real art)
  * @returns {import('./assetManager.js').BuiltBundle}
@@ -679,7 +718,8 @@ function packAtlas(entries, atlasSize, resolution) {
     }
     if (y + h > ATLAS_H) throw new Error('Placeholder atlas is full');
     if (e.image) {
-      ctx.drawImage(e.image, x, y);
+      if (e.trim) ctx.drawImage(e.image, e.trim.x, e.trim.y, w, h, x, y, w, h);
+      else ctx.drawImage(e.image, x, y);
       rects.set(e.key, { x, y, w, h });
       x += w + PAD;
       shelf = Math.max(shelf, h);
@@ -711,7 +751,10 @@ function packAtlas(entries, atlasSize, resolution) {
   const meta = new Map();
   for (const e of entries) {
     const r = /** @type {{ x: number, y: number, w: number, h: number }} */ (rects.get(e.key));
-    textures.set(e.key, new Texture({ source: base.source, frame: new Rectangle(r.x * k, r.y * k, r.w * k, r.h * k) }));
+    const frame = new Rectangle(r.x * k, r.y * k, r.w * k, r.h * k);
+    // (graphics v3: a trimmed frame keeps its whole size and its place in it: orig / trim)
+    const t = e.trim && e.image ? { orig: new Rectangle(0, 0, e.image.width * k, e.image.height * k), trim: new Rectangle(e.trim.x * k, e.trim.y * k, r.w * k, r.h * k) } : {};
+    textures.set(e.key, new Texture({ source: base.source, frame, ...t }));
     meta.set(e.key, { anchor: e.anchor });
   }
   return {

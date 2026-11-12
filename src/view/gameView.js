@@ -41,6 +41,7 @@ import { setFrame } from './spriteFrame.js';
 import { frameFight } from './assets/artV3.js';
 import { GroundCache } from './groundCache.js';
 import { V3_OBJECTS_WINTER, V3_VILLAGE_TYPES, V3_WINTER_OBJECTS, v3VillageBundle } from './assets/villageV3.js';
+import { V3_ENEMY_KINDS, kindsByRegion, v3EnemyBundle } from './assets/enemyV3.js';
 import { MacroGrid, PROPS, PROP_SWAY, TREE_SWAY, baseKey as v3BaseKey, edgeKey as v3EdgeKey, floraFrames, floraKey, flowCorner, flowKey, flowLook, openProp, plainsTreeLook, seasonPrefix, swayFrame, swayStep, treeFootProp, v3PlainsBundles } from './v3Plains.js';
 import { activeBoss } from '../game/entities/bosses.js';
 import { hash01, valueNoise } from './placement.js';
@@ -168,6 +169,10 @@ export class GameView {
     this.v3Others = null;
     /** Graphics v3: the v3 plains bundles of the season the world is about to change to, kept while they load (updateSeason). @type {string[] | null} */
     this.v3SeasonWant = null;
+    /** Graphics v3 (enemyV3.js): the normal enemy kinds that spawn in each region, for its chunks' bundles. */
+    this.v3EnemyKinds = this.v3 ? kindsByRegion(state.enemySpawns ?? [], (x, y) => regionAt(state.regions, x, y)?.id) : null;
+    /** Graphics v3: the enemy bundles live enemies need this frame (a kind spawned outside its regions), kept loaded. @type {Set<string>} */
+    this.v3EnemyLive = new Set();
     /** Graphics v3: the winter look of the common objects, held while it is winter (updateSeason). @type {string | null} */
     this.v3SeasonObjects = null;
     /** Graphics v3: the camera's view of the last frame, game px (state.viewRect). @type {{ x: number, y: number, width: number, height: number } | null} */
@@ -1049,6 +1054,7 @@ export class GameView {
     list.push(...this.v3PlainsBundlesOf(cx, cy));
     const village = this.v3VillageBundleOf(cx, cy);
     if (village) list.push(village);
+    // (graphics v3: the enemies' bundles are not a chunk's: they never hold its ground back, v3EnemyBundlesWanted)
     // P10.2: and the season's look (gfx W1: the season's art of each seasonal ground the chunk has, apart).
     if (!this.seasonBundle) return list;
     list.push(this.seasonBundle);
@@ -1059,6 +1065,36 @@ export class GameView {
       }
     }
     return list;
+  }
+
+  /**
+   * Graphics v3 (enemyV3.js): the enemy bundles wanted now — the kinds that spawn in the regions of the
+   * loaded chunks (outside every region: those that spawn there), and the kinds of the live enemies on them.
+   * @param {any} state @returns {Set<string>}
+   */
+  v3EnemyBundlesWanted(state) {
+    /** @type {Set<string>} */
+    const out = new Set();
+    const add = (/** @type {string} */ kind) => {
+      const b = v3EnemyBundle(kind);
+      if (this.assets.builders.has(b)) out.add(b);
+    };
+    for (const c of this.chunks.values()) {
+      const key = `e${c.cx},${c.cy}`;
+      let kinds = this.v2Tiles.get(key);
+      if (kinds === undefined) {
+        const x0 = c.cx * CHUNK;
+        const y0 = c.cy * CHUNK;
+        const here = this.regions.filter((r) => r.tx < x0 + CHUNK && r.tx + r.tw > x0 && r.ty < y0 + CHUNK && r.ty + r.th > y0).map((r) => r.id);
+        kinds = [...new Set((here.length ? here : ['']).flatMap((r) => [...(this.v3EnemyKinds?.get(r) ?? [])]))];
+        this.v2Tiles.set(key, kinds);
+      }
+      for (const k of kinds) add(k);
+    }
+    // (only the enemies on the loaded chunks: the others are far away and not drawn)
+    const size = CHUNK * this.map.tileSize;
+    for (const e of state.enemies) if (!e.boss && !e.final && V3_ENEMY_KINDS.includes(e.kind) && this.chunks.has(this.chunkKey(Math.floor(e.x / size), Math.floor(e.y / size)))) add(e.kind);
+    return out;
   }
 
   /**
@@ -1562,10 +1598,13 @@ export class GameView {
         this.assets.unload(b); // the chunks hold their own references now
         this.preloaded.delete(b);
       } else if (!this.bundlesLoading.has(b)) {
-        const stillWanted = waiting.has(b) || !!this.v3SeasonWant?.includes(b) || this.regions.some((r) => r.bundle === b && this.regionNear(r, origin, viewW, viewH));
+        const stillWanted = waiting.has(b) || !!this.v3SeasonWant?.includes(b) || this.v3EnemyLive.has(b) || this.regions.some((r) => r.bundle === b && this.regionNear(r, origin, viewW, viewH));
         if (!stillWanted) {
           if (b === 'region:plains') this.npcs.clear();
           this.dropBossSprites();
+          // graphics v3: an enemy kind's frames: drop that kind's sprites first (redrawn next frame from the base bundle)
+          const kind = /^v3:enemy:(\w+)$/.exec(b)?.[1];
+          if (kind) this.dropEnemySpritesOf(kind);
           this.assets.unload(b);
           this.preloaded.delete(b);
         }
@@ -1622,6 +1661,11 @@ export class GameView {
 
   dropBossSprites() {
     for (const id of this.enemySprites.ids()) if (id >= 1000) this.enemySprites.drop(id);
+  }
+
+  /** Graphics v3: drops the sprites of one normal enemy kind before its bundle goes (as dropBossSprites). @param {string} kind */
+  dropEnemySpritesOf(kind) {
+    for (const id of this.enemySprites.ids()) if (this.enemyKeys.get(id)?.startsWith(`enemy.${kind}.`)) this.enemySprites.drop(id);
   }
 
   /** Releases an enemy's sprite and its warning overlay (EnemySlots calls this). @param {number} id @param {Sprite} spr */
@@ -2317,6 +2361,13 @@ export class GameView {
     if (this.enemyFrameCountsAt !== this.assets.version) {
       this.enemyFrameCounts.clear(); // art came or went: recount the release frames once
       this.enemyFrameCountsAt = this.assets.version;
+    }
+    // graphics v3: the v3 frames of the kinds that spawn in the regions of the loaded chunks and of every
+    // live normal enemy's kind (loaded in the background, kept while wanted; meanwhile an enemy is drawn
+    // with the base bundle's frames)
+    if (this.v3EnemyKinds) {
+      this.v3EnemyLive = this.v3EnemyBundlesWanted(state);
+      for (const b of this.v3EnemyLive) if (!this.assets.isLoaded(b)) this.requestBundle(b);
     }
     for (const e of state.enemies) {
       // P10.4: a core of the murk is drawn by its region's art, only while that is loaded.

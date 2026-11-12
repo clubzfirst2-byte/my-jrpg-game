@@ -117,7 +117,8 @@ for (const screen of [PRO, SE]) {
     expect(v3.on).toBe(true);
     expect(v3.groups).toEqual(expect.arrayContaining(['v3/hero', 'v3/npc', 'v3/enemy', 'v3/terrain', 'v3/objects']));
     expect(await api(page, 'textureDensity', 'hero.idle.down.0')).toBe(4);
-    expect(await api(page, 'textureDensity', 'enemy.slime.idle.0')).toBe(4);
+    // (the enemies' v3 frames: a bundle per kind, loaded with the regions where it spawns — the island: beasts, archers)
+    await expect.poll(() => api(page, 'textureDensity', 'enemy.beast.idle.0')).toBe(4);
     expect(await api(page, 'textureDensity', 'npc.woman.idle.down.0')).toBe(4);
     expect(await api(page, 'textureDensity', 'hero.walk.right.0')).toBe(2);
     expect(v3.hero.density).toBe(4);
@@ -433,4 +434,37 @@ test('?v3=0: no village props, no v3 bundles (the game as before)', async ({ bro
   expect((await api(page, 'player')).y).toBeLessThan(86 * 16);
   expect(errors).toEqual([]);
   await context.close();
+});
+
+test('?v3=1: the normal enemies — v3 frames by kind, the plains loading only its beasts; another kind loads while it lives; trimmed frames keep their size', async ({ browser }, testInfo) => {
+  for (const screen of [PRO, SE]) {
+    const { context, page, errors } = await open(browser, screen, '&v3=1');
+    await api(page, 'teleport', 52, 100);
+    await page.waitForTimeout(2500);
+    // (the plains: beasts; the island's chunks still near: beasts and archers)
+    let names = (await api(page, 'stream')).bundleNames.filter((n) => n.startsWith('v3:enemy:'));
+    expect(names).toContain('v3:enemy:beast');
+    expect(names).not.toContain('v3:enemy:slime');
+    expect(names).not.toContain('v3:enemy:sentinel');
+    expect(await api(page, 'textureDensity', 'enemy.beast.move.3')).toBe(4);
+    expect(await api(page, 'textureDensity', 'enemy.sentinel.idle.0')).toBe(null);
+    for (const [k, dx, dy] of [['beast', 4, -1], ['slime', 3, 2], ['archer', -3, -2], ['sentinel', 6, 1]]) await api(page, 'spawnEnemy', k, 52 + dx, 100 + dy);
+    await expect.poll(async () => (await api(page, 'stream')).bundleNames.filter((n) => n.startsWith('v3:enemy:')).sort(), { timeout: 15_000 }).toEqual(['v3:enemy:archer', 'v3:enemy:beast', 'v3:enemy:sentinel', 'v3:enemy:slime']);
+    await page.waitForTimeout(500);
+    // every live enemy is drawn with a v3 frame of its game size (a trimmed frame keeps its whole size)
+    const SIZE = { beast: [22, 16], slime: [16, 14], archer: [16, 28], sentinel: [20, 28] };
+    await expect.poll(async () => (await api(page, 'enemyFrames')).every((d) => d.density === 4)).toBe(true);
+    for (const d of await api(page, 'enemyFrames')) expect([d.w, d.h], d.key).toEqual(SIZE[d.key.split('.')[1]]);
+    const mem = await api(page, 'v3');
+    expect(mem.gpu.total).toBeLessThan(35 * 2 ** 20);
+    await page.screenshot({ path: testInfo.outputPath(`battle-${screen.name}.png`) });
+    // the kinds go again once their enemies are gone (only the plains' beasts stay)
+    await api(page, 'clearEnemies');
+    await page.waitForTimeout(1500);
+    names = (await api(page, 'stream')).bundleNames.filter((n) => n.startsWith('v3:enemy:'));
+    expect(names).not.toContain('v3:enemy:slime');
+    expect(names).not.toContain('v3:enemy:sentinel');
+    expect(errors).toEqual([]);
+    await context.close();
+  }
 });

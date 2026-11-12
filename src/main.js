@@ -18,7 +18,8 @@ import { storyDebugApi } from './debug/storyDebug.js';
 import { startOpening, skipOpening, finishEnding, endingLine, ENDING } from './game/story/story.js';
 import { EndingScreen } from './ui/ending.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
-import { ART_SCALE, acquireSheet, releaseSheet, v3PlainsEntries } from './view/assets/placeholderPack.js';
+import { ART_SCALE, acquireSheet, releaseSheet, v3PlainsEntries, densityOf } from './view/assets/placeholderPack.js';
+import { V3_ENEMY_KINDS, v3EnemyBundle, v3EnemyKindOf, v3EnemyUnused } from './view/assets/enemyV3.js';
 import { v3PlainsBundleName } from './view/v3Plains.js';
 import { V3_OBJECTS_WINTER, V3_VILLAGE_KEYS, v3VillageBundle, villageSources, winterObjectKeys } from './view/assets/villageV3.js';
 import { addVillageProps } from './game/world/villageProps.js';
@@ -170,7 +171,8 @@ async function boot() {
   // rest is drawn as it is, each of its pixels 2×2 v3 pixels); their sheets, like the others', are
   // decoded only while a bundle is being built (v3Memory.js)
   const v3Groups = v3 && hdParam !== '0' ? v3ArtGroups(params, availableV3Groups()) : [];
-  for (const frames of await Promise.all(v3Groups.map((g) => releaseFrames(g)))) for (const [k, v] of frames) artOverrides.set(k, v);
+  // (the v3 enemies' shots and minimal frames are not used: enemyV3.js)
+  for (const frames of await Promise.all(v3Groups.map((g) => releaseFrames(g)))) for (const [k, v] of frames) if (!v3EnemyUnused(k)) artOverrides.set(k, v);
   if (v3) releaseSheetsLazily(artOverrides);
   installItemIcons(artOverrides); // the menus' item icons, from the same art
   // (graphics v3: the canvas has 4 pixels per game pixel, whatever art is loaded)
@@ -209,7 +211,7 @@ async function boot() {
   // packed tallest first so that it stays 2048×1024 (no second atlas). Without the v2 ground: as before.
   const groundV2Entries = releaseTerrainEntries('common:ground', artOverrides);
   assets.register('placeholder', () =>
-    buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides), ...releaseEnemyEntries(artOverrides), ...releaseTerrainEntries('placeholder', artOverrides), ...groundV2Entries], artOverrides, {
+    buildPlaceholderPack([...placeholderEntries(), ...releaseHeroEntries(artOverrides), ...releaseNpcEntries(artOverrides), ...releaseEnemyEntries(artOverrides).filter((e) => !(v3 && v3EnemyKindOf(e.key) && densityOf(/** @type {any} */ (artOverrides.get(e.key))) === V3_DENSITY)), ...releaseTerrainEntries('placeholder', artOverrides), ...groundV2Entries], artOverrides, {
       tallestFirst: groundV2Entries.length > 0,
       ...packOpts,
     }),
@@ -245,6 +247,14 @@ async function boot() {
     const anchors = new Map(placeholderEntries().map((e) => [e.key, e.anchor]));
     const winter = winterObjectKeys(artOverrides).map((key) => ({ key, rows: ['.'], anchor: anchors.get(key.slice('winter.'.length)) ?? /** @type {[number, number]} */ ([0.5, 1]) }));
     if (winter.length) assets.register(V3_OBJECTS_WINTER, () => buildPlaceholderPack(winter, artOverrides, { ...packOpts, tallestFirst: true, exactHeight: true }));
+  }
+  // Graphics v3 (enemyV3.js): each normal enemy kind's v3 frames, a bundle of its own (trimmed), loaded
+  // with the regions where it spawns
+  if (v3) {
+    for (const kind of V3_ENEMY_KINDS) {
+      const entries = [...artOverrides.keys()].filter((k) => v3EnemyKindOf(k) === kind && densityOf(/** @type {any} */ (artOverrides.get(k))) === V3_DENSITY).sort().map((key) => ({ key, rows: ['.'], anchor: /** @type {[number, number]} */ ([0.5, 1]) }));
+      if (entries.length) assets.register(v3EnemyBundle(kind), () => buildPlaceholderPack(entries, artOverrides, { ...packOpts, tallestFirst: true, exactHeight: true, trim: true }));
+    }
   }
   // Graphics v3: the plains' v3 ground, trees and props, one bundle per season (summer's in spring), loaded
   // by the chunks that have plains (gameView.v3PlainsBundleOf), packed tallest first on atlases of their own
@@ -1115,6 +1125,9 @@ async function boot() {
     toasts: () => [...toast.history],
     showToast: (/** @type {string} */ text) => toast.show(text),
     // Hero / enemy sprite bounds in canvas px (?scale= checks: nothing hidden under the UI)
+    /** The live enemies' frames as drawn: key, the texture's art density and its size (game px; a trimmed frame keeps its whole size). */
+    enemyFrames: () =>
+      view.enemySprites.live(state.enemies).map(({ id, sprite: s }) => ({ id, key: view.enemyKeys.get(id) ?? null, density: s.texture.source.resolution, w: s.texture.width, h: s.texture.height })),
     spriteBounds: () => {
       const b = (/** @type {any} */ s) => {
         const r = s.getBounds();
