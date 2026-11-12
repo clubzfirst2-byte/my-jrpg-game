@@ -203,7 +203,7 @@ def bare(c, trunk, roots, branches, P, L, s, rng, kind):
     c.shade_part(wood, tones=(1, 2, 3, 4, 5), light=(-0.8, -0.3, 0.5), norm=True)
     bark_texture(c, trunk, period=max(3, int(5 * s + 0.5)))
     snow_caps(c, ("bark",), depth=(2, 2), seed=7, min_thick=5)
-    drop_small_snow(c, 4)
+    drop_small_snow(c, 10)  # round 8: caps under 10 texels read as 1-2 px crumbs after the shading
     return finish(c, loose=("bark", "snow"))
 
 

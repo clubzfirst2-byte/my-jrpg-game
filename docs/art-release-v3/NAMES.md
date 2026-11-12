@@ -55,7 +55,7 @@ state = raw, except 'm' when any of the 8 neighbouring corners has raw = the opp
 The game also returns **'m' when any of the 4 map cells around the corner is not plains grass** (the
 flow fades out before transitions), and draws no flow on a tile that is not entirely plains grass.
 
-### 3.2 Which picture [flow_key] — **changed in round 7**
+### 3.2 Which picture [flow_key] — **changed in round 7; 1111 rule changed in round 8**
 
 `flow_key(tx, ty)` returns `None` or **(kind, bits, v, flip)**:
 
@@ -70,7 +70,13 @@ flow fades out before transitions), and draws no flow on a tile that is not enti
    (`sStored(E) = s(W)`, `sStored(W) = s(E)`; N and S unchanged).
 4. Crossed sides of `bits` (corners differ along the side, order N, E, S, W): N = TL≠TR, E = TR≠BR,
    S = BL≠BR, W = TL≠BL.
-   - none (1111): `v = hsh(tx, ty, 33) % 4`, `flip = ((hsh(tx, ty, 35) >>> 2) & 1) == 1`
+   - none (1111) [full_v]: `v0 = hsh(tx, ty, 33) % 4`; if the LEFT tile (tx − 1, ty) is also 1111 and
+     its v equals v0, then `v = (v0 + 1) % 4`, else `v = v0`. The left tile's v is found by the same
+     rule, so: go left from (tx, ty) while the tile is 1111 to the first 1111 tile x0 of the row run
+     (its left tile is not 1111), then for x = x0 … tx: `v0 = hsh(x, ty, 33) % 4`,
+     `v = (v0 + 1) % 4 if v0 == vPrev else v0` (vPrev = none at x0). Two 1111 tiles side by side never
+     have the same v. `flip = ((hsh(tx, ty, 35) >>> 2) & 1) == 1` (unchanged).
+     "1111" = all four corners are the same kind ('d' or 'l'; never 'm').
    - 4 sides (1010): `v = sStored(N) + 2·sStored(E) + 4·sStored(S) + 8·sStored(W)` (0–15)
    - 2 sides A, B: `v = sStored(A) + 2·sStored(B) + 4·((tx + 2·ty) % 3)` (0–11; `%` non-negative)
 5. File: `<set.>plains.grassflow.v3.<bits>.<v>` with set `""` for summer and autumn, `winter.` for winter.
@@ -86,13 +92,16 @@ Before round 7 the return was (kind, bits, v) with files `<season.>plains.grassf
 | season | d (thick grass) | l (sunny grass) |
 |---|---|---|
 | summer (and spring) | `#335d3a` | `#638b46` |
-| autumn | `#744b28` | `#91802e` |
-| winter | `#99abc7` | `#dce6f2` |
+| autumn | `#80572c` | `#a79138` |
+| winter | `#aabcd6` | `#fafcff` |
+
+Round 8 changed the autumn and winter colours only (the shapes are the same pictures for every tint).
+Before: autumn d `#744b28`, l `#91802e`; winter d `#99abc7`, l `#dce6f2`.
 
 ### 3.4 Memory (one season resident)
 
 Base 128 + edges 52 + flow shapes 104 = 284 tiles of 64×64 = 4.65 MB (4.44 MiB) RGBA; in atlases
-1024×1024 (256 tiles) + 512×256 (28 of 32) = 4.5 MiB. The flow shapes are shared by summer and
+1024×1024 (256 tiles) + 512×256 (28 of 32) = 4.72 MB (4.5 MiB). The flow shapes are shared by summer and
 autumn (only the tint changes); winter loads its own set.
 
 ## 4. Plains trees and props (production order 3)
