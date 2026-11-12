@@ -510,3 +510,33 @@ def despeckle(c, keep=(), loose=()):
                     break
     for x, y, v in ch:
         t[y, x] = v
+
+
+def clean_isolated(img, passes=2):
+    """Image-level clean-up (round 6 of the production checks): an opaque texel whose 4 neighbours
+    are all opaque and all of other colours takes the most common colour among them (ties: the
+    darker one, which keeps outlines closed). For thin props whose 1-texel steps read as specks."""
+    a = np.array(img.convert("RGBA")).astype(np.int64)
+    for _ in range(passes):
+        op = a[..., 3] == 255
+        key = (a[..., 0] << 16) | (a[..., 1] << 8) | a[..., 2]
+        H, W = key.shape
+        ch = []
+        for y in range(1, H - 1):
+            for x in range(1, W - 1):
+                if not op[y, x]:
+                    continue
+                nb = [(y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)]
+                if not all(op[q] for q in nb):
+                    continue
+                ks = [key[q] for q in nb]
+                if key[y, x] in ks:
+                    continue
+                best = max(set(ks), key=lambda k: (ks.count(k), -luma(((k >> 16) & 255, (k >> 8) & 255, k & 255))))
+                q = nb[ks.index(best)]
+                ch.append((y, x, a[q].copy()))
+        if not ch:
+            break
+        for y, x, v in ch:
+            a[y, x] = v
+    return Image.fromarray(a.astype(np.uint8), "RGBA")

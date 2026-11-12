@@ -27,7 +27,7 @@ import numpy as np  # noqa: E402
 from gen_nature_v3 import (BARK, BERRY, LEAF, MOSS, PINE, PINK, STONE, WHITE, WOOD, YELLOW, bark_texture,  # noqa: E402
                            hsh, leaf_masses)
 from hdkit import lock  # noqa: E402
-from v3lib import ROOT, Canvas, despeckle, erode, lift_ramp, save  # noqa: E402
+from v3lib import ROOT, Canvas, clean_isolated, despeckle, erode, lift_ramp, save  # noqa: E402
 
 OUT = os.path.join(ROOT, "src", "art-release-v3", "terrain")
 GRASS = lift_ramp(["#16301c", "#2a5030", "#335d3a", "#3c6a38", "#4e773f", "#528446", "#6c9e58"])
@@ -59,7 +59,7 @@ def finish(c, keep=(), loose=("leaf",)):
     return c
 
 
-def snow_caps(c, mats, depth=(2, 4), seed=0):
+def snow_caps(c, mats, depth=(2, 4), seed=0, min_thick=0):
     """Snow on the tops: every top surface of `mats` (a texel with no `mats` above it) gets snow 2-4
     deep with a lit top row. Round 5: only where the top surface is at least 2 texels wide (no lone
     snow dots on twig tips), and a cap is never thinner than 2 rows."""
@@ -70,6 +70,11 @@ def snow_caps(c, mats, depth=(2, 4), seed=0):
     for y in range(1, H):
         for x in range(W):
             top[y, x] = c.mat[y, x] in ks and c.mat[y - 1, x] not in ks
+            if top[y, x] and min_thick:  # round 6: only where the wood is thick (not on the thin tips)
+                th = 0
+                while y + th < H and c.mat[y + th, x] in ks:
+                    th += 1
+                top[y, x] = th >= min_thick
     caps = []
     for y in range(1, H):
         x = 0
@@ -161,7 +166,7 @@ def bare(c, trunk, roots, branches, P, L, s, rng, kind):
              ((78, 60), (96, 34), 4, -2), ((30, 92), (18, 70), 3, 1), ((130, 86), (142, 66), 3, -1),
              ((58, 84), (48, 56), 3, 1), ((98, 70), (112, 46), 3, -1)]
     for root, tip, w, bend in limbs:
-        twigs |= L(root, tip, max(w, 3.4 / max(s, 0.4)), bend, 2.6 / max(s, 0.4))
+        twigs |= L(root, tip, max(w, 3.4 / max(s, 0.4)), bend, 1.5 / max(s, 0.4))  # round 6: tapering tips
     for _ in range(int(18 * s) + 4):  # fine twigs off the limbs
         r = limbs[rng.randrange(len(limbs))]
         t = rng.uniform(0.4, 1.0)
@@ -169,12 +174,12 @@ def bare(c, trunk, roots, branches, P, L, s, rng, kind):
         by = r[0][1] + (r[1][1] - r[0][1]) * t
         ang = rng.uniform(-2.6, -0.5)
         ln = rng.uniform(8, 18)
-        twigs |= L((bx, by), (bx + math.cos(ang) * ln * rng.choice((-1, 1)), by + math.sin(ang) * ln), max(3.4, 4.2 * s), 0.5, 2.4)
+        twigs |= L((bx, by), (bx + math.cos(ang) * ln * rng.choice((-1, 1)), by + math.sin(ang) * ln), max(3.4, 4.2 * s), 0.5, 1.2)
     wood = trunk | roots | branches | twigs
     c.fill(wood, "bark")
     c.shade_part(wood, tones=(1, 2, 3, 4, 5), light=(-0.8, -0.3, 0.5), norm=True)
     bark_texture(c, trunk, period=max(3, int(5 * s + 0.5)))
-    snow_caps(c, ("bark",), depth=(2, 2), seed=7)
+    snow_caps(c, ("bark",), depth=(2, 2), seed=7, min_thick=5)
     return finish(c, loose=("bark", "snow"))
 
 
@@ -328,7 +333,7 @@ def bush(season, frame, berries):
     c = canvas(64, 48, season)
     clumps = [(24, 22, 14, 11), (42, 20, 13, 10), (16, 33, 12, 9), (46, 33, 13, 9), (31, 34, 15, 10)]
     if season == "winter":  # round 5: a mound of tangled branches under a blanket of snow (no fan)
-        return winter_mound(c, rng, (32, 30, 29, 16), berries=berries)
+        return winter_mound(c, rng, WINTER_LUMPS[berries], berries=berries)
     clumps = [(x + (SWAY[frame] if y < 26 else 0), y, rx, ry) for x, y, rx, ry in clumps]
     whole = c.m_ellipse(32, 29, 30, 18)
     back = np.zeros((48, 64), bool)
@@ -362,37 +367,57 @@ def shrub(season, frame):
 
 
 def bush_small_winter(c, rng):
-    return winter_mound(c, rng, (16, 19, 14, 11))
+    return winter_mound(c, rng, [(16, 21, 8, 7), (10, 24, 6, 5), (22, 23, 6, 6)], twigs=6)
 
 
-def winter_mound(c, rng, ell, berries=False):
-    """A leafless bush in winter: its outline is the summer bush's mound; inside, crossing branches
-    (thick, tapering) on a dark tangle; snow lies over the top third in a soft blanket with a lit
-    edge; a few red berries left on the berry bush."""
-    cx, cy, rx, ry = ell
-    mound = c.m_ellipse(cx, cy, rx, ry) & c.m_rect(0, 0, c.w - 1, int(cy + ry * 0.75))
+WINTER_LUMPS = {  # round 6: each bush its own outline (lumps of different sizes, not one ellipse)
+    False: [(22, 30, 14, 11), (38, 32, 13, 9), (12, 36, 9, 7), (50, 37, 9, 6), (30, 37, 15, 8)],   # low, wide
+    True: [(28, 24, 12, 13), (18, 32, 10, 9), (40, 30, 11, 11), (31, 37, 14, 8)],                  # tall, to the left
+}
+
+
+def winter_mound(c, rng, lumps, berries=False, twigs=10):
+    """A leafless bush in winter (round 6): its outline is a cluster of lumps of different sizes;
+    inside, crossing branches on a dark tangle; snow lies on each lump's top (a wavy edge, a lit top,
+    a blue lip); a few branch tips stick out ABOVE the snow (tapering, no snow on them); a few red
+    berries left on the berry bush."""
+    H, W = c.h, c.w
+    mound = np.zeros((H, W), bool)
+    for (x, y, rx, ry) in lumps:
+        mound |= c.m_ellipse(x, y, rx, ry)
+    base = max(y + ry * 0.75 for (x, y, rx, ry) in lumps)
+    mound &= c.m_rect(0, 0, W - 1, int(base))
+    cx = sum(l[0] for l in lumps) / len(lumps)
     c.fill(mound, "bark", 1)
-    k = c.mid("bark")
-    for i in range(int(rx * 0.9)):  # branches rising from the base across the mound
-        x0 = cx + rng.uniform(-rx * 0.5, rx * 0.5)
-        a = -math.pi / 2 + rng.uniform(-1.1, 1.1)
-        ln = rng.uniform(ry * 0.8, ry * 1.6)
-        br = lock(c, (x0, cy + ry * 0.7), (x0 + math.cos(a) * ln, cy + ry * 0.7 + math.sin(a) * ln), 3.4, rng.uniform(-2, 2), 2.0)
-        br &= mound
+    for i in range(len(lumps) * 4):  # branches rising from the base across the lumps
+        x0 = cx + rng.uniform(-10, 10)
+        tx, ty = lumps[i % len(lumps)][0] + rng.uniform(-4, 4), lumps[i % len(lumps)][1] - rng.uniform(0, 6)
+        br = lock(c, (x0, base - 1), (tx, ty), 3.2, rng.uniform(-2, 2), 1.6) & mound
         c.fill(br, "bark", 3)
-    for y, x in zip(*np.nonzero(c.mat == k)):  # lit on the left, shaded on the right
+    k = c.mid("bark")
+    for y, x in zip(*np.nonzero(c.mat == k)):
         if c.tone[y, x] == 3:
-            c.tone[y, x] = 4 if x < cx - rx * 0.2 else (2 if x > cx + rx * 0.3 else 3)
-    # the snow blanket: the mound's top, a wavy lower edge, lit top, a blue shade along its edge
-    yy, xx = np.mgrid[0:c.h, 0:c.w]
-    edge = cy - ry * 0.25 + 2.2 * np.sin((xx - cx) * 0.45) + 1.2 * np.sin((xx - cx) * 1.1 + 1)
-    blanket = mound & (yy < edge)
-    c.fill(blanket, "snow")
-    c.shade_part(blanket, tones=(4, 5, 6), norm=True)
-    lip = mound & (yy >= edge) & (yy < edge + 2)
-    c.fill(lip, "snow", 2)
+            c.tone[y, x] = 4 if x < cx - 6 else (2 if x > cx + 8 else 3)
+    snow = np.zeros((H, W), bool)
+    lip = np.zeros((H, W), bool)
+    yy, xx = np.mgrid[0:H, 0:W]
+    for j, (x, y, rx, ry) in enumerate(lumps):
+        lump = c.m_ellipse(x, y, rx, ry) & mound
+        edge = y - ry * 0.15 + 1.6 * np.sin((xx - x) * 0.6 + j) + 0.8 * np.sin((xx - x) * 1.3 + 2 * j)
+        snow |= lump & (yy < edge)
+        lip |= lump & (yy >= edge) & (yy < edge + 2)
+    c.fill(lip & ~snow, "snow", 2)
+    c.fill(snow, "snow")
+    c.shade_part(snow, tones=(4, 5, 6), norm=True)
+    for i in range(twigs):  # tips sticking out above the snow
+        (x, y, rx, ry) = lumps[i % len(lumps)]
+        a = -math.pi / 2 + rng.uniform(-0.7, 0.7)
+        x0, y0 = x + rng.uniform(-rx * 0.5, rx * 0.5), y - ry * 0.6
+        ln = rng.uniform(8, 13)
+        tip = lock(c, (x0, y0 + 3), (x0 + math.cos(a) * ln, y0 + math.sin(a) * ln), 2.4, rng.uniform(-1.5, 1.5), 0.8)
+        c.fill(tip & ~snow, "bark", 3)
     if berries:
-        for (bx, by) in ((cx - rx * 0.4, cy + 2), (cx + rx * 0.3, cy + 4), (cx - rx * 0.05, cy + 6)):
+        for (bx, by) in ((cx - 9, base - 9), (cx + 6, base - 7), (cx - 1, base - 5)):
             c.fill(c.m_ellipse(bx, by, 1.8, 1.8), "berry", 3)
             c.put(int(bx) - 1, int(by) - 1, "berry", 5)
     return finish(c, keep=("berry",), loose=("bark", "snow"))
@@ -569,10 +594,10 @@ def write(season):
     for kind, fn in TREES.items():
         frames = 1 if (season == "winter" and kind != "pine") else 3
         for f in range(frames):
-            out.append(save(fn(season, f), os.path.join(OUT, f"{pre}plains.tree.v3.{kind}.{f}.png")))
+            out.append(save(clean_isolated(fn(season, f).image()), os.path.join(OUT, f"{pre}plains.tree.v3.{kind}.{f}.png")))
     for kind, (fn, frames) in PROPS.items():
         for f in range(frames):
-            out.append(save(fn(season, f), os.path.join(OUT, f"{pre}plains.prop.v3.{kind}.{f}.png")))
+            out.append(save(clean_isolated(fn(season, f).image()), os.path.join(OUT, f"{pre}plains.prop.v3.{kind}.{f}.png")))
     return out
 
 
