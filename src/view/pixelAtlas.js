@@ -81,7 +81,11 @@ export function atlasFrame(key, w, h, paint) {
     const rows = sheetRows(sheet.at);
     if (rows > sheet.canvas.height) {
       // a taller canvas, the frames drawn so far kept where they are (the textures' UVs follow the resize)
-      const old = canvasOf(sheet.ctx.getImageData(0, 0, sheet.canvas.width, sheet.canvas.height).data, sheet.canvas.width, sheet.canvas.height);
+      // (copied canvas to canvas: no pixel read-back, which the browser warns about)
+      const old = document.createElement('canvas');
+      old.width = sheet.canvas.width;
+      old.height = sheet.canvas.height;
+      /** @type {CanvasRenderingContext2D} */ (old.getContext('2d')).drawImage(sheet.canvas, 0, 0);
       sheet.source.resize(ATLAS_SIZE, rows);
       sheet.ctx.drawImage(old, 0, 0);
     }
