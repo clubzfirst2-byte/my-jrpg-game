@@ -132,3 +132,11 @@ autumn (only the tint changes); winter loads its own set.
 - jump 2, land 2, glide 4, climb 4, swim 4, down 4 for down / right / up (60 files). All 206 stored frames are done.
 - climb, swim and glide are loaded only when used (decision 2026-11-12, STYLE 10.2).
 
+## 6. Villagers (production order 5)
+
+- `npc.<who>.<idle|walk>.<down|right|up|left>.<n>` in `src/art-release-v3/npc/`: the same people, keys, frame
+  counts and fps as the approved NPCs (`src/art-release/npc`, `src/view/npcAnim.js`: idle 4 at 3 fps, walk 6
+  at 8 fps). 64×112, anchor the bottom row's centre. `left` is stored (v1's left frames are not mirrors of
+  its right frames for any of the 9 people).
+- Done so far: woman (40 files; idle down 0-3 are the approved pilot frames, unchanged).
+
