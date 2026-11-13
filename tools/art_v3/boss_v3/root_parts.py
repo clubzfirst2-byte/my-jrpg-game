@@ -172,6 +172,18 @@ SPK_3 = """
 10|affdddbbba
 10|affddbbbba
 11|aggdddbbba
+11|affdddbbba
+12|aggfdddbbba
+12|aggfdddbbba
+13|affddddbbba
+13|affdddbbbba
+14|aggfdddbbba
+14|aggfddddbba
+15|affddddbbba
+15|affdddbbbba
+16|aggfdddbbba
+16|aggfdddbbba
+17|affddddbbba
 """
 
 # the spike out of each shoulder, typed in COLUMNS from its tip (column 16) to the body (column 50)
@@ -350,8 +362,8 @@ LEG_OUT = """
 3|aggffeeeeeddddbbcccccbbbba
 2|aggffeeeeeddddbbcccccbbbba
 2|aggffeeeeeddddddcccccbbbba
-1|aggffeeeeeddddddcccccbbbba
-0|aggffeeeeeddddddcccccbbbba
+3|affeeeeeddddddcccccbba
+4|aaaaaaaaaaaaaaaaaa
 """
 
 # the front leg raised above the shoulder (rearing): the upper root out to the elbow, the forearm up,
@@ -389,24 +401,24 @@ LEG_UP = """
 2|aggfeeeeddddcccbba
 2|aggfeeeeddddcccbba
 2|aggfeeeeddddcccbba(.24)aaaaa
-2|aggfeeeeddddcccbba(.20)aaaaggggg
-2|aggfeeeeddddcccbba(.16)aaaaggggfffff
-3|aggffeeeeddddcccbba(.10)aaaaggggfffffffff
-3|aggffeeeeddddcccbba(.6)aaaaggggffffffffffffe
-3|aggffeeeeddddcccbba(.2)aaaagggg(f12)eeeee
-3|aggffeeeedddddcccbbgggggg(f12)(e9)
-4|aggf(g12)(f16)(e13)
-4|aggff(g4)(f18)(e18)
-4|aggff(f12)(e20)(d8)
-4|aggff(f6)(e22)(d12)
-4|aggff(e12)bbbbbb(e6)(d16)
-4|aggfe(e18)(d22)
-4|aggfe(e10)(d24)(c6)
-4|aggfe(e4)(d10)bbbbb(d9)(c12)
-4|aggfeedbb(d19)(c17)
-4|aggfeebfb(d13)(c23)
-4|aggfeedbb(d6)(c24)(b6)
-4|aggfeedd(d2)(c23)(b12)
+2|aggfeeeeddddcccbba(.20)aaaaggggga
+2|aggfeeeeddddcccbba(.16)aaaaggggfffffa
+3|aggffeeeeddddcccbba(.10)aaaaggggfffffffffa
+3|aggffeeeeddddcccbba(.6)aaaaggggffffffffffffea
+3|aggffeeeeddddcccbba(.2)aaaagggg(f12)eeeeea
+3|aggffeeeedddddcccbbgggggg(f12)(e9)a
+4|aggf(g12)(f16)(e13)a
+4|aggff(g4)(f18)(e18)a
+4|aggff(f12)(e20)(d8)a
+4|aggff(f6)(e22)(d12)a
+4|aggff(e12)bbbbbb(e6)(d16)a
+4|aggfe(e18)(d22)a
+4|aggfe(e10)(d24)(c6)a
+4|aggfe(e4)(d10)bbbbb(d9)(c12)a
+4|aggfeedbb(d19)(c17)a
+4|aggfeebfb(d13)(c23)a
+4|aggfeedbb(d6)(c24)(b6)a
+4|aggfeedd(d2)(c23)(b12)a
 5|aggeedd(c19)(b17)a
 5|aggeedd(c13)(b23)a
 6|aggddd(c8)(b28)a
@@ -415,13 +427,37 @@ LEG_UP = """
 9|aggd(b35)a
 11|aafd(b33)a
 13|aa(b33)a
-15|(a34)
+15|(a34)a
 """
-PLACE_OUT = (8, 56)
-PLACE_UP = (8, 28)
+PLACE_OUT = (3, 56)
+PLACE_UP = (4, 28)
 
-# the hind legs, seen between the front legs: short, thick, in wet dark rot. Rows 96..158.
+# the hind legs, seen between the front legs: short, thick, in wet dark rot. Rows 73..159.
 HIND = """
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
+4|hmmllkkkkkjjjiiiih
 4|hmmllkkkkkjjjiiiih
 4|hmmllkkkkkjjjiiiih
 4|hmmllkkkkkjjjiiiih
@@ -488,63 +524,64 @@ HIND = """
 """
 
 # ---------------------------------------------------------------- head (HALF: columns 62..95)
-# a low boar head: a pointed ear with a dark inside, a heavy root brow slanting down to the nose
-# (the eye sits in the dark socket under it), a lit cheek with a crack, the snout disc and nostril.
+# a low boar head: a pointed ear with a dark inside, three roots down the forehead, a heavy brow of pale
+# dry root slanting down to the nose (the eye sits in the dark socket under it), two grooves round the
+# cheek, the pale snout disc with its nostril.
 # Rows 78..130; the map ends on the mouth line (the chin is JAW).
 
 HEAD = """
 0|aa
-0|afa
-1|afa
-1|afda
-1|afdda
-2|affbba
-2|affbbda
-2|affbbdda
-3|affbbbda
-3|affdbbbdda
-3|affdbbbbdda(.14)aaaaaa
-4|affdbbbbdda(.10)aaagggttr
-4|affdbbbbbddda(.6)aaggggggtrr
-4|affddbbbbbddda(.3)aagffffffftrr
-5|affddbbbbbdddbgffffffffffftrr
-5|affddbbbbbdddbgffffdfffffftrr
-5|affdddbbbbddbfffffffdffffftrr
-6|affddbbbbddbfffffffffdffftrr
-6|affddbbbdbffffffffffffdfftrr
-6|affdbbdbgggggffffffffffdftrr
-7|affdbbbffffffffggggffffftrr
-7|affddbfddddddddffffggggftrr
-8|affdbfbbbbbbbbddddffffgtrr
-8|aagfffffdbaaaabbbbddddftrr
-9|aggfffffdbaaaaaaabbbbdtrr
-10|aggfffffdaaaaaaaaaaabtrr
-9|aggfffffffaaaaaaaaaaadtrr
-9|aggfffffffaaaaaaaaaaadtrr
-9|aggfffffffbaaaaaaaaabdtrr
-9|aggffffffffbbbbbbbbbfdtrr
-9|aggfffffffffgggggggffdtrr
-9|aggfffffbffffffeeeeeeetrr
-9|aggffffbfffffffeeeeeeetrr
-9|aggfffbffffffffeeeeeeetrr
-9|affffbffffffffeeeeeeeetrr
-10|afffbffffffffeeeeeeeetrr
-10|afffffffffffeeeeeeeeetrr
-11|affffffffffeeeeeeeeetrr
-11|afffffeeeeeebbbbbbbbbbb
-12|affeeeeeeeebgggggggggg
-12|affeeeeeeeebgfffffffff
-13|affeeeeeedbgfffffffff
-14|affddddddbgfffffffff
-15|adddddddbgffffaafff
-16|addddddbgffffaafff
-18|addddbfffffaaffe
-19|adddbfffffaafed
-19|adddbffffffffed
-19|addbbfffffffddd
-20|addbfffffddddd
-20|adbbdddddddddd
-21|adbbbbbbbbbbb
+0|aga
+1|aga
+1|agfa
+1|aggfa
+2|aggifa
+2|aggiifa
+2|aggiiifa
+3|aggiiifa
+3|aggfiiiifa
+3|aggfiiiiffa(.14)aaaaaa
+4|aggfiiiiffa(.10)aaaggggff
+4|aggfiiiiiiffa(.6)aagffdbgffd
+4|aggfiiiiiiiffa(.3)aadbgffdbgffd
+5|aggfiiiiiiiffbggffdbgffdbgffd
+5|aggffiiiiiifdbggffdbgffdbgffd
+5|aggffiiiiiffdbfgffdbgffdbgffd
+6|aggffiiiiffdbfgffdbgffdbgffd
+6|aggfffiiffdbffgffdbgffdbgffd
+6|aggfffdbuuuuuuuufdbgffdbgffd
+7|aggffdbttttttttuuuuffdbgffd
+7|aggffdbrrrrrrrrttttuuuugffd
+8|aggfdbpppppppprrrrttttuufd
+8|aaggfffffbaaaapppprrrrttfd
+9|aggfffffbaaaaaaaapppprrfd
+10|aggffffbaaaaaaaaaaaappfd
+9|aggfffffbaaaaaaaaaaaabbfd
+9|aggfffffbaaaaaaaaaaaabffd
+9|aggfffffbbaaaaaaaaaabfffd
+9|aggfffffffbbbbbbbbbbffffd
+9|aggfffffffggggggggggffffd
+9|aggffffbbfffffffffffffffd
+9|agbbffffbbffffffffffffffd
+9|aggbbffffbbeeeeeeeeeeeefd
+9|aggfbbffffbbeeeeeeeeeeefd
+10|agffbbffffbbeeeeeeeeeefd
+10|agfffbbddddbbeeeeeeeeefd
+11|afffdbbddddbbeeeeeeeefd
+11|affdddbbdddbbbbbbbbbbbb
+12|afdddddddbpuuuuuuuuuut
+12|afdddddddbputttttttsss
+13|afddddddbputttttttsss
+14|afdddddbputttttttsss
+15|adddddbputttpoooprr
+16|addddbputttpoooprr
+18|addbputttpoooprr
+19|adbpttttpoooprr
+19|adbptttttppprrr
+19|adbprttttttrrrr
+20|abprrtttttrrrr
+20|abpprrrrrrrrrr
+21|apppppppppppp
 21|aaaaaaaaaaaaa
 """
 
@@ -603,17 +640,21 @@ JAW = """
 10|aaa
 """
 
-# the inside of the mouth (HALF, columns 85..95, rows 126..134): murk, seen only when the chin drops
+# the inside of the mouth (HALF, columns 85..95, rows 124..136): murk, seen only when the chin drops
 MOUTH = """
 0|O(P10)
 0|O(P10)
 0|O(P10)
 0|O(P10)
 0|O(P10)
-0|O(P10)
-0|O(P10)
-0|O(P10)
-0|(O11)
+1|O(P9)
+1|O(P9)
+1|O(P9)
+2|O(P8)
+2|O(P8)
+3|O(P7)
+4|O(P6)
+5|(O6)
 """
 
 # the left tusk (mirrored for the right): out of the side of the snout, down and out, then up to a
@@ -661,28 +702,28 @@ TUSK = """
 
 # the root beard under the chin: three strands to the ground (whole map, rows 134..155, origin column 81)
 BEARD = """
-5|hmmih(.3)hmkih(.5)hlkih
-5|hmmih(.3)hmkih(.5)hlkih
-5|hmmih(.3)hmkkih(.4)hlkih
-5|hmmih(.3)hmkih(.5)hlkih
-4|hmmih(.4)hmkih(.6)hlkih
-4|hmmih(.4)hmkih(.6)hlkih
-4|hmmkih(.3)hmkih(.6)hlkih
-4|hmmih(.4)hmkih(.6)hlkih
-3|hmmih(.5)hmkih(.7)hlkih
-3|hmmih(.5)hmkih(.7)hlkih
-3|hmmih(.5)hmkih(.7)hlkih
-3|hmmih(.5)hmkih(.7)hlkih
-2|hmmh(.7)hmkih(.8)hlih
-2|hmmh(.7)hmkih(.8)hlih
-2|hmmh(.7)hmkh(.9)hlih
-2|hmmh(.7)hmkh(.9)hlih
-1|hmmh(.8)hmkh(.10)hlih
-1|hmmh(.8)hmkh(.10)hlih
-1|hmm(.9)hmkh(.10)hlh
-1|hmm(.9)hmkh(.10)hlh
-0|hmm(.10)hmh(.12)hlh
-0|hh(.12)hh(.13)hh
+5|affba(.3)afdba(.5)afdba
+5|affba(.3)afdba(.5)afdba
+5|affba(.3)afddba(.4)afdba
+5|affba(.3)afdba(.5)afdba
+4|affba(.4)afdba(.6)afdba
+4|affba(.4)afdba(.6)afdba
+4|affdba(.3)afdba(.6)afdba
+4|affba(.4)afdba(.6)afdba
+3|affba(.5)afdba(.7)afdba
+3|affba(.5)afdba(.7)afdba
+3|affba(.5)afdba(.7)afdba
+3|affba(.5)afdba(.7)afdba
+2|affa(.7)afdba(.8)afba
+2|affa(.7)afdba(.8)afba
+2|affa(.7)afda(.9)afba
+2|affa(.7)afda(.9)afba
+1|affa(.8)afda(.10)afba
+1|affa(.8)afda(.10)afba
+1|aff(.9)afda(.10)afa
+1|aff(.9)afda(.10)afa
+0|aff(.10)afa(.12)afa
+0|aa(.12)aa(.13)aa
 """
 
 # ---------------------------------------------------------------- eyes (the image-left eye)
@@ -1051,7 +1092,7 @@ COLS = {"SHOULDER", "LEG_OUT"}
 # top-left in the frame, rest pose (HALF maps: the left one)
 PLACE = {
     "SPK_C": (89, 4), "SPK_1": (66, 8), "SPK_2": (50, 16), "SPK_3": (32, 28), "SHOULDER": (16, 47),
-    "LEG": (8, 80), "HIND": (58, 97), "HEAD": (62, 78), "NECK": (74, 92), "JAW": (83, 129), "MOUTH": (85, 126),
+    "LEG": (8, 80), "HIND": (58, 73), "HEAD": (62, 78), "NECK": (74, 92), "JAW": (83, 129), "MOUTH": (85, 124),
     "TUSK": (43, 101), "BEARD": (81, 134), "EYE_OPEN": (82, 102), "EYE_SHUT": (82, 104),
     "SOCKET": (79, 47), "CRYSTAL": (87, 52), "RIBS": (82, 45), "SOCKET2": (75, 43), "CRYSTAL2": (85, 50),
     "RIB2": (72, 42), "CRACK_A": (58, 52), "CRACK_B": (122, 48), "POOL_A": (0, 150), "POOL_B": (0, 149),

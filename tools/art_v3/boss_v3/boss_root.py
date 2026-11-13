@@ -42,7 +42,7 @@ P["V1~"] = P["V1"].mirror(relight=True)
 for _n in ("EYE_OPEN", "EYE_SHUT"):
     P[_n + "~"] = P[_n].mirror(darker=False, band=False)  # a light does not get a shadow side
 # the core gone dark (the purification): the same crystal, its lights put out
-P["CRYSTAL2_DIM"] = P["CRYSTAL2"].swap({}, tones=(0, 1, 1, 1, 1, 3, 3))
+P["CRYSTAL2_DIM"] = P["CRYSTAL2"].swap({}, tones=(0, 1, 1, 1, 1, 1, 3))
 PLACE = dict(B.PLACE)
 PLACE.update(R.PLACE)
 # the murk the body turns into when it is purified: the same pictures in the murk ramp
@@ -124,7 +124,7 @@ def draw(p):
     # back spikes: they rise (bristle) and move apart (fan) as whole pictures
     sk = int(round(p.spikes))
     for i, n in ((3, "SPK_3"), (2, "SPK_2"), (1, "SPK_1")):
-        fan = int(round(p.fan * i * 0.4))
+        fan = min(int(round(p.fan * i * 0.4)), 6)  # the outer spike stays rooted in the back
         x, y = at(n, bx - fan, by - sk)
         y = max(y, 1)  # a spike never leaves the frame: it sinks into the back instead (v2 shortened it)
         f.put(parts[n], x, y, **kw)
@@ -158,10 +158,10 @@ def draw(p):
     fwd = int(round((p.hs - 1.0) * 30))
     hy = dy + int(round(p.head)) + fwd
     if not p.melt:
-        hy = min(hy, 27)  # the chin stays above the ground
+        hy = min(hy, 16)  # the chin stays above the ground (v2: the head's centre at most 7 px down)
     hx = int(round(bx * 0.3))
     hcx = 96 + hx
-    jaw = int(round(p.jaw))
+    jaw = int(round(p.jaw * 0.75))
     if not p.melt:
         _both(f, parts, "MOUTH", *at("MOUTH", hx, hy), cx=hcx)
         _both(f, parts, "JAW", *at("JAW", hx, hy + jaw), cx=hcx)
