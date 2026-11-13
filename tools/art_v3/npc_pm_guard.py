@@ -58,25 +58,25 @@ HEAD_FRONT = half("""
 ........IKKKKLKKKKKKKLKKKKKKKKKK
 ........HJJJJKHJJJJJJKHJJJJJJJJJ
 ........GHHHHHHHHHHHHHHHHHHHHHHH
-............33ccccccccccccccccJL
-............23ddyyyyyyeeeeeeeeJL
-............23deeyyyyyyyyeeeeeJL
-............23deeeeeeyyyyyyeeeJL
-............23deeeeeeeeeyyyyeeJL
-............23deee#######yeeeeJL
+............44ddddddddddddddddJL
+............34ddyyyyyyeeeeeeeeJL
+............34deeyyyyyyyyeeeeeJL
+............34deeeeeeyyyyyyeeeJL
+............34deeeeeeeeeyyyyeeJL
+............34deee#######yeeeeJL
 ..........deddeee#########eeeeJL
 .........decddeeeed%##%*%deeeeJL
 .........debcdeffee+%%++deeeeeIK
 .........debcdeffeee---eeeeeeeeJ
 .........cdcddefeeedddddeeeeedcd
 ..........cdddeeeeeeeeeeeeeedcbc
-...........bcdeeeeeeddzddddzdddd
-............cdeeeddddzdddddzcccc
-............cdeeddzdddddzddd====
-............ccddddddzdddddd=eeee
-..............cddzdddddzdddddzdd
-..............bcddddzdddddzdddee
-................bccdddddzddddddd
+...........bcdeeeeeeeezeeeezeeee
+............cdeeeeeeezeeeeezcccc
+............cdeeeezeeeeezeee====
+............ccdeeeeezeeeeee=eeee
+..............cddzeeeeezeeeeezee
+..............bcdeeezeeeeezeeeee
+................bcceeeeezeeeeeee
 .................bcccccccccccccc
 ...................bbbbbbbbbbbbb
 """)
@@ -102,25 +102,25 @@ HEAD_FRONT_BLINK = half("""
 ........IKKKKLKKKKKKKLKKKKKKKKKK
 ........HJJJJKHJJJJJJKHJJJJJJJJJ
 ........GHHHHHHHHHHHHHHHHHHHHHHH
-............33ccccccccccccccccJL
-............23ddyyyyyyeeeeeeeeJL
-............23deeyyyyyyyyeeeeeJL
-............23deeeeeeyyyyyyeeeJL
-............23deeeeeeeeeyyyyeeJL
-............23deeeeeeeeeeyeeeeJL
+............44ddddddddddddddddJL
+............34ddyyyyyyeeeeeeeeJL
+............34deeyyyyyyyyeeeeeJL
+............34deeeeeeyyyyyyeeeJL
+............34deeeeeeeeeyyyyeeJL
+............34deeeeeeeeeeyeeeeJL
 ..........deddeeedddddddddeeeeJL
 .........decddeeee########eeeeJL
 .........debcdeff#ddddddddeeeeIK
 .........debcdeffeeeeeeeeeeeeeeJ
 .........cdcddefeeedddddeeeeedcd
 ..........cdddeeeeeeeeeeeeeedcbc
-...........bcdeeeeeeddzddddzdddd
-............cdeeeddddzdddddzcccc
-............cdeeddzdddddzddd====
-............ccddddddzdddddd=eeee
-..............cddzdddddzdddddzdd
-..............bcddddzdddddzdddee
-................bccdddddzddddddd
+...........bcdeeeeeeeezeeeezeeee
+............cdeeeeeeezeeeeezcccc
+............cdeeeezeeeeezeee====
+............ccdeeeeezeeeeee=eeee
+..............cddzeeeeezeeeeezee
+..............bcdeeezeeeeezeeeee
+................bcceeeeezeeeeeee
 .................bcccccccccccccc
 ...................bbbbbbbbbbbbb
 """)
@@ -146,26 +146,26 @@ HEAD_BACK = half("""
 ........IKKKKLKKKKKKKLKKKKKKKKKK
 ........HJJJJKHJJJJJJKHJJJJJJJJJ
 ........GHHHHHHHHHHHHHHHHHHHHHHH
-............12222222222222222222
-............34244324324543243245
-..........dc34244324324443243244
-.........dec33243324324433243243
-.........ddb23243323324333233243
-.........cdb23233323314333232133
-..........cb23133213213332132133
-............22133213213332122132
-.............21322122132221c2132
-..............1221c21c2221ccc122
+............23333333333333333333
+............45355435435554354355
+..........dc45355435435554354355
+.........dec44354435435544354354
+.........ddb34354434435444344354
+.........cdb34344434425444343244
+..........cb34244324324443243244
+............33244324324443233243
+.............32433233243332c3243
+..............2332c32c3332ccc233
 ...............bbbbbbbbbbbbbbbbb
-.................bcccccccccccdcc
-.................bcccccccccccdcc
-..................bccccccccccdcc
-..................bccccccccccdcc
-..................bccccccccccdcc
-...................bcccccccccdcc
-...................bcccccccccdcc
-...................bcccccccccdcc
-...................bcccccccccdcc
+.................cdddddddddddedd
+.................cdddddddddddedd
+..................cddddddddddedd
+..................cddddddddddedd
+..................cddddddddddedd
+...................cdddddddddedd
+...................cdddddddddedd
+...................cdddddddddedd
+...................cdddddddddedd
 """)
 
 HEAD_SIDE = grid("""
@@ -189,26 +189,26 @@ HEAD_SIDE = grid("""
 ............IKKKKLKKKKKKKKKLKKKKKKKKKLKKKKKKKKKKKJ....
 ............HJJJJKHJJJJJJJJKHJJJJJJJJKHJJJJJJJJJJI....
 ............HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH....
-................122222cccccccccccccccccccccccccKJ.....
-................234432ddeeeeeeeeeeeeeeeyyyyyeeeKJ.....
-................234432ebbbeeeeeeeeeeeeeeeeyyyyyKJ.....
-................334332bdeedbeeeeeeeeeeeeeeeeyyyKJ.....
-................233332bdccdbeeeeeeeeeeee######eKJ.....
-................233322bdcbdbeeeeeeeeeee########KJ.....
-................223321bdcbdbeeeeeeeeeeeeed%##*dKJ.....
-................123321bdccdbeeffffeeeeeeee+%%+eIK.....
-................122211ebddbeeeffffeeeeeeee---eeeeed...
-................112211eebbeeeefffeeeeeeeeeeeeeeeeedc..
+................233333cccccccccccccccccccccccccKJ.....
+................345543ddeeeeeeeeeeeeeeeyyyyyeeeKJ.....
+................345543ebbbeeeeeeeeeeeeeeeeyyyyyKJ.....
+................445443bdeedbeeeeeeeeeeeeeeeeyyyKJ.....
+................344443bdccdbeeeeeeeeeeee######eKJ.....
+................344433bdcbdbeeeeeeeeeee########KJ.....
+................334432bdcbdbeeeeeeeeeeeeed%##*dKJ.....
+................234432bdccdbeeffffeeeeeeee+%%+eIK.....
+................233322ebddbeeeffffeeeeeeee---eeeeed...
+................223322eebbeeeefffeeeeeeeeeeeeeeeeedc..
 ....................bcdeeeeeeeeeeeeeeeeeeeeeeedcbb....
-....................bcdeeeeeedddzddddddzddddddccc.....
-....................bccdddddzddddzddddzddddccccdd.....
-....................bccdddddzdddddzdddddddd=====d.....
-....................bcbcdzdddddzddddzddddd=eeeed......
-....................bcbcddddzdddddzdddzddddddddc......
-....................bccbcdddzddddzdddddzddddddc.......
-....................bcccbcdddddzdddddzddddddeec.......
-....................bccccbccdddzddddddzdddddcc........
-....................bcccccbcccccccccccccccccb.........
+....................bcdeeeeeeeeezeeeeeezeeeeeeccc.....
+....................bccdeeeezeeeezeeeezeeeeccccee.....
+....................bdddeeeezeeeeezeeeeeeee=====d.....
+....................bdbcezeeeeezeeeezeeeee=eeeed......
+....................bdbceeeezeeeeezeeezeeeeeeeec......
+....................bddbceeezeeeezeeeeezeeeeeec.......
+....................bdddbceeeeezeeeeezeeeeeeeec.......
+....................bdddebcceeezeeeeeezeeeeecc........
+....................bdddddbcccccccccccccccccb.........
 ....................bbccccccbbbbbbbbbbbbbbb...........
 """, 54)
 
@@ -233,26 +233,26 @@ HEAD_SIDE_BLINK = grid("""
 ............IKKKKLKKKKKKKKKLKKKKKKKKKLKKKKKKKKKKKJ....
 ............HJJJJKHJJJJJJJJKHJJJJJJJJKHJJJJJJJJJJI....
 ............HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH....
-................122222cccccccccccccccccccccccccKJ.....
-................234432ddeeeeeeeeeeeeeeeyyyyyeeeKJ.....
-................234432ebbbeeeeeeeeeeeeeeeeyyyyyKJ.....
-................334332bdeedbeeeeeeeeeeeeeeeeyyyKJ.....
+................233333cccccccccccccccccccccccccKJ.....
+................345543ddeeeeeeeeeeeeeeeyyyyyeeeKJ.....
+................345543ebbbeeeeeeeeeeeeeeeeyyyyyKJ.....
+................445443bdeedbeeeeeeeeeeeeeeeeyyyKJ.....
 ................233332bdccdbeeeeeeeeeeeeeeeeeeeKJ.....
 ................233322bdcbdbeeeeeeeeeeeddddddddKJ.....
 ................223321bdcbdbeeeeeeeeeeee#######KJ.....
 ................123321bdccdbeeffffeeeeeee#eeeeeIK.....
 ................122211ebddbeeeffffeeeeeeeeeeeeeeeed...
-................112211eebbeeeefffeeeeeeeeeeeeeeeeedc..
+................223322eebbeeeefffeeeeeeeeeeeeeeeeedc..
 ....................bcdeeeeeeeeeeeeeeeeeeeeeeedcbb....
-....................bcdeeeeeedddzddddddzddddddccc.....
-....................bccdddddzddddzddddzddddccccdd.....
-....................bccdddddzdddddzdddddddd=====d.....
-....................bcbcdzdddddzddddzddddd=eeeed......
-....................bcbcddddzdddddzdddzddddddddc......
-....................bccbcdddzddddzdddddzddddddc.......
-....................bcccbcdddddzdddddzddddddeec.......
-....................bccccbccdddzddddddzdddddcc........
-....................bcccccbcccccccccccccccccb.........
+....................bcdeeeeeeeeezeeeeeezeeeeeeccc.....
+....................bccdeeeezeeeezeeeezeeeeccccee.....
+....................bdddeeeezeeeeezeeeeeeee=====d.....
+....................bdbcezeeeeezeeeezeeeee=eeeed......
+....................bdbceeeezeeeeezeeezeeeeeeeec......
+....................bddbceeezeeeezeeeeezeeeeeec.......
+....................bdddbceeeeezeeeeezeeeeeeeec.......
+....................bdddebcceeezeeeeeezeeeeecc........
+....................bdddddbcccccccccccccccccb.........
 ....................bbccccccbbbbbbbbbbbbbbb...........
 """, 54)
 
@@ -269,19 +269,19 @@ BODY_FRONT = half("""
 ......IJKLKKKKKKKJJHGHHHHHHHHHHH
 ......HIJJJJJJJJJJIHBBBBBBBBBBBB
 .......GHHHHHHHHHHGCDEEEEDDDDDDD
-..............BCDDEEEECEDDDDDDDD
-..............BCDDEEEECEDDDDDDDD
-..............BCDDEEEECEDDDDDDDD
-..............BCDDEEEECEDDDDDDDD
-..............BCDDEEEECEDDDDDDDD
-..............BCDDEEEECEDDDDDDDD
-..............BCDDEEEEDCEDDDDDDD
-..............BCDDEEEEDCEDDDDDDD
-..............BCDDEEEEDCEDDDDDDD
-..............BCDDEEEEDCEDDDDDDD
-..............BCDDEEEEDCEDDDDDDD
-..............BCDDEEEEDCEDDDDDDD
-..............BCDDEEEEDCEDDDDDDD
+..............BCECDDDDDDDDDDDDDD
+..............BCECDDDDDDDDDDDDDD
+..............BCEECDDDDDDDDDDDDD
+..............BCEECDDDDDDDDDDDDD
+..............BCEEECDDDDDDDDDDDD
+..............BCEEECDDDDDDDDDDDD
+..............BCEEEECCDDDDDDDDDD
+..............BCEEEECCDDDDDDDDDD
+..............BCEEEEECCDDDDDDDDD
+..............BCEEEEECCDDDDDDDDD
+..............BCEEEEEECCDDDDDDDD
+..............BCEEEEEECCDDDDDDDD
+..............BCEEEEEEECCDDDDDDD
 ..............BCDDEEEEDCEDDDhkkk
 ..............STWWWWWWWWWWWWjlVV
 ..............STVVVVXVVVVXVVjkVk
@@ -289,19 +289,19 @@ BODY_FRONT = half("""
 ..............STTTTTTTTTTTTTjkVV
 ..............BCDDEEDDDDDDDDhjjj
 ..............BCDDEEDDDDDDDDDDCA
-............BBDDEEDDECDDDDDECDCA
-............BBDDEEDDECDDDDDECDCA
-............BBDDEEDDECDDDDDECDCA
-............BBDDEEDDECDDDDDECDCA
-............BBDDEEDDECDDDDDECDCA
-............BBDDEEDDECDDDDDECDCA
-............BBDDEEDDECDDDDDECDCA
-............BBDDEEDDECDDDDDECDCA
-............BBDDEEDDECCDDDDECCCA
-............BBDDEEDDECCDDDDECCCA
-............BBDDEEDDECCDDDDECCCA
-............BBDDEEDDECCDDDDECCCA
-............hjjjjjjjjjjjjjjjjjjA
+............BCDDDEECDDDEECDDDDCA
+............BCDDDEECDDDEECDDDDCA
+............BCDDEEDCDDEEDCCDDDCA
+............BCDDEEDCDDEEDCCDDDCA
+............BCDDEEDCCDEEDCCDDDCA
+............BCDEEDDCCDEEDDCCDDCA
+............BCDEEDDBCDEEDDCBDDCA
+............BCDEEDDBCDEEDDCBDDCA
+............BCEEDDCBCEEDDDCBCDCA
+............BCEEDDCBCEEDDCCBCDCA
+............BDEEDCCBDEEDDCBBCCCA
+............BDEEDCBBDEEDCCBBCCCA
+............hjjjjhhhjjjjhhhjjjhA
 ............ghhhhhhhhhhhhhhhhhhA
 """)
 
@@ -338,19 +338,19 @@ BODY_BACK = half("""
 ..............STTTTTTTTTTTTTTTTT
 ..............BCDDEEDDDDDDDDDDDC
 ..............BCDDEEDDDDDDDDDDDC
-............BBDDEEDDECDDDDDECDDC
-............BBDDEEDDECDDDDDECDDC
-............BBDDEEDDECDDDDDECDDC
-............BBDDEEDDECDDDDDECDDC
-............BBDDEEDDECDDDDDECDDC
-............BBDDEEDDECDDDDDECDDC
-............BBDDEEDDECDDDDDECDDC
-............BBDDEEDDECDDDDDECDDC
-............BBDDEEDDECCDDDDECCDC
-............BBDDEEDDECCDDDDECCDC
-............BBDDEEDDECCDDDDECCDC
-............BBDDEEDDECCDDDDECCDC
-............hjjjjjjjjjjjjjjjjjjj
+............BCDDDEECDDDEECDDDDCC
+............BCDDDEECDDDEECDDDDCC
+............BCDDEEDCDDEEDCCDDDCC
+............BCDDEEDCDDEEDCCDDDCC
+............BCDDEEDCCDEEDCCDDDCC
+............BCDEEDDCCDEEDDCCDDCC
+............BCDEEDDBCDEEDDCBDDCC
+............BCDEEDDBCDEEDDCBDDCC
+............BCEEDDCBCEEDDDCBCDCC
+............BCEEDDCBCEEDDCCBCDCC
+............BDEEDCCBDEEDDCBBCCCC
+............BDEEDCBBDEEDCCBBCCCC
+............hjjjjhhhjjjjhhhjjjhh
 ............ghhhhhhhhhhhhhhhhhhh
 """)
 
@@ -712,30 +712,30 @@ BODY_SIDE = grid("""
 ..............BCDEEDDDDECDDDDDDDDDDDDDDDDC......
 ..............BCDEEDDDDECDDDDDDDDDDDDDDDDC......
 ..............BCDEEDDDDECDDDDDDDDDDDDDDDDC......
-..............BCDEEDDDDECDDDDDDDDDDDDDDDDC......
-..............BCDEEDDDDECDDDDDDDDDDDDDDDDC......
-..............BCDEEDDDDECDDDDDDDDDDDDDDDDC......
-..............BCDEEDDDDECDDDDDDDDDDDDDDDDC......
-..............BCDEEDDDDECDDDDDDDDDDDDDDDDC......
-..............BCDEEDDDDECDDDDDDDDDDDDDDDDC......
-..............BCDEEDDDDECDDDDDDDDDDDDDDDDC......
+..............BCDEEDDDDDECDDDDDDDDDDDDDDDC......
+..............BCDEEDDDDDECDDDDDDDDDDDDDDDC......
+..............BCDEEDDDDDECCDDDDDDDDDDDDDDC......
+..............BCDEEDDDDDDECCDDDDDDDDDDDDDC......
+..............BCDEEDDDDDDECCDDDDDDDDDDDDDC......
+..............BCDEEDDDDDDECCDDDDDDDDDDDDDC......
+..............BCDEEDDDDDDDECCDDDDDDDDDDDDC......
 ..............STWWWWWWWWWWWWWWWWWWWWWWWWWWWT....
 ..............STVVVVXVVVVVVVVXVVVVVVVVVVjkhT....
 ..............STVVVVVVVVVVVVVVVVVVVVVVVVjjhT....
 ..............STTTTTTTTTTTTTTTTTTTTTTTTTTTTS....
 ..............BCDEEDDDDDDDDDDDDDDDDDDDDDDDDC....
 ..............BCDEEDDDDDDDDDDDDDDDDDDDDDDDDC....
-............BBCDEEDDDDDECDDDDDDDDDECDDDDDDDC....
-............BBCDEEDDDDDECDDDDDDDDDECDDDDDDDC....
-............BBCDEEDDDDDECDDDDDDDDDECDDDDDDDC....
-............BBCDEEDDDDDECDDDDDDDDDECDDDDDDDC....
-............BBCDEEDDDDDECDDDDDDDDDECDDDDDDDC....
-............BBCDEEDDDDDECDDDDDDDDDECDDDDDDDC....
-............BBCDEEDDDDDECDDDDDDDDDECDDDDDDDC....
-............BBCDEEDDDDDECDDDDDDDDDECDDDDDDDC....
-............BBCDEEDDDDDECDDDDDDDDDECDDDDDDDC....
-............BBCDEEDDDDDECDDDDDDDDDECDDDDDDDC....
-............hjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjh..
+............BBCDDDEECDDDDDDEECDDDDDDEECDDDDC....
+............BBCDDDEECDDDDDDEECDDDDDDEECDDDDC....
+............BBCDDDEECDDDDDDEECDDDDDDEECDDDDC....
+............BBCDDDEECDDDDDDEECDDDDDDEECDDDDC....
+............BBCDDEECCDDDDDEECCDDDDDEECCDDDDC....
+............BBCDDEECCDDDDDEECCDDDDDEECCDDDDC....
+............BBCDDEECCDDDDDEECCDDDDDEECCDDDDC....
+............BBCDDEECBDDDDDEECBDDDDDEECBDDDDC....
+............BBCDEECBDDDDDEECBDDDDDEECBDDDDDC....
+............BBCDEECBDDDDDEECBDDDDDEECBDDDDDC....
+............hjjjjhhhjjjjjhhhjjjjjhhhjjjjhhjjjh..
 ............ghhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhg..
 """, 48)
 
@@ -884,7 +884,7 @@ COAT = set("ABCDEFghijkl")
 def _sway_front(sway, B, U, top, sign=1):
     def shift(j, i, ch):
         y = top + j
-        dy = B + (U if y < 68 else 0)
+        dy = B + (U if y < 62 else 0)  # round 4b: the seam above the belt (was 68, inside the belt)
         dx = 0
         if sway and ch in COAT and y > 75:
             dx = sign * sway * (1 if y < 81 else 2)
@@ -893,7 +893,7 @@ def _sway_front(sway, B, U, top, sign=1):
 
 
 def _spear(f, sx, top, glint, tone=None):
-    f.stamp(SPEAR_HEAD, sx - 4, top, LEG, part="spear", tone=tone)
+    f.stamp(SPEAR_HEAD, sx - 4, top, LEG, part="spear", tone=tone, keep=True)
     if tone is None:  # the glint runs down the blade's lit edge
         f.stamp(["L"], sx - 1, top + 4 + 3 * glint, LEG, part="spear")
     grain = {31: "r", 44: "n", 58: "r", 71: "n", 83: "r", 96: "n"}  # the wood's knots, fixed on the shaft
@@ -912,27 +912,27 @@ def front(p, back=False, blink=False):
         yv1 = min(55, 55 - lift + (1 if fwd > 1 else 0))
         bottom = 111 - 2 * (55 - yv1)
         f.stamp(legmap, x0, bottom - len(legmap) + 1, LEG, part="leg", flip=flip,
-                tone=t_mirror if flip else None)
+                tone=t_mirror if flip else None, keep=True)
     body = BODY_BACK if back else BODY_FRONT
     if U:  # breathing in lifts the chest: the body underneath fills the rows it leaves
-        f.stamp(body, 0, 40, LEG, part="body", half_mirror=True, shift=_sway_front(p.sway, B, 0, 40))
-    f.stamp(body, 0, 40, LEG, part="body", half_mirror=True, shift=_sway_front(p.sway, B, U, 40))
-    f.stamp(CREST, 24, 54 + B + U, LEG, part="crest")
+        f.stamp(body, 0, 40, LEG, part="body", half_mirror=True, shift=_sway_front(p.sway, B, 0, 40), keep="XLghijkl")
+    f.stamp(body, 0, 40, LEG, part="body", half_mirror=True, shift=_sway_front(p.sway, B, U, 40), keep="XLghijkl")
+    f.stamp(CREST, 24, 54 + B + U, LEG, part="crest", keep=True)
     ay = 50 + B + U
     if not back:
         free = max(0, p.arm_far)
-        f.stamp(ARM, 48, ay - 2 * free, LEG, part="arm", flip=True, tone=t_mirror)
-        f.stamp(ARM[:18], 8, ay, LEG, part="arm")
+        f.stamp(ARM, 48, ay - 2 * free, LEG, part="arm", flip=True, tone=t_mirror, keep=True)
+        f.stamp(ARM[:18], 8, ay, LEG, part="arm", keep=True)
         sx = 5
     else:
         free = max(0, p.arm_near)
-        f.stamp(ARM, 8, ay - 2 * free, LEG, part="arm", tone=t_darker)
-        f.stamp(ARM[:18], 48, ay, LEG, part="arm", flip=True, tone=t_mirror)
+        f.stamp(ARM, 8, ay - 2 * free, LEG, part="arm", tone=t_darker, keep=True)
+        f.stamp(ARM[:18], 48, ay, LEG, part="arm", flip=True, tone=t_mirror, keep=True)
         sx = 57
     _spear(f, sx, 2 + B + (2 if p.prop > 0 else 0), p.glint)
-    f.stamp(FIST, sx - 2 if not back else sx - 6, ay + 16, LEG, part="fist", flip=back)
+    f.stamp(FIST, sx - 2 if not back else sx - 6, ay + 16, LEG, part="fist", flip=back, keep=True)
     head = HEAD_BACK if back else (HEAD_FRONT_BLINK if blink else HEAD_FRONT)
-    f.stamp(head, 0, 3 + B + U, LEG, part="head", half_mirror=True)
+    f.stamp(head, 0, 3 + B + U, LEG, part="head", half_mirror=True, keep=True)
     return f.finish()
 
 
@@ -940,16 +940,16 @@ def _side_leg(f, pose, tone):
     rows = SIDE_LEGS[pose]
     lift = pose[1]
     sole = 111 - 2 * lift - (2 if lift > 1 else 0)
-    f.stamp(rows, 16, sole - len(rows) + 1, LEG, part="leg", tone=tone)
+    f.stamp(rows, 16, sole - len(rows) + 1, LEG, part="leg", tone=tone, keep=True)
 
 
 def _spear_arm(f, ay, tone=None):
-    f.stamp(ARM_SIDE_SPEAR, 22, ay, LEG, part="arm", tone=tone)
-    f.stamp(FIST_SIDE, 51, ay + 14, LEG, part="fist", tone=tone)
+    f.stamp(ARM_SIDE_SPEAR, 22, ay, LEG, part="arm", tone=tone, keep=True)
+    f.stamp(FIST_SIDE, 51, ay + 14, LEG, part="fist", tone=tone, keep=True)
 
 
 def _hang_arm(f, ay, swing, tone=None):
-    f.stamp(HANG[(swing > 0) - (swing < 0)], 16, ay, LEG, part="arm", tone=tone)
+    f.stamp(HANG[(swing > 0) - (swing < 0)], 16, ay, LEG, part="arm", tone=tone, keep=True)
 
 
 def side(p, swap=False, blink=False):
@@ -964,10 +964,10 @@ def side(p, swap=False, blink=False):
     else:
         _hang_arm(f, ay, p.arm_far, tone=t_darker)
     if U:
-        f.stamp(BODY_SIDE, 0, 40, LEG, part="body", shift=_sway_front(p.sway, B, 0, 40, sign=-1))
-    f.stamp(BODY_SIDE, 0, 40, LEG, part="body", shift=_sway_front(p.sway, B, U, 40, sign=-1))
+        f.stamp(BODY_SIDE, 0, 40, LEG, part="body", shift=_sway_front(p.sway, B, 0, 40, sign=-1), keep="XLghijkl")
+    f.stamp(BODY_SIDE, 0, 40, LEG, part="body", shift=_sway_front(p.sway, B, U, 40, sign=-1), keep="XLghijkl")
     _side_leg(f, p.near, None)
-    f.stamp(HEAD_SIDE_BLINK if blink else HEAD_SIDE, 0, 3 + B + U, LEG, part="head")
+    f.stamp(HEAD_SIDE_BLINK if blink else HEAD_SIDE, 0, 3 + B + U, LEG, part="head", keep=True)
     if swap:
         _hang_arm(f, ay, p.arm_near)
     else:
