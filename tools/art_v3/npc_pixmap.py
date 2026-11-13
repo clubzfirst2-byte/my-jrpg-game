@@ -99,13 +99,16 @@ class Fig:
         self.c = Canvas(W, H, {k: ramp6(v) for k, v in ramps5.items()})
         self.part = np.zeros((H, W), object)
         self.part[:] = ""
+        self.kept = {}  # (x, y) -> (material id, tone) the clean-up must leave as drawn (stamp keep=)
 
     def stamp(self, rows, x0, y0, leg, part="", half_mirror=False, flip=False, tone=None, shift=None,
-              skip=""):
+              skip="", keep=None):
         """Puts a map with its top-left at (x0, y0). half_mirror: columns >= half the width are the
         mirrored half (lights one step down). flip: the map is mirrored left-right. tone: a function
         on every ramp tone (darker / far). shift(row, col, ch) -> (dx, dy) moves single texels (the hem's
-        sway, the breath)."""
+        sway, the breath). keep (added in round 4b; default None = as before): True, or a string of map
+        characters, whose texels the clean-up in finish() must not change (rivets, knuckles: points placed by
+        hand)."""
         c = self.c
         wmap = len(rows[0]) if rows else 0
         for j, row in enumerate(rows):
@@ -128,11 +131,21 @@ class Fig:
                         t = tone(t)
                     c.put(x, y, m, t)
                 self.part[y, x] = part
+                if keep is not None:
+                    if keep is True or ch in keep:
+                        self.kept[(x, y)] = (int(c.mat[y, x]), int(c.tone[y, x]))
+                    else:
+                        self.kept.pop((x, y), None)
+                elif self.kept:
+                    self.kept.pop((x, y), None)
 
     def finish(self):
         # STYLE.md 3.4: the clean-up every picture gets (as the hero): a texel unlike all 4 neighbours, 3 of
         # which (2 in hair) are one other tone of its material, takes that tone. Inks (eyes) are kept.
         despeckle(self.c, loose=("hair",))
+        for (x, y), (m, t) in self.kept.items():  # points placed by hand come back as drawn
+            if self.c.mat[y, x] == m:
+                self.c.tone[y, x] = t
         self.c.outline()
         self.c.shadow_band()
         return self
