@@ -11,7 +11,7 @@
 import { Container, Graphics, Rectangle, Sprite, Texture, TexturePool } from 'pixi.js';
 import { WaterAtlas, waterQuads } from './waterLayer.js';
 import { hash } from './tileHash.js';
-import { groundClassOf, tableIndex, uniformBlockOf } from './groundTables.js';
+import { groundClassOf, macroOf, tableIndex, uniformBlockOf } from './groundTables.js';
 import { chunkRange, CHUNK_KEEP_MARGIN_TILES, CHUNK_LOAD_MARGIN_TILES } from './chunkRange.js';
 import { Ground, Shape, LEVEL_PX, inBounds, northEdgeHeight, southEdgeHeight } from '../game/world/tilemap.js';
 import { lerp } from '../game/core/math.js';
@@ -739,7 +739,7 @@ export class GameView {
     // gfx v2 integration (start-up): from the map's table when the worker made it (groundTables.js)
     const t = this.groundTables;
     const at = t ? tableIndex(t, i, j) : -1;
-    if (t && at >= 0) return t.macro[at];
+    if (t && at >= 0) return macroOf(t, at);
     const key = `m${i},${j}`;
     if (this.v2Tiles.has(key)) return this.v2Tiles.get(key);
     if (!this.v2Pictures) this.v2Pictures = new Map();

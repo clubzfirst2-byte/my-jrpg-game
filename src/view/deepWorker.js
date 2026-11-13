@@ -21,13 +21,17 @@ export function groundDataOf(def) {
   return { deep, tables: groundTablesOf(map, def.regions ?? [], hash) };
 }
 
-// (as a worker: one message { ground, height, regions } in, { deep, tables } out, or null)
+// (as a worker: one message { ground, height, regions } in; out, { deep } first (needed by the first
+// chunks), then { tables } (used from when they come); null on a failure)
 const scope = /** @type {any} */ (globalThis);
 if (typeof scope.WorkerGlobalScope !== 'undefined' && scope instanceof scope.WorkerGlobalScope) {
   scope.onmessage = (/** @type {MessageEvent} */ e) => {
     try {
-      const out = groundDataOf(e.data);
-      scope.postMessage(out, [out.deep.buffer, out.tables.calm.buffer]);
+      const map = parseMap(e.data);
+      const deep = deepMapShaped(map.width, map.height, (x, y) => map.ground[y * map.width + x] === Ground.WATER, hash);
+      scope.postMessage({ deep }, [deep.buffer]);
+      const t = groundTablesOf(map, e.data.regions ?? [], hash);
+      scope.postMessage({ tables: t }, [t.calm.buffer, t.name.buffer, t.bi.buffer, t.bj.buffer]);
     } catch {
       scope.postMessage(null);
     }

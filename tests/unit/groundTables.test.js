@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createGameState, MAPS } from '../../src/game/state.js';
 import { calmNumber, macroPlacement } from '../../src/view/groundV2.js';
 import { hash } from '../../src/view/tileHash.js';
-import { groundClassOf, sandUnderTreesOf, tableIndex, uniformBlockOf } from '../../src/view/groundTables.js';
+import { groundClassOf, macroOf, sandUnderTreesOf, tableIndex, uniformBlockOf } from '../../src/view/groundTables.js';
 import { groundDataOf } from '../../src/view/deepWorker.js';
 
 // gfx v2 integration (start-up): the ground tables the worker makes from the map definition hold the
@@ -32,7 +32,7 @@ describe('ground tables off the main thread (groundTables.js, deepWorker.js)', (
         const k = tableIndex(tables, i, j);
         expect(tables.calm[k]).toBe(calmNumber(i, j, hash, memo));
         const m = macroPlacement(i, j, ctx);
-        expect(tables.macro[k]).toEqual(m);
+        expect(macroOf(tables, k)).toEqual(m);
         if (m) pictures++;
       }
     }

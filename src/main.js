@@ -96,24 +96,39 @@ function countDisplayObjects(node) {
 
 /**
  * gfx v2 integration (start-up): the deep-water map and the ground tables of a map definition, from a
- * worker (deepWorker.js, groundTables.js); null when no worker can do it (the view then works them out).
- * @param {any} def @returns {Promise<{ deep: Uint8Array, tables: any } | null>}
+ * worker (deepWorker.js, groundTables.js): `deep` first, `tables` after; null for either when no worker
+ * can do it (the view then works them out itself).
+ * @param {any} def @returns {{ deep: Promise<Uint8Array | null>, tables: Promise<any> }}
  */
-function deepMapInWorker(def) {
-  return new Promise((resolve) => {
-    try {
-      const w = new Worker(new URL('./view/deepWorker.js', import.meta.url), { type: 'module' });
-      const done = (/** @type {{ deep: Uint8Array, tables: any } | null} */ v) => {
+function groundInWorker(def) {
+  /** @type {(v: Uint8Array | null) => void} */
+  let gotDeep = () => {};
+  /** @type {(v: any) => void} */
+  let gotTables = () => {};
+  const deep = new Promise((r) => (gotDeep = r));
+  const tables = new Promise((r) => (gotTables = r));
+  try {
+    const w = new Worker(new URL('./view/deepWorker.js', import.meta.url), { type: 'module' });
+    const fail = () => {
+      gotDeep(null);
+      gotTables(null);
+      w.terminate();
+    };
+    w.onmessage = (e) => {
+      if (!e.data) return fail();
+      if (e.data.deep instanceof Uint8Array) gotDeep(e.data.deep);
+      if (e.data.tables) {
+        gotTables(e.data.tables);
         w.terminate();
-        resolve(v);
-      };
-      w.onmessage = (e) => done(e.data && e.data.deep instanceof Uint8Array ? e.data : null);
-      w.onerror = () => done(null);
-      w.postMessage(Array.isArray(def) ? { ground: def } : { ground: def.ground, height: def.height, regions: def.regions });
-    } catch {
-      resolve(null);
-    }
-  });
+      }
+    };
+    w.onerror = fail;
+    w.postMessage(Array.isArray(def) ? { ground: def } : { ground: def.ground, height: def.height, regions: def.regions });
+  } catch {
+    gotDeep(null);
+    gotTables(null);
+  }
+  return { deep, tables };
 }
 
 /** Resolves once the page has painted (a frame, then a task), or after 100 ms when no frame comes (a hidden page). */
@@ -220,7 +235,7 @@ async function boot() {
     : Promise.resolve(false);
   // gfx v2 integration (start-up): the v2 ground's deep-water map is worked out in a worker from now on
   // (another thread: it does not hold the title back), ready by the time the view draws (deepWorker.js)
-  const deepEarly = artGroups.includes(v2Name('terrain')) ? deepMapInWorker(MAPS[/** @type {keyof typeof MAPS} */ (params.get('map') ?? 'world')] ?? MAPS.world) : Promise.resolve(null);
+  const groundWorker = artGroups.includes(v2Name('terrain')) ? groundInWorker(MAPS[/** @type {keyof typeof MAPS} */ (params.get('map') ?? 'world')] ?? MAPS.world) : null;
   // gfx v2 integration (start-up): the title first. Without ?map= the page shows the title as soon as
   // its own art and the save are read, and only then prepares the world (the art sheets, the atlases,
   // the view, the HUD), which the title does not need (with the v2 art that work held the title back by
@@ -279,8 +294,11 @@ async function boot() {
   // gfx v2 integration (start-up): the world's art sheets (preloaded by the page alongside the title)
   // are read and decoded, off the main thread, while the title shows
   const worldArtLoad = Promise.all(artGroups.filter((g) => g !== uiArtGroup).map((g) => releaseFrames(g)));
-  /** With the title up, a break between the world's steps, so a tap on the title is answered meanwhile (a task, not a frame: frames are slow while the world is prepared). */
-  const breathe = () => (withTitle ? new Promise((resolve) => setTimeout(resolve, 0)) : Promise.resolve());
+  /**
+   * With the title up, a frame between the world's steps, so the title keeps being drawn and a tap on it
+   * is answered meanwhile (frames are cheap there: the world is not drawn under the title).
+   */
+  const breathe = () => (withTitle ? afterPaint() : Promise.resolve());
   // gfx v2 integration (start-up): the renderer and the game state need no art, so they are made while
   // the sheets decode (off the main thread). The art density is that of the art being loaded: 2 pixels
   // per game pixel with any real art (the release groups asked for, src/art), else 1 (?hd=0).
@@ -355,9 +373,16 @@ async function boot() {
 
   // gfx W5: light, shadow and effects — on, or the look before them with ?fx=v1 / ?v2=0 (fxSwitch.js)
   const view = new GameView(app, assets, state, { fx: fxVersion(params) });
-  const groundData = await deepEarly;
-  view.presetDeepWater(groundData?.deep ?? null);
-  view.presetGroundTables(groundData?.tables ?? null);
+  // the deep map (quick) before the first chunks; the ground tables whenever they come (until then the
+  // view works the same numbers out itself)
+  const groundDeep = groundWorker ? await groundWorker.deep : null;
+  view.presetDeepWater(groundDeep);
+  /** @type {any} */
+  let groundTablesIn = null;
+  void groundWorker?.tables.then((t) => {
+    groundTablesIn = t;
+    view.presetGroundTables(t);
+  });
   // gfx v2 integration (start-up): behind the title, one chunk a frame (a tap on the title is answered
   // meanwhile); all at once from the start press on (beginPlay)
   if (withTitle) view.chunkBudget = 1;
@@ -1285,7 +1310,7 @@ async function boot() {
     },
     assets: () => assets.stats(),
     /** gfx v2 integration (start-up): whether the deep map and the ground tables came from the worker. */
-    groundTablesFromWorker: () => ({ deep: !!groundData?.deep && view.deepWater === groundData.deep, tables: !!view.groundTables }),
+    groundTablesFromWorker: () => ({ deep: !!groundDeep && view.deepWater === groundDeep, tables: !!groundTablesIn && view.groundTables === groundTablesIn }),
     /** gfx v2: the v2 ground's pieces of a chunk (keys, places), to compare two builds. */
     groundPieces: (/** @type {number} */ cx, /** @type {number} */ cy) => (view.groundV2 ? view.groundPiecesV2(cx, cy) : null),
     /** gfx v2: the pixels of a built chunk's flat ground (its cache), as a PNG data URL, or null. */

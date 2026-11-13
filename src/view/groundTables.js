@@ -53,10 +53,11 @@ export const sandUnderTreesOf = (map, regions) =>
 
 /**
  * The tables over the display grid (i from -1 to width-1, j from -1 to height-1; a cell (x, y) of the
- * map uses the same numbers): calm[k] the calm number, macro[k] the picture piece or null,
- * k = (j + 1) * (width + 1) + (i + 1).
+ * map uses the same numbers), k = (j + 1) * (width + 1) + (i + 1): calm[k] the calm number; the picture
+ * piece, or none: names[name[k]] and the picture's NW tile (bi[k], bj[k]), name[k] = -1 for none (typed
+ * arrays: handed over from the worker without a copy; macroOf reads one).
  * @param {any} map parsed (tilemap.parseMap) @param {any[]} regions @param {(a: number, b: number) => number} hash
- * @returns {{ width: number, height: number, calm: Uint8Array, macro: ({ name: string, block: string } | null)[] }}
+ * @returns {GroundTables}
  */
 export function groundTablesOf(map, regions, hash) {
   const W = map.width + 1;
@@ -64,8 +65,11 @@ export function groundTablesOf(map, regions, hash) {
   const sand = sandUnderTreesOf(map, regions);
   const classAt = (/** @type {number} */ x, /** @type {number} */ y) => groundClassOf(map, regions, sand, x, y);
   const calm = new Uint8Array(W * H);
-  /** @type {({ name: string, block: string } | null)[]} */
-  const macro = new Array(W * H).fill(null);
+  const name = new Int16Array(W * H).fill(-1);
+  const bi = new Int16Array(W * H);
+  const bj = new Int16Array(W * H);
+  /** @type {string[]} */
+  const names = [];
   const memo = new Map();
   const pictures = new Map();
   const ctx = { uniformBlock: (/** @type {number} */ a, /** @type {number} */ b, /** @type {number} */ k) => uniformBlockOf(map, classAt, a, b, k), hash, width: map.width, height: map.height, pictures };
@@ -73,11 +77,24 @@ export function groundTablesOf(map, regions, hash) {
     for (let i = -1; i < map.width; i++) {
       const k = (j + 1) * W + (i + 1);
       calm[k] = calmNumber(i, j, hash, memo);
-      macro[k] = macroPlacement(i, j, ctx);
+      const m = macroPlacement(i, j, ctx);
+      if (m) {
+        let n = names.indexOf(m.name);
+        if (n < 0) n = names.push(m.name) - 1;
+        name[k] = n;
+        const [a, b] = m.block.split(',').map(Number);
+        bi[k] = a;
+        bj[k] = b;
+      }
     }
   }
-  return { width: map.width, height: map.height, calm, macro };
+  return { width: map.width, height: map.height, calm, name, bi, bj, names };
 }
+
+/** @typedef {{ width: number, height: number, calm: Uint8Array, name: Int16Array, bi: Int16Array, bj: Int16Array, names: string[] }} GroundTables */
+
+/** The picture piece at index k of the tables (macroPlacement's result), or null. @param {GroundTables} t @param {number} k */
+export const macroOf = (t, k) => (t.name[k] < 0 ? null : { name: t.names[t.name[k]], block: `${t.bi[k]},${t.bj[k]}` });
 
 /** The index of display tile / cell (i, j) in the tables, or -1 outside. @param {{ width: number, height: number }} t @param {number} i @param {number} j */
 export const tableIndex = (t, i, j) => (i < -1 || j < -1 || i >= t.width || j >= t.height ? -1 : (j + 1) * (t.width + 1) + (i + 1));
