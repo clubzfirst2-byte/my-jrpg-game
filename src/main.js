@@ -18,9 +18,10 @@ import { storyDebugApi } from './debug/storyDebug.js';
 import { startOpening, skipOpening, finishEnding, endingLine, ENDING } from './game/story/story.js';
 import { EndingScreen } from './ui/ending.js';
 import { ART_OVERRIDES } from './view/assets/artOverrides.js';
-import { ART_SCALE, acquireSheet, releaseSheet, v3PlainsEntries, densityOf } from './view/assets/placeholderPack.js';
+import { ART_SCALE, acquireSheet, releaseSheet, v3PlainsEntries, v3PartEntries, densityOf } from './view/assets/placeholderPack.js';
 import { V3_ENEMY_KINDS, v3EnemyBundle, v3EnemyKindOf, v3EnemyUnused } from './view/assets/enemyV3.js';
-import { v3PlainsBundleName } from './view/v3Plains.js';
+import { v3PinePartOf, v3PlainsBundleName } from './view/v3Plains.js';
+import { v3ForestBundleName, v3ForestPartOf } from './view/v3Forest.js';
 import { V3_OBJECTS_WINTER, V3_VILLAGE_KEYS, v3VillageBundle, villageSources, winterObjectKeys } from './view/assets/villageV3.js';
 import { addVillageProps } from './game/world/villageProps.js';
 import { testHeroFrames } from './debug/testHero.js';
@@ -286,6 +287,17 @@ async function boot() {
   for (const season of /** @type {const} */ (['summer', 'autumn', 'winter', 'flow'])) {
     const entries = v3 ? v3PlainsEntries(season, artOverrides) : [];
     if (entries.length) assets.register(v3PlainsBundleName(season), () => buildPlaceholderPack(entries, artOverrides, { ...packOpts, tallestFirst: true, exactHeight: true }));
+  }
+  // (the plains pine: a bundle of its own per season, loaded only by the chunks that draw one, FOREST.md 4)
+  for (const season of /** @type {const} */ (['pine.summer', 'pine.autumn', 'pine.winter'])) {
+    const entries = v3 ? v3PartEntries(season, artOverrides, v3PinePartOf) : [];
+    if (entries.length) assets.register(v3PlainsBundleName(season), () => buildPlaceholderPack(entries, artOverrides, { ...packOpts, tallestFirst: true, exactHeight: true }));
+  }
+  // Graphics v3 (FOREST.md): the forest's v3 ground, trees and props, one bundle per season, loaded by the
+  // chunks that have forest (gameView.v3ForestBundlesOf); "flow": the flow shapes summer and autumn share
+  for (const season of /** @type {const} */ (['summer', 'autumn', 'winter', 'flow'])) {
+    const entries = v3 ? v3PartEntries(season, artOverrides, v3ForestPartOf) : [];
+    if (entries.length) assets.register(v3ForestBundleName(season), () => buildPlaceholderPack(entries, artOverrides, { ...packOpts, tallestFirst: true, exactHeight: true }));
   }
   // (graphics v3: the hero's v3 bundle, held for the whole game, is built beside the base bundle)
   await Promise.all(['placeholder', HERO_V3_BUNDLE].filter((b) => assets.builders.has(b)).map((b) => assets.load(b)));
@@ -1234,6 +1246,8 @@ async function boot() {
       viewRect: state.viewRect ?? null,
       /** the plains' v3 trees and props on the loaded chunks, and their sway frames now (gameView.v3Stats) */
       plains: v3 ? view.v3Stats() : null,
+      /** the forest's v3 trees and props on the loaded chunks (gameView.v3Stats('forest')) */
+      forest: v3 ? view.v3Stats('forest') : null,
       /** the ground cache (groundCache.js): its texture's bytes, how often it was drawn, the time spent */
       cache: view.groundCache ? { bytes: view.groundCache.bytes(), rect: view.groundCache.rect, ...view.groundCache.stats } : null,
     }),

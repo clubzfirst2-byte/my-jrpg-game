@@ -7,8 +7,9 @@ import { GameView, CHUNK } from '../../src/view/gameView.js';
 import { createGameState, MAPS } from '../../src/game/state.js';
 import { createEnemy, updateEnemy } from '../../src/game/entities/enemies.js';
 import { inSeason } from '../../src/game/env/weather.js';
-import { REGION_ENTRIES, mirroredFrames, releaseV3RegionEntries, v3PlainsEntries, atlasSizeFor, densityOf, ART_SCALE, SheetRef, acquireSheet, releaseSheet } from '../../src/view/assets/placeholderPack.js';
+import { REGION_ENTRIES, mirroredFrames, releaseV3RegionEntries, v3PlainsEntries, v3PartEntries, atlasSizeFor, densityOf, ART_SCALE, SheetRef, acquireSheet, releaseSheet } from '../../src/view/assets/placeholderPack.js';
 import { onDemandReleaseGroup, precacheFiles } from '../../tools/precache.mjs';
+import { v3PinePartOf } from '../../src/view/v3Plains.js';
 
 // Graphics v3 (docs/art-release-v3/STYLE.md, ?v3=1): density 4, the narrow integer view, the play
 // adjustments and the memory measures. ?v3=0 (and the default, until the director decides) is the game
@@ -81,10 +82,14 @@ describe('art', () => {
     expect(releaseV3RegionEntries('region:plains', overrides).map((e) => e.key)).toEqual([]);
     expect(releaseV3RegionEntries('region:forest', overrides)).toEqual([]);
     const seasons = /** @type {const} */ (['summer', 'autumn', 'winter']);
-    const all = [...seasons, /** @type {const} */ ('flow')].flatMap((s) => v3PlainsEntries(s, overrides).map((e) => e.key));
+    const pines = /** @type {const} */ (['pine.summer', 'pine.autumn', 'pine.winter']).flatMap((s) => v3PartEntries(s, overrides, v3PinePartOf).map((e) => e.key));
+    const all = [...[...seasons, /** @type {const} */ ('flow')].flatMap((s) => v3PlainsEntries(s, overrides).map((e) => e.key)), ...pines];
     expect(new Set(all).size).toBe(all.length);
-    // every production file is in exactly one season's bundle; the pilot's tree / flowers / stump in none
+    // every production file is in exactly one season's bundle (the pine: a bundle of its own per season,
+    // FOREST.md 4); the pilot's tree / flowers / stump in none
     expect(all.sort()).toEqual(files.filter((f) => /plains\.(?:grass|grassflow|tree|prop)\.v3\./.test(f)).sort());
+    expect(pines.sort()).toEqual(files.filter((f) => /plains\.tree\.v3\.pine\./.test(f)).sort());
+    expect(pines.length).toBe(9);
     for (const s of seasons) {
       const e = v3PlainsEntries(s, overrides);
       expect(e.filter((x) => /grass\.v3\.[a-h]\d\d$/.test(x.key)).length).toBe(128);

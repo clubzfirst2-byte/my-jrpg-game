@@ -255,14 +255,29 @@ export const edgeKey = (season, v2Name) => `${seasonPrefix(season)}plains.grass.
  * @param {string} key @returns {'summer' | 'autumn' | 'winter' | 'flow' | null}
  */
 export function v3PlainsPartOf(key) {
-  const m = /^(?:(autumn|winter)\.)?plains\.(grass|grassflow|tree|prop)\.v3\./.exec(key);
+  const m = /^(?:(autumn|winter)\.)?plains\.(grass|grassflow|tree|prop)\.v3\.(pine\.)?/.exec(key);
   if (!m) return null;
   if (m[2] === 'grassflow' && !m[1]) return 'flow';
+  // (the pine: a bundle of its own per season, loaded only by the chunks that draw one: never beside
+  // the forest's art, FOREST.md 4 / NAMES.md 4, v3PinePartOf)
+  if (m[2] === 'tree' && m[3]) return null;
   return /** @type {'autumn' | 'winter' | undefined} */ (m[1]) ?? 'summer';
 }
 
-/** The bundle of a part of the plains v3 art. @param {'summer' | 'autumn' | 'winter' | 'flow'} part */
+/**
+ * Which pine bundle a plains v3 key goes in ("pine.summer", "pine.autumn", "pine.winter"), or null.
+ * @param {string} key @returns {'pine.summer' | 'pine.autumn' | 'pine.winter' | null}
+ */
+export function v3PinePartOf(key) {
+  const m = /^(?:(autumn|winter)\.)?plains\.tree\.v3\.pine\./.exec(key);
+  return m ? /** @type {'pine.summer' | 'pine.autumn' | 'pine.winter'} */ (`pine.${m[1] ?? 'summer'}`) : null;
+}
+
+/** The bundle of a part of the plains v3 art. @param {'summer' | 'autumn' | 'winter' | 'flow' | 'pine.summer' | 'pine.autumn' | 'pine.winter'} part */
 export const v3PlainsBundleName = (part) => `v3:plains:${part}`;
+
+/** The plains pine's bundle of a season (summer's for spring). @param {string | null | undefined} season */
+export const v3PineBundle = (season) => v3PlainsBundleName(/** @type {'pine.summer'} */ (`pine.${v3Season(season)}`));
 
 /** The bundles of the plains v3 art a season draws with (summer's for spring). @param {string | null | undefined} season */
 export const v3PlainsBundles = (season) => {
@@ -288,12 +303,15 @@ export const TREES = Object.freeze({
  * house, wall or another object. Within its room the kind is by the tree's hash, so a stand of trees
  * mixes them: room 3 → oak_l 45%, pine 30%, oak_m 25%; room 2 → oak_m 50%, pine 35%, sapling 15%;
  * room 1 → sapling.
- * @param {number} room @param {number} h 0..1 (the tree's own hash)
+ * Where the map must not place the pine (`pineOk` false: within 2 chunks of the forest, FOREST.md 4 /
+ * NAMES.md 4, v3Forest.plainsPineBanned), its share goes to the others: room 3 → oak_l (h < 0.6) or
+ * oak_m; room 2 → oak_m (h < 0.75) or sapling.
+ * @param {number} room @param {number} h 0..1 (the tree's own hash) @param {boolean} [pineOk]
  * @returns {keyof typeof TREES}
  */
-export function treeKind(room, h) {
-  if (room >= 3) return h < 0.45 ? 'oak_l' : h < 0.75 ? 'pine' : 'oak_m';
-  if (room === 2) return h < 0.5 ? 'oak_m' : h < 0.85 ? 'pine' : 'sapling';
+export function treeKind(room, h, pineOk = true) {
+  if (room >= 3) return h < 0.45 ? 'oak_l' : h < 0.75 ? (pineOk ? 'pine' : h < 0.6 ? 'oak_l' : 'oak_m') : 'oak_m';
+  if (room === 2) return h < 0.5 ? 'oak_m' : h < 0.85 ? (pineOk ? 'pine' : h < 0.75 ? 'oak_m' : 'sapling') : 'sapling';
   return 'sapling';
 }
 
@@ -388,19 +406,23 @@ export function treeFootProp(h, h2) {
 /**
  * How a plains tree object is drawn: a v3 tree by its room (treeKind), or, for 1 grove tree in 16, a
  * fallen log (still the same solid tile; burnt, it becomes a stump as any tree). @param {number} room @param {number} h @param {number} h2
- * @returns {{ what: 'tree' | 'prop', kind: string }}
+ * @param {boolean} [pineOk] whether the map may place the pine here (treeKind)
+ * @returns {{ what: 'tree' | 'prop', kind: string, set?: 'plains' | 'forest' }}
  */
-export function plainsTreeLook(room, h, h2) {
+export function plainsTreeLook(room, h, h2, pineOk = true) {
   if (room <= 1 && h2 < 1 / 16) return { what: 'prop', kind: 'log' };
-  return { what: 'tree', kind: treeKind(room, h) };
+  return { what: 'tree', kind: treeKind(room, h, pineOk) };
 }
 
-/** The key of a tree / prop frame. @param {string | null | undefined} season @param {'tree' | 'prop'} what @param {string} kind @param {number} frame */
-export const floraKey = (season, what, kind, frame) => `${seasonPrefix(season)}plains.${what}.v3.${kind}.${frame}`;
+/**
+ * The key of a tree / prop frame. @param {string | null | undefined} season @param {'tree' | 'prop'} what @param {string} kind @param {number} frame
+ * @param {'plains' | 'forest'} [set] whose art (graphics v3 forest: v3Forest.js)
+ */
+export const floraKey = (season, what, kind, frame, set = 'plains') => `${seasonPrefix(season)}${set}.${what}.v3.${kind}.${frame}`;
 
-/** How many frames of a tree / prop are loaded. @param {(key: string) => boolean} has @param {string | null | undefined} season @param {'tree' | 'prop'} what @param {string} kind */
-export function floraFrames(has, season, what, kind) {
+/** How many frames of a tree / prop are loaded. @param {(key: string) => boolean} has @param {string | null | undefined} season @param {'tree' | 'prop'} what @param {string} kind @param {'plains' | 'forest'} [set] */
+export function floraFrames(has, season, what, kind, set = 'plains') {
   let n = 0;
-  while (n < 4 && has(floraKey(season, what, kind, n))) n++;
+  while (n < 4 && has(floraKey(season, what, kind, n, set))) n++;
   return n;
 }

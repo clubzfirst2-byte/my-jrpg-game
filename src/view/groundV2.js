@@ -228,18 +228,20 @@ function keep2x2(width, height, deep) {
 /**
  * The layers of one display tile (bottom first).
  * @param {{ cls: string[], deep: boolean[], waterVariant: number, edgeVariant: (cls: string, mask: number) => number,
- *   pick: (cls: string) => string, macro: () => string | null }} t
+ *   pick: (cls: string) => string, macro: () => string | null, priority?: readonly string[] }} t
  *   cls / deep: the 4 corners (NW, NE, SW, SE); pick = the base name for a full land tile (a variant);
  *   edgeVariant = the variant of a land's edge overlay of a mask (round 7: 0-3 by the side states; masks
  *   6 / 9: 0 / 1; the ruin floor: its row phase);
- *   macro = a macro piece name ("macro.<q>") when the 4 corners are one land and the block is chosen
+ *   macro = a macro piece name ("macro.<q>") when the 4 corners are one land and the block is chosen;
+ *   priority = the land priority, low → high (graphics v3, winter: the forest / plains pair exchanged on
+ *   a tile with both, v3Forest.winterPriority; PRIORITY otherwise)
  * @returns {Layer[]}
  */
-export function displayLayers({ cls, deep, waterVariant, edgeVariant, pick, macro }) {
+export function displayLayers({ cls, deep, waterVariant, edgeVariant, pick, macro, priority = PRIORITY }) {
   /** @type {Layer[]} */
   const out = [];
   const land = cls.filter((c) => c !== 'water');
-  const rank = (/** @type {string} */ c) => PRIORITY.indexOf(c);
+  const rank = (/** @type {string} */ c) => priority.indexOf(c);
   let lowest = null;
   if (land.length < 4) {
     const allDeep = cls.every((c, k) => c === 'water' && deep[k]);
@@ -429,15 +431,18 @@ const SIDE = Object.freeze({
  * (or this one) has mask 6 / 9 for t — so the tiles on both sides of a side agree.
  * @param {string} t @param {number} m @param {number} i @param {number} j @param {Hash} hash
  * @param {(x: number, y: number) => string | null} classAt a cell's ground class (clamped to the map, as the display grid's corners)
+ * @param {(t: string, i: number, j: number, classAt: (x: number, y: number) => string | null) => number} [mask] how a
+ *   tile's mask is read (graphics v3, winter: in each tile's own winter order, v3Forest.winterMaskOf; maskOf otherwise)
  */
-export function edgeVariantOf(t, m, i, j, hash, classAt) {
+export function edgeVariantOf(t, m, i, j, hash, classAt, mask = maskOf) {
   if (t === 'ruin') return ruinRow(j);
   if (m === 6 || m === 9) return hash(i + 7, j) % 2;
   const state = (/** @type {'N' | 'E' | 'S' | 'W'} */ sd) => {
     const { h, ends, across } = SIDE[sd](i, j);
     if (ends.some(([x, y]) => classAt(x, y) === 'water')) return 0;
-    const ma = maskOf(t, across[0], across[1], classAt);
-    if (ma === 6 || ma === 9 || maskOf(t, i, j, classAt) === 6 || maskOf(t, i, j, classAt) === 9) return 0;
+    const ma = mask(t, across[0], across[1], classAt);
+    const mi = mask(t, i, j, classAt);
+    if (ma === 6 || ma === 9 || mi === 6 || mi === 9) return 0;
     return (hash(h[0], h[1]) >>> 4) & 1;
   };
   const [a, b] = crossingSides(m);

@@ -320,11 +320,21 @@ export function releaseV3RegionEntries(region, overrides) {
  * @returns {{ key: string, rows: string[], anchor: [number, number] }[]}
  */
 export function v3PlainsEntries(season, overrides) {
+  return v3PartEntries(season, overrides, v3PlainsPartOf);
+}
+
+/**
+ * Graphics v3: the entries of one part of a region's v3 art (v3PlainsEntries; the forest's, v3Forest.v3ForestPartOf;
+ * the plains pine's, v3Plains.v3PinePartOf): ground tiles (grass, grassflow) on the 16 px grid, the rest on their feet.
+ * @param {string} part @param {Map<string, ArtSource> | Set<string> | undefined} overrides @param {(key: string) => string | null} partOf
+ * @returns {{ key: string, rows: string[], anchor: [number, number] }[]}
+ */
+export function v3PartEntries(part, overrides, partOf) {
   if (!overrides?.size) return [];
   return [...overrides.keys()]
-    .filter((k) => v3PlainsPartOf(k) === season)
+    .filter((k) => partOf(k) === part)
     .sort()
-    .map((key) => (/plains\.(?:grass|grassflow)\.v3\./.test(key) ? { key, rows: Array(16).fill('.'.repeat(16)), anchor: TOP_LEFT } : { key, rows: ['.'], anchor: FEET }));
+    .map((key) => (/(?:plains|forest)\.(?:grass|grassflow)\.v3\./.test(key) ? { key, rows: Array(16).fill('.'.repeat(16)), anchor: TOP_LEFT } : { key, rows: ['.'], anchor: FEET }));
 }
 
 /** Enemy release frames: enemy.<kind>.<action>.<n> (docs/art-release/enemy/frames.json on the art branch). */

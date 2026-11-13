@@ -33,10 +33,11 @@ import { WORLD } from './world/world.js';
 import { objectBaseline } from './world/worldDiff.js';
 import { createNpcs, stepNpcs, syncNpcs, blockPlayerByNpcs, playerFrom } from './npc/npcs.js';
 import { TEST_FIELD } from './world/maps/testField.js';
+import { FOREST_EDGE_TEST } from './world/maps/forestEdgeTest.js';
 import { HEIGHT_TEST } from './world/maps/heightTest.js';
 
 /** Maps selectable with ?map=... (P3.5 default: the first island). */
-export const MAPS = Object.freeze({ world: WORLD, island: ISLAND, height: HEIGHT_TEST, field: TEST_FIELD });
+export const MAPS = Object.freeze({ world: WORLD, island: ISLAND, height: HEIGHT_TEST, field: TEST_FIELD, forestedge: FOREST_EDGE_TEST });
 
 /** Landmarks within this distance count as seen (about half a screen). */
 const SIGHT_PX = 200;

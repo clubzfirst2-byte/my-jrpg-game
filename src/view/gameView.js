@@ -43,12 +43,13 @@ import { GroundCache } from './groundCache.js';
 import { V3_OBJECTS_WINTER, V3_VILLAGE_TYPES, V3_WINTER_OBJECTS, v3VillageBundle } from './assets/villageV3.js';
 import { V3_ENEMY_KINDS, kindsByRegion, v3EnemyBundle } from './assets/enemyV3.js';
 import { HERO_V3_LAZY, HERO_V3_MOVE_BUNDLE, HERO_V3_MOVE_KEEP_MS, heroDrawKey } from './assets/heroV3.js';
-import { MacroGrid, PROPS, PROP_SWAY, TREE_SWAY, baseKey as v3BaseKey, edgeKey as v3EdgeKey, floraFrames, floraKey, flowCorner, flowKey, flowLook, openProp, plainsTreeLook, seasonPrefix, swayFrame, swayStep, treeFootProp, v3PlainsBundles } from './v3Plains.js';
+import { MacroGrid, PROPS, PROP_SWAY, TREE_SWAY, baseKey as v3BaseKey, edgeKey as v3EdgeKey, floraFrames, floraKey, flowCorner, flowKey, flowLook, openProp, plainsTreeLook, seasonPrefix, swayFrame, swayStep, treeFootProp, v3PineBundle, v3PlainsBundles } from './v3Plains.js';
+import { FOREST_PROPS, forestBaseKey, forestEdgeKey, forestFlowLook, forestFootProp, forestOpenProp, forestTreeLook, plainsPineBanned, rootsOffset, v3ForestBundles, winterMaskOf, winterPriority } from './v3Forest.js';
 import { activeBoss } from '../game/entities/bosses.js';
 import { hash01, valueNoise } from './placement.js';
 
 /** Graphics v3: the v3 ground tiles that are opaque over the whole tile (the base patterns), and their sprites' label. */
-const OPAQUE_V3 = /^(?:\w+\.)?plains\.grass\.v3\.[a-h]\d\d$/;
+const OPAQUE_V3 = /^(?:\w+\.)?(?:plains|forest)\.grass\.v3\.[a-h]\d\d$/;
 const OPAQUE_LABEL = 'v3-opaque';
 
 /** Graphics v3: the chunk ground's culling groups, in tiles (gameView.groupGround). */
@@ -90,7 +91,7 @@ export function chunkCacheArea(cx, cy, ts) {
  *   edges: { sprite: Sprite, key: string }[], waterFrame: number,
  *   waterMesh: import('pixi.js').Mesh | null, waterKeys: string[],
  *   extents: Map<number, { x0: number, x1: number, y0: number, y1: number }[]>, bundles: string[],
- *   sway?: { sprite: Sprite, kind: string, frames: number, tx: number, ty: number, frame: number }[], foot?: { sprite: Sprite, o: any }[],
+ *   sway?: { sprite: Sprite, kind: string, frames: number, tx: number, ty: number, frame: number, set?: 'plains' | 'forest' }[], foot?: { sprite: Sprite, o: any }[],
  *   props?: Container }} Chunk
  *   (graphics v3: sway = the swaying props of its ground, foot = the props at the foot of its trees, with the actors)
  */
@@ -160,6 +161,10 @@ export class GameView {
     this.v3Macro = null;
     /** Graphics v3: the flow corners of the chunk being built (v3GroundSetup). @type {((cx: number, cy: number) => 'd' | 'l' | 'm') | null} */
     this.v3CornerAt = null;
+    /** Graphics v3 (forest): the forest's flow corners of the chunk being built (v3GroundSetup). @type {((cx: number, cy: number) => 'd' | 'l' | 'm') | null} */
+    this.v3ForestCornerAt = null;
+    /** Graphics v3: whether the map must not place the plains pine on a tile (v3Forest.plainsPineBanned, FOREST.md 4), made on first use. @type {((tx: number, ty: number) => boolean) | null} */
+    this.v3PineBanned = null;
     /** Graphics v3: how each plains tree is drawn (v3Plains.plainsTreeLook), fixed per tree. @type {WeakMap<object, { what: 'tree' | 'prop', kind: string }>} */
     this.v3Looks = new WeakMap();
     /** Graphics v3: frames loaded per tree / prop kind, kept while the loaded art and the season stay the same. @type {{ version: string, n: Map<string, number> }} */
@@ -493,9 +498,11 @@ export class GameView {
     }
     // graphics v3: near the plains, the season's v3 plains art first too (the old look stays meanwhile)
     if (this.v3) {
-      const near = [...this.chunks.values()].some((c) => c.bundles.some((b) => b.startsWith('v3:plains:')));
-      const nearVillage = [...this.chunks.values()].some((c) => c.bundles.some((b) => b.startsWith('v3:village:')));
-      const wanted = [...(near ? v3PlainsBundles(want) : []), ...(nearVillage ? [v3VillageBundle(want)] : []), ...(want === 'winter' ? [V3_OBJECTS_WINTER] : [])];
+      const held = (/** @type {string} */ pre) => [...this.chunks.values()].some((c) => c.bundles.some((b) => b.startsWith(pre)));
+      const near = held('v3:plains:');
+      const nearVillage = held('v3:village:');
+      // (graphics v3 forest: its bundles too, and the plains pine's where a chunk draws one)
+      const wanted = [...(near ? v3PlainsBundles(want) : []), ...(held('v3:plains:pine.') ? [v3PineBundle(want)] : []), ...(held('v3:forest:') ? v3ForestBundles(want) : []), ...(nearVillage ? [v3VillageBundle(want)] : []), ...(want === 'winter' ? [V3_OBJECTS_WINTER] : [])];
       const missing = wanted.filter((b) => this.assets.builders.has(b) && !this.assets.isLoaded(b));
       if (missing.length) {
         this.v3SeasonWant = wanted; // (all of them: one loaded early must not be let go meanwhile)
@@ -558,6 +565,7 @@ export class GameView {
       const cls = this.groundClassAt(tx, ty);
       // (graphics v3: raised plains ground takes the v3 base, on the cell grid)
       if (cls === 'plains' && this.v3PlainsGround()) return v3BaseKey((this.v3Macro ??= new MacroGrid()), this.season, tx, ty);
+      if (cls === 'moss' && this.v3ForestGround()) return forestBaseKey((this.v3Macro ??= new MacroGrid()), this.season, tx, ty);
       if (cls && cls !== 'water') return landKey(cls, String(this.cellWang(tx, ty, cls)));
     }
     const g = this.drawnGround(tx, ty);
@@ -714,7 +722,7 @@ export class GameView {
     const cls = this.groundClassAt(x, y);
     if (cls === 'water') return { key: `tile.water${this.deepAt(x, y) ? '.deep' : ''}${hash(x, y) % 2 ? '.v1' : ''}`, anim: true };
     if (!cls) return { key: this.surfaceKey(x, y), anim: false };
-    if (cls === 'plains' && this.v3PlainsGround()) return { key: this.surfaceKey(x, y), anim: false }; // (graphics v3)
+    if ((cls === 'plains' && this.v3PlainsGround()) || (cls === 'moss' && this.v3ForestGround())) return { key: this.surfaceKey(x, y), anim: false }; // (graphics v3)
     return { key: landKey(cls, String(this.cellWang(x, y, cls))), anim: false };
   }
 
@@ -842,63 +850,88 @@ export class GameView {
   }
 
   /**
-   * Graphics v3 (STYLE.md 6, v3Plains.js): the v3 plains ground of display tile (i, j) in place of the v2
-   * layers: the base pattern's tile where the lowest ground is plains (a full plains tile's own, or the
-   * one the plains grass edges of the higher grounds lie on), then the flow where all 4 corners are
-   * plains, then the other layers, the plains grass edges over a lower ground taking their v3 picture
-   * (same mask and v: the v2 rule). Pieces whose v3 art is not loaded stay v2.
+   * Graphics v3 (forest, FOREST.md 1): whether the forest's v3 ground of the current season is loaded
+   * ("v3:forest:<season>", loaded by the chunks that have forest, chunkBundles).
+   */
+  v3ForestGround() {
+    return this.v3 && this.assets.hasTexture(`${seasonPrefix(this.season)}forest.grass.v3.a00`);
+  }
+
+  /**
+   * Graphics v3 (STYLE.md 6, v3Plains.js; the forest: FOREST.md 1, v3Forest.js): the v3 ground of display
+   * tile (i, j) in place of the v2 layers, for the plains and the forest where their art is loaded: the
+   * base pattern's tile where the lowest ground is plains / forest (a full tile's own, or the one the edges
+   * of the higher grounds lie on), then the flow where all 4 corners are that ground, then the other layers,
+   * the plains / forest edges over a lower ground taking their v3 picture (same mask and v: the v2 rule;
+   * winter: v3Forest.winterPriority). Pieces whose v3 art is not loaded stay v2.
    * @param {{ key: string, anim: boolean, x: number, y: number, quarter: string | null, tint?: number, flip?: boolean }[]} out
    * @param {{ key: string, anim: boolean }[]} layers v2's (displayLayers) @param {string[]} cls the 4 corners
    * @param {number} i @param {number} j @param {number} px @param {number} py
    */
   v3PlainsLayers(out, layers, cls, i, j, px, py) {
     const has = (/** @type {string} */ k) => this.assets.hasTexture(k);
-    const calm = /^plains\.grass\.(?:\d+|macro\d?\.\d)$/;
+    const plainsOn = this.v3PlainsGround();
+    const forestOn = this.v3ForestGround();
+    const calm = /^(plains|forest)\.grass\.(?:\d+|macro\d?\.\d)$/;
+    void cls;
     for (let n = 0; n < layers.length; n++) {
       const l = layers[n];
-      if (!l.anim && calm.test(l.key) && (n === 0 || l.key === 'plains.grass.0')) {
-        out.push({ key: v3BaseKey(this.v3Macro, this.season, i, j), anim: false, x: px, y: py, quarter: null });
-        if (n === 0 && this.v3FullPlains(i, j)) {
-          const fk = flowKey(i, j, this.v3CornerAt);
-          const look = fk && flowLook(this.season, fk, has);
+      const c = l.anim ? null : calm.exec(l.key);
+      const g = c ? c[1] : null;
+      if (c && (n === 0 || l.key === `${g}.grass.0`) && ((g === 'plains' && plainsOn) || (g === 'forest' && forestOn))) {
+        const macro = /** @type {MacroGrid} */ (this.v3Macro);
+        out.push({ key: g === 'plains' ? v3BaseKey(macro, this.season, i, j) : forestBaseKey(macro, this.season, i, j), anim: false, x: px, y: py, quarter: null });
+        if (n === 0 && this.v3Full(g === 'plains' ? 'plains' : 'moss', i, j)) {
+          const fk = flowKey(i, j, /** @type {any} */ (g === 'plains' ? this.v3CornerAt : this.v3ForestCornerAt));
+          const look = fk && (g === 'plains' ? flowLook(this.season, fk, has) : forestFlowLook(this.season, fk, has));
           if (look) out.push({ key: look.key, anim: false, x: px, y: py, quarter: null, tint: look.tint, ...(look.flip ? { flip: true } : {}) });
         }
         continue;
       }
-      const e = /^plains\.grass\.(edge\.\d+\.\d+)$/.exec(l.key);
-      const v3 = e ? v3EdgeKey(this.season, e[1]) : null;
+      const e = /^(plains|forest)\.grass\.(edge\.\d+\.\d+)$/.exec(l.key);
+      const v3 = e && e[1] === 'plains' && plainsOn ? v3EdgeKey(this.season, e[2]) : e && e[1] === 'forest' && forestOn ? forestEdgeKey(this.season, e[2]) : null;
       out.push({ key: v3 && has(v3) ? v3 : l.key, anim: l.anim, x: px, y: py, quarter: null });
     }
   }
 
   /**
-   * Graphics v3: the base patterns (made once, pure) and, for one chunk build, the flow corners: a world
-   * corner has the flow of v3Plains.flowCorner only when the 4 display tiles around it are full plains
-   * tiles, else none ('m'), so the flow fades out before the grass edges (STYLE.md 6).
+   * Graphics v3: the base patterns (made once, pure) and, for one chunk build, the flow corners of the
+   * plains and of the forest: a world corner has the flow of v3Plains.flowCorner only when the 4 display
+   * tiles around it are full tiles of that ground, else none ('m'), so the flow fades out before the edges
+   * (STYLE.md 6, FOREST.md 1).
    */
   v3GroundSetup() {
     this.v3Macro ??= new MacroGrid();
-    /** @type {Map<number, 'd' | 'l' | 'm'>} */
-    const memo = new Map();
-    /** @param {number} cx @param {number} cy @returns {'d' | 'l' | 'm'} */
-    this.v3CornerAt = (cx, cy) => {
-      const k = (cx + 8) * 65536 + (cy + 8);
-      let v = memo.get(k);
-      if (v === undefined) {
-        v = this.v3FullPlains(cx - 1, cy - 1) && this.v3FullPlains(cx, cy - 1) && this.v3FullPlains(cx - 1, cy) && this.v3FullPlains(cx, cy) ? flowCorner(cx, cy) : 'm';
-        memo.set(k, v);
-      }
-      return v;
+    const corners = (/** @type {string} */ cls) => {
+      /** @type {Map<number, 'd' | 'l' | 'm'>} */
+      const memo = new Map();
+      /** @param {number} cx @param {number} cy @returns {'d' | 'l' | 'm'} */
+      return (cx, cy) => {
+        const k = (cx + 8) * 65536 + (cy + 8);
+        let v = memo.get(k);
+        if (v === undefined) {
+          v = this.v3Full(cls, cx - 1, cy - 1) && this.v3Full(cls, cx, cy - 1) && this.v3Full(cls, cx - 1, cy) && this.v3Full(cls, cx, cy) ? flowCorner(cx, cy) : 'm';
+          memo.set(k, v);
+        }
+        return v;
+      };
     };
+    this.v3CornerAt = corners('plains');
+    this.v3ForestCornerAt = corners('moss');
   }
 
   /** Graphics v3: whether display tile (i, j) is a full plains tile (its 4 corner cells in the map, flat, plains). @param {number} i @param {number} j */
   v3FullPlains(i, j) {
+    return this.v3Full('plains', i, j);
+  }
+
+  /** Graphics v3: whether display tile (i, j) is a full tile of ground class cls (its 4 corner cells in the map, flat, that ground). @param {string} cls @param {number} i @param {number} j */
+  v3Full(cls, i, j) {
     const map = this.map;
     for (const [dx, dy] of CORNERS) {
       const x = i + dx;
       const y = j + dy;
-      if (!inBounds(map, x, y) || map.elev[y * map.width + x] !== 0 || map.shape[y * map.width + x] === Shape.RAMP_N || this.groundClassAt(x, y) !== 'plains') return false;
+      if (!inBounds(map, x, y) || map.elev[y * map.width + x] !== 0 || map.shape[y * map.width + x] === Shape.RAMP_N || this.groundClassAt(x, y) !== cls) return false;
     }
     return true;
   }
@@ -937,8 +970,11 @@ export class GameView {
       if (this.v3 && (cx > 0 || cy > 0)) {
         const x0 = cx * CHUNK * ts + half;
         const y0 = cy * CHUNK * ts + half;
+        // (a chunk whose west neighbour lies wholly outside the outdoors it is in, never built with it
+        // (updateChunks), draws its west display tiles itself)
+        const west = cx > 0 && !this.v3OwnWestEdge(cx, cy);
         let n = 0;
-        for (const p of out) if (p.anim || !((cx > 0 && p.x < x0) || (cy > 0 && p.y < y0))) out[n++] = p;
+        for (const p of out) if (p.anim || !((west && p.x < x0) || (cy > 0 && p.y < y0))) out[n++] = p;
         out.length = n;
       }
     } finally {
@@ -951,6 +987,23 @@ export class GameView {
   }
 
   /**
+   * Graphics v3: whether chunk (cx, cy) draws the display tiles over its west edge itself: when it overlaps
+   * an outdoor area and its west neighbour overlaps none of the outdoors it overlaps (the camera, held in
+   * that outdoor, never builds the neighbour: updateChunks). Fixed for the map. @param {number} cx @param {number} cy
+   */
+  v3OwnWestEdge(cx, cy) {
+    const key = `w${cx},${cy}`;
+    let own = this.v2Tiles.get(key);
+    if (own === undefined) {
+      const over = (/** @type {any} */ o, /** @type {number} */ c) => o.tx < (c + 1) * CHUNK && o.tx + o.tw > c * CHUNK && o.ty < (cy + 1) * CHUNK && o.ty + o.th > cy * CHUNK;
+      const mine = (this.outdoors ?? []).filter((o) => over(o, cx));
+      own = mine.length > 0 && !mine.some((o) => over(o, cx - 1));
+      this.v2Tiles.set(key, own);
+    }
+    return own;
+  }
+
+  /**
    * groundPiecesV2's loop. @param {{ key: string, anim: boolean, x: number, y: number, quarter: string | null }[]} out
    * @param {number} cx @param {number} cy @param {number} j1 @param {number} i1
    * @param {(x: number) => number} clampX @param {(y: number) => number} clampY @param {(x: number, y: number) => boolean} flat
@@ -958,9 +1011,12 @@ export class GameView {
    */
   groundPiecesInto(out, cx, cy, j1, i1, clampX, clampY, flat, half, ts) {
     const map = this.map;
-    const v3 = this.v3PlainsGround();
+    const v3 = this.v3PlainsGround() || this.v3ForestGround();
     if (v3) this.v3GroundSetup();
     const classAt = (/** @type {number} */ x, /** @type {number} */ y) => this.groundClassAt(clampX(x), clampY(y));
+    // graphics v3 (NAMES.md 2.1): in winter, with the forest's v3 art, the forest / plains pair exchanged
+    // on a tile with both, and every mask an edge's v reads read in its own tile's order
+    const winter = v3 && this.season === 'winter' && this.v3ForestGround();
     for (let j = cy * CHUNK - 1; j <= j1; j++) {
       for (let i = cx * CHUNK - 1; i <= i1; i++) {
         const px = i * ts + half;
@@ -975,7 +1031,8 @@ export class GameView {
             deep: cells.map(([x, y]) => this.deepAt(x, y)),
             waterVariant: hash(i, j) % 2,
             // round 7: the edge variant by the states of the sides the border crosses
-            edgeVariant: (t, m) => edgeVariantOf(t, m, i, j, hash, classAt),
+            edgeVariant: (t, m) => (winter ? edgeVariantOf(t, m, i, j, hash, classAt, winterMaskOf) : edgeVariantOf(t, m, i, j, hash, classAt)),
+            ...(winter ? { priority: winterPriority(c) } : {}),
             pick: (t) => String(this.wangAt(i, j, t)),
             // a picture piece where a picture is placed
             macro: () => {
@@ -1098,6 +1155,10 @@ export class GameView {
     }
     // graphics v3: the plains' v3 ground, trees and props of the season, with the chunks that have plains
     list.push(...this.v3PlainsBundlesOf(cx, cy));
+    // (graphics v3 forest: the forest's v3 ground, trees and props; the plains pine's bundle only where a tree is drawn as one)
+    list.push(...this.v3ForestBundlesOf(cx, cy));
+    const pine = this.v3PineBundleOf(cx, cy);
+    if (pine) list.push(pine);
     const village = this.v3VillageBundleOf(cx, cy);
     if (village) list.push(village);
     // (graphics v3: the enemies' bundles are not a chunk's: they never hold its ground back, v3EnemyBundlesWanted)
@@ -1174,6 +1235,40 @@ export class GameView {
     const y0 = cy * CHUNK;
     const inRegion = this.regions.some((r) => r.id === 'plains' && r.tx < x0 + CHUNK && r.tx + r.tw > x0 && r.ty < y0 + CHUNK && r.ty + r.th > y0);
     return inRegion || (this.groundV2 && this.chunkClasses(cx, cy).includes('plains')) ? bs : [];
+  }
+
+  /**
+   * Graphics v3 (FOREST.md 4.0): the bundles of the forest's v3 art in the current season ("v3:forest:<season>",
+   * summer's in spring, and the flow shapes summer and autumn share) when a chunk has forest ground or a part
+   * of the forest region, else none. Held only by the chunks that need them (not by regionNear). @param {number} cx @param {number} cy
+   */
+  v3ForestBundlesOf(cx, cy) {
+    if (!this.v3) return [];
+    const bs = v3ForestBundles(this.season).filter((b) => this.assets.builders.has(b));
+    if (!bs.length) return [];
+    const x0 = cx * CHUNK;
+    const y0 = cy * CHUNK;
+    const inRegion = this.regions.some((r) => r.id === 'forest' && r.tx < x0 + CHUNK && r.tx + r.tw > x0 && r.ty < y0 + CHUNK && r.ty + r.th > y0);
+    return inRegion || (this.groundV2 && this.chunkClasses(cx, cy).includes('moss')) ? bs : [];
+  }
+
+  /**
+   * Graphics v3: the plains pine's bundle of the season ("v3:plains:pine.<season>", v3Plains.v3PinePartOf) for a
+   * chunk that has a plains tree drawn as the pine, else null. The map places no pine within 2 chunks of the
+   * forest (v3TreeLook, FOREST.md 4), so it is never held beside the forest's art. Fixed for the map.
+   * @param {number} cx @param {number} cy
+   */
+  v3PineBundleOf(cx, cy) {
+    if (!this.v3) return null;
+    const b = v3PineBundle(this.season);
+    if (!this.assets.builders.has(b)) return null;
+    const key = `p${cx},${cy}`;
+    let has = this.v2Tiles.get(key);
+    if (has === undefined) {
+      has = this.map.objects.some((/** @type {any} */ o) => o.type === 'tree' && Math.floor(o.tx / CHUNK) === cx && Math.floor(o.ty / CHUNK) === cy && regionAt(this.regions, o.tx, o.ty)?.id === 'plains' && this.v3TreeLook(o).kind === 'pine') ? ['y'] : [];
+      this.v2Tiles.set(key, has);
+    }
+    return has.length ? b : null;
   }
 
   /**
@@ -1600,6 +1695,19 @@ export class GameView {
     const range = (/** @type {number} */ margin) => chunkRange(origin, viewW, viewH, margin, { chunkPx: size, ncx, ncy, all: this.loadAll });
     const want = range(ts * CHUNK_LOAD_MARGIN_TILES); // a little beyond the screen
     const keep = range(ts * CHUNK_KEEP_MARGIN_TILES); // hysteresis: freed only once out of view
+    // graphics v3 (memory, FOREST.md 4): outdoors, no chunk wholly beside the column the camera is held in
+    // (it is never on screen): e.g. at the forest's west edge, the plains' rooms chunk (x 96-127) and its
+    // plains art; at the plains' east edge, the forest's ground in that chunk's ring. The display tiles over
+    // such a column's west edge are drawn by its own first chunk then (groundPiecesV2).
+    const b = this.v3 && this.boundsArea === '' ? this.camera.bounds : null;
+    if (b && b.width >= viewW && !this.loadAll) {
+      const c0 = Math.floor(b.x / size);
+      const c1 = Math.floor((b.x + b.width - 1) / size);
+      for (const r of [want, keep]) {
+        r.x0 = Math.max(r.x0, c0);
+        r.x1 = Math.min(r.x1, c1);
+      }
+    }
     // v1.0 (perf review of the terrain cache): the chunk caches (cacheAsTexture) are the only users of
     // PixiJS's TexturePool, which keeps every texture given back and never shrinks: 4 MB each with
     // the release terrain. Once chunks have been freed (the frame before), let the idle ones go.
@@ -1787,6 +1895,9 @@ export class GameView {
     // P10.3: conifers in the forest and the mountains.
     if (o.type === 'tree') {
       const r = regionAt(this.regions, o.tx, o.ty)?.id;
+      // (graphics v3: the forest's own v3 trees where they are loaded, FOREST.md 1)
+      const v3 = r === 'forest' && this.v3 ? this.v3ForestTreeKey(o, timeSec) : null;
+      if (v3) return v3;
       if (r === 'forest' || r === 'mountains') return `${r}.pine`;
     }
     if (o.type === 'charm_shelf') return this.charmHome ? 'obj.charm_shelf.on' : 'obj.charm_shelf'; // P10.1
@@ -1835,24 +1946,54 @@ export class GameView {
     return null;
   }
 
-  /** Graphics v3: how a plains tree is drawn (fixed per tree). @param {any} o */
+  /**
+   * Graphics v3: how a plains or forest tree is drawn (fixed per tree): a plains tree by v3Plains.plainsTreeLook
+   * (never the pine within 2 chunks of the forest: v3Forest.plainsPineBanned, FOREST.md 4), a forest tree by
+   * v3Forest.forestTreeLook. @param {any} o @returns {{ what: 'tree' | 'prop', kind: string, set?: 'plains' | 'forest' }}
+   */
   v3TreeLook(o) {
     let look = this.v3Looks.get(o);
     if (!look) {
-      look = plainsTreeLook(this.v3TreeRoom(o.tx, o.ty), hash01(o.tx, o.ty, 931), hash01(o.tx, o.ty, 932));
+      const room = this.v3TreeRoom(o.tx, o.ty);
+      if (regionAt(this.regions, o.tx, o.ty)?.id === 'forest') look = forestTreeLook(room, this.v3TreeDense(o.tx, o.ty), hash01(o.tx, o.ty, 961), hash01(o.tx, o.ty, 962));
+      else {
+        this.v3PineBanned ??= plainsPineBanned(this.regions, CHUNK);
+        look = plainsTreeLook(room, hash01(o.tx, o.ty, 931), hash01(o.tx, o.ty, 932), !this.v3PineBanned(o.tx, o.ty));
+      }
       this.v3Looks.set(o, look);
     }
     return look;
   }
 
-  /** Graphics v3: how many frames of a plains tree / prop kind are loaded in this season. @param {'tree' | 'prop'} what @param {string} kind */
-  v3FrameCount(what, kind) {
+  /** Graphics v3 (forest): whether the 8 tiles round a tree all hold trees (deep in the wood). @param {number} tx @param {number} ty */
+  v3TreeDense(tx, ty) {
+    this.v3TreeRoom(0, 0); // (makes v3Trees)
+    const trees = /** @type {Set<number>} */ (this.v3Trees);
+    const w = this.map.width;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && !trees.has((ty + dy) * w + tx + dx)) return false;
+    return true;
+  }
+
+  /**
+   * Graphics v3 (forest, FOREST.md 1): the v3 art a forest tree is drawn with where it is loaded (one of the
+   * 4 trees, swaying; 1 edge tree in 20 a mossy log), else null (the v1 forest.pine). @param {any} o @param {number} timeSec
+   */
+  v3ForestTreeKey(o, timeSec) {
+    const look = this.v3TreeLook(o);
+    const n = this.v3FrameCount(look.what, look.kind, 'forest');
+    if (!n) return null;
+    const f = look.what === 'tree' ? swayFrame(TREE_SWAY, n, swayStep(o.tx, o.ty, timeSec)) : 0;
+    return floraKey(this.season, look.what, look.kind, f, 'forest');
+  }
+
+  /** Graphics v3: how many frames of a plains (forest) tree / prop kind are loaded in this season. @param {'tree' | 'prop'} what @param {string} kind @param {'plains' | 'forest'} [set] */
+  v3FrameCount(what, kind, set = 'plains') {
     const version = `${this.assets.version}|${this.season}`;
     if (this.v3Frames.version !== version) this.v3Frames = { version, n: new Map() };
-    const k = `${what}.${kind}`;
+    const k = `${set}.${what}.${kind}`;
     let n = this.v3Frames.n.get(k);
     if (n === undefined) {
-      n = floraFrames((key) => this.assets.hasTexture(key), this.season, what, kind);
+      n = floraFrames((key) => this.assets.hasTexture(key), this.season, what, kind, set);
       this.v3Frames.n.set(k, n);
     }
     return n;
@@ -1868,17 +2009,21 @@ export class GameView {
    *   - at the foot of 1 tree in 4, on the tree's own tile (the player cannot stand there): a bush, a
    *     berry bush, a rock, mushrooms (v3Plains.treeFootProp); with the actors, just in front of the tree
    * Grass and flowers sway (their 2 frames). Only where the season's v3 art is loaded.
+   * Graphics v3 forest (FOREST.md 1-2, v3Forest.js): in the forest region the same, with the forest's props:
+   * ferns (swaying) and toadstools on open moss (forestOpenProp), and at the foot of 1 tree in 3 whose front
+   * (south) tile is open: roots beside the trunk (rootsOffset), a fern, a mossy rock, toadstools (forestFootProp).
    * @param {Container} base @param {number} cx @param {number} cy @param {number} x1 @param {number} y1
-   * @returns {{ sway: { sprite: Sprite, kind: string, frames: number, tx: number, ty: number, frame: number }[], foot: { sprite: Sprite, o: any }[] }}
+   * @returns {{ sway: { sprite: Sprite, kind: string, frames: number, tx: number, ty: number, frame: number, set?: 'plains' | 'forest' }[], foot: { sprite: Sprite, o: any }[] }}
    *   the swaying ones, and those with the actors (destroyed with the chunk)
    */
   addV3Decor(base, cx, cy, x1, y1) {
     const map = this.map;
     const ts = map.tileSize;
-    /** @type {{ sprite: Sprite, kind: string, frames: number, tx: number, ty: number, frame: number }[]} */
+    /** @type {{ sprite: Sprite, kind: string, frames: number, tx: number, ty: number, frame: number, set?: 'plains' | 'forest' }[]} */
     const sway = [];
     /** @type {{ sprite: Sprite, o: any }[]} */
     const foot = [];
+    if (this.v3FrameCount('prop', 'fern', 'forest')) this.addV3ForestDecor(base, cx, cy, x1, y1, sway, foot);
     if (!this.v3FrameCount('prop', 'tuft')) return { sway, foot };
     if (!this.v3Taken) this.v3Taken = new Set(map.objects.filter((/** @type {any} */ o) => o.type !== 'tree').map((/** @type {any} */ o) => o.ty * map.width + o.tx));
     this.v3TreeRoom(0, 0); // (makes v3Trees)
@@ -1941,6 +2086,78 @@ export class GameView {
     return { sway, foot };
   }
 
+  /**
+   * Graphics v3 forest: addV3Decor's forest part (its props into `sway` / `foot`).
+   * @param {Container} base @param {number} cx @param {number} cy @param {number} x1 @param {number} y1
+   * @param {{ sprite: Sprite, kind: string, frames: number, tx: number, ty: number, frame: number, set?: 'plains' | 'forest' }[]} sway @param {{ sprite: Sprite, o: any }[]} foot
+   */
+  addV3ForestDecor(base, cx, cy, x1, y1, sway, foot) {
+    const map = this.map;
+    const ts = map.tileSize;
+    if (!this.v3Taken) this.v3Taken = new Set(map.objects.filter((/** @type {any} */ o) => o.type !== 'tree').map((/** @type {any} */ o) => o.ty * map.width + o.tx));
+    this.v3TreeRoom(0, 0); // (makes v3Trees)
+    const trees = /** @type {Set<number>} */ (this.v3Trees);
+    const moss = (/** @type {number} */ x, /** @type {number} */ y) => inBounds(map, x, y) && map.elev[y * map.width + x] === 0 && map.shape[y * map.width + x] !== Shape.RAMP_N && this.groundClassAt(x, y) === 'moss';
+    const make = (/** @type {keyof typeof FOREST_PROPS} */ kind, /** @type {number} */ tx, /** @type {number} */ ty) => {
+      const frames = this.v3FrameCount('prop', kind, 'forest');
+      if (!frames) return null;
+      const f = frames > 1 ? swayFrame(PROP_SWAY, frames, swayStep(tx, ty, 0)) : 0;
+      const key = floraKey(this.season, 'prop', kind, f, 'forest');
+      const sp = new Sprite(this.assets.texture(key));
+      const [ax, ay] = this.assets.meta(key).anchor;
+      sp.anchor.set(ax, ay);
+      /** @type {any} */ (sp).v3Prop = `forest.${kind}`; // (v3Stats)
+      if (frames > 1) sway.push({ sprite: sp, kind, frames, tx, ty, frame: f, set: 'forest' });
+      return sp;
+    };
+    for (let ty = cy * CHUNK; ty < y1; ty++) {
+      for (let tx = cx * CHUNK; tx < x1; tx++) {
+        const i = ty * map.width + tx;
+        if (regionAt(this.regions, tx, ty)?.id !== 'forest') continue;
+        if (trees.has(i)) {
+          // at the foot of a tree whose front is open (the others' feet are hidden by the trees in front)
+          if (trees.has(i + map.width) || !moss(tx, ty + 1)) continue;
+          const o = this.v3TreeObjectAt(tx, ty);
+          if (!o || o.gone || this.v3TreeLook(o).what !== 'tree') continue;
+          const kind = forestFootProp(hash01(tx, ty, 971), hash01(tx, ty, 972));
+          if (!kind) continue;
+          const sp = make(kind, tx, ty);
+          if (!sp) continue;
+          let x;
+          let feetY = ty * ts + ts;
+          if (kind === 'roots') {
+            const [dx, dy] = rootsOffset(tx, ty);
+            x = tx * ts + ts / 2 + dx;
+            feetY += dy;
+          } else x = tx * ts + ts / 2 + Math.round((hash01(tx, ty, 973) * 2 - 1) * Math.max(0, 8 - FOREST_PROPS[kind].w / 2));
+          sp.position.set(x, feetY - 1 - map.elev[i]);
+          sp.zIndex = feetY + 0.001;
+          this.actors.addChild(sp);
+          foot.push({ sprite: sp, o });
+          continue;
+        }
+        if (!moss(tx, ty) || map.solid[i] || this.v3Taken.has(i)) continue;
+        if (!moss(tx - 1, ty) || !moss(tx + 1, ty) || !moss(tx, ty - 1) || !moss(tx, ty + 1)) continue;
+        let near = false;
+        let blocked = false;
+        for (let dy = -2; dy <= 2 && !blocked; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            const k = (ty + dy) * map.width + tx + dx;
+            if (trees.has(k)) near = true;
+            if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1 && this.v3Taken.has(k)) blocked = true;
+          }
+        }
+        if (blocked) continue;
+        const kind = forestOpenProp(valueNoise(tx, ty, 6, 33), hash01(tx, ty, 974), hash01(tx, ty, 975), near);
+        if (!kind) continue;
+        const sp = make(kind, tx, ty);
+        if (!sp) continue;
+        sp.position.set(tx * ts + 4 + Math.floor(hash01(tx, ty, 976) * 9), ty * ts + 8 + Math.floor(hash01(tx, ty, 977) * 8));
+        base.addChild(sp);
+      }
+    }
+  }
+
   /** Graphics v3: the tree object on a tile, or null. @param {number} tx @param {number} ty */
   v3TreeObjectAt(tx, ty) {
     if (!this.v3TreeObjects) {
@@ -1956,27 +2173,29 @@ export class GameView {
    * Graphics v3 (debug, tests): the plains' v3 trees and props on the loaded chunks — trees by their look,
    * the open-ground and tree-foot props by kind, and the sway frames shown now (trees, props).
    */
-  v3Stats() {
+  v3Stats(region = 'plains') {
+    const set = region === 'forest' ? 'forest' : 'plains';
     /** @type {Record<string, number>} */
     const trees = {};
     /** @type {Record<string, number>} */
     const props = {};
     const frames = { trees: [0, 0, 0], props: [0, 0] };
     for (const e of this.objectSprites.values()) {
-      if (e.o.type !== 'tree' || regionAt(this.regions, e.o.tx, e.o.ty)?.id !== 'plains' || !this.v3FrameCount('tree', 'sapling')) continue;
+      if (e.o.type !== 'tree' || regionAt(this.regions, e.o.tx, e.o.ty)?.id !== region || !this.v3FrameCount('tree', set === 'forest' ? 'pine_s' : 'sapling', set)) continue;
       const l = this.v3TreeLook(e.o);
       const k = l.what === 'tree' ? l.kind : `prop.${l.kind}`;
       trees[k] = (trees[k] ?? 0) + 1;
       if (e.v3 && e.frame !== undefined && e.frame >= 0) frames.trees[e.frame]++;
     }
     let foot = 0;
+    const mine = (/** @type {string} */ key) => (set === 'forest') === key.startsWith('forest.');
     for (const c of this.chunks.values()) {
-      for (const e of c.sway ?? []) frames.props[e.frame]++;
-      foot += c.foot?.length ?? 0;
+      for (const e of c.sway ?? []) if ((e.set ?? 'plains') === set) frames.props[e.frame]++;
+      for (const f of c.foot ?? []) if (regionAt(this.regions, f.o.tx, f.o.ty)?.id === region) foot++;
       // (the open-ground props are the chunk ground's own children, after its groups)
       for (const sp of (c.props ?? c.base).children) {
         const key = /** @type {any} */ (sp).v3Prop;
-        if (key) props[key] = (props[key] ?? 0) + 1;
+        if (key && mine(key)) props[key.replace(/^forest\./, '')] = (props[key.replace(/^forest\./, '')] ?? 0) + 1;
       }
     }
     return { trees, props, foot, frames, season: this.season };
@@ -1995,7 +2214,7 @@ export class GameView {
         const f = swayFrame(PROP_SWAY, e.frames, swayStep(e.tx, e.ty, timeSec));
         if (f === e.frame) continue;
         e.frame = f;
-        e.sprite.texture = this.assets.texture(floraKey(this.season, 'prop', e.kind, f));
+        e.sprite.texture = this.assets.texture(floraKey(this.season, 'prop', e.kind, f, e.set ?? 'plains'));
       }
     }
     for (const e of this.objectSprites.values()) {
@@ -2003,12 +2222,13 @@ export class GameView {
       if (o.type !== 'tree' || o.gone || !e.v3) continue;
       const look = this.v3TreeLook(o);
       if (look.what !== 'tree') continue;
-      const n = this.v3FrameCount('tree', look.kind);
+      const set = look.set ?? 'plains';
+      const n = this.v3FrameCount('tree', look.kind, set);
       if (n < 2) continue;
       const f = swayFrame(TREE_SWAY, n, swayStep(o.tx, o.ty, timeSec));
       if (f === e.frame) continue;
       e.frame = f;
-      e.sprite.texture = this.assets.texture(floraKey(this.season, 'tree', look.kind, f));
+      e.sprite.texture = this.assets.texture(floraKey(this.season, 'tree', look.kind, f, set));
     }
   }
 
@@ -2112,7 +2332,7 @@ export class GameView {
       occluder = { sprite: s, x0: x - w, x1: x + w, y0: feetY - z - s.height, y1: feetY - z, key: feetY };
     }
     // (graphics v3: a v3 plains tree sways, updateSway)
-    this.objectSprites.set(o, this.v3 && /^(?:\w+\.)?plains\.tree\.v3\./.test(key) ? { o, sprite: s, occluder, v3: true, frame: -1 } : { o, sprite: s, occluder });
+    this.objectSprites.set(o, this.v3 && /^(?:\w+\.)?(?:plains|forest)\.tree\.v3\./.test(key) ? { o, sprite: s, occluder, v3: true, frame: -1 } : { o, sprite: s, occluder });
   }
 
   /** Objects changed by the environment (burnt, broken, opened, powered). @param {number} timeSec */

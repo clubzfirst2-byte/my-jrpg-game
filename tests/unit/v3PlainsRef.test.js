@@ -21,6 +21,8 @@ const REF = JSON.parse(readFileSync(new URL('../fixtures/ground_v3_ref.json', im
 const V2 = readdirSync(new URL('../../src/art-release-v2/terrain/', import.meta.url)).filter((f) => f.endsWith('.png')).map((f) => f.slice(0, -4));
 const V3 = readdirSync(new URL('../../src/art-release-v3/terrain/', import.meta.url)).filter((f) => f.endsWith('.png')).map((f) => f.slice(0, -4));
 const ART = new Set([...V2, ...V3]);
+// (the plains reference draws the forest moss with its v2 tiles: the forest's v3 art is v3Forest.test.js's)
+const PLAINS_ART = new Set([...ART].filter((k) => !/^(?:(?:autumn|winter)\.)?forest\.[a-z]+\.v3\./.test(k)));
 
 const CLASS = { g: 'grass', p: 'plains', l: 'lake', m: 'moss', n: 'snow', s: 'sand', d: 'dsand', '=': 'path', u: 'ruin', '~': 'water' };
 
@@ -30,7 +32,7 @@ function view(rows, season) {
   const map = { width: W, height: H, tileSize: 16, ground: new Uint8Array(W * H), elev: new Uint8Array(W * H), shape: new Uint8Array(W * H).fill(Shape.FLAT) };
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) map.ground[y * W + x] = rows[y][x] === '~' ? Ground.WATER : Ground.GRASS;
   const v = Object.create(GameView.prototype);
-  Object.assign(v, { v3: true, v3Macro: null, map, regions: [], season, v2Tiles: new Map(), sandUnderTrees: new Set(), deepWater: null, seasonKeySet: new Set(), v2Missing: new Set(), assets: { hasTexture: (k) => ART.has(k) } });
+  Object.assign(v, { v3: true, v3Macro: null, map, regions: [], season, v2Tiles: new Map(), sandUnderTrees: new Set(), deepWater: null, seasonKeySet: new Set(), v2Missing: new Set(), assets: { hasTexture: (k) => PLAINS_ART.has(k) } });
   v.groundClassAt = (x, y) => CLASS[rows[y][x]] ?? null;
   v.surfaceKey = () => 'tile.wood';
   const deep = deepMap(W, H, (x, y) => rows[y][x] === '~');
@@ -250,11 +252,16 @@ describe('v3 plains trees and props', () => {
 describe('v3 sheets: one per season', () => {
   it('the build packs a v3 group\'s autumn / winter frames apart; ?terrain=v2 drops all of its parts', () => {
     expect(['autumn.plains.tree.v3.pine.0', 'winter.x', 'plains.grass.v3.a00', 'hero.idle.down.0'].map(seasonPartOf)).toEqual(['autumn', 'winter', '', '']);
+    // (the forest's frames on sheets of their own: a plains bundle never decodes them)
+    expect(['forest.grass.v3.a00', 'autumn.forest.tree.v3.birch.0', 'winter.forest.grassflow.v3.1111.0', 'forest.pine'].map(seasonPartOf)).toEqual(['forest', 'forest.autumn', 'forest.winter', 'forest']);
     const dir = new URL('../../src/art-release-v3/terrain/', import.meta.url).pathname;
     const w = packGroup(dir, (n) => seasonPartOf(n) === 'winter');
     expect(Object.keys(w.table.frames).every((k) => k.startsWith('winter.'))).toBe(true);
-    expect(Object.keys(w.table.frames).length).toBe(V3.filter((k) => k.startsWith('winter.')).length);
+    expect(Object.keys(w.table.frames).length).toBe(V3.filter((k) => k.startsWith('winter.') && !k.startsWith('winter.forest.')).length);
     expect(w.table.width * w.table.height * 4).toBeLessThan(10 * 2 ** 20);
+    const wf = packGroup(dir, (n) => seasonPartOf(n) === 'forest.winter');
+    expect(Object.keys(wf.table.frames).length).toBe(V3.filter((k) => k.startsWith('winter.forest.')).length);
+    expect(wf.table.width * wf.table.height * 4).toBeLessThan(10 * 2 ** 20);
     const avail = ['terrain', 'terrain.autumn', 'terrain.winter', 'hero'];
     expect(v3ArtGroups(new URLSearchParams('v3=1'), avail)).toEqual(['v3/hero', 'v3/terrain', 'v3/terrain.autumn', 'v3/terrain.winter']);
     expect(v3ArtGroups(new URLSearchParams('v3=1&terrain=v2'), avail)).toEqual(['v3/hero']);

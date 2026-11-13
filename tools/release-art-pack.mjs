@@ -305,13 +305,19 @@ export function packGroup(dir, keep = () => true, { opaque = false } = {}) {
   return { png: encodePng(image), table, files: files.map((f) => join(dir, f)) };
 }
 
-/** Graphics v3: the season parts of a v3 group (its autumn / winter frames on sheets of their own). */
-export const SEASON_PARTS = Object.freeze(['', 'autumn', 'winter']);
+/** Graphics v3: the season parts of a v3 group (its autumn / winter frames on sheets of their own; the forest's frames on theirs). */
+export const SEASON_PARTS = Object.freeze(['', 'autumn', 'winter', 'forest', 'forest.autumn', 'forest.winter']);
 
 /**
  * Graphics v3 (memory, STYLE.md 10.1 (1) and (6)): a v3 group is packed as one sheet per season — its
  * "autumn." and "winter." frames apart ("v3/terrain.autumn", "v3/terrain.winter"), the rest as the group
  * ("v3/terrain") — so building one season's bundle decodes only that season's sheet. The part of a frame
- * name: "autumn", "winter" or "" (the rest). @param {string} name
+ * name: "autumn", "winter" or "" (the rest). The forest's frames ("<season.>forest.*", FOREST.md) are on
+ * sheets of their own too ("forest", "forest.autumn", "forest.winter"): building the plains' bundles never
+ * decodes the forest's frames, nor the other way round. @param {string} name
  */
-export const seasonPartOf = (name) => /^(autumn|winter)\./.exec(name)?.[1] ?? '';
+export const seasonPartOf = (name) => {
+  const m = /^(?:(autumn|winter)\.)?(forest\.)?/.exec(name);
+  const season = m?.[1] ?? '';
+  return m?.[2] ? `forest${season && `.${season}`}` : season;
+};
