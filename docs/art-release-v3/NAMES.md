@@ -143,3 +143,9 @@ autumn (only the tint changes); winter loads its own set.
 - Round 3 (after the second inspection): every frame is redrawn at the texel over the approved v1 frame as
   underdrawing (`tools/art_v3/npc_redraw.py`; round 2's `npc_v1map.py` is kept, unused), so poses, held
   things and motion are v1's; no two frames of one person are the same picture. Keys and file count unchanged.
+- Round 4 (decision 2026-11-13): each person's parts are hand-drawn pixel maps at the v3 grid
+  (`tools/art_v3/npc_pm_<who>.py`, framework `npc_pixmap.py`), placed per frame by v1's own pose table
+  (`tools/npc_release/npc_common.py`, read only) and written by `tools/art_v3/gen_npc_v3_pm.py`. Made this way:
+  guard, child, woman (then princess, smith on this branch; cook, elder, merchant, traveller on gfx/v3-npc-b).
+  Keys, file count, `left` rule and anchor are unchanged. Village budget 8.7 MB (1 MB = 1,000,000 bytes,
+  10% packing waste included); now 8.50 MB for the 9 people.
