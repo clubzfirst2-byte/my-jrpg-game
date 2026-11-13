@@ -25,7 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "npc_release"))
 sys.path.insert(0, os.path.join(HERE, "..", "art_proto"))
-from v3lib import Canvas, ramp6  # noqa: E402
+from v3lib import Canvas, despeckle, ramp6  # noqa: E402
 
 W, H = 64, 112
 
@@ -130,6 +130,9 @@ class Fig:
                 self.part[y, x] = part
 
     def finish(self):
+        # STYLE.md 3.4: the clean-up every picture gets (as the hero): a texel unlike all 4 neighbours, 3 of
+        # which (2 in hair) are one other tone of its material, takes that tone. Inks (eyes) are kept.
+        despeckle(self.c, loose=("hair",))
         self.c.outline()
         self.c.shadow_band()
         return self
