@@ -35,6 +35,40 @@ return h ^ (h >>> 16)                                 (unsigned)
   side-state variant v 0–3, masks 6 / 9: 0–1). The border is v2's curve at 2×, so v3 edges join v2
   ground on the other side.
 
+### 2.1 Winter exception: the forest / plains pair (decided by the director, 2026-11-12)
+
+v2 NAMES 2 says the priority does not change in winter. **One exception, winter only:**
+
+- On a display tile whose 4 corners hold **both forest (`moss`, `forest.grass`) and plains
+  (`plains`, `plains.grass`)** cells, those two grounds **exchange their positions** in the v2
+  priority list, for that tile: `… < mountains.snow < plains.grass < lake.grass < forest.grass < tile.grass`
+  (v2: `… < mountains.snow < forest.grass < lake.grass < plains.grass < tile.grass`). Path, sand, snow and
+  ruin stay below both, `tile.grass` above both; `lake.grass` matters only on a tile that also has a lake
+  corner. A tile with no plains corner, or no forest corner, uses the v2 order.
+- So on a forest / plains tile in winter: draw the **plains winter base**
+  (`winter.plains.grass.v3.<m><r><c>` and its flow layer as usual), then the **forest winter edge**
+  `winter.forest.grass.v3.edge.<mask>.<v>` with **mask = the forest corners** (NW 1, NE 2, SW 4, SE 8).
+  (Summer / autumn: v2 order, the plains edge over the forest base, mask = the plains corners.)
+- With other grounds on the same tile (e.g. forest, plains and path corners): the lowest ground's base,
+  then each higher ground low to high, in the tile's order (path base, then plains edge with mask =
+  plains + forest corners, then forest edge with mask = forest corners).
+- **The variant v** of the forest edge: the v2 rule (v2 NAMES 2, item 3) unchanged, with **every mask
+  read in the winter order** of its own display tile:
+  - masks 6 / 9: `v = hash(i + 7, j) % 2`;
+  - other masks: `v = sA + 2·sB` over the crossed sides in the order N, E, S, W; `s = (edgeHash >> 4) & 1`,
+    and `s = 0` when a side's end cell is water, or when **this tile's or the tile across that side's
+    forest mask, read in that tile's own winter order, is 6 or 9**.
+  - This matters where forest cells touch **only diagonally** (two forest cells at (x, y) and
+    (x+1, y+1) with plains at the other two corners): that tile's forest mask is 9 (or 6), so the sides
+    of its 4 neighbours toward it have state 0, and the border joins. Reading the neighbour's mask in
+    the v2 order instead (forest below plains: every forest / plains corner counts, the mask is 15)
+    gives a different v on those neighbours (3 of 140 border tiles on the inspection's test map).
+  - Reference: `winter_forest_v` in `tools/art_v3/compare_forest_v3.py` (matches the inspection's own
+    renderer on 140 / 140 border tiles).
+- Why: the plains winter edges have a 1-texel bright rim; between snow and snow it showed as a thin
+  white pencil line round every clearing. The forest winter edges have no rim (FOREST.md 1).
+- Drawing only: collision, heights and the map do not change.
+
 ## 3. Plains grass — flow layer (round 7; drawn over the base on full plains tiles only)
 
 ### 3.1 Corner state [flow_corner]
@@ -108,6 +142,18 @@ autumn (only the tint changes); winter loads its own set.
 
 - `<season.>plains.tree.v3.<kind>.<f>`: kind `oak_l` 160×224, `oak_m` 112×160, `sapling` 64×112,
   `pine` 96×200; f = sway frame 0–2 (play 0, 1, 0, 2); winter broadleaf: frame 0 only (bare).
+- **No plains `pine` near the forest region** (decided by the director, 2026-11-13; FOREST.md 4):
+  where the forest's art is resident, the plains pine is not loaded, so the map must not place
+  `plains.tree.v3.pine` in any 32-tile chunk (`gameView.CHUNK`) whose Chebyshev chunk distance
+  `max(|cx − ax|, |cy − ay|)` to a chunk `(ax, ay)` overlapped by the forest region's rectangle
+  (`r.tx, r.ty, r.tw, r.th`, the same test as `gameView.chunkBundles`) is 2 or less. Basis: a region's
+  bundle is held while one of its chunks is built (view + 4 tiles, `CHUNK_LOAD_MARGIN_TILES`) or kept
+  (view + 12, `CHUNK_KEEP_MARGIN_TILES`), or while its rectangle is within 32 tiles of the view
+  (`gameView.regionNear`); the ring of cells outside a chunk loads only the next region's
+  `ground:` bundle (`ringBundles`), not its trees. So a plains pine that can be on screen while the forest
+  bundle is held has its foot at most 32 + 21 + 1 = 54 tiles across / 32 + 12 + 4 = 48 tiles vertically from
+  the rectangle (largest view 20.8×11.7 tiles, STYLE.md 2): within 2 chunks. Recompute if these
+  numbers change.
 - `<season.>plains.prop.v3.<kind>.<f>`: `tuft`, `tallgrass`, `flowers_mix`, `flowers_white`,
   `flowers_yellow` (f 0–1, sway), `bush_berry`, `bush`, `shrub`, `stump`, `rock_s`, `rock_m`,
   `pebbles`, `log`, `mushrooms`, `clover` (f 0).
