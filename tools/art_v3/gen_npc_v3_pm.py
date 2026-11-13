@@ -1,5 +1,5 @@
 """v3 villagers, round 4 (hand-drawn pixel maps): writes src/art-release-v3/npc/npc.<who>.<idle|walk>.<dir>.<n>.png
-for the people made with npc_pixmap.py (here: guard, child, woman, smith; cook, elder, merchant and traveller are
+for the people made with npc_pixmap.py (here: guard, child, woman, smith, princess; cook, elder, merchant and traveller are
 made on another branch with the same tools). The other people's files are not touched.
 
 Each frame is assembled from that person's hand-drawn part maps (npc_pm_<who>.py), placed by v1's own pose
@@ -34,7 +34,7 @@ from npc_pixmap import eye_inks_outside, iris_blobs, translucent  # noqa: E402
 from v3lib import ROOT, edge_cuts, stray_pieces  # noqa: E402
 
 OUT = os.path.join(ROOT, "src", "art-release-v3", "npc")
-WHO = ("guard", "child", "woman", "smith")
+WHO = ("guard", "child", "woman", "smith", "princess")
 FRAMES = {"idle": 4, "walk": 6}
 VIEWS = ("down", "right", "up", "left")
 NO_LEFT = ("princess", "smith")  # no left files: the game draws their right mirrored (decision 2026-11-12)
