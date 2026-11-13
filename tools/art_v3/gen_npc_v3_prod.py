@@ -1,12 +1,13 @@
-"""v3 NPC production, round 2: writes src/art-release-v3/npc/npc.<who>.<idle|walk>.<dir>.<n>.png for the 9
-approved villagers, every frame drawn from the approved v1 frame's part map (npc_v1map.py), with the same
+"""v3 NPC production, round 3: writes src/art-release-v3/npc/npc.<who>.<idle|walk>.<dir>.<n>.png for the 9
+approved villagers, every frame redrawn at the texel over the approved v1 frame as underdrawing
+(npc_redraw.py; round 2's npc_v1map.py is kept, unused), with the same
 keys, frame counts and anchor as v1 (src/art-release/npc, read only; fps in src/view/npcAnim.js).
 Facing left: stored for the 7 people whose v1 left frames are not the mirror of their right frames;
 princess and smith have no left files (the game mirrors right: decision 2026-11-12).
 Checks before anything is written (the run stops and writes nothing on a failure):
   edge (nothing but an outline on the top row / side columns), stray pieces (40 texels or fewer),
   the same picture twice within one person, a left frame that is only the mirror of its right frame.
-Run: python3 tools/art_v3/gen_npc_v3_prod.py
+Run: python3 tools/art_v3/gen_npc_v3_prod.py [who ...]   (people named: only their files are written)
 """
 
 import hashlib
@@ -17,7 +18,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import numpy as np  # noqa: E402
 
-import npc_v1map  # noqa: E402
+import npc_redraw  # noqa: E402
 from v3lib import ROOT, edge_cuts, save, stray_pieces  # noqa: E402
 
 OUT = os.path.join(ROOT, "src", "art-release-v3", "npc")
@@ -26,9 +27,9 @@ NO_LEFT = ("princess", "smith")
 FRAMES = {"idle": 4, "walk": 6}
 
 
-def main():
+def main(people=WHO):
     todo, bad = [], []
-    for who in WHO:
+    for who in people:
         seen = {}
         right = {}
         for action, n in FRAMES.items():
@@ -37,7 +38,7 @@ def main():
                     continue
                 for i in range(n):
                     name = f"npc.{who}.{action}.{view}.{i}"
-                    cv = npc_v1map.render(who, action, view, i)
+                    cv = npc_redraw.render(who, action, view, i)
                     k = 0
                     while True:  # every frame its own picture (v1 itself repeats a frame twice for the woman)
                         a = cv.rgba()
@@ -45,7 +46,8 @@ def main():
                         if h not in seen or k > 3:
                             break
                         k += 1
-                        npc_v1map.vary(cv, k)
+                        cv = npc_redraw.render(who, action, view, i)
+                        npc_redraw.breathe(cv, k)
                     if h in seen:
                         bad.append((name, "same picture as", seen[h]))
                     seen[h] = name
@@ -63,7 +65,7 @@ def main():
         print("check failed, nothing written:", bad)
         sys.exit(1)
     for f in os.listdir(OUT):  # files of an earlier round that are no longer made (none of v1's keys)
-        if f.endswith(".png") and f[:-4] not in {n for _, n in todo}:
+        if f.endswith(".png") and f.split(".")[1] in people and f[:-4] not in {n for _, n in todo}:
             os.remove(os.path.join(OUT, f))
     out = [save(cv, os.path.join(OUT, name + ".png")) for cv, name in todo]
     print(f"{len(out)} files")
@@ -71,4 +73,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(tuple(sys.argv[1:]) or WHO)

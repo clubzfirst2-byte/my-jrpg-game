@@ -140,6 +140,6 @@ autumn (only the tint changes); winter loads its own set.
 - `left` is stored for woman, child, cook, elder, guard, merchant and traveller (v1's left frames are not
   mirrors of their right frames). **princess and smith have no `left` files: the engine draws their `right`
   mirrored** (scale.x = −1), as for the hero (decision 2026-11-12).
-- Round 2 (after the inspections): every frame is drawn from the approved v1 frame's part map
-  (`tools/art_v3/npc_v1map.py`), so poses, held things and motion are v1's; no two frames of one person are
-  the same picture.
+- Round 3 (after the second inspection): every frame is redrawn at the texel over the approved v1 frame as
+  underdrawing (`tools/art_v3/npc_redraw.py`; round 2's `npc_v1map.py` is kept, unused), so poses, held
+  things and motion are v1's; no two frames of one person are the same picture. Keys and file count unchanged.
