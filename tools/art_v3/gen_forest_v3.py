@@ -343,10 +343,45 @@ def _base_canvas(name, season):
     return _BASE_CACHE[key]
 
 
-def edge_base_pick(mask, variant):
-    """The base tile an edge's inside is cut from: (pattern, row, column), fixed per (mask, v)."""
+def _edge_base_pick0(mask, variant):
     h = G.hsh(mask, variant, 77)
     return PATTERNS[h % 8], (h >> 3) % 4, (h >> 5) % 4
+
+
+def _edge_base_table():
+    """Round 3, inspection 3 P3-3: within one mask the v's take different patterns (so different tiles:
+    mask 9 v0 / v1 both took (e, 1, 0), mask 3's four all came from f). A v whose first pick repeats a
+    pattern already taken in its mask (lower v first) moves to the next pattern, in the order of PATTERNS
+    after its own, that the mask has not used, keeping its row / column unless that tile is used by any
+    other (mask, v); then the next free column / row. The other picks are unchanged."""
+    keys = [(m, v) for m in range(1, 15) for v in range(2 if m in (6, 9) else 4)]
+    first = {k: _edge_base_pick0(*k) for k in keys}
+    used = set(first.values())
+    out = {}
+    for m in range(1, 15):
+        pats = []
+        for v in range(2 if m in (6, 9) else 4):
+            p, r, c = first[(m, v)]
+            if p in pats:
+                i = PATTERNS.index(p)
+                p = next(PATTERNS[(i + d) % 8] for d in range(1, 8) if PATTERNS[(i + d) % 8] not in pats)
+                for d in range(16):
+                    rr, cc = (r + (c + d) // 4) % 4, (c + d) % 4
+                    if (p, rr, cc) not in used:
+                        r, c = rr, cc
+                        break
+                used.add((p, r, c))
+            pats.append(p)
+            out[(m, v)] = (p, r, c)
+    return out
+
+
+_EDGE_BASE = _edge_base_table()
+
+
+def edge_base_pick(mask, variant):
+    """The base tile an edge's inside is cut from: (pattern, row, column), fixed per (mask, v)."""
+    return _EDGE_BASE[(mask, variant)]
 
 
 def edge_overlay(season, mask, variant):
