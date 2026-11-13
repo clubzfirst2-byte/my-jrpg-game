@@ -672,3 +672,143 @@ test('?v3=0: the hero as before — no v3 hero bundles, no stand-ins, the approv
     await context.close();
   }
 });
+
+// Graphics v3: the forest (docs/art-release-v3/FOREST.md, NAMES.md 2.1, v3Forest.js)
+
+const FOREST_AT = [140, 149]; // the forest's checkpoint, on its west edge (the camera at its column's bound)
+
+test('?v3=1: the forest in summer, autumn and winter — its own v3 bundles, trees and props, swaying; no plains art beside its column; memory under 35 MB', async ({ browser }) => {
+  test.setTimeout(300_000);
+  for (const season of ['summer', 'autumn', 'winter']) {
+    for (const screen of [SE, PRO]) {
+      const { context, page, errors } = await open(browser, screen, '&v3=1');
+      await api(page, 'setSeason', season);
+      await api(page, 'teleport', ...FOREST_AT);
+      await page.waitForTimeout(3000);
+      await expect.poll(async () => (await api(page, 'season')).view).toBe(season);
+      const pre = season === 'summer' ? '' : `${season}.`;
+      await expect.poll(async () => api(page, 'textureDensity', `${pre}forest.grass.v3.a00`), { timeout: 20_000 }).toBe(4);
+      const names = (await api(page, 'stream')).bundleNames;
+      expect(names.filter((n) => n.startsWith('v3:forest:')).sort()).toEqual(season === 'winter' ? ['v3:forest:winter'] : [`v3:forest:${season}`, 'v3:forest:flow'].sort());
+      // (the plains' rooms chunk beside the forest's column is not built: no plains v3 art here)
+      expect(names.filter((n) => n.startsWith('v3:plains:'))).toEqual([]);
+      const a = (await api(page, 'v3')).forest;
+      expect(Object.keys(a.trees).filter((k) => !k.startsWith('prop.')).length).toBeGreaterThanOrEqual(3);
+      expect(Object.values(a.props).reduce((x, y) => x + y, 0)).toBeGreaterThan(10);
+      expect(a.foot).toBeGreaterThan(10);
+      // every forest tree on screen is drawn with its own v3 frame
+      const trees = (await api(page, 'treesOnScreen')).filter((t) => t.region === 'forest');
+      expect(trees.length).toBeGreaterThan(20);
+      for (const t of trees) {
+        expect(t.key, `${t.tx},${t.ty}`).toMatch(/^(?:(?:autumn|winter)\.)?forest\.(?:tree|prop)\.v3\./);
+        expect(t.loaded).toBe(true);
+        expect(t.density).toBe(4);
+      }
+      // the ground: the forest's v3 base and flow (a full forest tile somewhere in view)
+      const p = await api(page, 'player');
+      let flow = 0;
+      for (let dy = -5; dy <= 5; dy++) for (let dx = -9; dx <= 9; dx++) {
+        const g = await api(page, 'groundAt', Math.floor(p.x / 16) + dx, Math.floor(p.y / 16) + dy);
+        if (g.some((x) => x.key.includes('forest.grassflow.v3.'))) flow++;
+      }
+      expect(flow).toBeGreaterThan(5);
+      await page.waitForTimeout(1600);
+      const b = (await api(page, 'v3')).forest;
+      expect(JSON.stringify(b.frames)).not.toBe(JSON.stringify(a.frames));
+      const mem = await api(page, 'v3');
+      expect(mem.gpu.total).toBeLessThan(35 * 2 ** 20);
+      expect(mem.cpu.total).toBe(0);
+      expect(errors).toEqual([]);
+      await context.close();
+    }
+  }
+});
+
+test('?v3=0: the forest as before — no v3 forest bundles, the v1 forest.pine, the v2 moss', async ({ browser }) => {
+  const { context, page, errors } = await open(browser, PRO, '&v3=0');
+  await api(page, 'teleport', ...FOREST_AT);
+  await page.waitForTimeout(2500);
+  const names = (await api(page, 'stream')).bundleNames;
+  expect(names.some((n) => n.startsWith('v3:'))).toBe(false);
+  const trees = (await api(page, 'treesOnScreen')).filter((t) => t.region === 'forest');
+  expect(trees.length).toBeGreaterThan(20);
+  for (const t of trees) expect(t.key).toBe('forest.pine');
+  const p = await api(page, 'player');
+  const g = await api(page, 'groundAt', Math.floor(p.x / 16) + 3, Math.floor(p.y / 16) - 3);
+  expect(g.every((x) => !x.key.includes('.v3.'))).toBe(true);
+  expect(errors).toEqual([]);
+  await context.close();
+});
+
+test('?v3=1 ?map=forestedge: the forest / plains border — summer the plains edge over the forest, winter the forest edge over the plains snow (NAMES.md 2.1)', async ({ browser }) => {
+  test.setTimeout(300_000);
+  for (const season of ['summer', 'winter']) {
+    const context = await browser.newContext({ viewport: { width: SE.width, height: SE.height }, deviceScaleFactor: SE.dpr, isMobile: true, hasTouch: true });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(`/?map=forestedge&time=10&season=${season}&weather=clear&v3=1`);
+    await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 30_000 });
+    await api(page, 'clearEnemies');
+    await api(page, 'teleport', 156, 40);
+    await page.waitForTimeout(3000);
+    await expect.poll(async () => api(page, 'textureDensity', `${season === 'winter' ? 'winter.' : ''}forest.grass.v3.a00`), { timeout: 20_000 }).toBe(4);
+    // the border tiles of rows 30-50: each holds the 2 grounds' pieces as the rule says
+    let border = 0;
+    for (let j = 30; j <= 50; j++) {
+      for (let i = 150; i <= 168; i++) {
+        const g = (await api(page, 'groundAt', i, j)).map((x) => x.key);
+        const both = g.some((k) => k.includes('forest.')) && g.some((k) => k.includes('plains.'));
+        if (!both || g.some((k) => k.startsWith('tile.') || k.includes('path'))) continue;
+        border++;
+        if (season === 'winter') {
+          expect(g[0], `${i},${j}`).toMatch(/^winter\.plains\.grass\.v3\.[a-h]\d\d$/);
+          expect(g.slice(1).join('|'), `${i},${j}`).toMatch(/^winter\.forest\.grass\.v3\.edge\.\d+\.\d$/);
+        } else {
+          expect(g[0], `${i},${j}`).toMatch(/^forest\.grass\.v3\.[a-h]\d\d$/);
+          expect(g.slice(1).join('|'), `${i},${j}`).toMatch(/^plains\.grass\.v3\.edge\.\d+\.\d$/);
+        }
+      }
+    }
+    expect(border).toBeGreaterThan(15);
+    expect(errors).toEqual([]);
+    await context.close();
+  }
+});
+
+test('?v3=1 ?map=forestedge: walking from the plains into the forest, no plains pine is on screen while the forest\'s art is held, and every tree on screen has its own frame', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const context = await browser.newContext({ viewport: { width: SE.width, height: SE.height }, deviceScaleFactor: SE.dpr, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/?map=forestedge&time=10&season=summer&weather=clear&v3=1');
+  await expect(page.locator('body')).toHaveAttribute('data-ready', 'true', { timeout: 30_000 });
+  await api(page, 'clearEnemies');
+  let pinesSeen = 0;
+  let forestHeld = 0;
+  let both = 0;
+  for (const x of [...Array.from({ length: 23 }, (_, k) => 20 + 8 * k), ...Array.from({ length: 23 }, (_, k) => 196 - 8 * k)]) {
+    await api(page, 'teleport', x, 48);
+    await page.waitForTimeout(700);
+    const names = (await api(page, 'stream')).bundleNames;
+    const forest = names.some((n) => n.startsWith('v3:forest:'));
+    const pine = names.some((n) => n.startsWith('v3:plains:pine.'));
+    const trees = await api(page, 'treesOnScreen');
+    const pines = trees.filter((t) => t.region === 'plains' && t.look === 'pine');
+    pinesSeen += pines.length;
+    if (forest) {
+      forestHeld++;
+      expect(pines, `x ${x}`).toEqual([]);
+      if (pine) both++;
+    }
+    // a tree drawn without its own frame (a stand-in) would be the old art in the new view
+    for (const t of trees) if (t.region === 'plains' || t.region === 'forest') expect(t.loaded && t.density === 4 && /\.v3\./.test(t.key), `${t.tx},${t.ty} ${t.key}`).toBe(true);
+  }
+  console.log(`forestedge walk: plains pines seen ${pinesSeen}, steps with the forest's art held ${forestHeld}, of them with the pine's bundle too ${both}`);
+  expect(pinesSeen).toBeGreaterThan(0);
+  expect(forestHeld).toBeGreaterThan(5);
+  expect(both).toBe(0);
+  expect(errors).toEqual([]);
+  await context.close();
+});

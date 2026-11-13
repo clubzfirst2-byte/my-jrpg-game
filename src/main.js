@@ -1282,6 +1282,27 @@ async function boot() {
       const e = assets.loaded.get(name);
       return e ? (e.bundle.canvases ?? []).reduce((n, { source }) => n + source.pixelWidth * source.pixelHeight * 4, 0) : null;
     },
+    /**
+     * Graphics v3 (tests): the tree sprites on screen now — region, how a v3 tree is drawn (look kind, null
+     * when it has none), the key (sway frame 0), whether its texture is loaded and the drawn texture's art density.
+     */
+    treesOnScreen: () => {
+      const r = view.viewRect;
+      if (!r) return [];
+      const out = [];
+      for (const [o, e] of view.objectSprites) {
+        if (o.type !== 'tree' || o.gone || !e.sprite.visible) continue;
+        const s = e.sprite;
+        const x0 = s.x - s.width * s.anchor.x;
+        const y0 = s.y - s.height * s.anchor.y;
+        if (x0 + Math.abs(s.width) < r.x || x0 > r.x + r.w || y0 + s.height < r.y || y0 > r.y + r.h) continue;
+        const key = view.objectKey(o, 0);
+        const region = regionAt(state.regions, o.tx, o.ty)?.id ?? null;
+        const look = v3 && (region === 'plains' || region === 'forest') ? view.v3TreeLook(o).kind : null;
+        out.push({ tx: o.tx, ty: o.ty, region, look, key, loaded: assets.hasTexture(view.seasonal(key)), density: s.texture.source.resolution });
+      }
+      return out;
+    },
     /** Graphics v3: a loaded texture's art density (texture px per game px), or null. */
     textureDensity: (/** @type {string} */ key) => (assets.hasTexture(key) ? assets.texture(key).source.resolution : null),
     /** P11.5: the art in use (density, how many real-art sprites) and the drawn hero's size in game px. */
