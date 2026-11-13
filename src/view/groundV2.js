@@ -220,6 +220,11 @@ function keep2x2(width, height, deep) {
   return kept;
 }
 
+/** A ground class's place in PRIORITY (-1 when not in it), as PRIORITY.indexOf. */
+const RANK = new Map(PRIORITY.map((c, i) => [c, i]));
+/** @param {string} c */
+const rankOf = (c) => RANK.get(c) ?? -1;
+
 /**
  * @typedef {{ key: string, anim: boolean }} Layer
  *   anim: an animated water key without its frame ("<key>.<f>" is drawn, f = 0..3)
@@ -236,27 +241,49 @@ function keep2x2(width, height, deep) {
  * @returns {Layer[]}
  */
 export function displayLayers({ cls, deep, waterVariant, edgeVariant, pick, macro }) {
+  // (gfx v2 integration, start-up: the same layers as before, worked out in plain loops — it runs for
+  // every display tile of every chunk built; tests/unit/groundV2*.test.js)
   /** @type {Layer[]} */
   const out = [];
-  const land = cls.filter((c) => c !== 'water');
-  const rank = (/** @type {string} */ c) => PRIORITY.indexOf(c);
+  let nLand = 0;
+  let allDeep = true;
+  let deepMask = 0;
+  let landMask = 0;
+  let same = true;
+  /** @type {string[]} the land classes, each once, in corner order */
+  const kinds = [];
+  for (let k = 0; k < 4; k++) {
+    const c = cls[k];
+    const bit = CORNERS[k][2];
+    if (c === 'water') {
+      if (deep[k]) deepMask |= bit;
+      else allDeep = false;
+    } else {
+      nLand++;
+      landMask |= bit;
+      allDeep = false;
+      if (!kinds.includes(c)) kinds.push(c);
+    }
+    if (c !== cls[0]) same = false;
+  }
   let lowest = null;
-  if (land.length < 4) {
-    const allDeep = cls.every((c, k) => c === 'water' && deep[k]);
+  if (nLand < 4) {
     const v = waterVariant ? '.v1' : '';
     out.push({ key: `tile.water${allDeep ? '.deep' : ''}${v}`, anim: true });
-    const deepMask = cls.reduce((m, c, k) => (c === 'water' && deep[k] ? m | CORNERS[k][2] : m), 0);
     if (deepMask && !allDeep) out.push({ key: `tile.water.deep.edge.${deepMask}`, anim: true });
-    const landMask = cls.reduce((m, c, k) => (c !== 'water' ? m | CORNERS[k][2] : m), 0);
     if (landMask) out.push({ key: `tile.water.foam.${landMask}`, anim: true });
   } else {
-    lowest = land.reduce((a, b) => (rank(b) < rank(a) ? b : a));
-    const name = (new Set(cls).size === 1 ? macro() : null) ?? pick(lowest);
-    out.push({ key: landKey(lowest, name), anim: false });
+    // the first corner of the lowest rank (corner order)
+    for (let k = 0; k < 4; k++) if (lowest === null || rankOf(cls[k]) < rankOf(lowest)) lowest = cls[k];
+    const name = (same ? macro() : null) ?? pick(/** @type {string} */ (lowest));
+    out.push({ key: landKey(/** @type {string} */ (lowest), name), anim: false });
   }
-  for (const t of [...new Set(land)].sort((a, b) => rank(a) - rank(b))) {
+  if (kinds.length > 1) kinds.sort((a, b) => rankOf(a) - rankOf(b)); // (stable, as before)
+  for (const t of kinds) {
     if (t === lowest) continue;
-    const mask = cls.reduce((m, c, k) => (c !== 'water' && rank(c) >= rank(t) ? m | CORNERS[k][2] : m), 0);
+    const rt = rankOf(t);
+    let mask = 0;
+    for (let k = 0; k < 4; k++) if (cls[k] !== 'water' && rankOf(cls[k]) >= rt) mask |= CORNERS[k][2];
     out.push({ key: mask === 15 ? landKey(t, '0') : landKey(t, `edge.${mask}.${edgeVariant(t, mask)}`), anim: false });
   }
   return out;

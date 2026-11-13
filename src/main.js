@@ -95,21 +95,21 @@ function countDisplayObjects(node) {
 }
 
 /**
- * gfx v2 integration (start-up): the deep-water map of a map definition, from a worker (deepWorker.js);
- * null when no worker can do it (the view then works it out itself).
- * @param {any} def @returns {Promise<Uint8Array | null>}
+ * gfx v2 integration (start-up): the deep-water map and the ground tables of a map definition, from a
+ * worker (deepWorker.js, groundTables.js); null when no worker can do it (the view then works them out).
+ * @param {any} def @returns {Promise<{ deep: Uint8Array, tables: any } | null>}
  */
 function deepMapInWorker(def) {
   return new Promise((resolve) => {
     try {
       const w = new Worker(new URL('./view/deepWorker.js', import.meta.url), { type: 'module' });
-      const done = (/** @type {Uint8Array | null} */ v) => {
+      const done = (/** @type {{ deep: Uint8Array, tables: any } | null} */ v) => {
         w.terminate();
         resolve(v);
       };
-      w.onmessage = (e) => done(e.data instanceof Uint8Array ? e.data : null);
+      w.onmessage = (e) => done(e.data && e.data.deep instanceof Uint8Array ? e.data : null);
       w.onerror = () => done(null);
-      w.postMessage(Array.isArray(def) ? { ground: def } : { ground: def.ground, height: def.height });
+      w.postMessage(Array.isArray(def) ? { ground: def } : { ground: def.ground, height: def.height, regions: def.regions });
     } catch {
       resolve(null);
     }
@@ -355,7 +355,9 @@ async function boot() {
 
   // gfx W5: light, shadow and effects — on, or the look before them with ?fx=v1 / ?v2=0 (fxSwitch.js)
   const view = new GameView(app, assets, state, { fx: fxVersion(params) });
-  view.presetDeepWater(await deepEarly);
+  const groundData = await deepEarly;
+  view.presetDeepWater(groundData?.deep ?? null);
+  view.presetGroundTables(groundData?.tables ?? null);
   // gfx v2 integration (start-up): behind the title, one chunk a frame (a tap on the title is answered
   // meanwhile); all at once from the start press on (beginPlay)
   if (withTitle) view.chunkBudget = 1;
@@ -1282,6 +1284,15 @@ async function boot() {
       visualTime = t;
     },
     assets: () => assets.stats(),
+    /** gfx v2 integration (start-up): whether the deep map and the ground tables came from the worker. */
+    groundTablesFromWorker: () => ({ deep: !!groundData?.deep && view.deepWater === groundData.deep, tables: !!view.groundTables }),
+    /** gfx v2: the v2 ground's pieces of a chunk (keys, places), to compare two builds. */
+    groundPieces: (/** @type {number} */ cx, /** @type {number} */ cy) => (view.groundV2 ? view.groundPiecesV2(cx, cy) : null),
+    /** gfx v2: the pixels of a built chunk's flat ground (its cache), as a PNG data URL, or null. */
+    chunkImage: async (/** @type {number} */ cx, /** @type {number} */ cy) => {
+      const c = view.chunks.get(view.chunkKey(cx, cy));
+      return c ? app.renderer.extract.base64({ target: c.base }) : null;
+    },
   };
   Object.assign(api, finalBossDebugApi(state, api.teleport)); // v1.0: the source (flags, arena, seats)
   Object.assign(api, storyDebugApi(state)); // v1.0: the opening and the ending

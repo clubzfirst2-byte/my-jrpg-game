@@ -11,6 +11,7 @@
 import { Container, Graphics, Rectangle, Sprite, Texture, TexturePool } from 'pixi.js';
 import { WaterAtlas, waterQuads } from './waterLayer.js';
 import { hash } from './tileHash.js';
+import { groundClassOf, tableIndex, uniformBlockOf } from './groundTables.js';
 import { chunkRange, CHUNK_KEEP_MARGIN_TILES, CHUNK_LOAD_MARGIN_TILES } from './chunkRange.js';
 import { Ground, Shape, LEVEL_PX, inBounds, northEdgeHeight, southEdgeHeight } from '../game/world/tilemap.js';
 import { lerp } from '../game/core/math.js';
@@ -32,7 +33,7 @@ import { seasonAt } from '../game/env/weather.js';
 import { SEASON_ENTRIES, seasonKeys, SOURCE_BUNDLE, SOURCE_REGIONS } from './assets/placeholderPack.js';
 import { HeroAnimator } from './heroAnim.js';
 import { DECOR_TYPES, decorOffset, macroQuarter, patchVariant, placementEnabled } from './placement.js';
-import { CORNERS, MACRO_NAMES, STEP_NAMES, PREFIX, PRIORITY, SEASONAL, WATER_FRAMES, WATER_FRAME_SEC as WATER_FRAME_SEC_V2, calmNumber, deepMapShaped, displayLayers, edgeVariantOf, groundClass, landKey, macroPlacement, quarterOfCorner, ruinCellTile, ruinTile, tileScheme } from './groundV2.js';
+import { CORNERS, MACRO_NAMES, STEP_NAMES, PREFIX, PRIORITY, SEASONAL, WATER_FRAMES, WATER_FRAME_SEC as WATER_FRAME_SEC_V2, calmNumber, deepMapShaped, displayLayers, edgeVariantOf, landKey, macroPlacement, quarterOfCorner, ruinCellTile, ruinTile, tileScheme } from './groundV2.js';
 import { GROUND_RUIN_BUNDLE, GROUND_V2_KEY, ISLAND_EDGES_BUNDLE, ISLAND_STEPS_BUNDLE, detailBundleOf, groundBundleOf, seasonGroundBundleOf, faceMaterial, faceVariant, groundCacheResolution, groundVariant, indoorLight, levelBrightness, releaseSeasonKeys, usesReleaseTerrain, waterAround, waterEdgePieces } from './assets/terrainArt.js';
 import { openingView } from '../game/story/story.js';
 import { enemyFrameKey, warningFlashAlpha, defeatAlpha } from './enemyAnim.js';
@@ -212,6 +213,8 @@ export class GameView {
     this.v2Pictures = null;
     /** @type {{ x: number, y: number, w: number, h: number } | null} */
     this.viewRect = null;
+    /** gfx v2 integration (start-up): the map's ground tables (groundTables.js), when given. @type {any} */
+    this.groundTables = null;
     /** gfx v2 integration (start-up): chunks built per frame at most (updateChunks); no limit in play. */
     this.chunkBudget = Infinity;
     this.sandUnderTrees = new Set(
@@ -639,9 +642,7 @@ export class GameView {
 
   /** W1: a cell's ground class for the dual grid (null: drawn on the cell grid). @param {number} x @param {number} y */
   groundClassAt(x, y) {
-    const g = this.drawnGround(x, y);
-    const name = g === Ground.GRASS ? 'grass' : g === Ground.SAND ? 'sand' : g === Ground.PATH ? 'path' : g === Ground.RUIN ? 'ruin' : g === Ground.WATER ? 'water' : 'other';
-    return groundClass(name, regionAt(this.regions, x, y)?.id);
+    return groundClassOf(this.map, this.regions, this.sandUnderTrees, x, y);
   }
 
   /** W1: whether a key's art is loaded in the current season (a miss is recorded: tests expect none). @param {string} key */
@@ -676,7 +677,25 @@ export class GameView {
    * @param {number} x @param {number} y @param {string} cls
    */
   cellWang(x, y, cls) {
-    return tileScheme(cls) === 'C' ? ruinCellTile(x, y, hash) : calmNumber(x, y, hash, this.cellCalmMemo ?? undefined);
+    return tileScheme(cls) === 'C' ? ruinCellTile(x, y, hash) : this.calmAt(x, y, this.cellCalmMemo);
+  }
+
+  /**
+   * A calm tile's number (groundV2.calmNumber): from the map's table when the worker made it
+   * (groundTables.js; the same number), else worked out. @param {number} i @param {number} j @param {Map<number, number> | null} memo
+   */
+  calmAt(i, j, memo) {
+    const t = this.groundTables;
+    const at = t ? tableIndex(t, i, j) : -1;
+    return at >= 0 ? /** @type {any} */ (t).calm[at] : calmNumber(i, j, hash, memo ?? undefined);
+  }
+
+  /**
+   * gfx v2 integration (start-up): the map's ground tables worked out off the main thread
+   * (groundTables.js, deepWorker.js), taken when they are this map's. @param {any} tables
+   */
+  presetGroundTables(tables) {
+    if (tables && tables.width === this.map.width && tables.height === this.map.height) this.groundTables = tables;
   }
 
   /**
@@ -708,19 +727,7 @@ export class GameView {
    * tiles on uniform ground), and which. @param {number} i @param {number} j @param {number} k
    */
   uniformBlock(i, j, k) {
-    const map = this.map;
-    let g = /** @type {string | null} */ (null);
-    for (let dy = 0; dy <= k; dy++) {
-      for (let dx = 0; dx <= k; dx++) {
-        const x = i + dx;
-        const y = j + dy;
-        if (!inBounds(map, x, y) || map.elev[y * map.width + x] !== 0 || map.shape[y * map.width + x] === Shape.RAMP_N) return null;
-        const c = this.groundClassAt(x, y);
-        if (!c || c === 'water' || (g && c !== g)) return null;
-        g = c;
-      }
-    }
-    return g;
+    return uniformBlockOf(this.map, (x, y) => this.groundClassAt(x, y), i, j, k);
   }
 
   /**
@@ -729,6 +736,10 @@ export class GameView {
    * @param {number} i @param {number} j @returns {{ name: string, block: string } | null}
    */
   macroAt(i, j) {
+    // gfx v2 integration (start-up): from the map's table when the worker made it (groundTables.js)
+    const t = this.groundTables;
+    const at = t ? tableIndex(t, i, j) : -1;
+    if (t && at >= 0) return t.macro[at];
     const key = `m${i},${j}`;
     if (this.v2Tiles.has(key)) return this.v2Tiles.get(key);
     if (!this.v2Pictures) this.v2Pictures = new Map();
@@ -745,7 +756,7 @@ export class GameView {
    * @param {number} i @param {number} j @param {string} cls
    */
   wangAt(i, j, cls) {
-    return tileScheme(cls) === 'C' ? ruinTile(i, j, hash) : calmNumber(i, j, hash, this.calmMemo ?? undefined);
+    return tileScheme(cls) === 'C' ? ruinTile(i, j, hash) : this.calmAt(i, j, this.calmMemo);
   }
 
   /**

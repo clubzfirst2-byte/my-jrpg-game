@@ -6,6 +6,7 @@
 import { parseMap, Ground } from '../game/world/tilemap.js';
 import { deepMapShaped } from './groundV2.js';
 import { hash } from './tileHash.js';
+import { groundTablesOf } from './groundTables.js';
 
 /** The deep map of a map definition's ground rows. Pure. @param {{ ground: string[], height?: string[] }} def */
 export function deepMapOf(def) {
@@ -13,13 +14,20 @@ export function deepMapOf(def) {
   return deepMapShaped(map.width, map.height, (x, y) => map.ground[y * map.width + x] === Ground.WATER, hash);
 }
 
-// (as a worker: one message { ground, height } in, the Uint8Array out, or null)
+/** The deep map and the ground tables (groundTables.js) of a map definition. @param {{ ground: string[], height?: string[], regions?: any[] }} def */
+export function groundDataOf(def) {
+  const map = parseMap(def);
+  const deep = deepMapShaped(map.width, map.height, (x, y) => map.ground[y * map.width + x] === Ground.WATER, hash);
+  return { deep, tables: groundTablesOf(map, def.regions ?? [], hash) };
+}
+
+// (as a worker: one message { ground, height, regions } in, { deep, tables } out, or null)
 const scope = /** @type {any} */ (globalThis);
 if (typeof scope.WorkerGlobalScope !== 'undefined' && scope instanceof scope.WorkerGlobalScope) {
   scope.onmessage = (/** @type {MessageEvent} */ e) => {
     try {
-      const deep = deepMapOf(e.data);
-      scope.postMessage(deep, [deep.buffer]);
+      const out = groundDataOf(e.data);
+      scope.postMessage(out, [out.deep.buffer, out.tables.calm.buffer]);
     } catch {
       scope.postMessage(null);
     }
