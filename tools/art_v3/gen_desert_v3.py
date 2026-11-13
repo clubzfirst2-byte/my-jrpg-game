@@ -11,7 +11,7 @@ formulas, its own drawing:
      (gen_ground_v3.macro_of, unchanged). Red sand: small wind ripples (a lit crest row over a shaded
      trough row, wavy, 5-12 long), ripple fields (3-4 per pattern, may run off the edge), 400 small
      mottles of ripples everywhere, marks at uneven spacing (ripple pairs, pebble clusters of 2-3
-     pebbles 2 x 2 / 3 x 2, small wind hollows). No 1-texel dots.
+     pebbles 3-4 x 3, small wind hollows, dry grass tufts), 2-3 pale wind-smoothed patches. No 1-texel dots.
   2. the flow: the same corner (Wang) scheme and the same key rule (gen_ground_v3.flow_key). Its own
      SHAPE set (grey, body 214 / tip 255):
        desert.sandflow.v3.<bits>.<v>.png
@@ -41,6 +41,7 @@ from v3lib import ROOT, Canvas, despeckle, lift_ramp, luma, save  # noqa: E402
 OUT = os.path.join(ROOT, "src", "art-release-v3", "terrain")
 PATTERNS = G.PATTERNS
 SAND = ["#3e1e12", "#82442a", "#954533", "#a8603c", "#b57d48", "#c27e54", "#daa274"]  # v2 ramps.json "dsand"
+STRAW = ["#3a2a14", "#6a5028", "#80622e", "#967638", "#ac8c48", "#c0a45a", "#dcc47c"]  # dry grass (as the flora's "dry")
 DSTONE = ["#2e2018", "#6a5240", "#7f6050", "#947a60", "#a4916e", "#b49a7c", "#d2bc9e"]  # v2 "dstone"
 
 
@@ -66,12 +67,12 @@ def ramps_for():
     fine[1] = _toward(s[3], s[1], 18)
     fine[4] = _toward(s[3], s[5], 11)
     fine[5] = _toward(s[3], s[6], 19)
-    return {"sand": s, "fine": fine, "stone": lift_ramp(DSTONE)}
+    return {"sand": s, "fine": fine, "stone": lift_ramp(DSTONE), "straw": lift_ramp(STRAW)}
 
 
 # ------------------------------------------------------------------ base patterns
 
-def ripple(c, x, y, ln, slope, bow, lit=4, shade=2, mask=None):
+def ripple(c, x, y, ln, slope, bow, lit=4, shade=2, mask=None, thick=1):
     """One wind ripple: for each column a lit crest texel and the shaded trough texel under it
     (2 rows: reads at 1x as a short line), bowed smoothly (bow texels at the middle). Clipped at the
     picture / mask."""
@@ -79,13 +80,13 @@ def ripple(c, x, y, ln, slope, bow, lit=4, shade=2, mask=None):
     for i in range(ln):
         X = int(x) + i
         Y = int(round(y + slope * i - bow * math.sin(math.pi * i / max(1, ln - 1))))
-        for dy, t in ((0, lit), (1, shade)):
+        for dy, t in (((0, lit), (1, shade)) if thick == 1 else ((0, lit), (1, lit), (2, shade))):
             YY = Y + dy
             if 0 <= X < c.w and 0 <= YY < c.h and (mask is None or mask[YY, X]):
                 c.mat[YY, X], c.tone[YY, X] = k, t
 
 
-def ripples_in(c, mask, density, rng, spacing, lmin=5, lmax=12):
+def ripples_in(c, mask, density, rng, spacing, lmin=5, lmax=12, thick=1):
     """Ripples inside `mask`: rows of ripples `spacing` apart (wavy, broken, each its own length)."""
     ys, xs = np.nonzero(mask)
     if len(ys) == 0:
@@ -99,7 +100,7 @@ def ripples_in(c, mask, density, rng, spacing, lmin=5, lmax=12):
         while x <= x1:
             ln = rng.randint(lmin, lmax)
             if rng.random() < density:
-                ripple(c, x, y + slope * (x - x0), ln, slope, bow * ln / 12, mask=mask)
+                ripple(c, x, y + slope * (x - x0), ln, slope, bow * ln / 12, mask=mask, thick=thick)
             x += ln + rng.randint(3, 8)
         y += spacing + rng.uniform(-1.0, 1.5)
 
@@ -138,6 +139,16 @@ def mark(c, x, y, kind, rng):
             pebble(c, px, py, rng.choice((3, 4, 4)))
             px += rng.randint(5, 7) * rng.choice((-1, 1))
             py += rng.randint(-2, 3)
+    elif kind == 4:  # round 2: a dry grass tuft, 3-4 straw blades 3-6 tall from one root, leaning out
+        k = c.mid("straw")
+        nb = rng.randint(3, 4)
+        for b in range(nb):
+            lean = (b - (nb - 1) / 2) * 0.45
+            h = rng.randint(3, 6)
+            for d in range(h):
+                X, Y = int(round(x + b - nb // 2 + lean * d)), y - d
+                if 0 <= X < c.w and 0 <= Y < c.h:
+                    c.mat[Y, X], c.tone[Y, X] = k, (5 if d >= h - 2 else (3 if d else 2))
     else:
         k = c.mid("fine")
         for dy, row, t in ((0, (1, 6), 2), (1, (0, 7), 2), (2, (1, 6), 4)):
@@ -156,21 +167,32 @@ def base_pattern(name, n=256):
     rng = random.Random(seed)
     c = Canvas(n, n, ramps_for())
     c.fill(np.ones((n, n), bool), "sand", 3)
+    # round 2: 2-3 pale wind-smoothed patches (the fine ramp's tone 4, no marks drawn in them later
+    # except the ones that run in from outside), each with a 1-row lit upper rim (fine 5)
+    pale = np.zeros((n, n), bool)
+    for i in range(rng.randint(2, 3)):
+        r = rng.uniform(10, 17)
+        m = G.blob(n, rng.uniform(0, n), rng.uniform(0, n), r * 1.5, r * rng.uniform(0.45, 0.65), seed + 50 + i)
+        pale |= m
+    kf = c.mid("fine")
+    c.mat[pale], c.tone[pale] = kf, 4
+    rim = pale & ~np.roll(pale, 1, axis=0)
+    c.tone[rim] = 5
     for i in range(rng.randint(3, 4)):
         r = rng.uniform(18, 30)
         m = G.blob(n, rng.uniform(0, n), rng.uniform(0, n), r, r * rng.uniform(0.5, 0.8), seed + i)
-        ripples_in(c, m, 0.9, rng, rng.uniform(4.0, 5.0), 9, 18)
+        ripples_in(c, m, 0.9, rng, rng.uniform(5.5, 6.5), 10, 20, thick=2)  # round 2: thicker field ripples
     for i in range(400):
         r = rng.uniform(3, 7)
         cx, cy = rng.uniform(-r * 0.5, n + r * 0.5), rng.uniform(-r * 0.5, n + r * 0.5)
-        m = G.blob(n, cx, cy, r * 1.4, r * rng.uniform(0.5, 0.8), seed * 3 + i)
+        m = G.blob(n, cx, cy, r * 1.4, r * rng.uniform(0.5, 0.8), seed * 3 + i) & ~pale
         ripples_in(c, m, 0.35, rng, rng.uniform(4.5, 6.5), 6, 11)
 
     def put_mark(x, y):
-        mark(c, x, y, rng.choices((0, 1, 2, 3), weights=(6, 3, 1, 2))[0], rng)
+        mark(c, x, y, rng.choices((0, 1, 2, 3, 4), weights=(6, 3, 1, 2, 2))[0], rng)
     for (x, y) in G.scatter(rng, n + 6, 170, 13, 0):
         put_mark(x - 3, y - 3)
-    for _ in range(40):
+    for _ in range(20):
         side = rng.randrange(4)
         a, b = rng.uniform(0, n), rng.uniform(-1, 9)
         put_mark(*{0: (a, b + 4), 1: (a, n - b + 3), 2: (b - 1, a), 3: (n - b, a)}[side])
@@ -184,7 +206,23 @@ def base_pattern(name, n=256):
                 r = rng.uniform(4, 7)
                 m = G.blob(n, tx * 64 + rng.uniform(4, 60), ty * 64 + rng.uniform(4, 60), r * 1.4, r * 0.7, rng.randrange(1 << 20))
                 ripples_in(c, m, 0.8, rng, 4.5, 6, 11)
-    despeckle(c, loose=("fine", "sand"))
+    # the 4 border bands (outer 6 rows / columns): a band under 0.85 of the middle's marks gets more
+    # marks inside it (the dart throw and the ripples running right thin out some borders: 0.67 seen)
+    def marked():
+        k = c.rgba()[..., :3].astype(np.int64)
+        k = (k[..., 0] << 16) | (k[..., 1] << 8) | k[..., 2]
+        v, cnt = np.unique(k, return_counts=True)
+        return k != v[np.argmax(cnt)]
+    for side in range(4):
+        for _ in range(60):
+            mk = marked()
+            mid = mk[12:-12, 12:-12].mean()
+            band = (mk[:6], mk[-6:], mk[:, :6], mk[:, -6:])[side].mean()
+            if band >= 0.88 * mid:
+                break
+            a, b = rng.uniform(-8, n), rng.uniform(0, 5)
+            put_mark(*{0: (a, b), 1: (a, n - 6 + b), 2: (b - 3, a), 3: (n - 9 + b, a)}[side])
+    despeckle(c, loose=("fine", "sand"), keep=("straw",))
     return c
 
 

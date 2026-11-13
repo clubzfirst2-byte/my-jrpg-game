@@ -122,7 +122,7 @@ def frond(c, x0, y0, ang, L, droop, w0, side_bias=0.0):
 
 
 PALMS = {  # W, H, trunk height (fraction), base half width, top half width, lean, fronds, frond length, dates
-    "palm_l": (128, 224, 0.60, 8.0, 5.0, 10, 13, 52, True),
+    "palm_l": (144, 256, 0.62, 9.0, 5.5, 12, 13, 62, True),
     "palm_s": (80, 144, 0.46, 6.0, 4.5, 5, 9, 34, False),
 }
 
@@ -565,6 +565,15 @@ def pebbles(frame):
     return finish(c, loose=("rstone",))
 
 
+def crop_top(img, rows=None):
+    """Drop the fully transparent rows above the picture (the anchor is the bottom centre, so the feet do
+    not move). `rows`: crop this many (the same for every sway frame of one kind)."""
+    a = np.array(img)
+    if rows is None:
+        rows = int(np.argmax(a[..., 3].any(1)))
+    return img.crop((0, rows, img.width, img.height)), rows
+
+
 TREES = {"palm_l": (lambda f: palm("palm_l", f), 3), "palm_s": (lambda f: palm("palm_s", f), 3), "snag": (snag, 1)}
 PROPS = {"cactus": (cactus, 1), "cactus_l": (cactus_l, 1), "barrel": (barrel, 1), "pear": (pear, 1),
          "agave": (agave, 1), "rock_l": (rock_l, 1), "rock_s": (rock_s, 1), "bones": (bones, 1),
@@ -574,16 +583,22 @@ PROPS = {"cactus": (cactus, 1), "cactus_l": (cactus_l, 1), "barrel": (barrel, 1)
 def write_trees():
     out = []
     for kind, (fn, frames) in TREES.items():
-        for f in range(frames):
-            out.append(save(clean_isolated(fn(f).image()), os.path.join(OUT, f"desert.tree.v3.{kind}.{f}.png")))
+        imgs = [clean_isolated(fn(f).image()) for f in range(frames)]
+        rows = min(int(np.argmax(np.array(i)[..., 3].any(1))) for i in imgs)  # the same crop for all frames
+        for f, img in enumerate(imgs):
+            out.append(save(crop_top(img, rows)[0], os.path.join(OUT, f"desert.tree.v3.{kind}.{f}.png")))
     return out
 
 
 def write_props():
     out = []
     for kind, (fn, frames) in PROPS.items():
+        imgs = [clean_isolated(fn(f).image()) for f in range(frames)]
+        rows = min(int(np.argmax(np.array(i)[..., 3].any(1))) for i in imgs)
+        if kind == "cactus":
+            rows = 0  # obj.cactus replaces the v1 key: exactly 2 x its size (24 x 40 -> 48 x 80)
         for f in range(frames):
-            img = clean_isolated(fn(f).image())
+            img = crop_top(imgs[f], rows)[0]
             out.append(save(img, os.path.join(OUT, f"desert.prop.v3.{kind}.{f}.png")))
             if kind == "cactus":  # the key the game draws today (the v1 obj.cactus, exactly 2x its size)
                 out.append(save(img, os.path.join(OUT, "obj.cactus.png")))
