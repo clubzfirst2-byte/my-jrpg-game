@@ -37,6 +37,7 @@ WHO = ("guard", "child")
 FRAMES = {"idle": 4, "walk": 6}
 VIEWS = ("down", "right", "up", "left")
 WHO = WHO + ("cook",)  #担当 B：料理人
+WHO = WHO + ("elder",)  #担当 B：長老
 
 
 def build(who):
@@ -71,6 +72,7 @@ def build(who):
                     bad.append((name, "eye ink off the head", n_out))
                 blink = v1.pose(action, i).blink
                 want = 0 if (view == "up" or blink) else (2 if view == "down" else 1)
+                want = getattr(M, "IRIS_WANT", lambda v, b, w: w)(view, blink, want)  # 担当 B：いつも閉じた目の人
                 got = iris_blobs(fig, M.IRIS_INKS)
                 if got != want:
                     bad.append((name, "iris blobs", got, "want", want))
