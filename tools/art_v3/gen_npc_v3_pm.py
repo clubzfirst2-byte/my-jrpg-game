@@ -36,6 +36,7 @@ OUT = os.path.join(ROOT, "src", "art-release-v3", "npc")
 WHO = ("guard", "child")
 FRAMES = {"idle": 4, "walk": 6}
 VIEWS = ("down", "right", "up", "left")
+WHO = WHO + ("cook",)  #担当 B：料理人
 
 
 def build(who):
