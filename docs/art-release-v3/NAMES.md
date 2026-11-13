@@ -142,6 +142,18 @@ autumn (only the tint changes); winter loads its own set.
 
 - `<season.>plains.tree.v3.<kind>.<f>`: kind `oak_l` 160×224, `oak_m` 112×160, `sapling` 64×112,
   `pine` 96×200; f = sway frame 0–2 (play 0, 1, 0, 2); winter broadleaf: frame 0 only (bare).
+- **No plains `pine` near the forest region** (decided by the director, 2026-11-13; FOREST.md 4):
+  where the forest's art is resident, the plains pine is not loaded, so the map must not place
+  `plains.tree.v3.pine` in any 32-tile chunk (`gameView.CHUNK`) whose Chebyshev chunk distance
+  `max(|cx − ax|, |cy − ay|)` to a chunk `(ax, ay)` overlapped by the forest region's rectangle
+  (`r.tx, r.ty, r.tw, r.th`, the same test as `gameView.chunkBundles`) is 2 or less. Basis: a region's
+  bundle is held while one of its chunks is built (view + 4 tiles, `CHUNK_LOAD_MARGIN_TILES`) or kept
+  (view + 12, `CHUNK_KEEP_MARGIN_TILES`), or while its rectangle is within 32 tiles of the view
+  (`gameView.regionNear`); the ring of cells outside a chunk loads only the next region's
+  `ground:` bundle (`ringBundles`), not its trees. So a plains pine that can be on screen while the forest
+  bundle is held has its foot at most 32 + 21 + 1 = 54 tiles across / 32 + 12 + 4 = 48 tiles vertically from
+  the rectangle (largest view 20.8×11.7 tiles, STYLE.md 2): within 2 chunks. Recompute if these
+  numbers change.
 - `<season.>plains.prop.v3.<kind>.<f>`: `tuft`, `tallgrass`, `flowers_mix`, `flowers_white`,
   `flowers_yellow` (f 0–1, sway), `bush_berry`, `bush`, `shrub`, `stump`, `rock_s`, `rock_m`,
   `pebbles`, `log`, `mushrooms`, `clover` (f 0).
