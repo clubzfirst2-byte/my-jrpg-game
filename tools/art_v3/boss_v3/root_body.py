@@ -381,6 +381,6 @@ V1 = """
 
 # frame positions of the maps' top-left (left half); the right half mirrors about the centre line
 PLACE = {"UNDER": (0, 36), "S1": (44, 34), "S2": (42, 44), "S3": (40, 54), "S4": (44, 63), "S5": (50, 77),
-         "V1": (36, 50)}
+         "V1": (34, 50)}
 COLS = {"S1", "S2", "S3", "S4", "S5"}
 ORDER = ("UNDER", "S1", "S2", "S3", "S4", "S5", "V1")  # the lower roots are nearer: each lies over the one above

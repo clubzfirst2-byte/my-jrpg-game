@@ -240,6 +240,22 @@ def main():
             d = (A[4:76] != B[4:76]).any(-1).sum() / max(1, (A[4:76, :, 3] == 255).sum())
             best = d if best is None else min(best, d)
         print(f"  {n}: {100 * best:.2f}")
+    # weight against v2: the silhouette's area, and the width of four rows of idle 0
+    ar = sorted((float((imgs[n][..., 3] == 255).sum()) / (4 * float((v2img(n)[..., 3] > 0).sum())), n) for n in ns)
+    a0, v0 = imgs[idle[0]][..., 3] == 255, v2img(idle[0])[..., 3] > 0
+    print(f"silhouette area v3 / (v2 x 4): idle 0 {a0.sum() / (4 * v0.sum()):.3f}; all frames {ar[0][0]:.3f} ({ar[0][1]}) .. {ar[-1][0]:.3f} ({ar[-1][1]})")
+    hh = a0.shape[0]
+    print("width of idle 0 at 1/8, 3/8, 5/8, 7/8 of the height (v3 / v2 x 2):",
+          [(int(a0[y].sum()), 2 * int(v0[y // 2].sum())) for y in (hh // 8, 3 * hh // 8, 5 * hh // 8, 7 * hh // 8)])
+    # the hand-drawn maps: rows equal to the row above (as the maps are oriented in the frame)
+    mod = __import__(kind)
+    rep = {}
+    for k, p in mod.P.items():
+        if k.endswith("~") or k.endswith("_DIM") or p.h < 8:
+            continue
+        code = p.mat.astype(int) * 8 + p.tone
+        rep[k] = round(100 * sum(1 for y in range(1, p.h) if (code[y] == code[y - 1]).all()) / (p.h - 1))
+    print("part maps, rows equal to the row above (%):", dict(sorted(rep.items(), key=lambda t: -t[1])))
     raw = sum(a.shape[0] * a.shape[1] * 4 for n, a in imgs.items() if n in ns)
     trim = 0
     for n in ns:

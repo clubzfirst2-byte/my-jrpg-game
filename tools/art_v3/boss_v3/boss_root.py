@@ -31,10 +31,10 @@ for _n in B.ORDER:
     P[_n + "~"] = P[_n].mirror()
 for _n in R.PLACE:
     P[_n] = part(getattr(R, _n), LEG, _n, cols=_n in R.COLS)
-for _n in ("FUNGUS_L", "FUNGUS_M", "FUNGUS_S", "ORB", "CHIP_A", "CHIP_B", "LEG_OUT", "LEG_UP"):
+for _n in ("FUNGUS_L", "FUNGUS_M", "FUNGUS_S", "ORB", "CHIP_A", "CHIP_B", "LEG_OUT", "LEG_UP", "KNOT_A", "SCAR_A", "SCAR_B"):
     if hasattr(R, _n):
         P[_n] = part(getattr(R, _n), LEG, _n, cols=_n in R.COLS)
-RELIGHT = {"LEG", "HIND", "SPK_1", "SPK_2", "SPK_3", "RIB2", "NECK"}  # upright limbs typed in rows
+RELIGHT = {"LEG", "VINE", "HIND", "SPK_1", "SPK_2", "SPK_3", "RIB2"}  # upright limbs typed in rows
 for _n in list(P):
     if _n in R.HALF or _n in ("LEG_OUT", "LEG_UP"):
         P[_n + "~"] = P[_n].mirror(relight=_n in RELIGHT)
@@ -82,6 +82,8 @@ def _both(f, parts, name, x, y, cx=96, **kw):
 def draw(p):
     if p.collapse >= 4:
         return remains()
+    if int(p.melt) == 2:
+        return mound()
     f = Frame(W, H, LEG, palette.RAMPS)
     p.melt = int(p.melt)
     parts = MURK if p.melt else P
@@ -105,7 +107,7 @@ def draw(p):
     def front_legs():
         for s, lf in ((-1, p.legs[0]), (1, p.legs[1])):
             lf = int(round(lf))
-            sp = int(round(p.spread * 0.5))
+            sp = min(int(round(p.spread * 0.5)), 6)  # the toes stay inside the frame
             name = "LEG"
             x, y = at("LEG", -sp, -lf + int(round(dy * 0.5)) + sink // 2)
             if p.raise_ >= 0.75:
@@ -119,6 +121,12 @@ def draw(p):
                 f.put(q, x, y, **kw)
             else:
                 f.put(parts[name + "~"], 192 - x - q.w + (2 * bx if name != "LEG" else 0), y, **kw)
+            if name == "LEG":  # the thin root winding down its outer side
+                v = parts["VINE"]
+                if s < 0:
+                    f.put(v, x, y + 8, **kw)
+                else:
+                    f.put(parts["VINE~"], 192 - x - v.w, y + 8, **kw)
     if p.raise_ < 0.3:
         front_legs()
     # back spikes: they rise (bristle) and move apart (fan) as whole pictures
@@ -135,13 +143,19 @@ def draw(p):
     for n in B.ORDER:
         _both(f, parts, n, *at(n, bx, by), cx=cx, **kw)
     _both(f, parts, "SHOULDER", *at("SHOULDER", bx, by), cx=cx, **kw)
+    for n, x, y in R.RIGHT_MARKS:  # the image-right half's own knots and splits
+        f.put(parts[n], x + bx, y + by, **kw)
     for n, x, y in R.FUNGI:
         f.put(parts[n], x + bx, y + by, **kw)
-    _both(f, parts, "NECK", *at("NECK", bx, by), cx=cx, **kw)
+    f.put(parts["NECK"], *at("NECK", bx, by), **kw)
     if p.raise_ >= 0.3:
         front_legs()
     # the core
     bared = p.phase2 or c
+    if p.melt:  # the bared socket stays (already murk), its crystal gone dark
+        f.put(P["SOCKET2"], *at("SOCKET2", bx, by), **kw)
+        f.put(P["CRYSTAL2_DIM"], *at("CRYSTAL2", bx, by), **kw)
+        _both(f, parts, "RIB2", *at("RIB2", bx, by), cx=cx, **kw)
     if not p.melt:
         if bared:
             f.put(P["SOCKET2"], *at("SOCKET2", bx, by))
@@ -157,7 +171,9 @@ def draw(p):
     # further down and the tusks move apart instead (the same pictures)
     fwd = int(round((p.hs - 1.0) * 30))
     hy = dy + int(round(p.head)) + fwd
-    if not p.melt:
+    if p.melt:
+        hy = min(hy, 24)  # the head and the tusks rest on the ground while the body sinks
+    else:
         hy = min(hy, 16)  # the chin stays above the ground (v2: the head's centre at most 7 px down)
     hx = int(round(bx * 0.3))
     hcx = 96 + hx
@@ -170,7 +186,7 @@ def draw(p):
         f.put(parts["BEARD"], x, min(y, G - parts["BEARD"].h + 1))
     _both(f, parts, "HEAD", *at("HEAD", hx, hy), cx=hcx, **kw)
     tw = fwd // 2
-    _both(f, parts, "TUSK", *at("TUSK", hx - tw, hy), cx=hcx, **kw)
+    _both(f, P, "TUSK", *at("TUSK", hx - tw, hy), cx=hcx, **kw)  # the tusks stay bone while the body turns to murk
     if not p.melt:
         e = "EYE_OPEN" if p.eyes == "open" else "EYE_SHUT"
         _both(f, P, e, *at(e, hx, hy), cx=hcx)
@@ -180,12 +196,23 @@ def draw(p):
         k = i - (n - 1) / 2
         f.put(P["ORB"], int(round(cx + k * 20 - 7)), int(round(62 + by + 8 - abs(k) * 6 - 7)))
     if p.chips:
-        for q, x, y in (("CHIP_A", 26, G - 9), ("CHIP_B", 162, G - 11), ("CHIP_B", 46, G - 4), ("CHIP_A", 142, G - 5),
-                        ("CHIP_B", 14, G - 19), ("CHIP_A", 174, G - 21)):
+        for q, x, y in (("CHIP_A", 40, G - 9), ("CHIP_B", 148, G - 8), ("CHIP_B", 2, G - 22), ("CHIP_A", 180, G - 26),
+                        ("CHIP_A", 76, G - 7), ("CHIP_B", 110, G - 6)):
             f.put(P[q], x, y)
     if p.melt:
         n = "POOL_A" if p.melt == 1 else "POOL_B"
         _both(f, P, n, PLACE[n][0], PLACE[n][1] + (1 if p.melt == 1 else 0))
+    return f
+
+
+def mound():
+    """The purification, frame 4: the hand-drawn mound of murk (MELT), the tips of the tusks still
+    bone, the dark crystal half sunk, the wide pool in front."""
+    f = Frame(W, H, LEG, palette.RAMPS)
+    _both(f, P, "TUSK", 49, 119, clip_y=G - 6)
+    _both(f, P, "MELT", *PLACE["MELT"])
+    f.put(P["CRYSTAL2_DIM"], 85, 125, clip_y=145)
+    _both(f, P, "POOL_B", *PLACE["POOL_B"])
     return f
 
 
@@ -249,19 +276,19 @@ def frames():
         "idle": [{}, dict(dy=2), dict(dy=2, head=2), dict(head=2, jaw=2)],
         "move": [dict(legs=(10, 0), shift=-4), dict(legs=(4, 4), dy=-2, head=-2), dict(legs=(0, 10), shift=4),
                  dict(legs=(2, 2), dy=-1, head=2)],
-        "windup_charge": (dict(lift=-10, head=20, hs=1.04, spikes=8, fan=5, spread=10),
-                          dict(lift=-12, head=24, hs=1.1, spikes=10, fan=6, spread=12, jaw=2)),
-        "attack_charge": (dict(lift=-8, head=24, hs=1.2, spread=12, jaw=6, legs=(6, 6), fan=4, spikes=6),
+        "windup_charge": (dict(lift=-7, head=20, hs=1.04, spikes=8, fan=5, spread=10),
+                          dict(lift=-8, head=24, hs=1.1, spikes=10, fan=6, spread=12, jaw=2)),
+        "attack_charge": (dict(lift=-6, head=24, hs=1.2, spread=12, jaw=6, legs=(6, 6), fan=4, spikes=6),
                           dict(lift=-2, head=10, hs=1.1, spread=4, jaw=2, fan=1),
-                          dict(lift=-10, head=26, hs=1.26, spread=16, jaw=6, legs=(8, 8), fan=5, spikes=8, dy=4)),
-        "windup_slam": (dict(dy=-10, lift=-4, head=-10, raise_=0.55, spread=-4, jaw=2),
-                        dict(dy=-16, lift=-6, head=-16, raise_=0.9, spread=-6, jaw=4)),
+                          dict(lift=-7, head=26, hs=1.26, spread=16, jaw=6, legs=(8, 8), fan=5, spikes=8, dy=4)),
+        "windup_slam": (dict(dy=-10, lift=-2, head=-10, raise_=0.55, spread=-4, jaw=2),
+                        dict(dy=-16, lift=-3, head=-16, raise_=0.9, spread=-6, jaw=4)),
         "attack_slam": (dict(dy=8, head=10, spread=14, jaw=6, chips=True, fan=3), dict(dy=4, head=4, spread=6, jaw=2),
                         dict(dy=10, head=12, spread=18, jaw=6, chips=True, fan=5, spikes=6, lift=4)),
-        "windup_volley": (dict(jaw=6, orbs=3, head=-16, spread=16, fan=5, spikes=6, lift=-2, **P2),
-                          dict(jaw=8, orbs=5, head=-18, spread=18, fan=6, spikes=6, lift=-4, **P2)),
-        "attack_volley": (dict(jaw=8, head=-18, spread=16, fan=6, spikes=6, lift=-4, **P2), dict(jaw=2, head=0, **P2),
-                          dict(jaw=8, head=-10, spread=18, fan=7, spikes=8, lift=-6, dy=-4, hs=1.08, **P2)),
+        "windup_volley": (dict(jaw=6, orbs=3, head=-20, spread=16, fan=7, spikes=8, lift=-2, dy=-2, **P2),
+                          dict(jaw=8, orbs=5, head=-24, spread=18, fan=8, spikes=8, lift=-4, dy=-3, **P2)),
+        "attack_volley": (dict(jaw=8, head=-24, spread=16, fan=8, spikes=8, lift=-4, dy=-3, **P2), dict(jaw=2, head=0, **P2),
+                          dict(jaw=8, head=-14, spread=18, fan=9, spikes=10, lift=-6, dy=-6, hs=1.08, **P2)),
         "hurt": dict(head=-8, eyes="shut", dy=-2, jaw=2, shift=-4),
         "stagger": (dict(shift=-10, legs=(0, 12), head=4, eyes="shut", jaw=2), dict(shift=8, legs=(8, 0), head=6, eyes="shut")),
         "idle2": [dict(spikes=2, **P2), dict(dy=2, spikes=2, **P2), dict(dy=2, head=2, spikes=2, **P2),
