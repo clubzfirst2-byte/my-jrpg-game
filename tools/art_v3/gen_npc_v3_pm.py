@@ -39,6 +39,7 @@ VIEWS = ("down", "right", "up", "left")
 WHO = WHO + ("cook",)  #担当 B：料理人
 WHO = WHO + ("elder",)  #担当 B：長老
 WHO = WHO + ("merchant",)  #担当 B：商人
+WHO = WHO + ("traveller",)  #担当 B：旅人
 
 
 def build(who):
