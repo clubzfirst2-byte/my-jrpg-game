@@ -5,9 +5,9 @@ right arm higher, a pink flower on top, tan spines).
 
 Files (src/art-release-v3/terrain/), anchor the bottom centre, no ground or ground shadow baked in:
   desert.tree.v3.<kind>.<f>.png   (sizes as written: the empty rows above the picture are cropped)
-      palm_l  144 x 201  a date palm (oasis): a curved ringed trunk leaning right, 13 arching feathered
+      palm_l  151 x 201  a date palm (oasis): a curved ringed trunk leaning right, 13 arching feathered
                          fronds, 2 hanging date clusters; sway f 0-2 (the frond tips move, the trunk stays)
-      palm_s   96 x 118  the palms' second shape: leans left, a stronger bend, 10 longer fronds that
+      palm_s  104 x 118  the palms' second shape: leans left, a stronger bend, 10 longer fronds that
                          hang lower, no dates; sway f 0-2
       snag     96 x 127  a dead acacia: a twisted grey trunk forking into bare branches, cracks, bark
                          plates, a hollow, broken stubs; f 0
@@ -31,6 +31,8 @@ import numpy as np  # noqa: E402
 
 from gen_nature_v3 import hsh, leaf_marks, scalloped  # noqa: E402
 from hdkit import lock  # noqa: E402
+from PIL import Image  # noqa: E402
+
 from v3lib import ROOT, Canvas, clean_isolated, despeckle, erode, lift_ramp, save  # noqa: E402
 
 OUT = os.path.join(ROOT, "src", "art-release-v3", "terrain")
@@ -417,7 +419,7 @@ def saguaro(W, H, col, arms, flower, seed):
 def cactus(frame):
     """The v1 obj.cactus design at density 4 (24 x 40 -> 48 x 80, v1's rows and columns doubled): the
     column, the left arm lower (top at v1's row 12), the right arm higher (row 8), each with its elbow,
-    a pink flower on top, 15 tan spine pairs. v1's earth mound is not drawn (STYLE 7.3)."""
+    a pink flower on top, 13 tan spine pairs. v1's earth mound is not drawn (STYLE 7.3)."""
     del frame
     return saguaro(48, 80, (15, 32, 6), [(-1, 4, 9, 25, 44, 51), (1, 38, 43, 17, 36, 43)], True, 3)
 
@@ -693,13 +695,25 @@ PROPS = {"cactus": (cactus, 1), "cactus_l": (cactus_l, 1), "barrel": (barrel, 1)
          "tumbleweed": (tumbleweed, 1), "drygrass": (drygrass, 2), "sage": (sage, 1), "pebbles": (pebbles, 1)}
 
 
+# round 3 (inspection 2, P3): the anchor is the bottom centre of the picture, and the palms' feet (the
+# bottom row of the trunk) were 3.5 texels left (palm_l) / 4 texels right (palm_s) of it. Empty columns
+# are added on one side (left, right) so the foot's centre is the picture's centre.
+FOOT_PAD = {"palm_l": (7, 0), "palm_s": (0, 8)}
+
+
 def write_trees():
     out = []
     for kind, (fn, frames) in TREES.items():
         imgs = [clean_isolated(fn(f).image()) for f in range(frames)]
         rows = min(int(np.argmax(np.array(i)[..., 3].any(1))) for i in imgs)  # the same crop for all frames
+        padl, padr = FOOT_PAD.get(kind, (0, 0))
         for f, img in enumerate(imgs):
-            out.append(save(crop_top(img, rows)[0], os.path.join(OUT, f"desert.tree.v3.{kind}.{f}.png")))
+            img = crop_top(img, rows)[0]
+            if padl or padr:  # empty columns only: the drawn texels are the same
+                wide = Image.new("RGBA", (img.width + padl + padr, img.height), (0, 0, 0, 0))
+                wide.paste(img, (padl, 0))
+                img = wide
+            out.append(save(img, os.path.join(OUT, f"desert.tree.v3.{kind}.{f}.png")))
     return out
 
 

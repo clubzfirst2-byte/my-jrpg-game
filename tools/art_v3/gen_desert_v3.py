@@ -16,7 +16,7 @@ formulas, its own drawing:
      SHAPE set (grey, 7 levels: GREYS):
        desert.sandflow.v3.<bits>.<v>.png
      round 2: dunes on the south border of each patch (lit face, crest, slip face in shadow), long
-     parallel ripples over the rest, a crescent in one full-tile variant; the game multiplies them by
+     parallel ripples over the rest (full tiles: ripples only); the game multiplies them by
      DESERT_FLOW_TINT[kind] (d = a low red dune, l = a pale high dune). See "flow shapes" below.
   3. transitions: the v2 dual-grid rule (desert sand is "dsand" in the v2 priority: above ruin and
      path, below the island sand and every grass):
@@ -279,8 +279,8 @@ def write_ground():
 #     (two flat tones). The dune is as high as the border faces south: it tapers to nothing where the
 #     border turns to run north-south (the horns of the crescent).
 # The rest of the patch carries long parallel wind ripples (a lit row over a shaded row) that cross
-# the tile's west / east sides at fixed rows, so they run on from tile to tile; a full (1111) tile may
-# hold a small crescent dune of its own. The light is from the TOP only in this layer (a shape may be
+# the tile's west / east sides at fixed rows, so they run on from tile to tile (a full (1111) tile holds
+# ripples only). The light is from the TOP only in this layer (a shape may be
 # drawn mirrored left-right by flow_key, so nothing here depends on left / right).
 # The pictures stay GREY (the game multiplies them by DESERT_FLOW_TINT[kind]); they now hold 7 greys.
 
@@ -336,27 +336,6 @@ def _put(c, k, sel, tone):
     c.tone[sel] = tone
 
 
-def _crescent(c, k, cx, cy, half, sag, taken):
-    """A small crescent dune inside a full tile (v2's dune at this density): a wide flat arch, the
-    crest highest left of the middle, the two horns `sag` lower and the right horn longer; the slip
-    face under the crest, the lit face (2 tones) over it."""
-    for x in range(64):
-        t = (x + 0.5 - cx) / (half if x + 0.5 < cx else half * 1.25)
-        if abs(t) >= 1:
-            continue
-        h = (1 - t * t) ** 0.8
-        yc = int(round(cy + sag * t * t))
-        sw, fw, f2 = int(round(6 * h)), int(round(4 * h)), int(round(9 * h))
-        if sw < 2:
-            continue
-        core = max(2, int(round(sw * 0.5)))
-        rows = [T_SHADE] * (sw - core) + [T_CORE] * core + [T_CREST] * (2 if h > 0.35 else 1) + [T_FACE] * fw + [T_FACE2] * (f2 - fw)
-        for j, tone in enumerate(rows):
-            y = yc + sw - 1 - j
-            c.mat[y, x], c.tone[y, x] = k, tone
-        taken[max(0, yc - f2 - 7):yc + sw + 4, max(0, x - 3):x + 4] = True
-
-
 def flow_shape(sset, bits, variant, F=None):
     """One desert flow SHAPE tile (grey on transparent), see the note above."""
     c = Canvas(64, 64, {"shape": [(g, g, g) for g in GREYS]})
@@ -407,13 +386,21 @@ def flow_shape(sset, bits, variant, F=None):
             for x in range(ln):
                 t = x / (ln - 1.0)
                 foot = int(round(y0 + drop * t * t))
-                _band(c, k, x, foot, sc0 * (1 - t * t) ** 0.8, taken)  # a round end, as the crescents'
-    elif full and variant == 3:
-        _crescent(c, k, 28.0, 27.0, 23.0, 8.0, taken)
+                _band(c, k, x, foot, sc0 * (1 - t * t) ** 0.8, taken)  # a round end
+    # round 3 (inspection 2, P1): no crescent in the full tile 1111.3 (the same small hump repeated, lined
+    # up down a column of tiles: it read as a stamp). All 4 full tiles hold ripples only; the dunes are
+    # the ridges on the patches' south borders.
     # the ripples: rows fixed on the west / east sides, each waving its own way inside the tile
     ok = (F > 0.62) & ~taken
+    # round 3 (inspection 2, P3): inside the tile all its ripples also move together by the tile's own
+    # offset (up to 4 rows up or down at the middle, 0 at the west / east sides, where the rows stay
+    # fixed), so the lit rows of a wide patch do not sit on the same 5 rows in every tile. The offset comes
+    # from its own hash (not from rng), so each ripple keeps its round-2 gaps and waves and only bows.
+    lift = (G.hsh(int(bits, 2), variant, 41) % 801) / 100.0 - 4.0
+    if full:  # the 4 full tiles: 4 offsets spread evenly (they fill the wide patches)
+        lift = (-4.0, 1.5, -1.5, 4.0)[variant]
     for row in RIPPLE_ROWS:
-        a1, a2 = rng.uniform(-2.6, 2.6), rng.uniform(-1.4, 1.4)
+        a1, a2 = lift + rng.uniform(-2.6, 2.6), rng.uniform(-1.4, 1.4)
         style = rng.random()
         gaps = []
         if style < 0.3:  # only the two ends that join the neighbours
