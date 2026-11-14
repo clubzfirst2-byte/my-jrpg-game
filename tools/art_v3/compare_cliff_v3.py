@@ -57,14 +57,38 @@ def el(e, x, y):
     return e[y][x] if 0 <= x < W and 0 <= y < H else 0
 
 
-def scene(ver):
+GROUNDS = {  # ground: (v2 grid char, v2 prefix, face material, plateau faces' variants)
+    "desert": ("d", "desert.sand", "desert", 2),
+    "plains": ("p", "plains.grass", "earth", 3),
+    "forest": ("m", "forest.grass", "earth", 3),
+}
+
+
+def v3_surface(ground, season, tx, ty):
+    if ground == "desert":
+        return D.ground_tile(tx, ty, load=ld)
+    import gen_ground_v3 as G3
+    import gen_forest_v3 as F3
+    return (G3 if ground == "plains" else F3).ground_tile(tx, ty, season, load=ld)
+
+
+def v3_flat(g, ground, season, i, j):
+    if ground == "desert":
+        return CD.v3_base(g, i, j)
+    return v3_surface(ground, season, i, j)  # (all one ground: the flow is the plain rule)
+
+
+def scene(ver, ground="desert", season="summer"):
+    ch, gpre, fmat, nvar = GROUNDS[ground]
+    sp = "" if season == "summer" else season + "."
     d = 2 if ver == "now" else 4
     T = 16 * d
-    g = ["d" * (W + 1) for _ in range(H + 1)]
+    g = [ch * (W + 1) for _ in range(H + 1)]
     im = Image.new("RGBA", (W * T, H * T), (0, 0, 0, 255))
-    for (i, j), keys in CD.record(g).items():  # flat ground (dual grid)
+    rec = CD.record(g) if ground == "desert" else record_season(g, season)
+    for (i, j), keys in rec.items():  # flat ground (dual grid)
         for k in keys:
-            tile = ld(CD.v2_file(k)) if ver == "now" else CD.v3_base(g, i, j)
+            tile = ld(v2_file_s(k, season)) if ver == "now" else v3_flat(g, ground, season, i, j)
             im.alpha_composite(tile, (i * T + T // 2, j * T + T // 2))
     im = im.crop((T // 2, T // 2, T // 2 + W * T, T // 2 + H * T))
     big = Image.new("RGBA", (W * T, H * T), (0, 0, 0, 255))
@@ -72,6 +96,10 @@ def scene(ver):
     im = big
     e = heights()
     hsh = RR.dhash
+    folder = V2T if ver == "now" else V3T
+    pre = (sp + gpre) if ver == "now" else (sp + gpre + ".v3")
+    if ground == "desert":
+        pre = "desert.sand" if ver == "now" else "desert.sand.v3"
     for ty in range(H):
         shades = []
         for tx in range(W):
@@ -79,39 +107,75 @@ def scene(ver):
             if h == 0:
                 continue
             X, Y = tx * T, (ty * 16 - h) * d
-            surf = ld(os.path.join(V2T, f"desert.sand.{RR.calm_number(tx, ty) % 32}.png")) if ver == "now" else \
-                D.ground_tile(tx, ty, load=ld)
+            if ver == "now":
+                surf = ld(os.path.join(V2T, f"{sp if ground != 'desert' else ''}{gpre}.{RR.calm_number(tx, ty) % 32}.png"))
+            else:
+                surf = v3_surface(ground, season, tx, ty)
             im.alpha_composite(surf, (X, Y))
             n, ea, we = el(e, tx, ty - 1) < h, el(e, tx + 1, ty) < h, el(e, tx - 1, ty) < h
             mask = n + 2 * ea + 4 * we
-            pre = "desert.sand" if ver == "now" else "desert.sand.v3"
-            folder = V2T if ver == "now" else V3T
             if mask:
                 im.alpha_composite(ld(os.path.join(folder, f"{pre}.step.{mask}.{hsh(tx + 5, ty + 9) % 2}.png")), (X, Y))
             if not n and not ea and el(e, tx + 1, ty - 1) < h:
                 im.alpha_composite(ld(os.path.join(folder, f"{pre}.step.inner.ne.png")), (X, Y))
             if not n and not we and el(e, tx - 1, ty - 1) < h:
                 im.alpha_composite(ld(os.path.join(folder, f"{pre}.step.inner.nw.png")), (X, Y))
-            # south face, bands of 8 / 4 game px
             top, bottom = (ty + 1) * 16 - h, (ty + 1) * 16 - el(e, tx, ty + 1)
             rem, y, first = bottom - top, top, True
-            var = ".v1" if hsh(tx, ty) % 2 else ""
+            var = ("", ".v1", ".v2")[hsh(tx, ty) % nvar]
             while rem > 0:
                 seg = 8 if rem >= 8 else 4
                 last = rem - seg <= 0
-                key = f"face.desert.{'top' if first else 'mid'}{'-base' if last else ''}.{seg}"
-                p = os.path.join(folder, key + var + ".png")
-                im.alpha_composite(ld(p if os.path.exists(p) else os.path.join(folder, key + ".png")), (X, y * d))
+                key = f"face.{fmat}.{'top' if first else 'mid'}{'-base' if last else ''}.{seg}"
+                cands = [sp + key + var, sp + key, key + var, key] if fmat == "earth" else [key + var, key]
+                p = next(os.path.join(folder, k_ + ".png") for k_ in cands if os.path.exists(os.path.join(folder, k_ + ".png")))
+                im.alpha_composite(ld(p), (X, y * d))
                 y += seg
                 rem -= seg
                 first = False
             if ea and tx + 1 < W:
                 shades.append((tx + 1, ty, el(e, tx + 1, ty), hsh(tx + 6, ty + 9) % 2))
         for (sx, sy, sh, v) in shades:
-            pre = "desert.sand" if ver == "now" else "desert.sand.v3"
-            folder = V2T if ver == "now" else V3T
             im.alpha_composite(ld(os.path.join(folder, f"{pre}.step.shade.{v}.png")), (sx * T, (sy * 16 - sh) * d))
     return im
+
+
+def record_season(g, season):
+    class Key:
+        def __init__(self, k):
+            self.k = k
+
+    class Images(dict):
+        def __missing__(self, k):
+            return Key(k)
+    draws = {}
+
+    def ac(self, im, dest=(0, 0), source=(0, 0)):
+        draws.setdefault(((dest[0] - 16) // 32, (dest[1] - 16) // 32), []).append(im.k)
+    old = Image.Image.alpha_composite, Image.Image.paste
+    Image.Image.alpha_composite = ac
+    Image.Image.paste = lambda self, *a, **k: None
+    try:
+        RR.render_v2(g, Images(), frame=0, season=None if season == "summer" else season)
+    finally:
+        Image.Image.alpha_composite, Image.Image.paste = old
+    return draws
+
+
+V2PRE = {"plains": "plains.grass", "moss": "forest.grass", "dsand": "desert.sand"}
+
+
+def v2_file_s(key, season):
+    """<season.>g2.<class>.<name> -> the v2 file."""
+    sp = ""
+    if not key.startswith("g2."):
+        sp, key = key.split("g2.", 1)
+        key = "g2." + key
+    _, cls, name = key.split(".", 2)
+    if name.startswith("e") and name[1].isdigit():
+        m, v = name[1:].split(".")
+        name = f"edge.{m}.{v}"
+    return os.path.join(V2T, f"{sp}{V2PRE[cls]}.{name}.png")
 
 
 def parts(path):
@@ -132,16 +196,21 @@ def parts(path):
 
 def main(out):
     os.makedirs(out, exist_ok=True)
-    for ver in ("now", "v3"):
-        im = scene(ver)
-        d = 2 if ver == "now" else 4
-        big = im.resize((im.width * (8 // d), im.height * (8 // d)), Image.NEAREST)
-        x0, y0 = 2 * 16 * 8, 1 * 16 * 8
-        big.crop((x0, y0, x0 + 2556, y0 + 1179)).save(os.path.join(out, f"cliff_15pro_{ver}_k2.png"), optimize=True)
-        bse = im.resize((im.width * (4 // d), im.height * (4 // d)), Image.NEAREST) if d == 2 else im
-        x0, y0 = 2 * 16 * 4, 1 * 16 * 4
-        bse.crop((x0, y0, x0 + 1334, y0 + 750)).save(os.path.join(out, f"cliff_se_{ver}_k1.png"), optimize=True)
-    parts(os.path.join(out, "cliff_parts_x4.png"))
+    which = sys.argv[2] if len(sys.argv) > 2 else "desert"
+    sets = [("desert", "summer")] if which == "desert" else [(g, s) for g in ("plains", "forest") for s in ("summer", "autumn", "winter")]
+    for ground, season in sets:
+        tag = "cliff" if ground == "desert" else f"cliff_{ground}_{season}"
+        for ver in ("now", "v3"):
+            im = scene(ver, ground, season)
+            d = 2 if ver == "now" else 4
+            big = im.resize((im.width * (8 // d), im.height * (8 // d)), Image.NEAREST)
+            x0, y0 = 2 * 16 * 8, 1 * 16 * 8
+            big.crop((x0, y0, x0 + 2556, y0 + 1179)).save(os.path.join(out, f"{tag}_15pro_{ver}_k2.png"), optimize=True)
+            bse = im.resize((im.width * (4 // d), im.height * (4 // d)), Image.NEAREST) if d == 2 else im
+            x0, y0 = 2 * 16 * 4, 1 * 16 * 4
+            bse.crop((x0, y0, x0 + 1334, y0 + 750)).save(os.path.join(out, f"{tag}_se_{ver}_k1.png"), optimize=True)
+    if which == "desert":
+        parts(os.path.join(out, "cliff_parts_x4.png"))
     print(sorted(f for f in os.listdir(out) if f.startswith("cliff")))
 
 
