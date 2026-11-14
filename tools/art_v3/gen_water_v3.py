@@ -61,8 +61,78 @@ def stamp_wrap(c, mat, x, y, rows):
             c.mat[Y, X], c.tone[Y, X] = k, int(ch)
 
 
+# (round 3) swell lines: long, gently curving rows of ripples across the tile, light on top (tone 4, 5 at a
+# few crests) with a darker trough under the longer pieces (tone 2). They give the water a slow light / dark
+# swell readable at 1x without blobs (blobs showed the tile grid). Drawn by hand: each line is
+# y = y0 + amp * sin(2 pi x / 64 + phase) (+ a bump of the variant's own inside x 6..58), its pieces given as
+# on / off runs over x 0..63 (wrapping). Lines in the 6-texel border band, and every line's pieces at x < 6 or
+# x >= 58, are the same in both variants. Each line bobs 0, 0, 1, 1 texels with its own phase.
+SWELLS = {
+    "shallow": [  # (y0, amp, phase, frame phase, variant bump (v0, v1), runs (v0, v1))
+        (2, 1.5, 0.0, 0, (0, 0), ([4, 6, 8, 6, 5, 7, 10, 6, 6, 3, 3], None)),
+        (17, 2.5, 1.7, 1, (2, -2), ([3, 7, 7, 5, 4, 8, 11, 5, 6, 8], [3, 9, 9, 6, 3, 6, 8, 6, 6, 8])),
+        (31, 2.0, 3.9, 3, (-2, 1), ([7, 6, 5, 8, 9, 5, 4, 7, 7, 6], [7, 8, 10, 5, 4, 8, 7, 4, 4, 7])),
+        (46, 2.5, 5.2, 2, (1, -2), ([2, 6, 8, 6, 6, 5, 5, 8, 11, 7], [2, 10, 5, 4, 10, 7, 6, 5, 8, 7])),
+    ],
+    "deep": [
+        (5, 1.5, 0.9, 0, (0, 0), ([3, 14, 5, 12, 4, 15, 6, 4, 1], None)),
+        (25, 2.5, 2.8, 2, (2, -1), ([6, 9, 6, 7, 10, 8, 4, 8, 6], [6, 6, 9, 10, 5, 7, 7, 8, 6])),
+        (44, 2.0, 4.6, 1, (-1, 2), ([4, 10, 9, 7, 5, 9, 7, 8, 5], [4, 7, 5, 10, 10, 6, 8, 9, 5])),
+    ],
+}
+BOB = [0, 0, 1, 1]  # each line holds 2 frames, then rises / falls 1 texel; lines at their own phase
+# (round 3) broad soft streaks of light (tone 4 round a core of 5, a lit top of 5 that glides 0, 1, 2, 1 texels) and of shade
+# (tone 2): long thin lenses drawn by hand (row lengths from the top, centred), the variant's own, wholly
+# inside x, y 8..56 so they never meet at the tile's border; few, so the tile does not show as a grid
+STREAKS = {
+    "shallow": {
+        0: [(30, 22, 4, [8, 18, 12]), (19, 38, 2, [10, 16]), (42, 51, 4, [6, 14, 8])],
+        1: [(24, 26, 4, [10, 20, 10]), (44, 13, 2, [8, 14]), (33, 47, 4, [8, 16, 6])],
+    },
+    "deep": {
+        0: [(26, 13, 4, [8, 16, 8]), (40, 43, 2, [12, 18, 8])],
+        1: [(38, 34, 4, [10, 18, 8]), (20, 23, 2, [10, 14, 6])],
+    },
+}
+# glints: a small star that shows on one frame and fades on the next (tone 6 with tone 5 arms), per variant
+GLINTS = {
+    # each frame shows the glints of one variant only (variant 0 on frames 0 / 2, variant 1 on 1 / 3), so the
+    # tiles that flash together are the hash's scattered half, not every tile (round 3: all tiles at once
+    # made a lattice of stars)
+    "shallow": {0: [(21, 13, 0), (44, 41, 2)], 1: [(38, 18, 1), (17, 46, 3)]},
+    "deep": {0: [(30, 16, 0)], 1: [(43, 40, 3)]},
+}
+
+
+def _runs(runs):
+    out, on = [], True
+    for r in runs:
+        out += [on] * r
+        on = not on
+    assert len(out) == 64, runs
+    return out
+
+
+def _swell_pieces(mat, variant):
+    """[(x, y_at_frame0 as a function of x, frame phase, on)] for the swell lines of this variant."""
+    lines = []
+    for (y0, amp, ph, fph, bump, runs) in SWELLS[mat]:
+        base = _runs(runs[0])
+        own = _runs(runs[variant]) if (variant and runs[1]) else base
+        on = [base[x] if (x < 6 or x >= 58) else own[x] for x in range(64)]
+        b = bump[variant]
+        ys = []
+        for x in range(64):
+            y = y0 + amp * math.sin(2 * math.pi * x / 64 + ph)
+            if 6 <= x < 58:
+                y += b * math.sin(math.pi * (x - 6) / 52)
+            ys.append(int(math.floor(y + 0.5)))
+        lines.append((ys, on, fph))
+    return lines
+
+
 def _features(mat, variant):
-    """(crests, sparkles): shared crests (touching the border band, wrapping round the tile: the same in
+    """(crests, glints): shared crests (touching the border band, wrapping round the tile: the same in
     both variants) and the variant's own (wholly inside 8..56). Round 2: no swell blobs (they showed the
     tile grid); more, smaller crests of 3 lengths. Fixed by seeds: the same every run."""
     rng_s = random.Random({"shallow": 501, "deep": 502}[mat])
@@ -78,21 +148,56 @@ def _features(mat, variant):
     pts = G.scatter(rng_v, 48, n_own, 9, 0)
     for i, (x, y) in enumerate(pts):
         crests.append((8 + int(x * 40 / 48), 8 + int(y * 44 / 48), (i + variant) % FRAMES, rng_v.choice("ssmml")))
-    sparkles = [(rng_v.randint(12, 48), rng_v.randint(12, 50), rng_v.randrange(FRAMES))] if mat == "shallow" else []
-    return crests, sparkles
+    return crests, GLINTS[mat][variant]
 
 
 def water_tile(mat, frame, variant=0):
     c = canvas()
     k = c.mid(mat)
     c.mat[:, :], c.tone[:, :] = k, 3
-    crests, sparkles = _features(mat, variant)
+    # swell lines first (the crests' life plays over them)
+    for (ys, on, fph) in _swell_pieces(mat, variant):
+        dy = BOB[(frame + fph) % FRAMES]
+        x = 0
+        # piece lengths (wrapping) decide the trough and the crest-top
+        runs, start = [], None
+        for i in range(64):
+            if on[i] and not on[i - 1]:
+                start = i
+            if on[i] and not on[(i + 1) % 64]:
+                runs.append((start if start is not None else i, i))
+        if all(on):
+            runs = [(0, 63)]
+        for (s0, s1) in runs:
+            n = (s1 - s0) % 64 + 1
+            for j in range(n):
+                x = (s0 + j) % 64
+                y = (ys[x] + dy) % 64
+                c.tone[y, x] = 5 if (n >= 7 and j in (n // 2, n // 2 + 1)) else 4
+                if n >= 8 and 2 <= j < n - 2:  # the longer pieces: the swell's lit face 2 texels deep
+                    c.tone[(y + 1) % 64, x] = 4
+                    c.tone[(y + 2) % 64, x] = 2
+                elif n >= 5 and 1 <= j < n - 1:
+                    c.tone[(y + 1) % 64, x] = 2
+    for (cx, cy, tone, rows) in STREAKS[mat][variant]:
+        for r, n in enumerate(rows):
+            x0 = cx - n // 2 + (r % 2)
+            core = tone == 4 and len(rows) == 3 and r == 1  # the lens' middle row: a brighter core (5)
+            for i in range(n):
+                c.tone[cy + r, x0 + i] = 5 if (core and 3 <= i < n - 3) else tone
+        if tone == 4:  # the lit top glides along it and back
+            g = [0, 1, 2, 1][frame]
+            n = rows[0]
+            for i in range(3):
+                c.tone[cy, cx - n // 2 + 1 + 2 * g + i] = 5
+    crests, glints = _features(mat, variant)
     for (x, y, phase, size) in crests:
         stamp_wrap(c, mat, x, y, CREST_LIFE[size][(frame + phase) % FRAMES])
-    for (x, y, step) in sparkles:
-        s = (frame + step) % FRAMES
-        if s in (0, 1):
-            stamp_wrap(c, mat, x + 2 * s, y, ["66", ".5"])
+    for (x, y, f0) in glints:
+        if frame == f0:
+            stamp_wrap(c, mat, x - 1, y - 1, [".5.", "565", ".5."])
+        elif (frame - f0) % FRAMES == 1:
+            stamp_wrap(c, mat, x, y, ["5"])
     return c
 
 
@@ -114,24 +219,79 @@ def deep_overlay(mask, frame):
     return c
 
 
-FOAM_REACH = [2.0, 3.0, 4.0, 3.0]  # round 2: texels from the shore, per frame (lapping)
+FOAM_REACH = [3, 4, 5, 4]  # the white wave front's band (texels from the shore), per frame: it laps out and back
+# (round 3) per frame, what each band from the shore holds (band k = water texels k - 0.5 <= d < k + 0.5 from
+# the nearest land texel; band 1 touches the land): S = the white shore line, F = the white wave front,
+# L = the front breaking up as it draws back (white lace, the rest 5), 5 = foam, 4 = the wet line. Nothing past
+# band 5. Between the shore line and the front there is always foam (5), so the front reads as its own line.
+FOAM_BANDS = [
+    "S5F4",   # 0: the wave close in, front at 3
+    "S55F4",  # 1: going out, front at 4, wet line at 5
+    "S555F",  # 2: furthest out, front at 5
+    "S55L4",  # 3: drawing back, the front breaks into lace at 4
+]
+# along the shore (x on a shore running across, y on one running down; 32-periodic so it runs on into the next
+# tile), drawn by hand: where the shore line / the front / the lace are white ('1') or foam 5 ('0')
+SHORE_W = "11111011111110111101111111011111"
+FRONT_W = "11011111101111110110111111101110"
+LACE_W = "10010110001001101000110100100110"
+FOAM_PAD = 8  # the land is continued this far past the tile's border (its border texels repeated) for d
+
+
+def _land_distance(land):
+    """Distance (texels, centre to centre) from every texel to the nearest land texel, and the vector to it;
+    the land continued past the tile's border by repeating its border texels (the shore crosses the border
+    where the next tile's land goes on)."""
+    P = FOAM_PAD
+    big = np.pad(land, P, mode="edge")
+    ly, lx = np.nonzero(big)
+    if len(ly) == 0:
+        return np.full(land.shape, 99.0), np.zeros(land.shape), np.zeros(land.shape)
+    # only the land texels next to water matter
+    edge = np.zeros_like(big)
+    pb = np.pad(big, 1, mode="edge")
+    edge = big & ~(pb[:-2, 1:-1] & pb[2:, 1:-1] & pb[1:-1, :-2] & pb[1:-1, 2:])
+    ly, lx = np.nonzero(edge)
+    ly, lx = ly - P, lx - P
+    yy, xx = np.mgrid[0:64, 0:64]
+    dy = ly[None, None, :] - yy[..., None]
+    dx = lx[None, None, :] - xx[..., None]
+    d2 = dx * dx + dy * dy
+    i = np.argmin(d2, axis=2)
+    d = np.sqrt(np.take_along_axis(d2, i[..., None], 2)[..., 0])
+    vx = np.take_along_axis(dx, i[..., None], 2)[..., 0]
+    vy = np.take_along_axis(dy, i[..., None], 2)[..., 0]
+    d[land] = 0
+    return d, vx, vy
 
 
 def foam_overlay(mask, frame):
     """Foam on the water outside a shore (mask = land corners; the land side transparent: the land's
-    edge overlay is drawn over it). Round 2: the distance from the shore in texels is the field's
-    distance (0.5 - F) / |grad F| (continuous across tiles: F and its gradient are), so the foam keeps one
-    width round the coast's bends (no pools). A foam band that laps in and out (FOAM_REACH: 3, 4, 5, 4
-    texels), bright 2 x 2 clusters (shallow 6) on a 4-texel pattern of period 16 cells (it runs on into the next
-    tile) that shifts with the frame, the rest shallow 5; a wet line (shallow 4, 2 texels) beyond. On masks
-    6 / 9 (two shores) only one shore laps. No speck under 6 texels away from the tile's border."""
+    edge overlay is drawn over it). Round 3: the distance from the shore is the real distance from the land
+    texels (gen_ground_v3.edge_inside, variant 0: the land edges' own line; continued past the tile's border),
+    so the foam keeps one width on straight shores, bends, coves and ponds alike (round 2 divided the field's
+    value by its slope: where the slope was small the foam swelled into a pool or a ball offshore).
+    Bands from the shore (FOAM_BANDS, FOAM_REACH 2, 3, 4, 3: the white front laps out and back; nothing past
+    5 texels): a broken white shore line, foam (shallow 5), the white wave front, the wet line (shallow 4);
+    on frame 3 the front breaks into lace. The white breaks are hand-drawn rows along the shore (SHORE_W,
+    FRONT_W, LACE_W), fixed in place: the white moves only out and back. On masks 6 / 9 (two shores) only
+    one shore laps (the other keeps frame 0). No speck under 6 texels away from the tile's border."""
     F, inside = G.edge_inside(mask, 0)
-    T = G._v2_transitions()
     c = canvas()
     k = c.mid("shallow")
-    # (round 2) a dropped island (F > 0.5 not reaching the tile's border: edge_inside leaves it water, the
-    # land is not drawn there): no foam on it or round it, unless real land is near too (v2's rule)
-    isl = (F > 0.5) & ~inside
+    if mask in (6, 9):  # two land pieces: each its own distance (one laps, the other keeps frame 0)
+        yy, xx = np.mgrid[0:64, 0:64]
+        side_a = ((xx - yy) < 0) if mask == 6 else ((xx + yy) > 63)  # the half whose shore keeps frame 0
+        da, ax, ay = _land_distance(inside & side_a)
+        db, bx, by = _land_distance(inside & ~side_a)
+        use_a = da < db
+        d = np.where(use_a, da, db)
+        vx = np.where(use_a, ax, bx)
+        vy = np.where(use_a, ay, by)
+        still = use_a
+    else:
+        d, vx, vy = _land_distance(inside)
+        still = np.zeros((64, 64), bool)
 
     def near(m, r):
         out = m.copy()
@@ -143,25 +303,25 @@ def foam_overlay(mask, frame):
             g_[:, :-1] |= out[:, 1:]
             out = g_
         return out
-    skip = near(isl, 7) & ~near(inside, 7)
     for y in range(64):
         for x in range(64):
-            if inside[y, x] or skip[y, x]:
+            if inside[y, x]:
                 continue
-            gx, gy = T.gradient(mask, (x + 0.5) / 2 - 0.5, (y + 0.5) / 2 - 0.5)
-            g = math.hypot(gx, gy) / 64  # per texel (transitions.gradient is per tile: u, v 0..1 over 64 texels)
-            if g < 1e-4:
+            band = int(math.floor(d[y, x] + 0.5))
+            bands = FOAM_BANDS[0 if still[y, x] else frame]
+            if band < 1 or band > len(bands):
                 continue
-            d = (0.5 - F[y, x]) / g
-            reach = FOAM_REACH[frame]
-            if mask in (6, 9) and ((x - y) < 0 if mask == 6 else (x + y) > 63):
-                reach = FOAM_REACH[0]
-            fv = F[y, x]
-            if d < reach and fv > 0.42:  # (and near the shore in the field too: where the field's wobble keeps
-                bright = ((x // 4) + 2 * (y // 4) + frame) % 4 == 0 and x % 4 < 2 and y % 4 < 2 and d < reach - 0.5
-                c.mat[y, x], c.tone[y, x] = k, (6 if bright else 5)
-            elif d < reach + 2 and fv > 0.40:  # it just under 0.5 over a broad area, d alone made pools offshore)
-                c.mat[y, x], c.tone[y, x] = k, 4
+            ch = bands[band - 1]
+            t = (x if abs(vy[y, x]) >= abs(vx[y, x]) else y) % 32
+            if ch == "S":
+                tone = 6 if SHORE_W[t] == "1" else 5
+            elif ch == "F":
+                tone = 6 if FRONT_W[t] == "1" else 5
+            elif ch == "L":
+                tone = 6 if LACE_W[t] == "1" else 5
+            else:
+                tone = int(ch)
+            c.mat[y, x], c.tone[y, x] = k, tone
     near1 = near(inside, 1)
     # no specks: 8-connected pieces under 6 texels that do not reach the tile's border
     op = c.mat != 0
