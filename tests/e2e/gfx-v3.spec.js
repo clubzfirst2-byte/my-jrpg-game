@@ -299,7 +299,9 @@ test('?v3=1: the plains in summer, autumn and winter — each season\'s own v3 b
     const pre = season === 'summer' ? '' : `${season}.`;
     const names = (await api(page, 'stream')).bundleNames;
     expect(names).toContain(`v3:plains:${season}`);
-    expect(names.filter((n) => n.startsWith('v3:plains:')).sort()).toEqual(season === 'winter' ? ['v3:plains:winter'] : [`v3:plains:${season}`, 'v3:plains:flow'].sort());
+    // (and the season's pine bundle where a loaded chunk draws a plains pine: FOREST.md 4)
+    expect(names.filter((n) => n.startsWith('v3:plains:') && n !== `v3:plains:pine.${season}`).sort()).toEqual(season === 'winter' ? ['v3:plains:winter'] : [`v3:plains:${season}`, 'v3:plains:flow'].sort());
+    expect(names.filter((n) => n.startsWith('v3:plains:pine.')).every((n) => n === `v3:plains:pine.${season}`)).toBe(true);
     expect(await api(page, 'textureDensity', `${pre}plains.grass.v3.a00`)).toBe(4);
     const a = (await api(page, 'v3')).plains;
     expect(a.season === season || (season === 'summer' && a.season === null)).toBe(true);
