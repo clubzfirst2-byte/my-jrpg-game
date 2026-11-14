@@ -110,9 +110,14 @@ export function stitchWorld(island, regions) {
   def.ground = cols[0].map((_, y) => cols.map((rows) => rows[y]).join(''));
   def.height = heights[0].map((_, y) => heights.map((rows) => rows[y]).join(''));
   // Camera bounds outside every room: one column's outdoors at a time. (An empty column has none.)
+  // Volume phase 1: a region may keep the camera off its west edge (`westMargin`, tiles: the widest
+  // of its column counts). The view builds chunks 4 tiles beyond the screen (chunkRange.js), and the
+  // chunk west of a column holds the strip of rooms of the column before it: with a margin of 5 the
+  // art of that other region is never loaded just for standing at the edge.
   def.outdoors = [];
   colHeights.forEach((th, col) => {
-    if (th > 0) def.outdoors.push({ id: outdoorId(col), tx: col * colW, ty: 0, tw: OUTDOOR_W, th });
+    const margin = regions.reduce((m, r) => ((r.col ?? 0) === col ? Math.max(m, r.westMargin ?? 0) : m), 0);
+    if (th > 0) def.outdoors.push({ id: outdoorId(col), tx: col * colW + margin, ty: 0, tw: OUTDOOR_W - margin, th });
   });
   def.outdoor = def.outdoors[0];
   return def;

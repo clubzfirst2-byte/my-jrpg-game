@@ -1,7 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const isCI = !!process.env.CI;
-const PORT = 4173;
+// PW_PORT: another port, when several checkouts run their tests on one machine at once.
+const PORT = Number(process.env.PW_PORT) || 4173;
 
 // iPhone-sized landscape viewport (the game is played in landscape).
 const iphoneLandscape = {

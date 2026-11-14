@@ -62,6 +62,32 @@ describe('風切りの段丘: where it is', () => {
 });
 
 describe('風切りの段丘: every way through the air works (real physics)', () => {
+  it('walking off the knoll (no jump) is not "falling in": the glider opens in the air and carries over the rift', () => {
+    const s = terraceState();
+    place(s, T(26, 46), 'right');
+    const move = { ...none, moveX: 1 };
+    for (let i = 0; i < 240 && s.player.grounded; i++) stepGame(s, move);
+    expect(s.player.grounded).toBe(false);
+    expect(s.events.some((e) => e.type === 'fell')).toBe(false);
+    run(s, move, 8);
+    stepGame(s, { ...move, jump: true });
+    expect(s.player.gliding).toBe(true);
+    for (let i = 0; i < 600 && !s.player.grounded; i++) stepGame(s, move);
+    expect(s.events.some((e) => e.type === 'fell')).toBe(false);
+    expect(Math.floor(s.player.x / 16) - 256).toBeGreaterThanOrEqual(35);
+  });
+
+  it('walking off it without opening the glider drops into the rift: back at the edge, half a heart', () => {
+    const s = terraceState();
+    place(s, T(26, 46), 'right');
+    const hp = s.player.hp;
+    for (let i = 0; i < 400 && !s.events.some((e) => e.type === 'fell'); i++) stepGame(s, { ...none, moveX: 1 });
+    expect(s.events.some((e) => e.type === 'fell')).toBe(true);
+    expect(s.player.hp).toBeLessThan(hp);
+    expect(Math.floor(s.player.x / 16) - 256).toBeLessThanOrEqual(27);
+    expect(s.player.z).toBe(48);
+  });
+
   for (const route of AIR_ROUTES) {
     it(`${route.id}: ${route.note}`, () => {
       const r = flyRoute(route);

@@ -3,7 +3,8 @@ import { createGameState, stepGame } from '../../src/game/state.js';
 import { WORLD, stitchWorld, outdoorAt, outdoorId, regionAt } from '../../src/game/world/world.js';
 import { ISLAND } from '../../src/game/world/maps/island.js';
 import { REGIONS } from '../../src/game/world/maps/regions.js';
-import { parseMap } from '../../src/game/world/tilemap.js';
+import { parseMap, Ground } from '../../src/game/world/tilemap.js';
+import { CHUNK_LOAD_MARGIN_TILES } from '../../src/view/chunkRange.js';
 import { applyProgress, emptyProgress, respawnPoint, tileFeet } from '../../src/game/world/features.js';
 import { computeWorldDiff } from '../../src/game/world/worldDiff.js';
 import { travelTo, travelBlocked, mapModel, touchSurveys } from '../../src/game/world/survey.js';
@@ -45,7 +46,7 @@ describe('the world takes any number of columns', () => {
     expect(w.ground[0].length).toBe(128 * 5);
     expect(w.regions.find((r) => r.id === 'far')).toMatchObject({ tx: 512, ty: 0 });
     // Column 3 is empty: filled with nothing, and it has no outdoors.
-    expect(w.outdoors.map((o) => [o.id, o.tx])).toEqual([['outdoor', 0], ['outdoor-east', 128], ['outdoor-col2', 256], ['outdoor-col4', 512]]);
+    expect(w.outdoors.map((o) => [o.id, o.tx, o.tw])).toEqual([['outdoor', 0, 96], ['outdoor-east', 128, 96], ['outdoor-col2', 261, 91], ['outdoor-col4', 517, 91]]);
     expect(outdoorId(0)).toBe('outdoor');
     expect(outdoorId(1)).toBe('outdoor-east');
     const map = parseMap(w);
@@ -63,9 +64,17 @@ describe('the world takes any number of columns', () => {
     expect(() => stitchWorld(ISLAND, [{ ...t, col: 1.5 }])).toThrow(/column/);
   });
 
-  it('the camera shows the terrace as its own outdoors', () => {
+  it('the camera shows the terrace as its own outdoors, kept 5 tiles off its west edge (westMargin)', () => {
     const r = WORLD.regions.find((x) => x.id === 'terrace');
-    expect(outdoorAt(WORLD.outdoors, r.tx + 10, r.ty + 46)).toMatchObject({ id: 'outdoor-col2', tx: 256, tw: 96, th: 96 });
+    expect(outdoorAt(WORLD.outdoors, r.tx + 10, r.ty + 46)).toMatchObject({ id: 'outdoor-col2', tx: 261, tw: 91, th: 96 });
+    // Nothing can be stood on in the margin: the pass arrives east of it, and the way back is its first tile.
+    const map = parseMap(WORLD);
+    for (let y = 0; y < 96; y++) for (let x = 0; x < 5; x++) expect(map.ground[(r.ty + y) * map.width + r.tx + x], `${x},${y}`).toBe(Ground.PIT);
+    expect(WORLD.warps.find((w) => w.id === 'pass-terrace')).toMatchObject({ toTx: r.tx + 6 });
+    expect(WORLD.warps.find((w) => w.id === 'pass-terrace-back')).toMatchObject({ tx: r.tx + 5, facing: 'left' });
+    // The chunk west of the column (the mountains' strip of rooms) is more than the view's 4-tile
+    // build margin away from anything the camera can show.
+    expect(261 * 16 - CHUNK_LOAD_MARGIN_TILES * 16).toBeGreaterThanOrEqual(256 * 16);
   });
 });
 

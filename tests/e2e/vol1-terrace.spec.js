@@ -105,8 +105,8 @@ test('a v1.0 save continues, walks into the terrace, reads the survey stone, gli
   expect(stream.bundleNames.filter((b) => b.startsWith('region:'))).toEqual(['region:plains']);
   // On along the road to the record stone.
   const stone = WORLD.checkpoints.find((c) => c.id === 'terrace');
-  await api(page, 'teleport', stone.tx - 3, stone.ty + 1);
-  await hold(page, 'ArrowRight', async () => (await api(page, 'progress')).checkpoints.includes('terrace'));
+  await api(page, 'teleport', stone.tx, stone.ty + 3);
+  await hold(page, 'ArrowUp', async () => (await api(page, 'progress')).checkpoints.includes('terrace'));
   await page.screenshot({ path: testInfo.outputPath('terrace-entry.png') });
 
   // The knoll: the survey stone draws the terrace on the map.
@@ -117,10 +117,23 @@ test('a v1.0 save continues, walks into the terrace, reads the survey stone, gli
 
   // The first glide: off the knoll's east edge, the glider opened in the air, over the rift.
   await api(page, 'teleport', ...T(26, 46));
+  // (Stepped while paused, as in p2-2-glide: leaving the edge and the press do not depend on how
+  // fast the machine is. Then the flight itself runs in real time with the key held.)
+  await api(page, 'pause');
   await page.keyboard.down('ArrowRight');
-  await expect.poll(async () => (await api(page, 'player')).grounded === false, { timeout: 10_000, intervals: [16] }).toBe(true);
-  await page.keyboard.press('Space');
-  await expect.poll(async () => (await api(page, 'player')).gliding, { timeout: 5_000, intervals: [16] }).toBe(true);
+  const left = await page.evaluate(() => {
+    const g = window.__debugApi;
+    for (let i = 0; i < 240 && g.player().grounded; i++) g.step(1);
+    g.step(8); // past the moment a press would still be a jump from the edge
+    return g.player();
+  });
+  expect(left.grounded).toBe(false);
+  await page.keyboard.press('Space'); // latched while paused
+  await api(page, 'step', 1);
+  expect((await api(page, 'player')).gliding).toBe(true);
+  await page.keyboard.down('ArrowRight'); // pausing released the held keys
+  await api(page, 'resume');
+  await waitTicks(page, 20);
   await page.screenshot({ path: testInfo.outputPath('terrace-glide.png') });
   await expect.poll(async () => (await api(page, 'player')).grounded, { timeout: 20_000, intervals: [50] }).toBe(true);
   await page.keyboard.up('ArrowRight');
@@ -196,7 +209,7 @@ test('a v1.0 save continues, walks into the terrace, reads the survey stone, gli
   expect(pr.checkpoint).toBe('plains');
   expect(pr.gates).toEqual(['trial_light', 'trial_vane']);
   expect(pr.bosses).toEqual(['core_forest']);
-  expect(pr.flags).toEqual(V1_HALF_WAY.flags);
+  expect(pr.flags).toEqual({ ...V1_HALF_WAY.flags, story_v1: true }); // (v1.0 marks a save it has continued; nothing else is set)
   expect(pr.quests).toEqual(V1_HALF_WAY.quests);
   expect(pr.inv.money).toBe(321);
   expect(errors).toEqual([]);
@@ -211,7 +224,7 @@ test('the map on a small iPhone: every button is a 44 px target, the list scroll
   await api(page, 'clearEnemies');
   // Touch every record stone and survey stone outdoors (by standing beside each).
   for (const c of WORLD.checkpoints) {
-    await api(page, 'teleport', c.tx, c.ty + 1);
+    await api(page, 'teleport', c.tx, c.ty);
     await expect.poll(async () => (await api(page, 'progress')).checkpoints.includes(c.id), { timeout: 10_000 }).toBe(true);
   }
   for (const s of WORLD.surveys) {

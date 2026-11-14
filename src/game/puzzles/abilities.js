@@ -8,6 +8,9 @@
 import { Ground } from '../world/tilemap.js';
 import { energize } from './switches.js';
 
+/** Higher than this above a pit's floor (px), the player is on a ledge beside it, not in it. */
+const PIT_LEDGE_PX = 8;
+
 export const ABILITY_IDS = /** @type {const} */ (['light', 'telekinesis', 'vine', 'resonance']);
 /** @type {Record<string, string>} */
 export const ABILITY_NAMES = { light: '灯火', telekinesis: '念動', vine: '蔓結び', resonance: '共鳴' };
@@ -201,6 +204,9 @@ export function stepAbilities(state) {
   const ts = state.map.tileSize;
   const i = Math.floor(p.y / ts) * state.map.width + Math.floor(p.x / ts);
   if (state.map.ground[i] !== Ground.PIT) return;
+  // Volume phase 1: standing on a ledge above the pit (the body still on the higher ground while its
+  // middle is past the edge) is not falling in: the player walks off, and may open the glider.
+  if (p.z - state.map.elev[i] > PIT_LEDGE_PX) return;
   p.x = p.prevX = p.safeX;
   p.y = p.prevY = p.safeY;
   p.z = p.prevZ = p.groundZ = p.safeZ;
