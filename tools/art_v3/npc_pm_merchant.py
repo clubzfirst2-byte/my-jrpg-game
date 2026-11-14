@@ -401,8 +401,8 @@ PURSE = grid("""
 .oopqqpn
 oopqqqqnn
 opqqqqqqnn
+pqkkkjqqon
 pqkkjjqqon
-pqkjjjqqon
 pqqqqqqqon
 pqqqqqqqon
 pqqqqqqpon
@@ -413,12 +413,12 @@ pqqqqqqpon
 
 # the pen behind his right ear: from the front only its end shows past the hair; from the side it lies on it
 PEN_FRONT = grid("""
-&&
-&&&
+??
+&??
 .&&&
-..&&^
-...^^^
-4|^^^
+..&&&
+...&&^
+4|&&^
 5|$$$
 6|$$$
 7|!!!

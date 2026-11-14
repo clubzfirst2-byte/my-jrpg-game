@@ -355,11 +355,11 @@ BODY_SIDE = grid("""
 16|CDEEEEEEEEDDDDDDJKKKKL
 15|BCDEEEEEEEDDDDDDDJJJKKKL
 14|BCDEEEEEEDDDDDDDDDJJJKKKKL
-13|BCDEEEEEDDDDDDDDDDDJKJJKKKKL
-12|BCDEEECCDDDDDDDDDDDDJKJJKKKKKL
-12|BCDEEEDCCDDDDDDDDDDDJKKJJKKKKKL
-12|BCDEEEDDCCDDDDDDDDDDJKKJJKKKKKKL
-11|BCDEEEDDDDCCDDDDDDDDDJKKKJJKKKKKKL
+13|BCDEEEEEDDDDDDDDDDDJKIJKKKKL
+12|BCDEEECCDDDDDDDDDDDDJKIJKKKKKL
+12|BCDEEEDCCDDDDDDDDDDDJKKIJKKKKKL
+12|BCDEEEDDCCDDDDDDDDDDJKKIJKKKKKKL
+11|BCDEEEDDDDCCDDDDDDDDDJKKKIJKKKKKKL
 11|BCDEEDDDDDDDDDDDDDDDDJKKKKKKKKKKKKL
 10|BCDEEDDDDDDDDDDDDDDDDDJJKKKKKKKKJJKL
 10|BCDEEDDDDDDDDDDDDDDDDDJJKKKKKKKKJJJKL
@@ -839,6 +839,27 @@ ijjjjjjjji..
 .iiiiiiii...
 """, 12)
 
+# facing right: the towel's end down his back, on the far shoulder; only its edge shows behind the shoulder.
+# v1 drew that edge in one tone (#a8bcd8, tone 3 = j): tone 3 here too, a light on the fold over the
+# shoulder (k), one pair of stripes (i) and the hanging end (j to i, then the outline).
+TOWEL_SIDE = grid("""
+jjkkjjjjjjjj
+jjjjjjjjjjjj
+iiiiiiiiiiij
+jjjjjjjjjjjj
+jjjjjjjjjj..
+jjjjjjjjjj..
+jjjjjjjjjj..
+iiiiiiiiij..
+jjjjjjjjjj..
+iiiiiiiiij..
+jjjjjjjjjj..
+jjjjjjjjjj..
+jjjjjjjjjj..
+ijjjjjjjji..
+.iiiiiiii...
+""", 12)
+
 # facing left: the towel lies over the near shoulder (from the back to the front)
 TOWEL_OVER = grid("""
 ..jkkkkkkkkkjj
@@ -925,7 +946,7 @@ def side(p, swap=False, blink=False):
     _side_leg(f, p.far, t_far)
     _hang_arm(f, ay, p.arm_far, tone=t_darker)
     if not swap:  # the towel on the far shoulder: its end hangs down his back
-        f.stamp(TOWEL_BACK, 10, 50 + B + U, LEG, part="towel", tone=t_darker)
+        f.stamp(TOWEL_SIDE, 10, 50 + B + U, LEG, part="towel")
     _side_leg(f, p.near, None)  # the long apron hides the thigh
     _body(f, BODY_SIDE, B, U, False)
     f.stamp(HEAD_SIDE_BLINK if blink else HEAD_SIDE, 0, 6 + B + U, LEG, part="head")
