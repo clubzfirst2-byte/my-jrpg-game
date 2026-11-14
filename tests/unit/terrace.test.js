@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { createGameState, stepGame } from '../../src/game/state.js';
+import { stepGame } from '../../src/game/state.js';
 import { WORLD, regionAt } from '../../src/game/world/world.js';
-import { tileFeet, areaAt } from '../../src/game/world/features.js';
+import { areaAt } from '../../src/game/world/features.js';
 import { COMBAT } from '../../src/game/entities/playerCombat.js';
 import { Ground } from '../../src/game/world/tilemap.js';
 import { windReaches, laneWindAt, updraftAt, WIND } from '../../src/game/env/wind.js';
