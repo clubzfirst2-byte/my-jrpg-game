@@ -10,6 +10,7 @@ of the right: the held thing stays in its hand).
 Checks before anything is written (a failure stops the run and writes nothing):
   edge         nothing but an outline on the top row / side columns
   stray        no piece of 40 texels or fewer apart from the figure
+  pieces       the figure is exactly one 4-connected piece (round 4d: a head apart from its neck, any size)
   translucent  no texel with 0 < alpha < 255
   same         no two frames of one person are the same picture
   mirror       no left frame that is only the mirror of its right frame
@@ -40,6 +41,26 @@ VIEWS = ("down", "right", "up", "left")
 NO_LEFT = ("princess", "smith")  # no left files: the game draws their right mirrored (decision 2026-11-12)
 
 
+def n_pieces(a):
+    """4-connected pieces of opaque texels in the finished frame (outline included)."""
+    op = a[..., 3] == 255
+    seen = np.zeros(op.shape, bool)
+    n = 0
+    for y0, x0 in zip(*np.nonzero(op)):
+        if seen[y0, x0]:
+            continue
+        n += 1
+        st = [(y0, x0)]
+        seen[y0, x0] = True
+        while st:
+            y, x = st.pop()
+            for yy, xx in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)):
+                if 0 <= yy < op.shape[0] and 0 <= xx < op.shape[1] and op[yy, xx] and not seen[yy, xx]:
+                    seen[yy, xx] = True
+                    st.append((yy, xx))
+    return n
+
+
 def build(who):
     M = importlib.import_module("npc_pm_" + who)
     v1 = importlib.import_module(who).NPC
@@ -59,6 +80,9 @@ def build(who):
                 st = stray_pieces(fig.c)
                 if st:
                     bad.append((name, "stray", st))
+                pieces = n_pieces(a)
+                if pieces != 1:  # the figure is one piece (a head floating above its neck is caught here)
+                    bad.append((name, "pieces", pieces))
                 if translucent(a):
                     bad.append((name, "translucent", translucent(a)))
                 h = hashlib.md5(a.tobytes()).hexdigest()
