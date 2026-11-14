@@ -119,8 +119,8 @@ for (const screen of [PRO, SE]) {
     expect(await api(page, 'textureDensity', 'hero.idle.down.0')).toBe(4);
     // (the enemies' v3 frames: a bundle per kind, loaded with the regions where it spawns — the island: beasts, archers)
     await expect.poll(() => api(page, 'textureDensity', 'enemy.beast.idle.0')).toBe(4);
-    // (the villagers' v3 frames: a bundle per person, held near the plains region — not on the island; npcV3.js)
-    expect(await api(page, 'textureDensity', 'npc.woman.idle.down.0')).toBe(null);
+    // (the villagers' v3 frames: a bundle per person, held while a loaded chunk has a part of the plains
+    // region — the start on the island loads the plains chunks next to it, so they come in the background; npcV3.js)
     expect(await api(page, 'textureDensity', 'hero.walk.right.0')).toBe(4);
     expect(await api(page, 'textureDensity', 'hero.climb.right.0')).toBe(null);
     expect(await api(page, 'textureDensity', 'v1.hero.climb.right.0')).toBe(2);
@@ -887,20 +887,26 @@ test('?v3=1: the 9 villagers — every idle and walk frame from the v3 art; the 
     expect(a, pose).toBeTruthy();
     expect(a.density, pose).toBe(2);
     expect(a.mirrored, pose).toBe(false);
-    expect({ key: s.key, w: s.w, h: s.h, dx: s.dx, dy: s.dy, anchor: s.anchor, zIndex: s.zIndex, alpha: s.alpha, body: s.body }, pose).toEqual({ key: a.key, w: a.w, h: a.h, dx: a.dx, dy: a.dy, anchor: a.anchor, zIndex: a.zIndex, alpha: a.alpha, body: a.body });
+    // (draw order relative to the villager's y: the guard walks his round between the two runs)
+    expect({ key: s.key, w: s.w, h: s.h, dx: s.dx, dy: s.dy, dz: s.dz, anchor: s.anchor, alpha: s.alpha, body: s.body }, pose).toEqual({ key: a.key, w: a.w, h: a.h, dx: a.dx, dy: a.dy, dz: a.dz, anchor: a.anchor, alpha: a.alpha, body: a.body });
+    expect(s.dz, pose).toBe(0);
     expect([s.w, s.h, s.dx, s.dy, ...s.anchor], pose).toEqual([16, 28, 0, 0, 0.5, 1]);
   }
   // every frame of every person was drawn: 9 × 4 directions × (idle 4 + walk 6)
   expect(seen.size).toBe(360);
 });
 
-test('?v3=1: the villager bundles — none on the island, all 9 near the plains (8.7 MB), let go in the forest, only the princess\'s where she stands elsewhere; art under 35 MB', async ({ browser }, testInfo) => {
+test('?v3=1: the villager bundles — at the start all 9 exactly while a plains chunk is loaded, all 9 near the plains (8.7 MB), let go in the forest, only the princess\'s where she stands elsewhere; art under 35 MB', async ({ browser }, testInfo) => {
   test.setTimeout(180_000);
   for (const screen of [PRO, SE]) {
     const { context, page, errors } = await open(browser, screen, '&v3=1');
-    // the island: no villager bundle; the princess on the beach is the only villager there and off screen
+    // the start (the island's beach): the bundles follow the rule — all 9 while a loaded chunk has a part of
+    // the plains region (the start loads the plains chunks next to the island), else only the princess's
     expect((await api(page, 'v3')).npcs.people).toEqual(NPC_PEOPLE);
-    expect(await api(page, 'textureDensity', 'npc.elder.idle.down.0')).toBe(null);
+    await page.waitForTimeout(1000);
+    const start = await api(page, 'v3');
+    const plainsNear = 'region:plains' in start.bundles;
+    expect(start.npcs.wanted).toEqual(plainsNear ? allNpcBundles : start.npcs.wanted.filter((b) => b === 'v3:npc:princess'));
     // the village: all 9, each person's frames at density 4, the mirrored left keys answered too
     await api(page, 'teleport', ...VILLAGE_AT);
     await expect.poll(() => npcBundles(page), { timeout: 30_000 }).toEqual(allNpcBundles);
