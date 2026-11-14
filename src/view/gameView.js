@@ -42,6 +42,7 @@ import { frameFight } from './assets/artV3.js';
 import { GroundCache } from './groundCache.js';
 import { V3_OBJECTS_WINTER, V3_VILLAGE_TYPES, V3_WINTER_OBJECTS, v3VillageBundle } from './assets/villageV3.js';
 import { V3_ENEMY_KINDS, kindsByRegion, v3EnemyBundle } from './assets/enemyV3.js';
+import { NPC_V3_REGION, npcV3Bundle, npcV3BundleWho } from './assets/npcV3.js';
 import { HERO_V3_LAZY, HERO_V3_MOVE_BUNDLE, HERO_V3_MOVE_KEEP_MS, heroDrawKey } from './assets/heroV3.js';
 import { MacroGrid, PROPS, PROP_SWAY, TREE_SWAY, baseKey as v3BaseKey, edgeKey as v3EdgeKey, floraFrames, floraKey, flowCorner, flowKey, flowLook, openProp, plainsTreeLook, seasonPrefix, swayFrame, swayStep, treeFootProp, v3PineBundle, v3PlainsBundles } from './v3Plains.js';
 import { FOREST_PROPS, forestBaseKey, forestEdgeKey, forestFlowLook, forestFootProp, forestOpenProp, forestTreeLook, plainsPineBanned, rootsOffset, v3ForestBundles, winterMaskOf, winterPriority } from './v3Forest.js';
@@ -135,7 +136,7 @@ export class GameView {
    * @param {import('pixi.js').Application} app
    * @param {import('./assets/assetManager.js').AssetManager} assets
    * @param {import('../game/state.js').GameState} state
-   * @param {{ v3?: boolean, v3Opaque?: boolean, v3Cache?: boolean, v3HeroMove?: boolean }} [opts] v3: graphics v3 and its narrow view (?v3=1, assets/artV3.js)
+   * @param {{ v3?: boolean, v3Opaque?: boolean, v3Cache?: boolean, v3HeroMove?: boolean, v3Npcs?: string[] }} [opts] v3: graphics v3 and its narrow view (?v3=1, assets/artV3.js)
    */
   constructor(app, assets, state, opts = {}) {
     this.app = app;
@@ -179,6 +180,10 @@ export class GameView {
     this.v3EnemyKinds = this.v3 ? kindsByRegion(state.enemySpawns ?? [], (x, y) => regionAt(state.regions, x, y)?.id) : null;
     /** Graphics v3: the enemy bundles live enemies need this frame (a kind spawned outside its regions), kept loaded. @type {Set<string>} */
     this.v3EnemyLive = new Set();
+    /** Graphics v3 (npcV3.js): the people (art names) drawn from bundles of their own. @type {string[]} */
+    this.v3Npcs = this.v3 ? (opts.v3Npcs ?? []) : [];
+    /** Graphics v3: the villager bundles wanted this frame (v3NpcBundlesWanted), kept loaded. @type {Set<string>} */
+    this.v3NpcLive = new Set();
     /** Graphics v3: the winter look of the common objects, held while it is winter (updateSeason). @type {string | null} */
     this.v3SeasonObjects = null;
     /** Graphics v3: the camera's view of the last frame, game px (state.viewRect). @type {{ x: number, y: number, width: number, height: number } | null} */
@@ -335,6 +340,7 @@ export class GameView {
     this.bossRing = null;
     this.items = new ItemView((key) => this.makeSprite(key), this.actors);
     this.npcs = new NpcView(assets, (key) => this.makeSprite(key), this.actors);
+    for (const who of this.v3Npcs) this.npcs.own.add(who);
     this.puzzles = new PuzzleView(
       (key) => this.makeSprite(key),
       (key) => this.assets.texture(this.seasonal(key)), // (graphics v3: the plates' winter look)
@@ -1205,6 +1211,44 @@ export class GameView {
   }
 
   /**
+   * Graphics v3 (npcV3.js; STYLE.md 10.2: the villagers' art is held while in their region): the villager
+   * bundles wanted now — every person's while a loaded chunk has a part of the plains region (all 9 live
+   * there: the village, the road, the shop in its strip of rooms), and elsewhere the bundle of each
+   * villager standing on a loaded chunk (the princess by the other regions' record stones). Like the
+   * enemies' bundles they are not a chunk's: they never hold its ground back.
+   * @param {any} state @returns {Set<string>}
+   */
+  v3NpcBundlesWanted(state) {
+    /** @type {Set<string>} */
+    const out = new Set();
+    let home = false;
+    for (const c of this.chunks.values()) {
+      const key = `h${c.cx},${c.cy}`;
+      let has = this.v2Tiles.get(key);
+      if (has === undefined) {
+        const x0 = c.cx * CHUNK;
+        const y0 = c.cy * CHUNK;
+        has = this.regions.some((r) => r.id === NPC_V3_REGION && r.tx < x0 + CHUNK && r.tx + r.tw > x0 && r.ty < y0 + CHUNK && r.ty + r.th > y0) ? ['y'] : [];
+        this.v2Tiles.set(key, has);
+      }
+      if (has.length) {
+        home = true;
+        break;
+      }
+    }
+    if (home) {
+      for (const who of this.v3Npcs) out.add(npcV3Bundle(who));
+      return out;
+    }
+    const size = CHUNK * this.map.tileSize;
+    for (const n of state.npcs) {
+      const who = n.art ?? n.id;
+      if (this.v3Npcs.includes(who) && this.chunks.has(this.chunkKey(Math.floor(n.x / size), Math.floor(n.y / size)))) out.add(npcV3Bundle(who));
+    }
+    return out;
+  }
+
+  /**
    * Graphics v3 (VILLAGE.md 4.0): the bundle of the village's houses, fences, well and signposts in the
    * current season ("v3:village:<season>", summer's in spring), for a chunk that has any of them, else null.
    * @param {number} cx @param {number} cy
@@ -1752,13 +1796,16 @@ export class GameView {
         this.assets.unload(b); // the chunks hold their own references now
         this.preloaded.delete(b);
       } else if (!this.bundlesLoading.has(b)) {
-        const stillWanted = waiting.has(b) || !!this.v3SeasonWant?.includes(b) || this.v3EnemyLive.has(b) || this.regions.some((r) => r.bundle === b && this.regionNear(r, origin, viewW, viewH));
+        const stillWanted = waiting.has(b) || !!this.v3SeasonWant?.includes(b) || this.v3EnemyLive.has(b) || this.v3NpcLive.has(b) || this.regions.some((r) => r.bundle === b && this.regionNear(r, origin, viewW, viewH));
         if (!stillWanted) {
           if (b === 'region:plains') this.npcs.clear();
           this.dropBossSprites();
           // graphics v3: an enemy kind's frames: drop that kind's sprites first (redrawn next frame from the base bundle)
           const kind = /^v3:enemy:(\w+)$/.exec(b)?.[1];
           if (kind) this.dropEnemySpritesOf(kind);
+          // graphics v3: a villager's frames: drop the sprites showing them first
+          const who = npcV3BundleWho(b);
+          if (who) this.npcs.dropArt(who);
           this.assets.unload(b);
           this.preloaded.delete(b);
         }
@@ -2477,6 +2524,12 @@ export class GameView {
     this.env.update(state, o, this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom, timeSec);
     this.weather.update(state, o, this.camera.zoom, this.boundsArea ? areaAt(state, state.player.x, state.player.y) : null, timeSec, dtSec);
     this.items.update(state, timeSec);
+    // graphics v3: the villagers' own bundles (loaded in the background, kept while wanted; a villager is
+    // not drawn until its person's bundle is in)
+    if (this.v3Npcs.length) {
+      this.v3NpcLive = this.v3NpcBundlesWanted(state);
+      for (const b of this.v3NpcLive) if (!this.assets.isLoaded(b)) this.requestBundle(b);
+    }
     this.npcs.update(state, alpha, { x, y }, timeSec);
     this.puzzles.update(state, timeSec);
     this.features.update(

@@ -461,11 +461,37 @@ export function tallestFirstOrder(entries) {
  * Graphics v3 (`exactHeight`): the height the shelves use, rounded up to 4 px, not to a power of two (WebGL
  * 2 and WebGL 1 without mipmaps take any size): a v3 season's plains art uses 1100-odd rows of a 2048 ×
  * 2048 square, which a power of two would round to 2048 (16 MB) instead of about 9.
+ * Graphics v3 (`tight`, the villagers' bundles, npcV3.js): the width, a multiple of 4 from the widest entry
+ * to 2048, whose shelves take the least area (height rounded up to 4 px; the narrower of equals). A few
+ * dozen frames of one size leave the last shelf of a power-of-two width mostly empty (a villager's 40
+ * frames on 1024 px: 3 shelves, the third a third full).
  * @param {{ rows: string[], image?: { width: number, height: number } }[]} entries
- * @param {{ exactHeight?: boolean }} [opts]
+ * @param {{ exactHeight?: boolean, tight?: boolean }} [opts]
  * @returns {{ width: number, height: number }}
  */
-export function atlasSizeFor(entries, { exactHeight = false } = {}) {
+export function atlasSizeFor(entries, { exactHeight = false, tight = false } = {}) {
+  if (tight && entries.length) {
+    const sizes = entries.map(sizeOf);
+    const widest = Math.max(...sizes.map((s) => s.w));
+    let best = null;
+    for (let width = Math.ceil(widest / 4) * 4; width <= 2048; width += 4) {
+      let x = 0;
+      let y = 0;
+      let shelf = 0;
+      for (const { w, h } of sizes) {
+        if (x + w > width) {
+          x = 0;
+          y += shelf + 1;
+          shelf = 0;
+        }
+        x += w + 1;
+        shelf = Math.max(shelf, h);
+      }
+      const height = Math.max(4, Math.ceil((y + shelf) / 4) * 4);
+      if (height <= 2048 && (!best || width * height < best.width * best.height)) best = { width, height };
+    }
+    if (best) return best;
+  }
   for (const size of [64, 128, 256, 512, 1024, 2048]) {
     let x = 0;
     let y = 0;
@@ -665,15 +691,16 @@ export function mirroredFrames(all, mirror) {
 /**
  * @param {{ key: string, rows: string[], anchor: [number, number] }[]} [entries]
  * @param {Map<string, ArtSource>} [overrides] the real art (P11.5), by logical name
- * @param {{ tallestFirst?: boolean, mirror?: MirrorOptions, exactHeight?: boolean, trim?: boolean, mirrorOf?: Map<string, string> }} [opts] tallestFirst: pack the real art
+ * @param {{ tallestFirst?: boolean, mirror?: MirrorOptions, exactHeight?: boolean, tight?: boolean, trim?: boolean, mirrorOf?: Map<string, string> }} [opts] tallestFirst: pack the real art
  *   tallest first (gfx W1); mirror: graphics v3, left frames drawn as their right frames mirrored;
  *   exactHeight: graphics v3, the real art's atlases only as high as they are used (atlasSizeFor);
+ *   tight: graphics v3, the real art's atlases as wide as wastes least (atlasSizeFor; the villagers' bundles);
  *   trim: graphics v3, the real art's sprites (not tiles) packed without their transparent margins (opaqueBox);
  *   mirrorOf: graphics v3, left frames that have no art of their own, each drawn as the given right frame
  *   of the pack mirrored (heroV3.js: the v3 hero stores no left frame for an action without a held prop)
  * @returns {Promise<import('./assetManager.js').BuiltBundle>}
  */
-export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map(), { tallestFirst = false, mirror, exactHeight = false, trim = false, mirrorOf } = {}) {
+export async function buildPlaceholderPack(entries = placeholderEntries(), overrides = new Map(), { tallestFirst = false, mirror, exactHeight = false, tight = false, trim = false, mirrorOf } = {}) {
   let all = await withOverrides(entries, overrides);
   // (graphics v3: the real art packed without its transparent margins)
   // (the box from the build when the sheet's table gives it: reading the pixels back is slow while the GPU draws)
@@ -689,7 +716,7 @@ export async function buildPlaceholderPack(entries = placeholderEntries(), overr
   for (const d of densities) {
     const of = all.filter((e) => e.image && (e.density ?? ART_SCALE) === d);
     const real = tallestFirst ? tallestFirstOrder(of) : of;
-    packs.push(packAtlas(real, atlasSizeFor(real, { exactHeight }), d));
+    packs.push(packAtlas(real, atlasSizeFor(real, { exactHeight, tight }), d));
   }
   const pack = mergePacks(packs);
   // a mirrored left frame: its right frame's texture, flipped by the view (SpriteMeta.flipX)

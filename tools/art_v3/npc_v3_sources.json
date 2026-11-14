@@ -1,0 +1,14 @@
+{
+  "note": "Where each villager's v3 frames (src/art-release-v3/npc/npc.<who>.*.png) were taken from. The ONE place that records it: tools/art_v3/import_npc_v3.mjs reads this file, checks the frames out of the commit named here (the same blobs: the pictures are never edited on this branch) and verifies the result. To replace a person, change its commit here and run `node tools/art_v3/import_npc_v3.mjs`; `--check` only verifies. state: \"final\" = passed the independent inspection; \"provisional\" = still being corrected by its artist, to be replaced.",
+  "people": {
+    "guard": { "branch": "gfx/v3-art", "commit": "7ea81cfcd9c7f2ba0a5e61cbfeaf8f3a81dda013", "state": "final", "left": "stored", "files": 40 },
+    "child": { "branch": "gfx/v3-art", "commit": "7ea81cfcd9c7f2ba0a5e61cbfeaf8f3a81dda013", "state": "final", "left": "stored", "files": 40 },
+    "woman": { "branch": "gfx/v3-art", "commit": "7ea81cfcd9c7f2ba0a5e61cbfeaf8f3a81dda013", "state": "final", "left": "stored", "files": 40 },
+    "smith": { "branch": "gfx/v3-art", "commit": "7ea81cfcd9c7f2ba0a5e61cbfeaf8f3a81dda013", "state": "final", "left": "mirror", "files": 30 },
+    "princess": { "branch": "gfx/v3-art", "commit": "7ea81cfcd9c7f2ba0a5e61cbfeaf8f3a81dda013", "state": "final", "left": "mirror", "files": 30 },
+    "elder": { "branch": "gfx/v3-npc-b", "commit": "fc573c86ba49e0cd7f1bee4ebe4565f971ae14ea", "state": "final", "left": "stored", "files": 40 },
+    "cook": { "branch": "gfx/v3-npc-b", "commit": "fc573c86ba49e0cd7f1bee4ebe4565f971ae14ea", "state": "provisional", "left": "stored", "files": 40 },
+    "merchant": { "branch": "gfx/v3-npc-b", "commit": "fc573c86ba49e0cd7f1bee4ebe4565f971ae14ea", "state": "provisional", "left": "stored", "files": 40 },
+    "traveller": { "branch": "gfx/v3-npc-b", "commit": "fc573c86ba49e0cd7f1bee4ebe4565f971ae14ea", "state": "provisional", "left": "stored", "files": 40 }
+  }
+}

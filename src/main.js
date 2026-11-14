@@ -29,6 +29,7 @@ import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
 import { availableV1Groups, availableV2Groups, availableV3Groups, prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
 import { V3_DENSITY, V3_TARGET_HEIGHT, chooseToastSlot, v3ArtGroups, v3Enabled } from './view/assets/artV3.js';
 import { releaseSheetsLazily, dropIdleSheets, sameMirrored, freeAtlasCanvases, cpuImageBytes } from './view/assets/v3Memory.js';
+import { npcCoveredByV3, npcV3Bundle, npcV3Parts, npcV3People, npcWhoOf } from './view/assets/npcV3.js';
 import { HERO_V3_BUNDLE, HERO_V3_LAZY, HERO_V3_MOVE_BUNDLE, heroActionOf, heroCoveredByV3, heroFallbackKey, heroV3Parts } from './view/assets/heroV3.js';
 import { resolveArtGroups } from './view/assets/artV2.js';
 import { GROUND_RUIN_BUNDLE, ISLAND_EDGES_BUNDLE, ISLAND_STEPS_BUNDLE, TERRAIN_GROUP, releaseTerrainEntries, v2BundleParts, terrainDebugApi, wantsTerrainArt } from './view/assets/terrainArt.js';
@@ -186,6 +187,11 @@ async function boot() {
       if (a && HERO_V3_LAZY.includes(a)) artOverrides.set(heroFallbackKey(k), v);
     }
   }
+  // Graphics v3 (npcV3.js): the villagers with v3 frames, each drawn from a bundle of its own
+  /** @type {Set<string>} */
+  const v3NpcKeys = new Set();
+  for (const frames of v3Frames) for (const [k, v] of frames) if (npcWhoOf(k) && densityOf(v) === V3_DENSITY) v3NpcKeys.add(k);
+  const v3Npcs = npcV3People(v3NpcKeys);
   for (const frames of v3Frames) for (const [k, v] of frames) if (!v3EnemyUnused(k)) artOverrides.set(k, v);
   if (v3) releaseSheetsLazily(artOverrides);
   installItemIcons(artOverrides); // the menus' item icons, from the same art
@@ -230,7 +236,7 @@ async function boot() {
     ? [...releaseHeroEntries(artOverrides).filter((e) => !heroCoveredByV3(e.key, v3HeroKeys)), ...[...artOverrides.keys()].filter((k) => k.startsWith('v1.hero.')).map((key) => ({ key, rows: ['.'], anchor: /** @type {[number, number]} */ ([0.5, 1]) }))]
     : releaseHeroEntries(artOverrides);
   assets.register('placeholder', () =>
-    buildPlaceholderPack([...placeholderEntries(), ...baseHeroEntries, ...releaseNpcEntries(artOverrides), ...releaseEnemyEntries(artOverrides).filter((e) => !(v3 && v3EnemyKindOf(e.key) && densityOf(/** @type {any} */ (artOverrides.get(e.key))) === V3_DENSITY)), ...releaseTerrainEntries('placeholder', artOverrides), ...groundV2Entries], artOverrides, {
+    buildPlaceholderPack([...placeholderEntries(), ...baseHeroEntries, ...releaseNpcEntries(artOverrides).filter((e) => !npcCoveredByV3(e.key, v3Npcs)), ...releaseEnemyEntries(artOverrides).filter((e) => !(v3 && v3EnemyKindOf(e.key) && densityOf(/** @type {any} */ (artOverrides.get(e.key))) === V3_DENSITY)), ...releaseTerrainEntries('placeholder', artOverrides), ...groundV2Entries], artOverrides, {
       tallestFirst: groundV2Entries.length > 0,
       ...packOpts,
     }),
@@ -282,6 +288,14 @@ async function boot() {
     const entries = keys.map((key) => ({ key, rows: ['.'], anchor: /** @type {[number, number]} */ ([0.5, 1]) }));
     if (entries.length) assets.register(bundle, () => buildPlaceholderPack(entries, artOverrides, { ...packOpts, tallestFirst: true, exactHeight: true, trim: true, mirrorOf }));
   }
+  // Graphics v3 (npcV3.js): each villager's v3 frames, trimmed, a bundle of its own, loaded while the plains
+  // region is near (gameView.v3NpcBundlesWanted); the princess's and the smith's left frames are their
+  // right frames mirrored (no left files: NAMES.md 6)
+  for (const who of v3Npcs) {
+    const { keys, mirrorOf } = npcV3Parts(v3NpcKeys, who);
+    const entries = keys.map((key) => ({ key, rows: ['.'], anchor: /** @type {[number, number]} */ ([0.5, 1]) }));
+    assets.register(npcV3Bundle(who), () => buildPlaceholderPack(entries, artOverrides, { ...packOpts, tallestFirst: true, exactHeight: true, tight: true, trim: true, mirrorOf }));
+  }
   // Graphics v3: the plains' v3 ground, trees and props, one bundle per season (summer's in spring), loaded
   // by the chunks that have plains (gameView.v3PlainsBundleOf), packed tallest first on atlases of their own
   for (const season of /** @type {const} */ (['summer', 'autumn', 'winter', 'flow'])) {
@@ -314,7 +328,7 @@ async function boot() {
   // so a save never names them: game/world/villageProps.js)
   if (v3 && v3Village) addVillageProps(state);
   performance.mark('world');
-  const view = new GameView(app, assets, state, { v3, v3Opaque: params.get('v3opaque') === '1', v3Cache: params.get('v3cache') !== '0', v3HeroMove: assets.builders.has(HERO_V3_MOVE_BUNDLE) });
+  const view = new GameView(app, assets, state, { v3, v3Opaque: params.get('v3opaque') === '1', v3Cache: params.get('v3cache') !== '0', v3HeroMove: assets.builders.has(HERO_V3_MOVE_BUNDLE), v3Npcs });
   performance.mark('view');
   // Test / check helpers: ?time=20 (hour) and ?weather=rain|storm|cloudy|clear.
   const timeParam = Number.parseFloat(params.get('time') ?? '');
@@ -742,6 +756,11 @@ async function boot() {
       else if (!t.resource) out.render += b;
     }
     return out;
+  };
+  /** A loaded bundle's GPU texture bytes (its atlases), or null when it is not loaded. @param {string} name */
+  const bundleBytes = (name) => {
+    const e = assets.loaded.get(name);
+    return e ? (e.bundle.canvases ?? []).reduce((n, { source }) => n + source.pixelWidth * source.pixelHeight * 4, 0) : null;
   };
   let skipNextFrame = true;
 
@@ -1248,6 +1267,10 @@ async function boot() {
       plains: v3 ? view.v3Stats() : null,
       /** the forest's v3 trees and props on the loaded chunks (gameView.v3Stats('forest')) */
       forest: v3 ? view.v3Stats('forest') : null,
+      /** the villagers drawn from bundles of their own (npcV3.js): the people, and each loaded bundle's GPU bytes */
+      npcs: { people: v3Npcs, wanted: [...view.v3NpcLive].sort(), bytes: Object.fromEntries(v3Npcs.map((who) => [who, bundleBytes(npcV3Bundle(who))])) },
+      /** every loaded bundle's GPU texture bytes (its atlases) */
+      bundles: Object.fromEntries([...assets.loaded.keys()].sort().map((name) => [name, bundleBytes(name)])),
       /** the ground cache (groundCache.js): its texture's bytes, how often it was drawn, the time spent */
       cache: view.groundCache ? { bytes: view.groundCache.bytes(), rect: view.groundCache.rect, ...view.groundCache.stats } : null,
     }),
@@ -1278,10 +1301,7 @@ async function boot() {
       if (view.heroMove) view.heroMove.keepMs = ms;
     },
     /** Graphics v3: a loaded bundle's GPU texture bytes (its atlases), or null when it is not loaded. */
-    bundleBytes: (/** @type {string} */ name) => {
-      const e = assets.loaded.get(name);
-      return e ? (e.bundle.canvases ?? []).reduce((n, { source }) => n + source.pixelWidth * source.pixelHeight * 4, 0) : null;
-    },
+    bundleBytes: (/** @type {string} */ name) => bundleBytes(name),
     /**
      * Graphics v3 (tests): the tree sprites on screen now — region, how a v3 tree is drawn (look kind, null
      * when it has none), the key (sway frame 0), whether its texture is loaded and the drawn texture's art density.

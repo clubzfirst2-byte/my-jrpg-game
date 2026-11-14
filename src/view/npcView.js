@@ -4,6 +4,8 @@
 // bundle; release art and the princess's placeholder (she stands by record stones in every region,
 // v1.0) are in the base bundle. Villagers who leave (their appearance condition, v1.0) lose their
 // sprite; a ghost (the princess's 写し身) is see-through.
+// Graphics v3 (assets/npcV3.js): a person with v3 art is drawn from its own bundle ("v3:npc:<who>"), and
+// not at all until that is in; a left frame may be the right one mirrored (setFrame).
 import { lerp } from '../game/core/math.js';
 import { npcAlpha } from '../game/npc/npcs.js';
 import { npcFrameKey } from './npcAnim.js';
@@ -27,6 +29,10 @@ export class NpcView {
     this.keys = new Map();
     /** The ids there this frame (reused: no garbage per frame). @type {Set<string>} */
     this.present = new Set();
+    /** Graphics v3: the people (art names) drawn from bundles of their own (gameView sets it). @type {Set<string>} */
+    this.own = new Set();
+    this.hasKey = (/** @type {string} */ key) => this.assets.hasTexture(key);
+    this.isOwn = (/** @type {string} */ art) => this.own.has(art);
   }
 
   /**
@@ -35,14 +41,14 @@ export class NpcView {
    * @param {number} [timeSec] real time (the release art's breathing loop)
    */
   update(state, alpha, center, timeSec = 0) {
-    const has = (/** @type {string} */ key) => this.assets.hasTexture(key);
+    const has = this.hasKey;
     // Someone who left (v1.0 appearance conditions): no sprite.
     this.present.clear();
     for (const n of state.npcs) this.present.add(n.id);
     for (const id of this.sprites.keys()) if (!this.present.has(id)) this.drop(id); // (deleting while iterating a Map is safe)
     for (const n of state.npcs) {
       const near = Math.hypot(n.x - center.x, n.y - center.y) < NEAR_PX;
-      const key = near ? npcFrameKey(n, timeSec, has) : null;
+      const key = near ? npcFrameKey(n, timeSec, has, this.isOwn) : null;
       let s = this.sprites.get(n.id);
       if (!key || !has(key)) {
         if (s) this.drop(n.id);
@@ -70,6 +76,11 @@ export class NpcView {
     this.keys.delete(id);
   }
 
+  /** Graphics v3: drops the sprites showing one person's frames, before that person's bundle goes. @param {string} who art name */
+  dropArt(who) {
+    for (const [id, key] of this.keys) if (key.startsWith(`npc.${who}.`)) this.drop(id);
+  }
+
   /** Drop every sprite (before the plains art is released). */
   clear() {
     for (const s of this.sprites.values()) s.destroy();
@@ -79,6 +90,7 @@ export class NpcView {
 
   /** What is on screen: each villager's frame, size in game px and draw order. */
   debug() {
-    return [...this.sprites].map(([id, s]) => ({ id, key: this.keys.get(id), w: s.texture.width, h: s.texture.height, zIndex: s.zIndex, x: s.x, y: s.y, alpha: s.alpha }));
+    // (graphics v3: density = the drawn texture's art px per game px; mirrored = a left frame drawn from its right frame)
+    return [...this.sprites].map(([id, s]) => ({ id, key: this.keys.get(id), w: s.texture.width, h: s.texture.height, zIndex: s.zIndex, x: s.x, y: s.y, alpha: s.alpha, anchor: [s.anchor.x, s.anchor.y], density: s.texture.source.resolution, mirrored: s.scale.x < 0 }));
   }
 }
