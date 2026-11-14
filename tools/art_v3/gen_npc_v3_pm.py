@@ -1,5 +1,5 @@
 """v3 villagers, round 4 (hand-drawn pixel maps): writes src/art-release-v3/npc/npc.<who>.<idle|walk>.<dir>.<n>.png
-for the people made with npc_pixmap.py (now: guard, child). The other people's files are not touched.
+for the people made with npc_pixmap.py (the names in WHO below). The other people's files are not touched.
 
 Each frame is assembled from that person's hand-drawn part maps (npc_pm_<who>.py), placed by v1's own pose
 table for that frame (tools/npc_release, read only). Keys, frame counts and anchor are v1's
