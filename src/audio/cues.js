@@ -20,6 +20,8 @@ export const EVENT_SFX = Object.freeze({
   pickup: 'pickup',
   chest: 'chest',
   checkpoint: 'checkpoint',
+  survey: 'discover', // volume phase 1
+  travel: 'door',
   landmark: 'discover',
   gateOpen: 'gate',
   switchOn: 'switch',

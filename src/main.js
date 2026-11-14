@@ -35,6 +35,8 @@ import { HeartsHud } from './ui/hud.js';
 import { RotateHint } from './ui/rotateHint.js';
 import { TitleScreen } from './ui/title.js';
 import { InventoryMenu } from './ui/inventoryMenu.js';
+import { MapMenu } from './ui/mapMenu.js';
+import { travelTo, mapModel, checkpointName } from './game/world/survey.js';
 import { DialogueBox } from './ui/dialogueBox.js';
 import { ShopMenu } from './ui/shopMenu.js';
 import { startDialogue, dialogueView, advance, questDef } from './game/npc/talk.js';
@@ -466,6 +468,9 @@ async function boot() {
         if (room?.home && room.name) toast.show(room.name, { ms: 1500 });
       } else if (ev.type === 'fell') {
         toast.show('穴に落ちた…', { ms: 1200 });
+      } else if (ev.type === 'survey') {
+        const r = state.regions.find((x) => x.id === ev.id);
+        toast.show(`測量石に触れた — ${r?.name ?? ''}が地図に描かれた（Ⅱ →「地図」）`, { ms: 4000 });
       } else if (ev.type === 'checkpoint') {
         toast.show('記録石に触れた — 倒れてもここから再開できる');
       } else if (ev.type === 'gateOpen') {
@@ -499,9 +504,34 @@ async function boot() {
     onVolume: (kind) => setVolume(kind, nextVolume(kind === 'bgm' ? settings.bgmVolume : settings.sfxVolume)),
     volumes: () => ({ bgm: settings.bgmVolume, sfx: settings.sfxVolume }),
     onSettings: () => settingsMenu.open(),
+    // Volume phase 1: the map (not on the test maps without regions).
+    onMap: state.regions.length ? () => mapMenu.open() : undefined,
     // v1.0: 「タイトルへ」 — saved first; with no title (?map= test maps) there is none.
     onTitle: withTitle ? () => void backToTitle() : undefined,
     version: `v${__APP_VERSION__}`,
+  });
+  // Volume phase 1: the map, and travel to a record stone already touched. Travelling resumes the
+  // game at the stone (the camera jumps; the region's art streams in as after a pass).
+  const mapMenu = new MapMenu(uiRoot, {
+    getState: () => state,
+    onTravel: (id) => {
+      if (!travelTo(state, id)) return false;
+      view.snapCamera(state);
+      resume();
+      toast.show(`${checkpointName(id)}の記録石へ移った`, { ms: 2500 });
+      return true;
+    },
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyM' && !inTitle && !inMenu && !inTalk() && state.ending !== 'screen' && !state.opening && state.regions.length) {
+      if (mapMenu.isOpen) {
+        mapMenu.close();
+        resume();
+      } else {
+        if (!paused) pause('');
+        mapMenu.open();
+      }
+    } else if (e.code === 'Escape' && mapMenu.isOpen) mapMenu.close();
   });
   // P11.3: the settings screen; every choice applies at once and is remembered.
   const settingsMenu = new SettingsMenu(uiRoot, {
@@ -984,6 +1014,15 @@ async function boot() {
     switches: () => ({ ...state.switchActive }),
     gates: () => [...state.progress.gates],
     menuOpen: () => menu.isOpen,
+    /** Volume phase 1: the map model, travel (as the map's button does), and whether the map shows. */
+    mapModel: () => JSON.parse(JSON.stringify(mapModel(state))),
+    travel: (/** @type {string} */ id) => {
+      const ok = travelTo(state, id);
+      if (ok) view.snapCamera(state);
+      return ok;
+    },
+    mapOpen: () => mapMenu.isOpen,
+    winds: () => ({ winds: state.winds.length, updrafts: state.updrafts.length, shown: view.wind.pool.filter((s) => s.visible).length }),
     /** Test helper: put items into the bag. */
     give: (/** @type {string} */ id, /** @type {number} */ n = 1) => addItem(state.progress.inv, id, n),
     addMoney: (/** @type {number} */ n) => {

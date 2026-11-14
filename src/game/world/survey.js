@@ -14,6 +14,23 @@ import { groundHeightUnder } from '../physics/collision.js';
 
 /** @typedef {{ id: string, region: string, tx: number, ty: number }} SurveyDef */
 
+/** What the map calls each record stone (a stone not listed is called by its id's region). @type {Record<string, string>} */
+export const CHECKPOINT_NAMES = {
+  beach: '目覚めの浜',
+  hill: '島の丘',
+  camp: '島の野営地',
+  plains: '風見の村',
+  desert: '荒野の入口',
+  mountains: '白嶺のふもと',
+  forest: '森の小道',
+  lake: '鏡湖の西岸',
+  source: '星環の前室',
+  terrace: '段丘の入口',
+  terrace_east: '段丘・東の棚',
+};
+/** @param {string} id */
+export const checkpointName = (id) => CHECKPOINT_NAMES[id] ?? '記録石';
+
 /** How close (px) the player must be to touch a survey stone (the stone is solid: from beside it). */
 const SURVEY_RANGE = 22;
 

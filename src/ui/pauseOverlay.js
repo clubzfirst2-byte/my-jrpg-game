@@ -5,7 +5,7 @@
 export class PauseOverlay {
   /**
    * @param {HTMLElement} root
-   * @param {{ onPauseRequest: () => void, onResume: () => void, onVolume?: (kind: 'bgm' | 'sfx') => void, volumes?: () => { bgm: number, sfx: number }, onSettings?: () => void, onTitle?: () => void, version?: string }} handlers
+   * @param {{ onPauseRequest: () => void, onResume: () => void, onVolume?: (kind: 'bgm' | 'sfx') => void, volumes?: () => { bgm: number, sfx: number }, onSettings?: () => void, onTitle?: () => void, onMap?: () => void, version?: string }} handlers
    *   onTitle: v1.0 「タイトルへ」 (saves, then back to the title; only when given); version: shown small
    */
   constructor(root, handlers) {
@@ -77,7 +77,20 @@ export class PauseOverlay {
       v.textContent = handlers.version;
       this.overlay.append(v);
     }
-    this.overlay.append(this.message, sound, resume);
+    this.overlay.append(this.message);
+    // Volume phase 1: the map (in the centred column, above the resume button).
+    if (handlers.onMap) {
+      const map = document.createElement('button');
+      map.type = 'button';
+      map.id = 'open-map';
+      map.textContent = '地図';
+      map.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handlers.onMap?.();
+      });
+      this.overlay.append(map);
+    }
+    this.overlay.append(sound, resume);
     this.refresh();
     this.overlay.addEventListener('click', () => handlers.onResume());
 
