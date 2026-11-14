@@ -42,7 +42,7 @@ import { frameFight } from './assets/artV3.js';
 import { GroundCache } from './groundCache.js';
 import { V3_OBJECTS_WINTER, V3_VILLAGE_TYPES, V3_WINTER_OBJECTS, v3VillageBundle } from './assets/villageV3.js';
 import { V3_ENEMY_KINDS, kindsByRegion, v3EnemyBundle } from './assets/enemyV3.js';
-import { NPC_V3_REGION, npcV3Bundle, npcV3BundleWho } from './assets/npcV3.js';
+import { NPC_V3_MIRROR_LEFT, NPC_V3_REGION, npcV3Bundle, npcV3BundleWho } from './assets/npcV3.js';
 import { HERO_V3_LAZY, HERO_V3_MOVE_BUNDLE, HERO_V3_MOVE_KEEP_MS, heroDrawKey } from './assets/heroV3.js';
 import { MacroGrid, PROPS, PROP_SWAY, TREE_SWAY, baseKey as v3BaseKey, edgeKey as v3EdgeKey, floraFrames, floraKey, flowCorner, flowKey, flowLook, openProp, plainsTreeLook, seasonPrefix, swayFrame, swayStep, treeFootProp, v3PineBundle, v3PlainsBundles } from './v3Plains.js';
 import { FOREST_PROPS, forestBaseKey, forestEdgeKey, forestFlowLook, forestFootProp, forestOpenProp, forestTreeLook, plainsPineBanned, rootsOffset, v3ForestBundles, winterMaskOf, winterPriority } from './v3Forest.js';
@@ -341,6 +341,7 @@ export class GameView {
     this.items = new ItemView((key) => this.makeSprite(key), this.actors);
     this.npcs = new NpcView(assets, (key) => this.makeSprite(key), this.actors);
     for (const who of this.v3Npcs) this.npcs.own.add(who);
+    for (const who of this.v3Npcs) if (NPC_V3_MIRROR_LEFT.includes(who)) this.npcs.mirrorLeft.add(who);
     this.puzzles = new PuzzleView(
       (key) => this.makeSprite(key),
       (key) => this.assets.texture(this.seasonal(key)), // (graphics v3: the plates' winter look)

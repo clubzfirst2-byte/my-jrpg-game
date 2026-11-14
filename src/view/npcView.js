@@ -33,6 +33,9 @@ export class NpcView {
     this.own = new Set();
     this.hasKey = (/** @type {string} */ key) => this.assets.hasTexture(key);
     this.isOwn = (/** @type {string} */ art) => this.own.has(art);
+    /** Graphics v3: the people whose left frames are their right frames mirrored (gameView sets it). @type {Set<string>} */
+    this.mirrorLeft = new Set();
+    this.isMirrorLeft = (/** @type {string} */ art) => this.mirrorLeft.has(art);
   }
 
   /**
@@ -48,7 +51,7 @@ export class NpcView {
     for (const id of this.sprites.keys()) if (!this.present.has(id)) this.drop(id); // (deleting while iterating a Map is safe)
     for (const n of state.npcs) {
       const near = Math.hypot(n.x - center.x, n.y - center.y) < NEAR_PX;
-      const key = near ? npcFrameKey(n, timeSec, has, this.isOwn) : null;
+      const key = near ? npcFrameKey(n, timeSec, has, this.isOwn, this.isMirrorLeft) : null;
       let s = this.sprites.get(n.id);
       if (!key || !has(key)) {
         if (s) this.drop(n.id);

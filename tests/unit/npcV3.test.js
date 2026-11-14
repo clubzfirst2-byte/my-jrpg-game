@@ -145,6 +145,27 @@ describe('v3 villagers', () => {
       expect(k).toBe(`npc.smith.walk.left.${f}`);
       expect(smith.mirrorOf.get(k)).toBe(`npc.smith.walk.right.${f}`);
     }
+    // the "right mirrored" branch (mirrorLeft): the left frame is found by its right frame alone (no left
+    // texture asked for), the left key is returned; for the other 7 a missing left file stays missing
+    const mirrorLeft = (art) => NPC_V3_MIRROR_LEFT.includes(art);
+    for (const who of NPC_V3_PEOPLE) {
+      const { keys } = npcV3Parts(V3, who);
+      const asked = [];
+      const onlyStored = (k) => {
+        asked.push(k);
+        return keys.includes(k);
+      };
+      const idle = npcFrameKey(npc({ id: who }), 2.2, onlyStored, own, mirrorLeft);
+      const walk = npcFrameKey(npc({ id: who, moving: true, walkTime: 0.45 }), 0, onlyStored, own, mirrorLeft);
+      expect(idle, who).toMatch(new RegExp(`^npc\\.${who}\\.idle\\.left\\.[0-3]$`));
+      expect(walk, who).toBe(`npc.${who}.walk.left.3`);
+      expect(asked.some((k) => k.includes('.left.')), who).toBe(!mirrorLeft(who));
+      expect(asked.some((k) => k.includes('.right.')), who).toBe(mirrorLeft(who));
+      // the other directions do not take the branch
+      expect(npcFrameKey(npc({ id: who, facing: 'right' }), 0, onlyStored, own, mirrorLeft), who).toMatch(/\.idle\.right\./);
+    }
+    expect(npcFrameKey(npc({ id: 'guard' }), 0, (k) => k.includes('.right.'), own, () => true)).toBe('npc.guard.idle.left.' + npcFrameKey(npc({ id: 'guard', facing: 'right' }), 0, () => true).slice(-1));
+    expect(npcFrameKey(npc({ id: 'guard' }), 0, (k) => k.includes('.right.'), own, mirrorLeft)).toBe(null);
     // the bundle not in yet: no frame (never the placeholder look), whatever else is loaded
     const onlyPlaceholders = (k) => /^npc\.\d\./.test(k);
     expect(npcFrameKey(npc({}), 0, onlyPlaceholders, own)).toBe(null);

@@ -29,11 +29,12 @@ RAMPS = {  # v1's ramps (tools/npc_release/elder.py RAMPS + tools/art_proto/pixe
 }
 INKS = {"#": "#3a2620", "=": "#8a4a40", "~": "#ee9c8c"}
 EYE_INKS = {INKS["#"]}
-IRIS_INKS = set()  # his eyes are closed in a smile in every frame (v1: "already closed"): no iris anywhere
+IRIS_INKS = EYE_INKS  # his eyes are closed in a smile in every frame (v1: "already closed"): the check
+# counts the closed eyes' lines instead of irises: front 2, side 1, back 0, also on the "blink" frame
 
 
 def IRIS_WANT(view, blink, want):
-    return 0
+    return 0 if view == "up" else (2 if view == "down" else 1)
 
 
 LEG = legend([("012345", "hair"), ("abcdef", "skin"), ("ABCDEF", "robe"), ("GHIJKL", "trim"),
@@ -68,8 +69,8 @@ HEAD_FRONT = half("""
 ........345543deeeeeee####eeeeee
 ........345543deeeee##eeee##eeee
 ........3454cddeeeeeeeeeeeeeeeff
-........3454cddeeeeeeeeeeeeeeeff
-........3454cddeee~~~eeeeeeeeedd
+........3454cddeeee~eeeeeeeeeeff
+........3454cddeeee~~~eeeeeeeedd
 ........3454cddeee~~~eeeeeeeeedd
 ..........34cddeeeee444555555555
 ..........34cddeee44455555555555
