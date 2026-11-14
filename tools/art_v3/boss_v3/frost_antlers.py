@@ -197,6 +197,30 @@ T15 = """
 17|AAFDDBAA
 """
 
+# the burr: the thick foot of the UP beam where it leaves the brow (COLS, columns 72..90; laid once,
+# under the beam)
+BURR = """
+2|AAAA
+2|AGFDBA
+3|AGGFDDBA
+3|AGFFDDDBBA
+4|AGGFFDDDDBBA
+5|AGFFFDDDDDBBA
+5|AGGFFDDDDDDBBA
+6|AGFFFDDDDDDBBBA
+7|AGGFFDDDDDDBBBA
+8|AGFFFDDDDDDDBBA
+9|AGGFFDDDDDDBBBA
+9|AGFFFDDDDDDDBBBA
+10|AGGFFDDDDDDBBBBA
+11|AGFFFDDDDDDBBBA
+12|AGGFFDDDDDBBBBA
+13|AGFFFDDDDBBBBA
+14|AAGFFDDDBBBAA
+16|AAAFFDDBAAA
+18|AAAAAAA
+"""
+
 # ---- MID: swung out level
 M_BEAM = """
 25|AA
@@ -835,10 +859,10 @@ GLINT = """
 1|W
 """
 
-COLS = {"BEAM_IN", "BEAM_TIP", "M_BEAM", "M_T15", "M_T3", "D_BEAM1", "D_T1", "D_T15", "D_T2", "D_T3", "F_BEAM",
+COLS = {"BEAM_IN", "BEAM_TIP", "BURR", "M_BEAM", "M_T15", "M_T3", "D_BEAM1", "D_T1", "D_T15", "D_T2", "D_T3", "F_BEAM",
         "F_T15", "F_T3", "H_BEAM"}
 PLACE = {
-    "BEAM_IN": (32, 20), "BEAM_TIP": (14, 22), "T1": (66, 18), "T2_TIP": (45, 4), "T2_BASE": (45, 17),
+    "BEAM_IN": (32, 20), "BEAM_TIP": (14, 22), "BURR": (74, 33), "T1": (66, 18), "T2_TIP": (45, 4), "T2_BASE": (45, 17),
     "T3_TIP": (20, 6), "T3_BASE": (20, 16), "T15": (40, 13),
     "M_BEAM": (12, 44), "M_T1": (54, 31), "M_T2": (26, 33), "M_T15": (27, 43), "M_T3": (6, 48),
     "D_BEAM1": (51, 44), "D_BEAM2": (29, 70), "D_T1": (49, 47), "D_T15": (31, 63), "D_T2": (26, 63), "D_T3": (16, 86),
@@ -847,8 +871,8 @@ PLACE = {
 }
 # the maps of each attitude, back to front (the tines first, the beam over their feet)
 SETS = {
-    "UP": ("T1", "T15", "T2_BASE", "T2_TIP", "T3_BASE", "T3_TIP", "BEAM_TIP", "BEAM_IN"),
-    "UP_BROKEN": ("T1", "T15", "T2_BASE", "T3_BASE", "BEAM_IN"),
+    "UP": ("T1", "T15", "T2_BASE", "T2_TIP", "T3_BASE", "T3_TIP", "BEAM_TIP", "BURR", "BEAM_IN"),
+    "UP_BROKEN": ("T1", "T15", "T2_BASE", "T3_BASE", "BURR", "BEAM_IN"),
     "HIGH": ("H_T1", "H_T15", "H_T2", "H_T3", "H_BEAM"),
     "MID": ("M_T1", "M_T2", "M_T15", "M_T3", "M_BEAM"),
     "DOWN": ("D_T1", "D_T15", "D_T2", "D_T3", "D_BEAM2", "D_BEAM1"),

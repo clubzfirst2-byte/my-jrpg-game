@@ -53,7 +53,7 @@ for _n in R.PLACE:
     P[_n] = part(getattr(R, _n), LEG, _n)
     if _n in R.HALF:
         P[_n + "~"] = P[_n].mirror(relight=_n in R.RELIGHT)
-for _n in ("SHARD_L", "SHARD_S", "CHIP"):
+for _n in ("SHARD_L", "SHARD_S", "CHIP", "HANK_A", "HANK_B", "HANK_C", "RIME_A", "RIME_B", "RIME_C", "FEATHER", "DRIP"):
     P[_n] = part(getattr(R, _n), LEG, _n)
 for _n in A.PLACE:
     P[_n] = part(getattr(A, _n), LEG, _n, cols=_n in A.COLS)
@@ -111,11 +111,12 @@ def attitude(p):
 
 def antlers(f, state, ox, oy, cx, **kw):
     # every map is laid twice, a few texels apart (the second over the first): the crystal's two
-    # faces, with the seam between them -- a beam 3 texels lower, an upright tine 2 texels inward
+    # faces, with the seam between them -- a beam 4 texels lower, an upright tine 4 texels inward
     for n in A.SETS[state]:
         x, y = PLACE[n]
-        dx, dy = (0, 3) if n in A.COLS else (2, 0)
-        _both(f, n, x + ox + dx, y + oy + dy, cx=cx, **kw)
+        dx, dy = (0, 4) if n in A.COLS else (4, 0)
+        if n != "BURR":
+            _both(f, n, x + ox + dx, y + oy + dy, cx=cx, **kw)
         _both(f, n, x + ox, y + oy, cx=cx, **kw)
     for x, y in A.GLINTS.get(state, ()):
         g = P["GLINT"]
@@ -164,12 +165,22 @@ def draw(p):
             f.put(q, x, y)
         else:
             f.put(P[n + "~"], 2 * c2 - x - q.w, y)
+        if n == "FLEG":  # the feathering down the back (outer side) of the cannon
+            fx = x + 6 if s < 0 else 2 * c2 - x - q.w + q.w - 6 - P["FEATHER"].w
+            f.put(P["FEATHER"], fx, y + 26)
+            ix = x + 23 if s < 0 else 2 * c2 - x - q.w + q.w - 23 - P["HANK_C"].w  # a dark lock on its inner side
+            f.put(P["HANK_C"], ix, y + 25)
     # shoulders and chest, the mane over them
     _both(f, "CHEST", PLACE["CHEST"][0] + bx, PLACE["CHEST"][1] + by, cx=cx, clip_y=G + 1)
+    _both(f, "RUFF", PLACE["RUFF"][0] + bx, PLACE["RUFF"][1] + by, cx=cx)
+    for n, x, y in R.MARKS:  # pale hanks, underlocks and rime on the coat
+        f.put(P[n], x + bx, y + by)
     if p.phase2 or c:
         f.put(P["CRACK_L"], PLACE["CRACK_L"][0] + bx, PLACE["CRACK_L"][1] + by)
         f.put(P["CRACK_R"], PLACE["CRACK_R"][0] + bx, PLACE["CRACK_R"][1] + by)
     _both(f, "MANE", PLACE["MANE"][0] + bx, PLACE["MANE"][1] + by, cx=cx, clip_y=G + 1)
+    for n, x, y in R.MANE_MARKS:
+        f.put(P[n], x + bx, y + by)
     # the head
     state = attitude(p)
     fwd = int(round((p.hs - 1.0) * 30))
@@ -206,8 +217,16 @@ def fall_a():
     the antlers cracked short, the murk rising."""
     f = Frame(W, H, LEG, RAMPS)
     _both(f, "FALL_A", *PLACE["FALL_A"])
+    for n, x, y in (("HANK_A", 50, 126), ("HANK_B", 62, 124), ("HANK_C", 70, 128), ("RIME_A", 56, 121), ("HANK_A", 136, 127),
+                    ("HANK_B", 124, 125), ("HANK_C", 116, 129), ("RIME_B", 128, 122), ("CHIP", 44, 148), ("CHIP", 150, 152)):
+        f.put(P[n], x, y)
     head(f, 0, 56, CX, eyes="shut", core="CORE_DIM", state="FLAT")
+    for n, x, y in (("DRIP", 86, 126), ("RIME_B", 99, 122), ("DRIP", 101, 138), ("RIME_C", 90, 142), ("DRIP", 91, 150),
+                    ("CHIP", 58, 156), ("DRIP", 122, 150), ("RIME_B", 130, 158), ("CHIP", 112, 160), ("DRIP", 140, 158),
+                    ("RIME_C", 124, 146), ("DRIP", 70, 150)):
+        f.put(P[n], x, y)
     _both(f, "POOL_A", 0, 167)
+    f.put(P["CHIP"], 93, 162)
     return f
 
 
@@ -217,6 +236,9 @@ def fall_b():
     _both(f, "FALL_B", *PLACE["FALL_B"])
     antlers(f, "FLAT", 0, 96, CX)
     f.put(P["CORE_DIM"], 89, 134)
+    for n, x, y in (("CHIP", 60, 152), ("SHARD_S", 128, 148), ("RIME_B", 76, 150), ("CHIP", 108, 156), ("RIME_C", 46, 160),
+                    ("RIME_C", 140, 160), ("RIME_B", 84, 162), ("DRIP", 92, 158), ("CHIP", 148, 161), ("DRIP", 156, 158)):
+        f.put(P[n], x, y)
     _both(f, "POOL_B", 0, 165)
     return f
 
@@ -228,6 +250,8 @@ def remains():
     _both(f, "REMAINS", PLACE["REMAINS"][0], PLACE["REMAINS"][1] + 2)
     antlers(f, "FLAT", 0, 88, CX)
     f.put(P["CORE_DIM"], 89, 128)
+    for n, x, y in (("RIME_A", 58, 150), ("RIME_B", 122, 146), ("CHIP", 76, 156), ("RIME_C", 104, 158), ("RIME_C", 138, 160)):
+        f.put(P[n], x, y)
     return f
 
 

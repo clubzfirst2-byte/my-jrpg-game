@@ -572,111 +572,262 @@ FALL_A = """
 40|aagdbPPdddbfdddbbfdRRdbfdddbbfddPPdbfdddd
 40|agdbPPPPdbfddbbRRfRRRdbfddbbPPdPPPdbfddPP
 39|aagPPRRPPbbfdRRRRRRRRbfdPPPPPRRPPPbbdPPPP
-39|OOT(R5)PPP(R11)PP(R9)PPP(R6)
-38|OUT(R6)PPP(R12)PPP(R8)PP(R6)
-38|OUUT(R6)PP(R13)PPP(R7)PPP(R5)
-37|OOUT(R7)PPP(R12)PP(R8)PPP(R5)
-37|OUTT(R8)PP(R12)PPP(R7)PP(R6)
-36|OOUT(R8)PPP(R13)PP(R6)PPP(R6)
-36|OUUT(R9)PP(R12)PPP(R7)PP(R6)
-35|OOUT(R9)PPP(R13)PP(R6)PPP(R6)
-35|OUTT(R10)PP(R12)PPP(R7)PP(R6)
-34|OOUT(R10)(P4)(R14)(P5)(R25)
-34|OUUT(R9)(P5)(R15)(P6)(R23)
-33|OOUT(R10)(P6)(R14)(P8)(R21)
-33|OUTT(R9)(P7)(R15)(P9)(R19)
-32|OOUT(R9)(P8)(R15)(P11)(R17)
-32|OUUT(R8)(P9)(Q16)(P12)(R15)
-32|OUTT(R7)(P10)(Q18)(P13)(R12)
-31|OOUT(R7)(P11)(Q20)(P14)(R9)
-31|OUUT(R6)(P12)(Q22)(P15)(R6)
-31|OUTT(R5)(P13)(Q24)(P16)RRR
-30|OOUT(R4)(P14)(Q26)(P18)
-30|OUUT(R3)(P15)(Q28)(P16)
-30|OUTT(P18)(Q30)(P14)
-30|OOT(P19)(Q32)(P12)
-30|OUT(P18)(Q34)(P11)
-30|OOT(P17)(Q36)(P10)
-30|OP(P16)(Q38)(P10)
-30|OO(P64)
-31|O(P64)
+39|OOU(T15)UU(R12)O(P9)
+38|OUU(T16)(R14)OO(P8)
+38|OOT(T14)UU(R15)(P7)OO
+37|OUU(S17)(Q13)O(Q10)
+37|OOU(S15)TT(Q14)(Q8)OO
+36|OUT(S16)(Q15)O(Q10)
+36|OOU(R17)(P13)UU(R10)
+35|OUU(R16)O(P14)(R12)
+35|OOT(R18)(P12)TT(R11)
+34|OUU(Q16)O(Q20)(S22)
+34|OOU(Q18)(Q19)TT(S20)
+33|OUT(Q17)O(Q21)(S21)
+33|OOU(P18)(R20)UU(T20)
+32|OUU(P17)O(R22)(T21)
+32|OOT(P19)(R21)(T19)UU
+32|OUU(Q18)O(S22)(S20)
+31|OOU(Q20)(S20)TT(S20)
+31|OUT(Q19)O(S23)(S19)
+31|OOU(R18)UU(T22)(R20)
+30|OUU(R21)(T21)O(R20)
+30|OOT(R19)UU(T23)(R19)
+30|OUU(S20)O(S22)(Q20)
+30|OOU(S22)(S20)O(Q20)
+30|OUT(S20)TT(S21)(Q20)
+30|OOU(T21)O(R21)(P20)
+30|OUU(T19)UU(R22)(P20)
+30|OOT(T22)(R20)O(P20)
+31|OO(S21)(Q22)(Q20)
 32|(O64)
 """
 # frame 4 (typed in frame columns, rows 142..169): a low mound of murk, tufts of the coat left in it
 FALL_B = """
 84|(O12)
 78|OOO(U6)(T9)
-73|OOOUU(T8)(S10)
-69|OOUU(T7)(R6)(S10)
-65|OOOUT(T5)(R10)PP(S9)
-62|OOUUT(T4)(R14)PPP(S8)
-59|OOUTT(T3)(R8)agfa(R6)(P4)(R7)
-56|OOUUT(T3)(R9)agfda(R8)(P5)(R5)
-53|OOUTT(R12)aggfdba(R9)(P6)(R4)
-51|OUUT(R15)afdbba(R10)(P7)(R3)
-48|OOUT(R8)PP(R8)abba(R12)(P8)RR
-46|OUUT(R9)PPP(R11)(R12)(P10)R
-44|OOUT(R10)(P4)(R22)(P11)R
-42|OUUT(R10)(P5)(R8)agfa(R9)(P12)RR
-40|OOUT(R11)(P6)(R6)aggfda(R8)(P13)RR
-38|OUUT(R12)(P7)(R5)afdbba(R10)(P14)
-36|OOUT(R13)(P8)(R6)abba(R10)(P15)
-35|OUTT(R12)(P10)(R18)(P17)
-33|OOUT(R12)(P11)(Q20)(P16)
-32|OUTT(R10)(P13)(Q24)(P13)
-31|OOUT(R8)(P14)(Q28)(P11)
-30|OUTT(R6)(P15)(Q32)(P9)
-29|OOUT(R4)(P16)(Q36)(P7)
-28|OUT(R3)(P18)(Q38)(P6)
-28|OOT(P22)(Q36)(P7)
-28|OO(P66)
+73|OOUU(T10)UU(R7)
+69|OOU(S12)(Q10)OO
+65|OUU(S13)TT(Q13)
+62|OOT(S14)(Q12)O(Q4)
+59|OUU(R15)agfa(P9)(R6)
+56|OOU(R14)agfda(P12)(R6)
+53|OUT(R16)aggfdba(P10)UU(R5)
+51|OOU(Q15)afdbba(Q13)(S8)
+48|OUU(Q17)abba(Q14)TT(S8)
+46|OOT(Q18)O(Q15)(S13)
+44|OUU(P17)(R14)agfa(T14)
+42|OOU(P18)O(R12)aggfda(T14)
+40|OUT(P19)(R13)afdbba(T15)
+38|OOU(Q18)UU(S14)abba(S17)
+36|OUU(Q20)(S20)O(S16)
+35|OOT(Q19)O(S19)TT(S17)
+33|OUU(R20)(T20)UU(R18)
+32|OOU(R19)O(T21)(R20)
+31|OUT(R21)UU(T20)(R19)
+30|OOU(S20)(S22)O(Q20)
+29|OUU(S21)TT(S21)(Q20)
+28|OOT(S22)O(S22)(Q20)
+28|OUU(T20)UU(R23)(P20)
+28|OO(T22)(R22)O(P21)
 29|O(P66)
 31|(O65)
 """
-# frame 5 (typed in frame columns, rows 136..171): the heap of pale coat that is left
+# frame 5 (typed in frame columns, rows 136..170): the heap of coat that is left, its strands by turns
+# the grey-tan coat, the pale face hair and the dark mane
 REMAINS = """
 80|aaaaaaaaaaaaaaaa
-78|aagggggggfffffffgg
-75|aagggffbgffffbgfffbgf
-73|aagggffffbgffddbgffdbgf
-71|aaggfbggffdbgfdddbffddbgd
-68|aagggfffbgffddbffdddbfdddbfd
-66|aagggffffdbgfdddbfddddbffddbfd
-64|aaggffbggffdbffdddbfdddbbfdddbfd
-61|aagggfffdbgffddbfddddbffdddbfddbbfd
-59|aaggbgfffddbffddbbfddddbfddddbffddbfd
-57|aaggffbgfddddbfdddbffdddbbfddddbfdddbdd
-54|aagggfffdbffdddbbfdddbfddddbffddddbfddbbdd
-52|aaggfbgffddbfddddbffdddbfdddbbfdddddbfdddbdd
-51|aggfddbffdddbfdddddbfdddbffdddbfddddbbfdddbdd
-51|aggfdbbfddddbffddddbfdddbbfddddbfddddbfdddbdd
-50|aagfddbfdddddbfddddbbfdddbfdddddbfdddbbfdddbdd
-50|agfdddbffdddbbfdddddbfddbbfdddddbfddddbddddbdd
-49|agfddddbfddddbffdddddbdddbffddddbbdddddbddddbdd
-49|aagddddbfdddbbfddddddbfddbfdddddbfdddddbbdddbdd
-48|agfddddbbfddddbfdddddbbdddbfddddbbddddddbdddbbdd
-48|agfdddbbdddddbfddddddbdddbbfdddddbddddddbdddbddd
-47|aagdd(d2)b(d6)b(d6)bb(d4)b(d6)b(d6)bb(d3)bdd
-47|agd(d4)bb(d5)b(d6)b(d4)bb(d5)b(d7)b(d4)bdd
-46|aagd(d3)b(d6)bb(d6)b(d4)b(d6)bb(d6)b(d4)bbd
-46|agdd(d2)bb(d6)b(d6)b(d5)bb(d5)b(d6)b(d5)bdd
-45|aagd(d3)b(d5)bb(d7)b(d4)b(d7)b(d5)bb(d5)bdd
-45|agbd(d4)b(d6)b(d6)bb(d4)b(d6)bb(d6)b(d4)bbd
-44|aagb(d5)b(d5)bb(d6)b(d5)bb(d5)b(d7)b(d4)bbd
-44|agbb(d4)bb(d5)b(d7)b(d4)bb(d6)b(d6)bb(d4)bbb
-43|aagb(b2)(d5)b(d6)bb(d5)b(d6)b(d5)bb(d6)b(d3)bbb
-43|agbb(d6)bb(d5)b(d6)bbb(d4)b(d6)b(d5)bbb(d3)bbb
-42|aagb(b3)(d4)bb(d5)bb(d5)b(d5)bbb(d4)bb(d5)bb(b5)bb
-42|agbb(b4)(d4)bbb(d4)bb(d4)bbb(d4)bb(d4)bbb(d3)(b10)
-41|aabb(b8)(d3)(b6)(d3)(b7)(d3)(b6)(d2)(b13)
-41|aab(b52)
+78|aaggbgffffimmkkput
+75|aapuuttbgfffdimmkkput
+73|aapuuttrrbgffddimkkkptt
+71|aammpuuttrrbgfdddimmkkptr
+68|aaimmkkputtrrrbffdddimkkkput
+66|aagfimmkkputrrrrbgfdddimkkiptt
+64|aaggfdimkkkputtrrrbffdddimmkkptr
+61|aabggffddimmkkpuutrrrbgfdddimkkkput
+59|aauubgfffddimkkiputrrrpbffdddimmkkptt
+57|aauutrbgffdddimmkkputtrrrbgfddbimkkkptr
+54|aagpuuttrbffddddimkkkputrrrrbgfdddimmkiput
+52|aaggfputtrrbgfddddimmkkpuutrrrbffdddimkkkptt
+51|aggffdputrrrbffddddimkkiputtrrpbgfdddimmkkptr
+51|agfffdpuutrrbgfdddbimmkkputrrrrbffdddimkkkput
+50|aagffddputtrpbffddddimkkkpuutrrrbgfddbimmkiptt
+50|agffdddputrrrbgfddddimmkkputtrrrbffdddimkkkptr
+49|agffddddpuutrrbffdddbimkkiputrrrpbgfdddimmkkput
+49|aagfddddputtrrbgfddddimmkkpuutrrrbffddbimkkkptt
+48|agffdddddputrrpbffddddimkkkputtrrrbgfdddimmkiptr
+48|agfdddddbpuutrrbgfdddbimmkkputrrrrbffdddimkkkput
+47|aagfddddddptrrrpbfdddddimkkkptrrrrpbfddddimkkiprr
+47|agfddddddbputrrrbfdddbbilkkkpttrrrrbfdddbimkkkptr
+46|aagfdddddddptrrrrbfdddddimkkiptrrrppbfddddikkkkprr
+46|agfddddddbbptrrrpbfdddbbimkkkptrrrrrbfddbbimkkiptr
+45|aagfdddddddbptrrppbfddddbikkkkptrrrrpbfdddbimkkkprr
+45|agfdddddddbbptrrrpbfdddbbimkkiptrrrppbfddbbikkkiprp
+44|aagfdddddddbbprrrppbfddbbbikkkkptrrrppbfddbbimkkiprr
+44|agfdddddddbbbptrrppbfdddbbikkkiprrrrppbfdbbbikkkkprp
+43|aagfddddddbbbbprrrppbfddbbbikkiiptrrpppbfddbbikkkippr
+43|agfddddddbbbbbprrpppbddbbbbikkkiprrrpppbdddbbikkiiprp
+42|aagfdddbdbbbbbbprrpppbddbbbbikiiiprrppppbddbbbikkiippp
+42|agfddbbbbbbbbbbprppppbdbbbbbikiiiprpppppbdbbbbikiiippp
+41|aabbbb(b10)(p6)(b7)(i5)(p7)(b6)(i5)ppp
 41|(a55)
 """
 
-HALF = {"FLEG", "FLEG_FOLD", "HIND", "CHEST", "MANE", "HEAD", "JAW", "MOUTH", "FALL_A", "FALL_B", "REMAINS"}
+# ---------------------------------------------------------------- marks laid over the coat (whole maps)
+# pale hanks hanging on the shoulders and chest, a dark underlock, rime on the humps and the mane,
+# the feathering down the back of a front cannon
+HANK_A = """
+1|oo
+0|ouuo
+0|ouutpo
+0|outtrpo
+0|ouutrpo
+0|outtrpo
+1|outtrpo
+1|ouutrpo
+1|outrrpo
+1|outtrpo
+2|ouutrpo
+2|outtrpo
+2|outrrpo
+2|ouutrpo
+3|outtrpo
+3|outrpo
+3|ouutpo
+4|outpo
+4|ouupo
+5|oto
+5|oo
+"""
+HANK_B = """
+0|oo
+0|ouuo
+0|outpo
+1|outrpo
+1|ouutpo
+2|outrpo
+2|ouurpo
+3|outrpo
+4|outpo
+4|ouupo
+5|otpo
+6|oto
+7|oo
+"""
+HANK_C = """
+0|hh
+0|hmih
+0|hmkih
+1|hmkiih
+1|hlkkih
+2|hmkiih
+2|hlkkih
+3|hmkih
+3|hlkih
+4|hmih
+4|hih
+5|hh
+"""
+RIME_A = """
+2|AAAAAA
+0|AAGGFFFDAA
+0|AGFFDDDBBA
+1|AADDBBBAA
+3|AAAAA
+"""
+RIME_B = """
+1|AAAA
+0|AGGFDA
+0|AFDBBA
+1|AAAA
+"""
+RIME_C = """
+1|AA
+0|AGFA
+1|AA
+"""
+FEATHER = """
+2|oo
+1|ouo
+1|outo
+0|outpo
+0|ouupo
+0|outrpo
+0|outppo
+1|ouupo
+1|outpo
+1|otrpo
+1|ouupo
+2|outpo
+2|otpo
+2|ouupo
+3|outo
+3|otpo
+3|ouo
+4|oto
+4|oo
+"""
+# the ruff: long hair standing out at the side of the neck (HALF, rows 76..109, origin column 58)
+RUFF = """
+9|hh
+7|hhmh
+6|hmmlkh
+5|hmllkkih
+4|hmmlkikkh
+3|hmllkkikkh
+3|hmmlkikklkh
+2|hmllkkiklkkh
+2|hmmlkkikkkikh
+1|hmllkikkklkkih
+1|hmmlkkikklkikh
+1|hmllkkiklkkkih
+0|hmmlkikkklkkikh
+0|hmllkkikklkikkh
+0|hmmlkkiklkkikkh
+0|hhmlkikkklkkikh
+1|hmllkkikklkikh
+1|hmmlkikklkkkih
+1|hhmlkkikkklkih
+2|hmllkikklkkih
+2|hmmlkkikklkih
+2|hhmlkikkklkih
+3|hmllkkiklkih
+3|hmmlkikkkkih
+4|hmlkkikklih
+4|hhmkikkklih
+5|hmlkkiklih
+6|hmkikkkih
+6|hhmkkikih
+7|hmkikkih
+8|hmkkiih
+9|hmkiih
+10|hmiih
+11|hhhh
+"""
+# a tongue of murk creeping up (the purification)
+DRIP = """
+2|OO
+1|OTRO
+1|OTRPO
+0|OUTRPO
+0|OTRRPO
+0|OTRPPO
+1|ORPPO
+1|OPPO
+2|OO
+"""
+# where they lie on the body in the rest pose (the two halves are not mirrored)
+MARKS = (("HANK_C", 52, 98), ("HANK_A", 46, 100), ("HANK_A", 56, 104), ("HANK_B", 44, 112), ("HANK_C", 62, 112),
+         ("HANK_A", 50, 118), ("HANK_B", 58, 122), ("HANK_B", 64, 130),
+         ("HANK_C", 130, 98), ("HANK_A", 134, 101), ("HANK_A", 126, 107), ("HANK_B", 139, 110), ("HANK_C", 122, 114),
+         ("HANK_A", 136, 116), ("HANK_B", 128, 124), ("HANK_B", 120, 131),
+         ("RIME_A", 50, 93), ("RIME_A", 132, 94), ("RIME_B", 44, 101), ("RIME_B", 140, 103))
+MANE_MARKS = (("RIME_B", 78, 64), ("RIME_B", 108, 66))
+
+HALF = {"FLEG", "FLEG_FOLD", "HIND", "RUFF", "CHEST", "MANE", "HEAD", "JAW", "MOUTH", "FALL_A", "FALL_B", "REMAINS"}
 RELIGHT = {"FLEG", "FLEG_FOLD", "HIND"}  # upright limbs: the mirrored one is lit from the left too
 PLACE = {
-    "FLEG": (40, 122), "FLEG_FOLD": (42, 122), "HIND": (56, 118), "CHEST": (40, 90),
+    "FLEG": (40, 122), "FLEG_FOLD": (42, 122), "HIND": (54, 118), "RUFF": (58, 76), "CHEST": (40, 90),
     "MANE": (60, 62), "HEAD": (60, 46), "JAW": (0, 103), "MOUTH": (0, 100), "EYE_OPEN": (81, 68),
     "EYE_SHUT": (81, 69), "CORE": (89, 38), "CRACK_L": (48, 104), "CRACK_R": (133, 106),
     "FALL_A": (0, 118), "FALL_B": (0, 142), "REMAINS": (0, 136),
