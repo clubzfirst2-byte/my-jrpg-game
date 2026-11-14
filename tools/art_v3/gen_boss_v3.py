@@ -1,10 +1,10 @@
-"""v3 production order 8: the bosses at density 4. First boss: 朽ち根のヌシ (boss_root).
+"""v3 production order 8: the bosses at density 4. 朽ち根のヌシ (boss_root), 凍て角のヌシ (boss_frost).
 
 Keys, actions, frame counts and fps are v2's (src/art-release-v2/enemy/frames.json at d900394); every
 frame is twice the v2 size (the same game size), the anchor is the same (feet = bottom centre), the
 boss is seen from the front. Every part is a hand-drawn pixel map (tools/art_v3/boss_v3/); a frame
 places the parts, nothing is scaled up from v2 and nothing is shaded by a formula.
-Writes src/art-release-v3/boss/enemy.boss_root.*.png and src/art-release-v3/boss/frames.json.
+Writes src/art-release-v3/boss/enemy.boss_<kind>.*.png and src/art-release-v3/boss/frames.json.
 The other v3 groups (src/art-release-v3/enemy, ...) are not touched.
 Run: python3 tools/art_v3/gen_boss_v3.py
 """
@@ -19,12 +19,13 @@ sys.path.insert(0, os.path.join(HERE, "boss_v3"))
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 
+import boss_frost  # noqa: E402
 import boss_root  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 OUT = os.path.join(ROOT, "src", "art-release-v3", "boss")
-KINDS = [("boss_root", boss_root)]
-V2_SIZES = {"boss_root": (96, 80)}
+KINDS = [("boss_root", boss_root), ("boss_frost", boss_frost)]
+V2_SIZES = {"boss_root": (96, 80), "boss_frost": (96, 88)}
 FPS = {"idle": 180, "idle2": 180, "move": 90, "windup": "split the wind-up time evenly", "attack": 80, "hurt": 90,
        "stagger": 120, "defeat": 140}
 

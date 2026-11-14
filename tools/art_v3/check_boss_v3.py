@@ -14,7 +14,6 @@ sys.path.insert(0, os.path.join(HERE, "boss_v3"))
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 
-import palette  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 OUT = os.path.join(ROOT, "src", "art-release-v3", "boss")
@@ -114,6 +113,8 @@ def block22(a):
 
 def main():
     kind = sys.argv[1] if len(sys.argv) > 1 else "boss_root"
+    mod = __import__(kind)
+    palette = mod  # the kind's own ramps
     files = sorted(glob.glob(os.path.join(OUT, f"enemy.{kind}.*.png")))
     names = [os.path.basename(f)[:-4] for f in files]
     v2 = sorted(os.path.basename(x)[:-4] for x in subprocess.run(
@@ -245,17 +246,27 @@ def main():
     a0, v0 = imgs[idle[0]][..., 3] == 255, v2img(idle[0])[..., 3] > 0
     print(f"silhouette area v3 / (v2 x 4): idle 0 {a0.sum() / (4 * v0.sum()):.3f}; all frames {ar[0][0]:.3f} ({ar[0][1]}) .. {ar[-1][0]:.3f} ({ar[-1][1]})")
     hh = a0.shape[0]
-    print("width of idle 0 at 1/8, 3/8, 5/8, 7/8 of the height (v3 / v2 x 2):",
-          [(int(a0[y].sum()), 2 * int(v0[y // 2].sum())) for y in (hh // 8, 3 * hh // 8, 5 * hh // 8, 7 * hh // 8)])
+    wr = []
+    for y in range(8, hh, 16):
+        w3, w2 = int(a0[y].sum()), 2 * int(v0[y // 2].sum())
+        wr.append(f"{y}:{w3}/{w2}" + (f"={w3 / w2:.2f}" if w2 else ""))
+    print("width of idle 0 every 16 rows (row: v3 / v2 x 2 = ratio):", " ".join(wr))
+    # the fallen frames: colours in 16 x 16 windows (90%+ opaque)
+    for i in (3, 4, 5):
+        c16 = win_colours(imgs[f"enemy.{kind}.defeat.{i}"], 16, 8)
+        print(f"defeat.{i}: 16x16 window colours min {min(c16)} median {np.median(c16):.0f} ({len(c16)} windows)")
     # the hand-drawn maps: rows equal to the row above (as the maps are oriented in the frame)
-    mod = __import__(kind)
     rep = {}
     for k, p in mod.P.items():
         if k.endswith("~") or k.endswith("_DIM") or p.h < 8:
             continue
         code = p.mat.astype(int) * 8 + p.tone
-        rep[k] = round(100 * sum(1 for y in range(1, p.h) if (code[y] == code[y - 1]).all()) / (p.h - 1))
-    print("part maps, rows equal to the row above (%):", dict(sorted(rep.items(), key=lambda t: -t[1])))
+
+        def row(y):  # the row's opaque run(s) without the blanks before and after
+            xs = np.nonzero(p.mat[y] >= 0)[0]
+            return tuple(code[y, xs.min():xs.max() + 1]) if len(xs) else ()
+        rep[k] = round(100 * sum(1 for y in range(1, p.h) if row(y) == row(y - 1)) / (p.h - 1))
+    print("part maps, rows equal to the row above, blanks before and after not counted (%):", dict(sorted(rep.items(), key=lambda t: -t[1])))
     raw = sum(a.shape[0] * a.shape[1] * 4 for n, a in imgs.items() if n in ns)
     trim = 0
     for n in ns:

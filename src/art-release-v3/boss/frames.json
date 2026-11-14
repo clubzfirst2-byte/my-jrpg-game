@@ -4,7 +4,9 @@
  "note": "v3 bosses (gen_boss_v3.py). Same kinds, actions, frame counts and fps as v2 (src/art-release-v2/enemy/frames.json); every size is 2x v2 (the same game size).",
  "minimal": {
   "enemy.boss_root.0": "enemy.boss_root.idle.0",
-  "enemy.boss_root.1": "enemy.boss_root.move.0"
+  "enemy.boss_root.1": "enemy.boss_root.move.0",
+  "enemy.boss_frost.0": "enemy.boss_frost.idle.0",
+  "enemy.boss_frost.1": "enemy.boss_frost.move.0"
  },
  "kinds": {
   "boss_root": {
@@ -106,6 +108,109 @@
      "size": [
       192,
       160
+     ]
+    }
+   }
+  },
+  "boss_frost": {
+   "facing": "front",
+   "actions": {
+    "idle": {
+     "frames": 4,
+     "size": [
+      192,
+      176
+     ]
+    },
+    "move": {
+     "frames": 6,
+     "size": [
+      192,
+      176
+     ]
+    },
+    "windup_slam": {
+     "frames": 4,
+     "size": [
+      192,
+      176
+     ]
+    },
+    "attack_slam": {
+     "frames": 5,
+     "size": [
+      192,
+      176
+     ]
+    },
+    "windup_ring": {
+     "frames": 4,
+     "size": [
+      192,
+      176
+     ]
+    },
+    "attack_ring": {
+     "frames": 5,
+     "size": [
+      192,
+      176
+     ]
+    },
+    "windup_charge": {
+     "frames": 4,
+     "size": [
+      192,
+      176
+     ]
+    },
+    "attack_charge": {
+     "frames": 5,
+     "size": [
+      192,
+      176
+     ]
+    },
+    "hurt": {
+     "frames": 3,
+     "size": [
+      192,
+      176
+     ]
+    },
+    "stagger": {
+     "frames": 4,
+     "size": [
+      192,
+      176
+     ]
+    },
+    "idle2": {
+     "frames": 4,
+     "size": [
+      192,
+      176
+     ]
+    },
+    "hurt2": {
+     "frames": 3,
+     "size": [
+      192,
+      176
+     ]
+    },
+    "stagger2": {
+     "frames": 4,
+     "size": [
+      192,
+      176
+     ]
+    },
+    "defeat": {
+     "frames": 6,
+     "size": [
+      192,
+      176
      ]
     }
    }

@@ -95,7 +95,7 @@ def main():
     g = Image.new("RGB", (W, y + rowh + 4), (78, 110, 62))
     from pixmap import Frame
     for k, p, x, y in place:
-        f = Frame(p.w, p.h, mod.LEG, mod.palette.RAMPS)
+        f = Frame(p.w, p.h, mod.LEG, mod.RAMPS)
         f.put(p, 0, 0)
         im = Image.fromarray(f.rgba(), "RGBA")
         g.paste(im, (x, y), im)
