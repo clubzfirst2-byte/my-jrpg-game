@@ -2,13 +2,9 @@
 from the front.
 
 The same design, keys, frame counts and key poses as v2 (tools/enemy_v2/boss_frost.py at d900394; the
-lengths here are v2's x 2, in texels). Every part is a hand-drawn pixel map (frost_parts.py,
-frost_antlers.py); a frame only PLACES the parts at whole-texel offsets, back to front. What v2 did by
-a formula is done with hand-drawn states here:
-  * the antlers' turn (rot) and levelling (lev): five hand-drawn attitudes -- UP, HIGH, MID, DOWN, FLAT;
-  * the head's scale and the face's foreshortening (hs, fore): the head comes further down instead;
-  * the antlers shrinking to stay in the frame: the head rises less instead (their size never changes);
-  * the purification's melt: three hand-drawn frames (FALL_A, FALL_B, REMAINS).
+lengths here are v2's x 2, in texels). Every part is a hand-drawn pixel map (frost_head.py,
+frost_body.py, frost_antlers.py, frost_fall.py); a frame only PLACES the parts at whole-texel offsets,
+back to front, each part once.
 """
 
 import math
@@ -18,8 +14,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import frost_antlers as A  # noqa: E402
-import frost_parts as R  # noqa: E402
-import root_parts as ROOT  # noqa: E402  (the pools of murk are the same hand-drawn maps for every core)
+import frost_body as B  # noqa: E402
+import frost_head as HD  # noqa: E402
 from bossanim import actions, boss_actions  # noqa: E402
 from pixmap import Frame, Legend, part  # noqa: E402
 
@@ -33,269 +29,72 @@ def hx(s):
 
 
 # frostfur / ice / murk / glow: v2's colours, tone 0 lifted to luma 30 (the v3 normal enemies' values).
-# frostfur_d (the dark mane and far legs) and frostfur_p (the pale face) are new in v3.
+# frostfur_d (dark fur), frostfur_m and ice_d (tones between the others) are new in v3.
 RAMPS = {k: [hx(c) for c in v] for k, v in {
     "frostfur": ["#261e1a", "#55483e", "#706155", "#8a7a6c", "#9d8e80", "#b0a294", "#dcd2c6"],
     "frostfur_d": ["#261e1a", "#3c322b", "#4a3e36", "#584b41", "#6a5c50", "#7c6d60", "#9a8a7c"],
-    "frostfur_p": ["#2e2622", "#6e6258", "#8a7d70", "#a69a8c", "#bcb0a2", "#d0c6ba", "#eee6dc"],
+    "frostfur_m": ["#261e1a", "#63554a", "#75665a", "#7d6e61", "#958678", "#a39486", "#c6baac"],
     "ice": ["#1a3040", "#3e6e88", "#5c91aa", "#7ab4cc", "#99ccde", "#b8e4f0", "#f0fcff"],
+    "ice_d": ["#1a3040", "#2c5068", "#3e6a84", "#4f84a0", "#6ea4bc", "#8cc2d8", "#d4f0f8"],
     "murk": ["#2c183c", "#2e1a3e", "#3c2250", "#4a2a62", "#5c3779", "#6e4490", "#9a70c0"],
     "glow": ["#421042", "#6a1e6a", "#8d2f8d", "#b040b0", "#c858c8", "#e070e0", "#ffc8ff"],
 }.items()}
-GROUPS = [("abcdefg", "frostfur"), ("hijklmn", "frostfur_d"), ("opqrstu", "frostfur_p"), ("ABCDEFG", "ice"),
-          ("OPQRSTU", "murk"), ("VWXYZ$%", "glow")]
+GROUPS = [("abcdefg", "frostfur"), ("hijklmn", "frostfur_d"), ("opqrstu", "frostfur_m"), ("ABCDEFG", "ice"),
+          ("HIJKLMN", "ice_d"), ("OPQRSTU", "murk"), ("VWXYZ$%", "glow")]
 LEG = Legend(GROUPS)
 
 P = {}
-PLACE = dict(R.PLACE)
-PLACE.update(A.PLACE)
-for _n in R.PLACE:
-    P[_n] = part(getattr(R, _n), LEG, _n)
-    if _n in R.HALF:
-        P[_n + "~"] = P[_n].mirror(relight=_n in R.RELIGHT)
-for _n in ("SHARD_L", "SHARD_S", "CHIP", "HANK_A", "HANK_B", "HANK_C", "RIME_A", "RIME_B", "RIME_C", "FEATHER", "DRIP"):
-    P[_n] = part(getattr(R, _n), LEG, _n)
-for _n in A.PLACE:
-    P[_n] = part(getattr(A, _n), LEG, _n, cols=_n in A.COLS)
+COLS = set()
+for _m in (HD, B, A):
+    for _n in dir(_m):
+        _v = getattr(_m, _n)
+        if _n.isupper() and isinstance(_v, str) and "\n" in _v:
+            P[_n] = part(_v, LEG, _n, cols=_n in getattr(_m, "COLS", ()))
+P["UP_BEAM~"] = P["UP_BEAM"].mirror(band=False)
+for _n in ("UP_T1", "UP_T2", "UP_T3", "FLEG", "HIND"):
+    P[_n + "~"] = P[_n].mirror(relight=True)
+for _n in ("SHOULDER", "EAR", "RIME_A"):
     P[_n + "~"] = P[_n].mirror()
-P["GLINT"] = part(A.GLINT, LEG, "GLINT")
 for _n in ("EYE_OPEN", "EYE_SHUT"):
     P[_n + "~"] = P[_n].mirror(darker=False, band=False)
-P["CORE_DIM"] = P["CORE"].swap({}, tones=(0, 1, 1, 1, 1, 1, 3))  # the core gone dark
-for _n in ("POOL_A", "POOL_B"):
-    P[_n] = part(getattr(ROOT, _n), LEG, _n)
-    P[_n + "~"] = P[_n].mirror()
+for _n in ("CL_A", "CL_B", "CL_C", "CM_A", "CM_B", "CM_C", "CM_D", "CD_A", "CD_B", "CD_C", "CD_D"):
+    P[_n + "~"] = P[_n].mirror(darker=False, band=False)
 
 
-class Pose:
-    def __init__(self, **k):
-        self.dy = 0  # the whole body down (+)
-        self.head = 0  # head down (+) / up (-)
-        self.hs = 1.0  # v2: head scale (the charge's lunge). v3: the head comes further down
-        self.fore = 1.0  # v2: the face's foreshortening. v3: not drawn (one face)
-        self.rot = 0  # the antlers' turn in degrees: picks the hand-drawn attitude
-        self.lev = 0  # antlers levelled toward the camera (charge): 0..1
-        self.legs = (0, 0, 0, 0)  # lift of each leg in v2 pixels (x 2 texels): front left, hind left, hind right, front right
-        self.rear = 0  # rearing: the front of the body up (+), front legs folded
-        self.shift = 0
-        self.mouth = 0  # the chin's drop
-        self.shards = 0  # ice crystals around (ring wind-up): count
-        self.shard_r = 0  # how far out they are (0 at the body .. 1 at the frame edge)
-        self.shard_s = 1.0  # their size: the large map from 1.0, the small one under it
-        self.eyes = "open"
-        self.phase2 = False
-        self.collapse = 0
-        self.chips = False
-        self.__dict__.update(k)
-
-
-def _both(f, name, x, y, cx=CX, **kw):
+def both(f, name, x, y, cx=CX, **kw):
     p = P[name]
     f.put(p, x, y, **kw)
     f.put(P[name + "~"], 2 * cx - x - p.w, y, **kw)
 
 
-def attitude(p):
-    """The hand-drawn antler set for a pose."""
-    if p.lev >= 0.5 or p.collapse >= 2:
-        return "FLAT"
-    if not (p.phase2 or p.collapse) and (p.rear >= 4 or p.rot <= -7):
-        return "HIGH"
-    r = p.rot + 6
-    if r >= 52:
-        return "DOWN"
-    if r >= 30:
-        return "MID"
-    return "UP_BROKEN" if (p.phase2 or p.collapse) else "UP"
+# the clumps of the mane and chest, back to front (name, x, y in the frame at rest)
+MANE = (
+    ("CD_B", 68, 124), ("CD_B~", 112, 123), ("CD_D", 72, 124), ("CD_D~", 100, 122), ("CD_A~", 89, 127),
+    ("CD_A", 70, 104), ("CD_B~", 114, 104), ("CD_C~", 82, 112), ("CD_A~", 96, 106), ("CD_C", 108, 110), ("CM_B", 86, 104),
+    ("CM_C", 68, 92), ("CD_C~", 113, 92), ("CM_D", 76, 90), ("CM_A", 100, 90), ("CD_C", 92, 100),
+    ("CL_C", 66, 84), ("CL_B", 67, 72), ("CD_A~", 112, 72), ("CD_C~", 114, 62), ("CL_C", 71, 62),
+)
 
 
-def antlers(f, state, ox, oy, cx, **kw):
-    # every map is laid twice, a few texels apart (the second over the first): the crystal's two
-    # faces, with the seam between them -- a beam 4 texels lower, an upright tine 4 texels inward
-    for n in A.SETS[state]:
-        x, y = PLACE[n]
-        dx, dy = (0, 4) if n in A.COLS else (4, 0)
-        if n != "BURR":
-            _both(f, n, x + ox + dx, y + oy + dy, cx=cx, **kw)
-        _both(f, n, x + ox, y + oy, cx=cx, **kw)
-    for x, y in A.GLINTS.get(state, ()):
-        g = P["GLINT"]
-        f.put(g, x + ox, y + oy, **kw)
-        f.put(g, 2 * cx - (x + ox) - g.w, y + oy, **kw)
-
-
-def head(f, ox, oy, cx, jaw=0, eyes="open", core="CORE", state="UP"):
-    if jaw:
-        _both(f, "MOUTH", PLACE["MOUTH"][0] + ox, PLACE["MOUTH"][1] + oy, cx=cx)
-    _both(f, "JAW", PLACE["JAW"][0] + ox, PLACE["JAW"][1] + oy + jaw, cx=cx)
-    _both(f, "HEAD", PLACE["HEAD"][0] + ox, PLACE["HEAD"][1] + oy, cx=cx)
-    e = "EYE_OPEN" if eyes == "open" else "EYE_SHUT"
-    _both(f, e, PLACE[e][0] + ox, PLACE[e][1] + oy, cx=cx)
-    antlers(f, state, ox, oy, cx)
-    f.put(P[core], PLACE["CORE"][0] + ox, PLACE["CORE"][1] + oy)
-
-
-def draw(p):
-    c = int(p.collapse)
-    if c >= 4:
-        return remains()
+def idle_test():
     f = Frame(W, H, LEG, RAMPS)
-    dy = int(round(p.dy + c * 12))
-    bx = int(round(p.shift))
-    rear = int(round(p.rear))
-    by = dy - rear
-    cx = CX + bx
-    # hind legs (further back; rearing puts the weight on them)
-    for s, lift in ((-1, p.legs[1]), (1, p.legs[2])):
-        x = PLACE["HIND"][0] + int(round(bx * 0.3))
-        y = PLACE["HIND"][1] - 2 * int(math.floor(lift + 0.5)) + min(rear, 5)
-        q = P["HIND"]
-        if s < 0:
-            f.put(q, x, y)
-        else:
-            f.put(P["HIND~"], 2 * (CX + int(round(bx * 0.3))) - x - q.w, y)
-    # front legs (near, thick); folded under the chest when it rears
-    for s, lift in ((-1, p.legs[0]), (1, p.legs[3])):
-        if rear:
-            n, x, y, c2 = "FLEG_FOLD", PLACE["FLEG_FOLD"][0] + bx, PLACE["FLEG_FOLD"][1] + by, cx
-        else:
-            n, x, y, c2 = "FLEG", PLACE["FLEG"][0] + bx // 2, PLACE["FLEG"][1] - 2 * int(math.floor(lift + 0.5)), CX + bx // 2
-        q = P[n]
-        if s < 0:
-            f.put(q, x, y)
-        else:
-            f.put(P[n + "~"], 2 * c2 - x - q.w, y)
-        if n == "FLEG":  # the feathering down the back (outer side) of the cannon
-            fx = x + 6 if s < 0 else 2 * c2 - x - q.w + q.w - 6 - P["FEATHER"].w
-            f.put(P["FEATHER"], fx, y + 26)
-            ix = x + 23 if s < 0 else 2 * c2 - x - q.w + q.w - 23 - P["HANK_C"].w  # a dark lock on its inner side
-            f.put(P["HANK_C"], ix, y + 25)
-    # shoulders and chest, the mane over them
-    _both(f, "CHEST", PLACE["CHEST"][0] + bx, PLACE["CHEST"][1] + by, cx=cx, clip_y=G + 1)
-    _both(f, "RUFF", PLACE["RUFF"][0] + bx, PLACE["RUFF"][1] + by, cx=cx)
-    for n, x, y in R.MARKS:  # pale hanks, underlocks and rime on the coat
-        f.put(P[n], x + bx, y + by)
-    if p.phase2 or c:
-        f.put(P["CRACK_L"], PLACE["CRACK_L"][0] + bx, PLACE["CRACK_L"][1] + by)
-        f.put(P["CRACK_R"], PLACE["CRACK_R"][0] + bx, PLACE["CRACK_R"][1] + by)
-    _both(f, "MANE", PLACE["MANE"][0] + bx, PLACE["MANE"][1] + by, cx=cx, clip_y=G + 1)
-    for n, x, y in R.MANE_MARKS:
-        f.put(P[n], x + bx, y + by)
-    # the head
-    state = attitude(p)
-    fwd = int(round((p.hs - 1.0) * 30))
-    hy = dy + int(round(p.head)) - int(round(rear * 0.6)) + fwd
-    if c:
-        hy = max(hy, c * 14)
-    if state == "HIGH":
-        hy = max(hy, -11)
-    if state.startswith("UP"):
-        hy = max(hy, -3)  # the antlers' tips stay in the frame: the head rises less (their size is kept)
-    hx_ = max(int(round(bx * 1.4)), -12)  # the antlers stay inside the frame
-    if state == "MID":
-        hx_ = max(min(hx_, 4), -4)
-    head(f, hx_, hy, CX + hx_, jaw=int(round(p.mouth * 0.75)), eyes=p.eyes, core="CORE_DIM" if c >= 3 else "CORE", state=state)
-    # ring: ice crystals rising around it, then flying out (v2's places x 2)
-    n = int(p.shards)
-    for i in range(n):
-        ang = -math.pi / 2 + (i - (n - 1) / 2) * (2.6 / max(n - 1, 1))
-        rx_, ry_ = 44 + 48 * p.shard_r, 36 + 44 * p.shard_r
-        x = CX + math.cos(ang) * rx_
-        y = 116 + math.sin(ang) * ry_ * 0.4 + 36 * (1 - p.shard_r) - (i % 2) * 8
-        q = P["SHARD_L" if p.shard_s >= 1.0 else "SHARD_S"]
-        y = min(max(y, 4 + q.h / 2), G - 12)
-        x = min(max(x, 2 + q.w / 2), W - 2 - q.w / 2)
-        f.put(q, int(round(x - q.w / 2)), int(round(y - q.h / 2)))
-    if p.chips:
-        for x, y in ((20, G - 6), (172, G - 8), (40, G - 2), (152, G - 2), (60, G - 18), (132, G - 18), (12, G - 22), (180, G - 24)):
-            f.put(P["CHIP"], x - 3, y - 6)
-    return f
-
-
-def fall_a():
-    """The purification, frame 3: the body slumped on the ground (hand-drawn), the head fallen on it,
-    the antlers cracked short, the murk rising."""
-    f = Frame(W, H, LEG, RAMPS)
-    _both(f, "FALL_A", *PLACE["FALL_A"])
-    for n, x, y in (("HANK_A", 50, 126), ("HANK_B", 62, 124), ("HANK_C", 70, 128), ("RIME_A", 56, 121), ("HANK_A", 136, 127),
-                    ("HANK_B", 124, 125), ("HANK_C", 116, 129), ("RIME_B", 128, 122), ("CHIP", 44, 148), ("CHIP", 150, 152)):
+    both(f, "HIND", 60, 136)
+    both(f, "FLEG", 44, 133)
+    both(f, "SHOULDER", 40, 88)
+    for n, x, y in (("CL_A", 43, 101), ("CL_C", 58, 110), ("CL_B", 49, 117)):
         f.put(P[n], x, y)
-    head(f, 0, 56, CX, eyes="shut", core="CORE_DIM", state="FLAT")
-    for n, x, y in (("DRIP", 86, 126), ("RIME_B", 99, 122), ("DRIP", 101, 138), ("RIME_C", 90, 142), ("DRIP", 91, 150),
-                    ("CHIP", 58, 156), ("DRIP", 122, 150), ("RIME_B", 130, 158), ("CHIP", 112, 160), ("DRIP", 140, 158),
-                    ("RIME_C", 124, 146), ("DRIP", 70, 150)):
+    for n, x, y in (("CM_A", 130, 101), ("CM_C~", 123, 110), ("CM_B~", 130, 117)):
         f.put(P[n], x, y)
-    _both(f, "POOL_A", 0, 167)
-    f.put(P["CHIP"], 93, 162)
-    return f
-
-
-def fall_b():
-    """Frame 4: a low mound of murk with tufts of the coat (hand-drawn), the antlers lying on it."""
-    f = Frame(W, H, LEG, RAMPS)
-    _both(f, "FALL_B", *PLACE["FALL_B"])
-    antlers(f, "FLAT", 0, 96, CX)
-    f.put(P["CORE_DIM"], 89, 134)
-    for n, x, y in (("CHIP", 60, 152), ("SHARD_S", 128, 148), ("RIME_B", 76, 150), ("CHIP", 108, 156), ("RIME_C", 46, 160),
-                    ("RIME_C", 140, 160), ("RIME_B", 84, 162), ("DRIP", 92, 158), ("CHIP", 148, 161), ("DRIP", 156, 158)):
+    both(f, "RIME_A", 54, 85)
+    f.put(P["CHEST_BASE"], 64, 60)
+    for n, x, y in MANE:
         f.put(P[n], x, y)
-    _both(f, "POOL_B", 0, 165)
+    both(f, "EAR", 61, 55)
+    both(f, "UP_BEAM", 18, 4)
+    for n, (x, y) in (("UP_T3", (25, 6)), ("UP_T2", (40, 4)), ("UP_T1", (68, 18))):
+        both(f, n, x, y)
+    f.put(P["FACE"], 79, 53)
+    f.put(P["JAW"], 87, 105)
+    both(f, "EYE_OPEN", 81, 66)
+    f.put(P["CORE"], 88, 37)
     return f
-
-
-def remains():
-    """Frame 5: a heap of pale coat (hand-drawn), the broken antlers on top, the core gone dark."""
-    f = Frame(W, H, LEG, RAMPS)
-    _both(f, "POOL_A", 0, 165)
-    _both(f, "REMAINS", PLACE["REMAINS"][0], PLACE["REMAINS"][1] + 2)
-    antlers(f, "FLAT", 0, 88, CX)
-    f.put(P["CORE_DIM"], 89, 128)
-    for n, x, y in (("RIME_A", 58, 150), ("RIME_B", 122, 146), ("CHIP", 76, 156), ("RIME_C", 104, 158), ("RIME_C", 138, 160)):
-        f.put(P[n], x, y)
-    return f
-
-
-SIZE = (W, H)
-PATTERNS = ("slam", "ring", "charge")
-PHASE2 = ("charge",)
-SMOOTH = {"rot", "lev", "fore", "hs", "shard_r", "shard_s", "legs"}  # legs: rounded to v2's whole pixels when drawn
-
-
-def frames():
-    P2 = dict(phase2=True)
-    # v2's key poses, the lengths x 2 (texels)
-    K = {
-        "idle": [{}, dict(dy=2), dict(dy=2, head=2), dict(head=2, mouth=2)],
-        "move": [dict(legs=(4, 0, 3, 0), shift=-4), dict(legs=(1, 1, 1, 1), dy=-2, head=-2, rot=-2),
-                 dict(legs=(0, 3, 0, 4), shift=4), dict(legs=(1, 1, 1, 1), dy=-1, head=2, rot=2)],
-        "windup_slam": (dict(head=14, rot=28, fore=0.85, dy=2), dict(head=28, rot=56, fore=0.68, dy=4)),
-        "attack_slam": (dict(head=32, rot=70, fore=0.6, dy=6, chips=True), dict(head=20, rot=40, fore=0.8, dy=4, mouth=2),
-                        dict(head=40, rot=96, fore=0.5, dy=8, chips=True, mouth=4)),
-        "windup_ring": (dict(rear=8, head=-2, rot=-4, fore=0.75, mouth=2, shards=4, shard_r=0.2, shard_s=1.0),
-                        dict(rear=16, head=-2, rot=-6, fore=0.65, mouth=4, shards=6, shard_r=0.35, shard_s=1.3)),
-        "attack_ring": (dict(head=-2, rot=-8, fore=0.65, mouth=6, dy=2, shards=8, shard_r=1.0, shard_s=1.1, chips=True),
-                        dict(head=-6, rot=-12, fore=0.8, mouth=2, shards=6, shard_r=1.25, shard_s=0.7)),
-        "windup_charge": (dict(head=12, lev=0.7, rot=8, fore=0.8, legs=(5, 0, 0, 0), **P2),
-                          dict(head=16, lev=0.95, rot=10, fore=0.75, legs=(0, 0, 0, 5), shift=2, **P2)),
-        "attack_charge": (dict(head=18, lev=1.0, rot=12, hs=1.12, fore=0.75, legs=(3, 0, 0, 0), **P2),
-                          dict(head=12, lev=0.7, rot=8, hs=1.06, fore=0.85, **P2)),
-        "hurt": dict(head=-6, rot=-6, eyes="shut", mouth=4, shift=-4),
-        "stagger": (dict(shift=-10, legs=(0, 0, 3, 6), head=6, rot=10, eyes="shut"),
-                    dict(shift=8, legs=(5, 2, 0, 0), head=8, rot=14, eyes="shut")),
-        "idle2": [dict(**P2), dict(dy=2, **P2), dict(dy=2, head=2, **P2), dict(head=2, mouth=2, **P2)],
-        "defeat": [dict(head=-8, rot=-8, eyes="shut", mouth=6, shift=-6, **P2),
-                   dict(head=-6, rot=-6, eyes="shut", mouth=6, legs=(3, 0, 0, 0), **P2),
-                   dict(collapse=2, head=16, rot=32, eyes="shut", **P2)],
-    }
-    out = actions(Pose, draw, K, PATTERNS, PHASE2)
-    # the purification (6 frames): the hit, the buckle, the collapse (v2's three keys), then three
-    # hand-drawn frames: slumped with the murk rising, a mound of murk, the heap that is left
-    for i, k in enumerate(K["defeat"]):
-        out[f"defeat.{i}"] = draw(Pose(**k))
-    out["defeat.3"] = fall_a()
-    out["defeat.4"] = fall_b()
-    out["defeat.5"] = remains()
-    return out
-
-
-ACTIONS = boss_actions(PATTERNS)
