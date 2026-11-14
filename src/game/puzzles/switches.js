@@ -7,6 +7,8 @@
 //   sensor  light: a light orb, a flame (burning tile, lit sconce, brazier, campfire) nearby
 //   sconce  fire: lit by a fire arrow, the fire blade, or a fire next to it (stays lit)
 //   stone   resonance / shock: a resonance pulse or electricity reaching it (active for a while)
+//   vane    wind: a wind lane reaching it, or hot air from a fire beside it (only while it lasts;
+//           volume phase 1, env/wind.js)
 //
 // Switches share a `link` (the doors they open) and a `group`: when every switch of one group is
 // active at the same moment, the link's doors open for good (saved like the P4 vault).
@@ -14,12 +16,13 @@
 // The final boss itself never counts as weight on a plate (it is huge and floats).
 import { openDoors, envNeighbours } from '../env/envSim.js';
 import { tileIndexAt } from '../env/envActions.js';
+import { vaneTurns } from '../env/wind.js';
 
-/** @typedef {'weight' | 'light' | 'fire' | 'shock' | 'resonance'} InputKind */
+/** @typedef {'weight' | 'light' | 'fire' | 'shock' | 'resonance' | 'wind'} InputKind */
 /**
  * @typedef {object} SwitchDef
  * @property {string} id
- * @property {'plate' | 'sensor' | 'sconce' | 'stone'} kind
+ * @property {'plate' | 'sensor' | 'sconce' | 'stone' | 'vane'} kind
  * @property {number} tx @property {number} ty
  * @property {string} link   doors it opens
  * @property {string} group  switches that must be active together
@@ -80,6 +83,7 @@ export function switchActive(state, s, lights) {
     const o = state.env.objectAt.get(i);
     if (o && o.lit) return true;
   }
+  if (accepts.has('wind') && vaneTurns(state, i)) return true;
   if (accepts.has('resonance') || accepts.has('shock')) {
     if ((state.switchUntil[s.id] ?? 0) > state.env.now) return true;
   }

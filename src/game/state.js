@@ -31,6 +31,7 @@ import { areaAt } from './world/features.js';
 import { ISLAND } from './world/maps/island.js';
 import { WORLD } from './world/world.js';
 import { objectBaseline } from './world/worldDiff.js';
+import { touchSurveys } from './world/survey.js';
 import { createNpcs, stepNpcs, syncNpcs, blockPlayerByNpcs, playerFrom } from './npc/npcs.js';
 import { TEST_FIELD } from './world/maps/testField.js';
 import { HEIGHT_TEST } from './world/maps/heightTest.js';
@@ -91,6 +92,9 @@ export const ENEMY_CORPSE_MS = 600;
  * @property {number} abilityReadyAt
  * @property {boolean} abilityHeld
  * @property {import('./world/world.js').RegionInfo[]} regions  P8
+ * @property {import('./env/wind.js').WindDef[]} winds  volume phase 1: wind lanes of the map
+ * @property {import('./env/wind.js').UpdraftDef[]} updrafts  volume phase 1: rising air of the map
+ * @property {import('./world/survey.js').SurveyDef[]} surveyDefs  volume phase 1: survey stones (測量石)
  * @property {any[]} objectBaseline  P8: objects as the map made them (for saving differences)
  * @property {import('./npc/npcs.js').Npc[]} npcs  P9: villagers (the ones there now)
  * @property {import('./npc/npcs.js').NpcDef[]} npcDefs  v1.0: every villager of the map, with its appearance condition
@@ -153,6 +157,9 @@ export function createGameState(def = HEIGHT_TEST) {
     abilityReadyAt: 0,
     abilityHeld: false,
     regions: f.regions ?? [],
+    winds: f.winds ?? [],
+    updrafts: f.updrafts ?? [],
+    surveyDefs: f.surveys ?? [],
     objectBaseline: [],
     npcs: [],
     npcDefs: f.npcs ?? [],
@@ -278,6 +285,7 @@ export function stepGame(state, input) {
   // v1.0 final: villagers have a solid body (npcs.js NPC_BODY).
   blockPlayerByNpcs(state, from, Math.hypot(input.moveX ?? 0, input.moveY ?? 0) > 0.2, STEP_SEC, PLAYER_MOVE.stepHeight);
   touchCheckpoints(state);
+  touchSurveys(state); // volume phase 1
   checkWarps(state);
   discoverLandmarks(state, SIGHT_PX);
 

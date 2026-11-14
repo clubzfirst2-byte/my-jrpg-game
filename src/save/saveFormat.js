@@ -18,7 +18,7 @@ export function useLegacyObjects(objects) {
 export const needsLegacyObjects = (e) => !!e && typeof e.schemaVersion === 'number' && e.schemaVersion < 3;
 
 /** Bump when the shape of `data` changes, and add a migration from the previous version. */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /**
  * Migrations from version N to N+1, applied in order when loading an older save.
@@ -33,6 +33,10 @@ export const MIGRATIONS = {
   // v2 -> v3 (P10.3): changed world objects are named "type@tx,ty" instead of by list index (which
   // shifts whenever the map gains objects). See nameIndexedDiff.
   2: (data) => ({ ...data, worldDiff: nameIndexedDiff(data?.worldDiff, legacyLists ?? []) }),
+  // v3 -> v4 (volume phase 1): the map. `surveyed` lists the regions drawn on it (survey stones
+  // touched); a save from before has none. Nothing else changes: every id, flag, chest, checkpoint
+  // and world difference of a v3 save means the same in v4 (no coordinate of an old region moved).
+  3: (data) => ({ ...data, surveyed: Array.isArray(data?.surveyed) ? data.surveyed : [] }),
 };
 
 /**

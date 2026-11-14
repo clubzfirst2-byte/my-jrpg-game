@@ -36,11 +36,12 @@ const OPEN_RANGE = 20;
  * @property {Record<string, boolean>} flags   P9: things said and done
  * @property {Record<string, 'active' | 'done'>} quests  P9: quests started / finished
  * @property {string[]} bosses  P10.4: cores of the murk purified (bosses defeated)
+ * @property {string[]} surveyed  volume phase 1 (save format 4): regions drawn on the map (survey stones touched)
  */
 
 /** @returns {Progress} */
 export function emptyProgress() {
-  return { openedChests: [], checkpoints: [], checkpoint: null, landmarks: [], maxHp: 12, gates: [], inv: createInventory(), picked: {}, abilities: [], ability: null, maxStamina: 100, flags: {}, quests: {}, bosses: [] };
+  return { openedChests: [], checkpoints: [], checkpoint: null, landmarks: [], maxHp: 12, gates: [], inv: createInventory(), picked: {}, abilities: [], ability: null, maxStamina: 100, flags: {}, quests: {}, bosses: [], surveyed: [] };
 }
 
 /** Feet position at the center-bottom of a tile. @param {any} map @param {number} tx @param {number} ty */
@@ -55,7 +56,7 @@ export function tileFeet(map, tx, ty) {
  */
 export function placeFeatureSolids(state) {
   const map = state.map;
-  for (const c of [...state.chests, ...state.campfires]) map.solid[c.ty * map.width + c.tx] = 1;
+  for (const c of [...state.chests, ...state.campfires, ...(state.surveyDefs ?? [])]) map.solid[c.ty * map.width + c.tx] = 1;
 }
 
 /**
@@ -223,6 +224,7 @@ export function applyProgress(state, saved) {
   pr.flags = { ...pr.flags };
   pr.quests = { ...pr.quests };
   pr.bosses = [...pr.bosses];
+  pr.surveyed = [...(pr.surveyed ?? [])];
   pr.inv = normalizeInventory(saved.inv);
   pr.picked = { ...(saved.picked ?? {}) };
   state.progress = pr;

@@ -6,6 +6,7 @@ import { WEATHER, isRaining } from './weather.js';
 import { weatherNow, material } from './envSim.js';
 import { conductorsFrom, tileIndexAt } from './envActions.js';
 import { hitPlayer, hitEnemy } from '../combat/damage.js';
+import { laneWindAt, inUpdraft } from './wind.js';
 
 export const STORM = Object.freeze({
   /** Strikes land 2 to 10 tiles from the player. */
@@ -36,8 +37,10 @@ export function applyWeatherToPlayer(state) {
   const indoor = i >= 0 && env.indoor[i] === 1;
   // Clear days are calm for the glider; from cloudy weather on, the wind carries it.
   const drift = indoor || w.kind === 'clear' ? 0 : WEATHER.glideDrift;
-  p.windX = w.windX * drift;
-  p.windY = w.windY * drift;
+  // Volume phase 1: a wind lane of the map blows whatever the weather (indoors too).
+  const lane = laneWindAt(state, p.x, p.y);
+  p.windX = w.windX * drift + lane.x;
+  p.windY = w.windY * drift + lane.y;
   p.rainOn = !indoor && isRaining(w) && !p.grip; // grip boots (P6) do not slip
   // Rising air over fire: any burning tile in the 3x3 under the player.
   let hot = false;
@@ -52,7 +55,8 @@ export function applyWeatherToPlayer(state) {
       }
     }
   }
-  p.updraft = hot;
+  // Volume phase 1: so does the rising air of an updraft of the map.
+  p.updraft = hot || (p.gliding && inUpdraft(state, p.x, p.y));
 }
 
 /**

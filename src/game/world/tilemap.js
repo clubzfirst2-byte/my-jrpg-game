@@ -52,6 +52,9 @@ const HEIGHT_DIGITS = '0123456789abcdefghijklmnopqrstuv';
  * @property {import('../entities/bosses.js').BossDef[]} [bosses]  P10.4: cores of the murk and their arenas
  * @property {import('./features.js').LandmarkDef[]} [landmarks]
  * @property {import('./maps/regions.js').PassDef[]} [passes]  v1.0: doorways to another region (the island's beach ring)
+ * @property {import('../env/wind.js').WindDef[]} [winds]  volume phase 1: wind lanes
+ * @property {import('../env/wind.js').UpdraftDef[]} [updrafts]  volume phase 1: rising air
+ * @property {import('./survey.js').SurveyDef[]} [surveys]  volume phase 1: survey stones (測量石)
  * @property {import('../entities/finalBoss.js').FinalBossDef} [finalBoss]  v1.0 (C7): 淀みの源 (not one of `bosses`)
  * @typedef {string[] | IslandDef} MapDef
  */
