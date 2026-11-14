@@ -43,7 +43,7 @@ export function closeGlider(p) {
  */
 export function glideStep(p, dt) {
   // Over a fire the hot air lifts the glider (P5), up to a height above the ground.
-  const lifting = !!p.updraft && p.z - p.groundZ < GLIDE.updraftHeight;
+  const lifting = !!p.updraft && p.z - p.groundZ < (p.updraftCap ?? GLIDE.updraftHeight);
   p.vz = lifting ? GLIDE.updraftSpeed : -GLIDE.fallSpeed;
   p.z += p.vz * dt;
   p.fallPeakZ = p.z; // only a fall after closing the glider can hurt

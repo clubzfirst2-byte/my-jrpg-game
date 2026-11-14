@@ -14,7 +14,8 @@
 /**
  * @typedef {{ id: string, tx: number, ty: number, tw: number, th: number, dx: -1 | 0 | 1, dy: -1 | 0 | 1, speed?: number }} WindDef
  *   dx / dy: the way the air moves (one of them is 0); speed in px/s (default WIND.laneSpeed)
- * @typedef {{ id: string, tx: number, ty: number, tw: number, th: number }} UpdraftDef
+ * @typedef {{ id: string, tx: number, ty: number, tw: number, th: number, lift?: number }} UpdraftDef
+ *   lift: how high above the ground it carries (px; default GLIDE.updraftHeight). Low under a roof.
  */
 
 export const WIND = Object.freeze({
@@ -43,12 +44,12 @@ export function laneWindAt(state, x, y) {
   return { x: wx, y: wy };
 }
 
-/** Whether rising air is at a point. @param {any} state @param {number} x @param {number} y */
-export function inUpdraft(state, x, y) {
+/** The rising air at a point, if any. @param {any} state @param {number} x @param {number} y @returns {UpdraftDef | null} */
+export function updraftAt(state, x, y) {
   const ts = state.map.tileSize;
   const tx = Math.floor(x / ts);
   const ty = Math.floor(y / ts);
-  return (state.updrafts ?? []).some((/** @type {UpdraftDef} */ u) => inside(u, tx, ty));
+  return (state.updrafts ?? []).find((/** @type {UpdraftDef} */ u) => inside(u, tx, ty)) ?? null;
 }
 
 /**

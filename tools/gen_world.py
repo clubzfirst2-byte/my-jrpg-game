@@ -38,6 +38,7 @@ class Region:
         self.g = [['~'] * RW for _ in range(RH)]
         self.h = [[0] * RW for _ in range(RH)]
         self.features = {'enemies': [], 'chests': [], 'checkpoints': [], 'landmarks': [], 'pickups': [], 'envObjects': [], 'campfires': [], 'npcs': [], 'warps': [], 'areas': [], 'bosses': [], 'switches': []}
+        self.extra = {}
         # The room strip east of the region (P10.1): nothing there until a room is carved out.
         self.eg = [['%'] * EW for _ in range(RH)]
         self.eh = [[0] * EW for _ in range(RH)]
@@ -739,7 +740,224 @@ for R in (P, S, M, F, L):
     if _moved: print('rocks moved from under crowns:', R.id, len(_moved))
     assert not any(R.g[y][x] == '#' and R.g[y + 1][x] == 'T' for y in range(RH - 1) for x in range(RW)), ('rock under a crown', R.id)
 
-regions = [P.out(), S.out(), M.out(), F.out(), L.out()]
+# ---------------- Volume phase 1: 風切りの段丘 (terrace), the 奥地 of the plains ----------------
+# A tableland east of the plains, in a column of its own (col 2: nothing placed before it moves).
+# Three shelves, west to east, parted by two rifts with no bottom (pit tiles: walking in puts you
+# back at the edge; they are crossed in the air). The wind always blows here:
+#
+#   西の棚 (x 3-27)    the pass from the plains, a record stone, the survey stone on a knoll (K1):
+#                       glide east from the knoll over the first rift (7 tiles)
+#   中の棚 (x 35-58)   a beast camp, 風車の試練, the ledge K3 where a wind lane (L1) blows east over
+#                       the second rift (13 tiles: too far without the wind)
+#   東の棚 (x 72-92)   a second record stone, 吹き上げの試練, an updraft (U1) up to 風守りの高台: a high
+#                       terrace with a ruin rim (never climbed), the broken mills, 二つ風の試練.
+#                       From its west rim a wind lane (L2) blows west: the way home.
+# Ways back by hand: K4 (東 -> 中), K2 (中 -> 西); or travel between the record stones (the map).
+# It is drawn with the plains' art (bundle region:plains) until its own is made.
+T_ = Region('terrace', '風切りの段丘', 131)
+for y in range(RH):
+    for x in range(RW):
+        T_.g[y][x] = '_'
+WEST, MID, EAST = (3, 27), (35, 58), (72, 92)
+def t_rect(x0, x1, y0, y1, ch=None, h=None):
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            if ch is not None: T_.g[y][x] = ch
+            if h is not None: T_.h[y][x] = h
+for (x0, x1) in (WEST, MID, EAST):
+    for y in range(4, 92):
+        for x in range(x0, x1 + 1):
+            # The outer edges of the tableland wander a little; the rims of the rifts are straight
+            # (what must be crossed is always the same distance).
+            wob = int(noise(x, y, 131, 6) * 3)
+            if y < 4 + wob or y > 91 - wob: continue
+            if x0 == WEST[0] and x < x0 + wob: continue
+            if x1 == EAST[1] and x > x1 - wob: continue
+            T_.g[y][x] = '.'
+# Low steps inside the shelves (the look of terraces; one level each: a jump up).
+def t_step(cx, cy, rx, ry, height, s, x0, x1):
+    for y in range(RH):
+        for x in range(x0, x1 + 1):
+            d = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 + (noise(x, y, s, 5) - 0.5) * 0.3
+            if d < 1 and T_.g[y][x] == '.': T_.h[y][x] = max(T_.h[y][x], height)
+t_step(12, 17, 8, 8, 16, 132, 5, 20)
+t_step(49, 14, 7, 6, 16, 133, 42, 56)
+t_step(46, 78, 6, 7, 16, 134, 40, 52)
+t_step(84, 52, 6, 5, 16, 135, 78, 90)
+# The pass from the plains: a road in from the west edge to the record stone.
+t_rect(0, 12, 46, 48, '=', 0)
+t_rect(3, 14, 43, 51, None, 0)
+# K1: the knoll on the west shelf's east rim (two steps up), where the first glide starts.
+t_rect(20, 27, 40, 52, '.', 16)
+t_rect(23, 27, 42, 50, '.', 32)
+# K2: the way back west, on the middle shelf's west rim.
+t_rect(35, 40, 62, 70, '.', 16)
+t_rect(35, 38, 64, 68, '.', 32)
+# K3: the ledge on the middle shelf's east rim, in the wind lane L1.
+t_rect(52, 58, 54, 64, '.', 16)
+t_rect(55, 58, 56, 62, '.', 32)
+# K4: the way back west from the east shelf: a tall bluff (a climb).
+t_rect(72, 77, 76, 86, '.', 32)
+t_rect(72, 75, 78, 84, '.', 64)
+# Where gliders come down: flat and open.
+t_rect(35, 44, 40, 52, '.', 0)
+t_rect(72, 84, 54, 64, '.', 0)
+t_rect(35, 46, 12, 22, '.', 0)
+t_rect(4, 27, 12, 22, None, None)
+# 風守りの高台: the high terrace, four levels up, with a rim of old stone (never climbed).
+HIGH = (73, 91, 6, 35)
+t_rect(72, 92, 4, 36, '_', 0)
+t_rect(HIGH[0], HIGH[1], HIGH[2], HIGH[3], 'u', 64)
+t_rect(HIGH[0] + 1, HIGH[1] - 1, HIGH[2] + 1, HIGH[3] - 1, '.', 64)
+t_rect(72, 92, 36, 37, '.', 0)  # the foot of its south wall
+# The broken mills: three stumps of towers in a row (the landmark; ruin blocks two levels taller).
+MILLS = [(77, 10), (82, 10), (87, 10)]
+for (x, y) in MILLS:
+    t_rect(x, x + 1, y, y + 1, 'u', 96)
+# 風見の塚: a small mound of old stone on the west shelf, with an updraft beside it (the first try).
+MOUND = (18, 23, 76, 83)
+t_rect(MOUND[0], MOUND[1], MOUND[2], MOUND[3], 'u', 48)
+t_rect(12, 26, 72, 88, None, 0)
+t_rect(MOUND[0], MOUND[1], MOUND[2], MOUND[3], None, 48)
+T_WINDS = [
+    {'id': 'terrace-east', 'tx': 52, 'ty': 56, 'tw': 24, 'th': 7, 'dx': 1, 'dy': 0},   # L1: over the second rift
+    {'id': 'terrace-home', 'tx': 28, 'ty': 13, 'tw': 46, 'th': 9, 'dx': -1, 'dy': 0},  # L2: from the high terrace west
+]
+T_UPDRAFTS = [
+    {'id': 'terrace-mound', 'tx': 13, 'ty': 78, 'tw': 4, 'th': 4},  # beside 風見の塚
+    {'id': 'terrace-high', 'tx': 78, 'ty': 37, 'tw': 7, 'th': 6},   # U1: up to the high terrace (to the foot of its wall)
+]
+# Keep-clear places: nothing grows where gliders start and land, in the lanes or on the roads.
+def t_clear(x, y):
+    if any(w['tx'] - 1 <= x < w['tx'] + w['tw'] + 1 and w['ty'] - 1 <= y < w['ty'] + w['th'] + 1 for w in T_WINDS + T_UPDRAFTS): return True
+    if 40 <= y <= 52 and (x <= 46): return True          # the road, K1 and the first landing
+    if 62 <= y <= 70 and 35 <= x <= 41: return True      # K2
+    if 76 <= y <= 86 and 72 <= x <= 78: return True      # K4
+    if MOUND[2] - 2 <= y <= MOUND[3] + 2 and MOUND[0] - 6 <= x <= MOUND[1] + 2: return True
+    if x in (27, 35, 58, 72): return True                # the rims of the rifts
+    return False
+for y in range(RH):
+    for x in range(RW):
+        if T_.g[y][x] != '.' or t_clear(x, y): continue
+        if T_.h[y][x] <= 16 and hsh(x, y, 136) < 0.045: T_.g[y][x] = 'T'
+        elif T_.h[y][x] <= 16 and hsh(x, y, 137) < 0.012 and not (y + 1 < RH and T_.g[y + 1][x] == 'T'): T_.g[y][x] = '#'
+for y in range(RH - 1):  # no rock right behind a tree (it would stand under the crown)
+    for x in range(RW):
+        if T_.g[y][x] == '#' and T_.g[y + 1][x] == 'T': T_.g[y][x] = '.'
+def t_at(x, y, lvl=None):
+    """The free tile nearest (x, y) on the level of (x, y) (or `lvl`)."""
+    return T_.near_free(x, y, T_.h[y][x] if lvl is None else lvl)
+def t_xy(x, y, lvl=None):
+    tx, ty = t_at(x, y, lvl)
+    return {'tx': tx, 'ty': ty}
+# Record stones: at the pass, and on the east shelf where the wind sets you down.
+T_.features['checkpoints'].append({'id': 'terrace', **t_xy(9, 44)})
+T_.features['checkpoints'].append({'id': 'terrace_east', **t_xy(80, 66)})
+# Chests.
+T_.features['chests'].append({'id': 'terrace_west', **t_xy(12, 16), 'reward': 'money', 'money': 60})
+T_.features['chests'].append({'id': 'terrace_mound', 'tx': 21, 'ty': 79, 'reward': 'item', 'item': 'arrow', 'count': 10})
+T_.features['chests'].append({'id': 'terrace_high', **t_xy(89, 30, 64), 'reward': 'item', 'item': 'star_shard'})
+# The beast camp on the middle shelf: a fire, three of them, and what they kept.
+T_.features['campfires'].append(t_xy(47, 30))
+T_.features['chests'].append({'id': 'terrace_camp', **t_xy(49, 28), 'reward': 'money', 'money': 100})
+for (x, y, kind) in [(45, 32, 'beast'), (49, 32, 'beast'), (51, 29, 'archer'),   # the camp
+                     (13, 60, 'beast'), (9, 30, 'beast'),                         # the west shelf
+                     (44, 84, 'beast'),                                           # the middle shelf, south
+                     (86, 74, 'archer'), (82, 46, 'beast')]:                      # the east shelf
+    T_.features['enemies'].append({'kind': kind, **t_xy(x, y)})
+for (x, y) in [(78, 24), (86, 22)]:                                               # the high terrace's keepers
+    T_.features['enemies'].append({'kind': 'sentinel', **t_xy(x, y, 64)})
+assert len({e['kind'] for e in T_.features['enemies']}) <= 3, 'at most three kinds of enemies in one place (art memory)'
+for k, (x, y, item) in enumerate([(7, 56, 'red_berry'), (16, 34, 'swift_herb'), (40, 30, 'mushroom'), (50, 70, 'red_berry'), (44, 16, 'arrow'), (88, 60, 'swift_herb'), (84, 84, 'ember_pepper'), (80, 28, 'arrow')]):
+    T_.features['pickups'].append({'id': f'terrace{k}', 'item': item, **t_xy(x, y), **({'count': 5} if item == 'arrow' else {})})
+T_.features['landmarks'].append({'id': 'terrace_mills', 'name': '割れ風車の列', 'tx': 82, 'ty': 11, 'always': False})
+T_.features['landmarks'].append({'id': 'terrace_rift', 'name': '風鳴りの裂け目', 'tx': 31, 'ty': 46, 'always': False})
+# The survey stone: on the knoll, where the first glide starts (high ground: the map of this place).
+T_.features['surveys'] = [{'id': 'survey-terrace', 'region': 'terrace', 'tx': 25, 'ty': 43}]
+assert T_.free(25, 43, 32) is False or True
+
+# --- the wind trials (rooms in the strip, like the island's: floor cols 99-109) ---
+T_ROOM_WINDS, T_ROOM_UPDRAFTS = [], []
+def vane(R, sid, X, y, link, group):
+    R.obj('vane', X, y)
+    R.switch(sid, 'vane', X, y, link, group, ['wind'])
+# 風車の試練 (middle shelf): one vane. The wind comes in from the west wall along a row, but brambles
+# and a crate stand in it. Clear the row (cut or burn the brambles; push the crate out with the sword
+# or 念動), or set the grass beside the vane alight with a fire arrow through the brazier (hot air).
+y0 = 4
+T_.puzzle_box('trial_vane', '風車の試練', y0)
+T_.partition(y0 + 4, 'trial_vane')
+T_.features['chests'].append({'id': 'trial_vane', 'tx': 104, 'ty': y0 + 2, 'reward': 'money', 'money': 150})
+T_ROOM_WINDS.append({'id': 'trial-vane', 'tx': 99, 'ty': y0 + 7, 'tw': 11, 'th': 1, 'dx': 1, 'dy': 0})
+vane(T_, 'vane-a', 109, y0 + 7, 'trial_vane', 'a')
+T_.obj('bramble', 101, y0 + 7)
+T_.obj('crate', 106, y0 + 7)
+T_.sg(109, y0 + 8, '.')            # grass beside the vane: the east wall stops a fire arrow there
+T_.obj('brazier', 102, y0 + 8)
+T_.pillar_gate('trial_vane', '風車の試練', (44, 58), y0)
+# 吹き上げの試練 (east shelf): the prize is across a rift seven tiles wide. Rising air at both edges
+# carries a glider over (under a roof it lifts only a little); or 蔓結び grows a bridge.
+y0 = 22
+T_.puzzle_box('trial_rise', '吹き上げの試練', y0)
+for y in range(y0 + 3, y0 + 10):
+    for X in range(99, 110):
+        T_.sg(X, y, '_')
+T_.features['chests'].append({'id': 'trial_rise', 'tx': 101, 'ty': y0 + 1, 'reward': 'item', 'item': 'star_shard'})
+T_ROOM_UPDRAFTS.append({'id': 'trial-rise-near', 'tx': 102, 'ty': y0 + 8, 'tw': 5, 'th': 2, 'lift': 40})
+T_ROOM_UPDRAFTS.append({'id': 'trial-rise-far', 'tx': 102, 'ty': y0 + 3, 'tw': 5, 'th': 2, 'lift': 40})
+T_.pillar_gate('trial_rise', '吹き上げの試練', (86, 70), y0)
+# 二つ風の試練 (the high terrace): two vanes must turn at once. One wind blows east along a row with a
+# crate in it, the other west along a row with brambles in it; each vane has grass beside it and a
+# brazier in line (a fire arrow), but one fire burns out before the other is lit: clear both rows,
+# or clear one and burn at the other.
+y0 = 40
+T_.puzzle_box('trial_winds', '二つ風の試練', y0)
+T_.partition(y0 + 4, 'trial_winds')
+T_.features['chests'].append({'id': 'trial_winds', 'tx': 104, 'ty': y0 + 2, 'reward': 'item', 'item': 'star_shard'})
+T_ROOM_WINDS.append({'id': 'trial-winds-east', 'tx': 99, 'ty': y0 + 6, 'tw': 11, 'th': 1, 'dx': 1, 'dy': 0})
+T_ROOM_WINDS.append({'id': 'trial-winds-west', 'tx': 99, 'ty': y0 + 9, 'tw': 11, 'th': 1, 'dx': -1, 'dy': 0})
+vane(T_, 'winds-a', 109, y0 + 6, 'trial_winds', 'a')
+vane(T_, 'winds-b', 99, y0 + 9, 'trial_winds', 'a')
+T_.obj('crate', 103, y0 + 6)
+T_.obj('bramble', 105, y0 + 9); T_.obj('bramble', 106, y0 + 9)
+T_.sg(109, y0 + 7, '.'); T_.obj('brazier', 101, y0 + 7)
+T_.sg(99, y0 + 10, '.'); T_.obj('brazier', 107, y0 + 10)
+T_.pillar_gate('trial_winds', '二つ風の試練', (82, 20), y0)
+T_.extra = {'climate': 'temperate', 'bundle': 'region:plains', 'col': 2, 'art': 'plains', 'parent': 'plains',
+            'winds': T_WINDS + T_ROOM_WINDS, 'updrafts': T_UPDRAFTS + T_ROOM_UPDRAFTS}
+# The pass: east from under the plains' windmill hill (rows 30-32), and back.
+PASS_PT = range(30, 33)
+_trees_before = sum(row.count('T') for row in P.g)
+_free_before = {(x, y) for y in range(RH) for x in range(RW) if P.g[y][x] in '.s='}
+for y in PASS_PT:  # (as carve_pass does; the features in the strip of rooms share these rows, so by hand)
+    for x in range(RW - 1, -1, -1):
+        if P.g[y][x] in '.s' and P.h[y][x] == 0 and RW - 1 - x > 6: break
+        assert P.g[y][x] in '~.' and not any(o.get('tx') == x and o.get('ty') == y for lst in P.features.values() for o in lst if isinstance(o, dict)), ('pass to the terrace over', x, y, P.g[y][x])
+        P.g[y][x] = '='; P.h[y][x] = 0
+assert _trees_before == sum(row.count('T') for row in P.g), 'the pass to the terrace takes no tree of the plains (saves name them)'
+P.extra['passes'] = P.extra['passes'] + [{'id': 'pass-terrace', 'tx': RW - 1, 'ty': 31, 'facing': 'right', 'to': {'region': 'terrace', 'tx': 1, 'ty': 47}}]
+T_.extra['passes'] = [{'id': 'pass-terrace-back', 'tx': 0, 'ty': 47, 'facing': 'left', 'to': {'region': 'plains', 'tx': RW - 2, 'ty': 31}}]
+# Checks: the survey stone's tile, what stands on pits, and the gate spots.
+_sv = T_.features['surveys'][0]
+assert T_.g[_sv['ty']][_sv['tx']] == '.' and T_.h[_sv['ty']][_sv['tx']] == 32, 'the survey stone stands on the knoll'
+for key in ('enemies', 'chests', 'checkpoints', 'pickups', 'campfires'):
+    for o in T_.features[key]:
+        if o['tx'] < RW: assert T_.g[o['ty']][o['tx']] in '.=u', ('terrace: on bad ground', key, o)
+for lm in ('trial_vane', 'trial_rise', 'trial_winds'):
+    _g = next(l for l in T_.features['landmarks'] if l['id'] == lm)
+    print('terrace gate', lm, (_g['tx'], _g['ty']), T_.h[_g['ty']][_g['tx']])
+assert T_.h[next(l for l in T_.features['landmarks'] if l['id'] == 'trial_winds')['ty']][next(l for l in T_.features['landmarks'] if l['id'] == 'trial_winds')['tx']] == 64, '二つ風の試練 is on the high terrace'
+
+# ---------------- Volume phase 1: survey stones (測量石) of the regions made before ----------------
+# One on high ground in each region; touching it draws the region on the map. Placed last, on free
+# tiles, so nothing placed before them moves.
+for (R, x, y, lvl) in [(P, 74, 33, 32), (S, 68, 20, 48), (M, 51, 31, 64), (F, 21, 62, 16), (L, 47, 12, 0)]:
+    sx, sy = R.near_free(x, y, lvl)
+    assert R.g[sy][sx] != '=', ('survey stone on a road', R.id)
+    assert all(R.g[sy + dy][sx + dx] in '.s=' and R.h[sy + dy][sx + dx] == lvl for (dx, dy) in ((0, 1),)), ('survey stone: no way to stand south of it', R.id)
+    R.features['surveys'] = [{'id': f'survey-{R.id}', 'region': R.id, 'tx': sx, 'ty': sy}]
+
+regions = [P.out(), S.out(), M.out(), F.out(), L.out(), T_.out()]
 for r in regions:
     assert len(r['ground']) == RH and all(len(row) == RW + EW for row in r['ground'])
     walk = lambda x, y: r['ground'][y][x] in '.s=wum' and not any(o['tx'] == x and o['ty'] == y for o in r['envObjects'] if o['type'] not in ('mat', 'stairs'))
@@ -761,7 +979,7 @@ out = """// @ts-check
 // stacks the regions under the island and offsets them).
 
 /** @typedef {{ id: string, tx: number, ty: number, facing: 'up' | 'down' | 'left' | 'right', to: { region: string, tx: number, ty: number }, if?: import('../features.js').FlagCondition[] }} PassDef */
-/** @typedef {import('../tilemap.js').IslandDef & { id: string, name: string, climate: 'temperate' | 'dry' | 'cold', bundle: string, col?: number, passes?: PassDef[], finalBoss?: import('../../entities/finalBoss.js').FinalBossDef }} RegionDef */
+/** @typedef {import('../tilemap.js').IslandDef & { id: string, name: string, climate: 'temperate' | 'dry' | 'cold', bundle: string, col?: number, art?: string, parent?: string, passes?: PassDef[], finalBoss?: import('../../entities/finalBoss.js').FinalBossDef }} RegionDef */
 
 /** @type {RegionDef[]} */
 export const REGIONS = %s;

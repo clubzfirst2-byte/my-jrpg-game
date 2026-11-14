@@ -130,6 +130,10 @@ export function stepSwitches(state) {
   for (const s of /** @type {SwitchDef[]} */ (state.switches)) {
     const on = switchActive(state, s, lights);
     state.switchActive[s.id] = on;
+    if (s.kind === 'vane') {
+      const o = env.objectAt.get(idx(state, s)); // for the view: the vane turns
+      if (o) o.turning = on;
+    }
     if (s.seat) continue; // read by the final boss, never a door
     const key = `${s.link}\u0000${s.group}`;
     groups.set(key, (groups.get(key) ?? true) && on);

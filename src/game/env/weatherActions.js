@@ -6,7 +6,7 @@ import { WEATHER, isRaining } from './weather.js';
 import { weatherNow, material } from './envSim.js';
 import { conductorsFrom, tileIndexAt } from './envActions.js';
 import { hitPlayer, hitEnemy } from '../combat/damage.js';
-import { laneWindAt, inUpdraft } from './wind.js';
+import { laneWindAt, updraftAt } from './wind.js';
 
 export const STORM = Object.freeze({
   /** Strikes land 2 to 10 tiles from the player. */
@@ -56,7 +56,9 @@ export function applyWeatherToPlayer(state) {
     }
   }
   // Volume phase 1: so does the rising air of an updraft of the map.
-  p.updraft = hot || (p.gliding && inUpdraft(state, p.x, p.y));
+  const rising = p.gliding ? updraftAt(state, p.x, p.y) : null;
+  p.updraft = hot || !!rising;
+  p.updraftCap = hot ? undefined : rising?.lift;
 }
 
 /**

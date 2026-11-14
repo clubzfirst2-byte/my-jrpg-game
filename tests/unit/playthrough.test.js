@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createGameState } from '../../src/game/state.js';
 import { WORLD } from '../../src/game/world/world.js';
 import { Ground, Shape, LEVEL_PX } from '../../src/game/world/tilemap.js';
+import { AIR_ROUTES, T } from './terraceRoutes.js';
 
 // P10.6 completion check (DESIGN.md roadmap): a playthrough of the whole world. From the start,
 // moving the way the player can — walking, swimming, jumping up one level, climbing earth cliffs
@@ -32,6 +33,23 @@ const warpsFrom = new Map();
 for (const w of WORLD.warps) {
   const i = w.ty * W + w.tx;
   warpsFrom.set(i, [...(warpsFrom.get(i) ?? []), w.toTy * W + w.toTx]);
+}
+
+// Volume phase 1: 風切りの段丘 is crossed in the air. This check has no gliding, so the ways through
+// the air count as doorways from where the jump starts to the middle of where it lands; each one is
+// flown with the real game step in terrace.test.js. So does the glide over the rift in 吹き上げの試練.
+for (const r of AIR_ROUTES) {
+  const from = T(r.from[0], r.from[1]);
+  const to = T(Math.round((r.to.x0 + r.to.x1) / 2), Math.round((r.to.y0 + r.to.y1) / 2));
+  const i = from.ty * W + from.tx;
+  warpsFrom.set(i, [...(warpsFrom.get(i) ?? []), to.ty * W + to.tx]);
+}
+{
+  const a = WORLD.areas.find((x) => x.id === 'trial_rise');
+  const near = (a.ty + 10) * W + a.tx + 6;
+  const far = (a.ty + 2) * W + a.tx + 6;
+  warpsFrom.set(near, [...(warpsFrom.get(near) ?? []), far]);
+  warpsFrom.set(far, [...(warpsFrom.get(far) ?? []), near]);
 }
 
 // v1.0 (C5): the beach ring is a doorway only with the flag source_open (warps with `if`). The
@@ -78,6 +96,7 @@ describe('a playthrough of the whole world: everything can be reached from the s
     'cores of the murk': [WORLD.bosses, 1],
     landmarks: [WORLD.landmarks.filter((l) => !l.always), 4], // discovered when seen up close (the windmill stands on its ruin)
     'doorways and stairs': [WORLD.warps, 1],
+    'survey stones': [WORLD.surveys, 1], // volume phase 1
   };
   for (const [name, [list, r]] of Object.entries(groups)) {
     it(`every one of the ${list.length} ${name}`, () => {
@@ -124,13 +143,13 @@ describe('a playthrough of the whole world: everything can be reached from the s
     expect(others.filter((o) => !reach(o)).map((o) => o.id)).toEqual([]);
   });
 
-  it('all six regions, all four cores and all six trials are on the way', () => {
+  it('all seven regions, all four cores and all nine trials are on the way', () => {
     for (const r of WORLD.regions) {
       let any = false;
       for (let ty = r.ty; ty < r.ty + r.th && !any; ty++) for (let tx = r.tx; tx < r.tx + Math.min(r.tw, 96) && !any; tx++) any = !!seen[ty * W + tx];
       expect(any, r.id).toBe(true);
     }
     expect(WORLD.bosses).toHaveLength(4);
-    expect(WORLD.areas.filter((a) => a.id.startsWith('trial_'))).toHaveLength(6);
+    expect(WORLD.areas.filter((a) => a.id.startsWith('trial_'))).toHaveLength(9); // 6 + the three wind trials (volume phase 1)
   });
 });

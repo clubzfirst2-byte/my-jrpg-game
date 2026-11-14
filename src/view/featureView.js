@@ -44,6 +44,17 @@ export class FeatureView {
       return { id: c.id, sprite: s };
     });
 
+    // Volume phase 1: survey stones (測量石).
+    /** @type {{ region: string, sprite: Sprite }[]} */
+    this.surveys = (state.surveyDefs ?? []).map((c) => {
+      const f = feet(c.tx, c.ty);
+      const s = makeSprite('obj.survey.off');
+      s.position.set(f.x, f.y - f.z - 1);
+      s.zIndex = f.y - 1;
+      actors.addChild(s);
+      return { region: c.region, sprite: s };
+    });
+
     /** @type {{ sprite: Sprite, puffs: Sprite[], x: number, y: number }[]} */
     this.fires = state.campfires.map((c, i) => {
       const f = feet(c.tx, c.ty);
@@ -130,6 +141,7 @@ export class FeatureView {
       // The active stone pulses gently.
       c.sprite.alpha = pr.checkpoint === c.id ? 0.85 + 0.15 * Math.sin(timeSec * 3) : 1;
     }
+    for (const c of this.surveys) c.sprite.texture = texture((pr.surveyed ?? []).includes(c.region) ? 'obj.survey.on' : 'obj.survey.off');
     for (const f of this.fires) {
       f.sprite.texture = texture(`obj.campfire.${Math.floor(timeSec * FIRE_FPS) % 2}`);
       f.puffs.forEach((p, k) => {

@@ -20,6 +20,7 @@ import { COMBAT } from '../game/entities/playerCombat.js';
 import { areaAt } from '../game/world/features.js';
 import { sourceFrameKey, drawSourceTelegraphs, drawSeatLights } from './sourceView.js';
 import { FeatureView } from './featureView.js';
+import { WindView } from './windView.js';
 import { EnvView } from './envView.js';
 import { WeatherView, starRingOpen, crystalLightColor } from './weatherView.js';
 import { ItemView } from './itemView.js';
@@ -150,7 +151,8 @@ export class GameView {
     /** @type {Map<any, { o: any, sprite: Sprite, occluder: Occluder | null }>} object -> its sprite (loaded chunks only) */
     this.objectSprites = new Map();
     /** @type {RegionInfo[]} */
-    this.regions = state.regions ?? [];
+    // Volume phase 1: an 奥地 is dressed in its parent region's art (`art`) until its own is drawn.
+    this.regions = (state.regions ?? []).map((r) => (r.art ? { ...r, id: r.art } : r));
     /**
      * v1.0 QA4 L-6: the desert's trees stand on a tile of grass (the map's tree tile), which read as
      * a square green patch in the sand; with the release terrain those tiles are drawn as desert sand
@@ -183,6 +185,7 @@ export class GameView {
     this.screenLayer.label = 'screen';
     app.stage.addChild(this.screenLayer);
     this.features = new FeatureView((key) => this.makeSprite(key), this.actors, this.screenLayer, state);
+    this.wind = new WindView((key) => this.makeSprite(key), this.actors, state); // volume phase 1
     // Environment (P4): ash / wet ground goes between the cached ground and the actors.
     this.envGround = new Container();
     this.envGround.label = 'env-ground';
@@ -770,6 +773,7 @@ export class GameView {
     if (o.type === 'brazier') return `obj.brazier.${Math.floor(timeSec * 6) % 2}`;
     if (o.type === 'sconce') return o.lit ? 'obj.sconce.on' : 'obj.sconce.off';
     if (o.type === 'stone') return o.glow ? 'obj.stone.on' : 'obj.stone.off';
+    if (o.type === 'vane') return `obj.vane.${o.turning ? Math.floor(timeSec * 8) % 2 : 0}`; // volume phase 1
     // P10.3: conifers in the forest and the mountains.
     if (o.type === 'tree') {
       const r = regionAt(this.regions, o.tx, o.ty)?.id;
@@ -931,6 +935,7 @@ export class GameView {
       this.updateObjects(timeSec, state.env.now);
     }
     const o = this.camera.origin();
+    this.wind.update(o, this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom, timeSec);
     this.env.update(state, o, this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom, timeSec);
     this.weather.update(state, o, this.camera.zoom, this.boundsArea ? areaAt(state, state.player.x, state.player.y) : null, timeSec, dtSec);
     this.items.update(state, timeSec);

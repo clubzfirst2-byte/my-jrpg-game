@@ -113,6 +113,7 @@ export const PLAYER_MAX_HP = 12; // 3 hearts x 4 quarters
  * @property {number} [windX]   P5: wind drift while gliding (px/s), set by the game each step
  * @property {number} [windY]
  * @property {boolean} [updraft] P5: rising air over a fire under the player
+ * @property {number} [updraftCap] volume phase 1: how high an updraft of the map carries (px above the ground)
  * @property {boolean} [rainOn]  P5: rain is falling on the player (slippery walls)
  * @property {number} [slipTime]
  */

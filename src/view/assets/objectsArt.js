@@ -29,11 +29,17 @@ export const OBJECTS_GROUP = 'objects';
 export const TERRAIN_OBJECT_KEYS = Object.freeze(['obj.tree', 'obj.rock', 'obj.bramble', 'obj.stump', 'obj.cactus']);
 /**
  * Keys with no release art yet: they keep the placeholder (drawn at 1 art pixel per game pixel).
- * None now (the beach ring's art landed). A key's art is picked up by name once its file
+ * (The beach ring's art landed; the volume phase 1 objects wait for theirs.) A key's art is picked up by name once its file
  * src/art-release/objects/<key>.png is there; until then list it here, with the reason.
  * @type {Readonly<Record<string, string>>}
  */
-export const PLACEHOLDER_FALLBACK_KEYS = Object.freeze({});
+export const PLACEHOLDER_FALLBACK_KEYS = Object.freeze({
+  // Volume phase 1 (風切りの段丘): stand-ins drawn in code (volumeArt.js) until the v3 art is made.
+  'obj.vane.0': 'volume phase 1: the wind vane has no art yet',
+  'obj.vane.1': 'volume phase 1: the wind vane has no art yet',
+  'obj.survey.off': 'volume phase 1: the survey stone has no art yet',
+  'obj.survey.on': 'volume phase 1: the survey stone has no art yet',
+});
 
 /**
  * Whether this view loads the objects' release art (see the top of the file).

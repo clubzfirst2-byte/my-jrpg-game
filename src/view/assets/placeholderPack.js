@@ -3,6 +3,7 @@
 // A production pack must provide the same logical names and anchors (DESIGN.md 7.5).
 import { Rectangle, Texture } from 'pixi.js';
 import { LEVEL_PX } from '../../game/world/tilemap.js';
+import { volumeEntries } from './volumeArt.js';
 import {
   PALETTE,
   archerFrames,
@@ -168,6 +169,8 @@ export function placeholderEntries() {
   entries.push({ key: 'sw.sensor.off', rows: sensorSprite(false), anchor: FEET });
   entries.push({ key: 'sw.sensor.on', rows: sensorSprite(true), anchor: FEET });
   entries.push({ key: 'fx.light', rows: lightOrbSprite(), anchor: CENTER });
+  // Volume phase 1: stand-ins for the vane and the survey stone (volumeArt.js).
+  for (const e of volumeEntries()) entries.push({ ...e, anchor: FEET });
   // P10.1: house floors and walls (rooms can be in any region's strip); nothing outside the rooms.
   entries.push({ key: 'tile.wood', rows: woodFloorTile(), anchor: TOP_LEFT });
   entries.push({ key: 'tile.walltop', rows: wallTopTile(), anchor: TOP_LEFT });

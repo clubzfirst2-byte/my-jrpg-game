@@ -30,13 +30,14 @@ describe('objects release art: names → the game keys', () => {
     expect(missing).toEqual([]);
     // terrain's keys are never in the objects art; nothing else falls back now — the beach ring has its art
     for (const k of TERRAIN_OBJECT_KEYS) expect(ART.has(k), k).toBe(false);
-    expect(PLACEHOLDER_FALLBACK_KEYS).toEqual({});
+    // volume phase 1: the vane and the survey stone wait for their art (stand-ins drawn in code)
+    expect(Object.keys(PLACEHOLDER_FALLBACK_KEYS).sort()).toEqual(['obj.survey.off', 'obj.survey.on', 'obj.vane.0', 'obj.vane.1']);
     for (const k of ['obj.star_ring.off', 'obj.star_ring.on']) expect(ART.has(k), k).toBe(true);
   });
 
   it('every map object and switch of the world maps to a covered key, in each of its states', () => {
     const state = createGameState(MAPS.world);
-    const STATES = { receiver: ['on', 'off'], sconce: ['on', 'off'], stone: ['on', 'off'], brazier: ['0', '1'], star_ring: ['on', 'off'], charm_shelf: ['', 'on'] };
+    const STATES = { receiver: ['on', 'off'], sconce: ['on', 'off'], stone: ['on', 'off'], brazier: ['0', '1'], star_ring: ['on', 'off'], charm_shelf: ['', 'on'], vane: ['0', '1'] };
     const types = new Set(state.map.objects.map((o) => o.type));
     for (const t of types) {
       if (t === 'tree') continue; // terrain (obj.tree / <region>.pine)

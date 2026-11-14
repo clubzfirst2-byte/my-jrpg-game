@@ -26,9 +26,11 @@ describe('the world: the island with the regions stacked below', () => {
     const west = REGIONS.filter((r) => !r.col);
     const east = REGIONS.filter((r) => r.col === 1);
     expect(WORLD.ground.length).toBe(Math.max(ISLAND.ground.length + west.reduce((n, r) => n + r.ground.length, 0), east.reduce((n, r) => n + r.ground.length, 0)));
+    // Volume phase 1: the regions that were there keep their places exactly; new ones only add columns.
     expect(WORLD.regions.map((r) => [r.id, r.tx, r.ty])).toEqual([
       ['island', 0, 0], ['plains', 0, 72], ['desert', 0, 168],
       ['mountains', 128, 0], ['forest', 128, 96], ['lake', 128, 192],
+      ['terrace', 256, 0],
     ]);
     const plains = REGIONS[0];
     const chest = plains.chests[0];
@@ -39,7 +41,7 @@ describe('the world: the island with the regions stacked below', () => {
 
   it('parses into one map; ids stay unique; item references are valid', () => {
     const map = parseMap(WORLD);
-    expect(map.width).toBe(256); // P10.3: two columns of 128 (whole chunks)
+    expect(map.width).toBe(384); // P10.3: columns of 128 (whole chunks); volume phase 1: a third one
     for (const key of ['chests', 'checkpoints', 'pickups', 'landmarks']) {
       const ids = WORLD[key].map((x) => x.id);
       expect(new Set(ids).size).toBe(ids.length);
