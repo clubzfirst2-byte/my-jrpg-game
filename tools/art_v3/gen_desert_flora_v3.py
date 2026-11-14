@@ -38,8 +38,12 @@ RAMPS = {
     "palmbark": ["#2a1c12", "#4e3624", "#604430", "#74543a", "#886646", "#9c7a56", "#b89a74"],
     "date": ["#3a160a", "#7a2e12", "#963c16", "#b0501c", "#c86a26", "#dc8a36", "#f0b060"],
     "deadwood": ["#2a2420", "#504640", "#625650", "#766a60", "#8a7e72", "#a09486", "#c0b6a6"],
+    "oldbark": ["#2a1c14", "#463428", "#544032", "#644e3e", "#745e4c", "#86705c", "#a08a74"],
+    "heartwood": ["#4a3a24", "#806a48", "#967e58", "#aa9268", "#bea87c", "#d0bc92", "#e6d6b0"],
     "cactus": ["#0e2418", "#1e4028", "#285030", "#326038", "#407446", "#548a54", "#76a670"],
+    "saguaro": ["#0e2420", "#17392e", "#1e4a3a", "#2e6a4e", "#3c7a58", "#4a8a62", "#78ae84"],  # v1 obj.cactus's greens
     "spine": ["#5a4630", "#9a8060", "#b09474", "#c8ac88", "#dcc49e", "#ecd8b4", "#fff0d0"],
+    "spine1": ["#5a4630", "#9a8060", "#a48a6c", "#b49a7c", "#c2aa8c", "#d2bc9e", "#fff0d0"],  # v1 obj.cactus's spine pair,
     "pink": ["#5a2038", "#b0507a", "#c8689e", "#e080a8", "#ea98af", "#f4b0cc", "#ffe0ee"],
     "yellow": ["#6a4a10", "#c08a20", "#d8bb30", "#f0c040", "#f4d360", "#f8dc80", "#fff4c0"],
     "fruit": ["#4a0c14", "#7e1424", "#98182c", "#b42036", "#cc3446", "#e05462", "#f4908e"],
@@ -123,8 +127,11 @@ def frond(c, x0, y0, ang, L, droop, w0, side_bias=0.0):
 
 PALMS = {  # W, H, trunk height (fraction), base half width, top half width, lean, fronds, frond length, dates
     "palm_l": (144, 256, 0.62, 9.0, 5.5, 12, 13, 62, True),
-    "palm_s": (80, 144, 0.46, 6.0, 4.5, 5, 9, 34, False),
+    # round 2 (inspection 1, P1-3 / P2-5): a TREE of 112+ texels and the palms' second shape: it leans
+    # LEFT (palm_l leans right), its trunk bends more, its fronds are longer for its size and hang lower
+    "palm_s": (96, 168, 0.55, 6.5, 4.5, -13, 10, 40, False),
 }
+PALM_DROOP = {"palm_l": 1.0, "palm_s": 1.3}
 
 
 def palm(kind, frame):
@@ -171,7 +178,7 @@ def palm(kind, frame):
         a += rng.uniform(-0.07, 0.07)
         side = math.cos(a)
         L = FL * (0.8 + 0.3 * abs(side)) * (1.0 if i % 2 else 0.86) * rng.uniform(0.94, 1.06)
-        droop = (0.18 + 0.5 * abs(side) ** 1.5) * rng.uniform(0.85, 1.15)
+        droop = (0.18 + 0.5 * abs(side) ** 1.5) * rng.uniform(0.85, 1.15) * PALM_DROOP[kind]
         back = rank < nf // 3
         m, rib0, pts = frond(c, hx, hy + 2, a, L, droop, w0=(9 if kind == "palm_l" else 6.5))
         if sway:  # the tips move with the wind (the outer third), the base stays
@@ -237,17 +244,54 @@ def snag(frame):
     parts |= lock(c, (71, G - 98), (64, G - 124), 3.5, -2, 1.5)
     parts |= lock(c, (48, G - 26), (80, G - 50), 6, -3, 2)  # a low side branch (from the trunk's middle)
     parts |= lock(c, (44, G - 4), (30, G + 1), 7, -1, 2) | lock(c, (50, G - 4), (64, G + 1), 7, 1, 2)  # roots
+    # round 2 (inspection 1, P2-6): broken branch ends (short stubs), drawn with the tree
+    stubs = [((43, G - 32), (33, G - 39), 5, 0, 3.5), ((57, G - 72), (63, G - 82), 4.5, 0, 3.0),
+             ((40, G - 68), (46, G - 79), 4, 0, 3.0)]
+    for (p0, p1, w0, bd, w1) in stubs:
+        parts |= lock(c, p0, p1, w0, bd, w1)
     parts &= np.mgrid[0:H, 0:W][0] <= G
     c.fill(parts, "deadwood")
     c.shade_part(parts, tones=(1, 2, 3, 4, 5), light=(-0.8, -0.3, 0.5), norm=True)
-    # cracks along the grain: wandering dark lines with a lit edge on their left (on the trunk only)
-    trunk = lock(c, (46, G), (50, G - 58), 15, -4, 8)
-    for y, x in zip(*np.nonzero(trunk & erode(parts))):
-        u = (x + 1.6 * math.sin(y * 0.17) + 0.08 * y) % 6
-        if u < 1.0:
-            c.tone[y, x] = max(1, int(c.tone[y, x]) - 2)
-        elif u < 2.0 and c.tone[y, x] >= 3:
-            c.tone[y, x] = min(5, int(c.tone[y, x]) + 1)
+    inner = erode(parts)
+    yy, xx = np.mgrid[0:H, 0:W]
+    # the last of the bark: 3 ragged dark-brown plates still on the lower trunk and the left limb
+    # (hand-placed polygons), each with a lit upper-left edge where it lifts off the wood
+    plates = [[(46, G), (47, G - 13), (50, G - 23), (54, G - 14), (53, G - 6), (55, G)],
+              [(51, G - 30), (55, G - 44), (58, G - 40), (56, G - 31), (54, G - 26)],
+              [(39, G - 66), (33, G - 78), (36, G - 82), (42, G - 72)]]
+    for poly in plates:
+        m = c.m_poly(poly) & parts
+        old = c.tone[m].copy()
+        c.fill(m, "oldbark")
+        c.tone[m] = np.clip(old - 1, 1, 3)
+        edge = m & ~np.roll(m, 1, axis=0) & inner
+        c.tone[edge] = 5
+    wood = parts & (c.mat == c.mid("deadwood"))
+    # cracks along the grain: long hand-placed splits (a dark line, a lit edge on its left), following
+    # the trunk and the two limbs; different lengths, none straight
+    cracks = [[(41, G - 4), (42, G - 16), (44, G - 28)], [(45, G - 20), (46, G - 36), (47, G - 41)],
+              [(46, G - 50), (48, G - 60)], [(46, G - 60), (39, G - 72), (32, G - 84), (27, G - 93)],
+              [(52, G - 62), (59, G - 78), (66, G - 92), (71, G - 102)], [(44, G - 2), (44, G - 9)],
+              [(58, G - 34), (70, G - 43)], [(31, G - 92), (33, G - 108)], [(74, G - 92), (84, G - 92)]]
+    for line in cracks:
+        m = c.m_line(line, 1.7) & inner & wood
+        lit = np.roll(m, -1, axis=1) & ~m & wood
+        c.tone[lit] = np.clip(c.tone[lit] + 1, 1, 6)
+        c.tone[m] = 1
+    # a hollow where a limb fell: a dark oval, darker at the top (in shade), a lit lower rim
+    hx_, hy_ = 49, G - 44
+    hole = c.m_ellipse(hx_, hy_, 3.2, 4.6) & inner
+    c.fill(hole, "deadwood", 1)
+    c.tone[hole & (yy < hy_ - 1)] = 0
+    rimh = (c.m_ellipse(hx_, hy_ + 1.2, 4.4, 5.6) & ~c.m_ellipse(hx_, hy_, 3.2, 4.6)) & inner & (yy > hy_)
+    c.tone[rimh] = 5
+    # the broken ends: a pale splintered face on each stub's tip (heartwood), 2 jagged splinters
+    for (p0, p1, w0, bd, w1) in stubs:
+        tx, ty = int(round(p1[0])), int(round(p1[1]))
+        face = c.m_ellipse(tx, ty + 0.5, 2.6, 2.6) & parts
+        c.fill(face, "heartwood", 5)
+        c.tone[face & (yy > ty)] = 3
+        c.tone[face & (xx == tx) & (yy <= ty)] = 6
     del rng, frame
     return finish(c)
 
@@ -263,66 +307,123 @@ def spines(c, mask, step, seed, rows=(0, 1)):
                 c.put(x + 1, y + 1, "spine", 3)
 
 
-def saguaro(W, H, col_hw, arms, flower, seed):
-    c = canvas(W, H)
-    G = H - 2
-    cx = W / 2
-    yy, xx = np.mgrid[0:H, 0:W]
-    top = 6 if flower else 3
+def _round_bar(c, x0, x1, y0, y1, r_top=0, r_out=0, out_side=0):
+    """Texels x0..x1, y0..y1 with the 2 top corners rounded by r_top and (out_side -1 left / +1 right)
+    the lower outer corner by r_out."""
+    yy, xx = np.mgrid[0:c.h, 0:c.w]
+    m = (xx >= x0) & (xx <= x1) & (yy >= y0) & (yy <= y1)
+    if r_top:
+        for cx_, sgn in ((x0 + r_top, -1), (x1 - r_top, 1)):
+            corner = ((xx - cx_) * sgn > 0) & (yy < y0 + r_top)
+            m &= ~(corner & ((xx - cx_) ** 2 + (yy - (y0 + r_top)) ** 2 > (r_top + 0.4) ** 2))
+    if r_out and out_side:
+        cx_ = x0 + r_out if out_side < 0 else x1 - r_out
+        corner = ((xx - cx_) * out_side > 0) & (yy > y1 - r_out)
+        m &= ~(corner & ((xx - cx_) ** 2 + (yy - (y1 - r_out)) ** 2 > (r_out + 0.4) ** 2))
+    return m
 
-    def capsule(x0, y0, x1, y1, hw):  # a vertical or horizontal rounded bar
-        return ((xx + 0.5 >= min(x0, x1) - hw) & (xx + 0.5 <= max(x0, x1) + hw) & (yy + 0.5 >= min(y0, y1)) &
-                (yy + 0.5 <= max(y0, y1))) | c.m_ellipse(x0, y0, hw, hw) | c.m_ellipse(x1, y1, hw, hw)
-    col = capsule(cx, top + col_hw, cx, G + col_hw + 2, col_hw) & (yy <= G)
-    parts = [col]
-    for (side, y_join, reach, rise, hw) in arms:
-        x_out = cx + side * reach
-        arm = capsule(cx, y_join, x_out, y_join, hw) | capsule(x_out, y_join - rise, x_out, y_join, hw)
-        parts.append(arm & ~col)
-    # draw the far side's arm first, the column, then each arm with its own cylinder shading
-    for p in parts:
-        c.fill(p, "cactus")
-    for p in parts:
-        cyl_tone(c, p, tones=(1, 2, 3, 4, 5, 4))
-    # ribs: vertical grooves every 4-5 texels, a lit ridge left of each (follows each part)
-    for p in parts:
-        for y in range(H):
-            xs = np.nonzero(p[y])[0]
-            if len(xs) < 6:
-                continue
-            x0, x1 = xs.min(), xs.max()
-            for x in xs:
-                u = (x - x0) % 5
-                if u == 4 and x < x1 - 1:
-                    c.tone[y, x] = max(1, int(c.tone[y, x]) - 1)
-                elif u == 3 and c.tone[y, x] >= 3:
-                    c.tone[y, x] = min(5, int(c.tone[y, x]) + 1)
-    # the joints of the arms: a 2-row shade under the elbow
-    for (side, y_join, reach, rise, hw) in arms:
-        x_out = cx + side * reach
-        for y in range(int(y_join + hw - 2), int(y_join + hw)):
-            for x in range(int(min(cx, x_out)), int(max(cx, x_out)) + 1):
-                if 0 <= y < H and 0 <= x < W and c.mat[y, x] and not col[y, x]:
-                    c.tone[y, x] = 1
-    spines(c, np.logical_or.reduce(parts) & erode(np.logical_or.reduce(parts)), 23, seed)
-    if flower:  # the v1 pink flower on the top: 3 petals and a light heart
-        fx, fy = int(cx), top - 1
-        c.stamp([".pPp.", "pPhPp", ".ppp."], fx - 2, fy - 2,
-                {"p": ("pink", 2), "P": ("pink", 4), "h": ("pink", 6)})
-    return finish(c, loose=("cactus",))
+
+def _bands(c, m, tones):
+    """Vertical bands across each row of m (left to right), spread over the row's own width: `tones`
+    is the pattern for the part's full width; narrower rows (the rounded top) keep the left bands."""
+    full = max(int(m[y].sum()) for y in range(c.h))
+    for y in range(c.h):
+        xs = np.nonzero(m[y])[0]
+        if len(xs) == 0:
+            continue
+        x0, n = xs.min(), len(xs)
+        for x in xs:
+            i = (x - x0) if n == full else int((x - x0 + 0.5) / n * full)
+            c.tone[y, x] = tones[min(len(tones) - 1, i)]
+
+
+def saguaro(W, H, col, arms, flower, seed):
+    """A saguaro in the v1 obj.cactus design (round 2: redrawn to it, inspection 1 P1-2):
+      * the column `col` = (x0, x1, top y): 3 clear tones in vertical bands (a lit left band, the mid
+        green, 2 dark grooves each with a lit ridge on its left, the right edge in shade), a round top
+        with a highlight on its left;
+      * arms (side, x0, x1, top y, elbow y0, elbow y1): each stands CLEAR of the column (3 empty texels
+        between them) and joins it by a horizontal elbow with a rounded outer corner, a lit top row and
+        a dark underside, so the elbow reads; the same bands as the column;
+      * spine pairs (a light texel and a darker one under-right of it, v1's tan pairs) every 7 rows,
+        alternating between the lit band and the mid band (v1's zigzag), on the column and every arm;
+      * a pink flower on the top (10 x 5, v1's dark tips, light left, mid right)."""
+    del seed
+    c = canvas(W, H)
+    x0, x1, top = col
+    foot = H - 2
+    colm = _round_bar(c, x0, x1, top, foot, r_top=min(8, (x1 - x0) // 2))
+    parts = []
+    for (side, ax0, ax1, atop, ey0, ey1) in arms:
+        up = _round_bar(c, ax0, ax1, atop, ey1, r_top=2, r_out=4, out_side=side)
+        el = _round_bar(c, min(ax0, x0) if side < 0 else x1, max(ax1, x1) if side > 0 else x0, ey0, ey1, r_out=4, out_side=side) & ~colm
+        parts.append((side, up, el | up, (ax0, ax1, atop, ey0, ey1)))
+    c.fill(colm, "saguaro")
+    for _, up, whole, _ in parts:
+        c.fill(whole, "saguaro")
+    w = x1 - x0 + 1
+    # the column's bands (v1: e e f f g f f g at twice the density, a lit ridge left of each groove)
+    pat = [5, 5, 5, 5, 4, 3, 3, 4, 2, 3, 3, 3, 4, 2, 3, 3, 2, 2]
+    pat = pat if w == len(pat) else [pat[min(len(pat) - 1, int(i * len(pat) / w))] for i in range(w)]
+    _bands(c, colm, pat)
+    for side, up, whole, (ax0, ax1, atop, ey0, ey1) in parts:
+        aw = ax1 - ax0 + 1
+        ap = [5, 5, 3, 3, 4, 2] if aw <= 6 else [5, 5, 4, 3, 3, 4, 2, 2][:aw]
+        _bands(c, up, ap)
+        el = whole & ~up
+        c.tone[el] = 3
+        yy, xx = np.mgrid[0:H, 0:W]
+        c.tone[whole & (yy >= ey0) & (yy <= ey1)] = 3  # the elbow: the mid green right across
+        c.tone[el & (yy == ey0)] = 5  # its lit top (seen in the gap between the arm and the column)
+        c.tone[el & (yy == ey0 + 1)] = 4
+        c.tone[whole & (yy >= ey1 - 1) & (yy <= ey1)] = 2  # its dark underside
+        c.tone[up & (yy >= ey0) & (yy < ey1 - 1) & (xx - ax0 < 2 if side < 0 else xx - ax0 < 2)] = 4
+        # the shade the arm's elbow casts on the column below the joint (2 rows), right arm only
+        # (light from the top left), and the highlight on the arm's round top
+        c.stamp(["hh", "hh", "h."], ax0 + 1, atop + 1, {"h": ("saguaro", 6)})
+    # the round top: a highlight on its left, the top row lit
+    c.stamp([".hhh", "hhh.", "hh..", "hh..", "h...", "h..."], x0 + 2, top + 2, {"h": ("saguaro", 6)})
+    # spine pairs
+    def pair(x, y):
+        # 2 light texels over 2 darker ones, one step to the right (v1's diagonal pair at this density;
+        # every texel has a neighbour of its colour, so the clean-up keeps it)
+        c.put(x, y, "spine1", 5)
+        c.put(x + 1, y, "spine1", 5)
+        c.put(x + 1, y + 1, "spine1", 3)
+        c.put(x + 2, y + 1, "spine1", 3)
+    n = 0
+    for y in range(top + 9, foot - 3, 7):
+        pair(x0 + (2 if n % 2 == 0 else w * 5 // 9) + (n % 3 == 2), y)
+        n += 1
+    for side, up, whole, (ax0, ax1, atop, ey0, ey1) in parts:
+        for i, y in enumerate(range(atop + 5, ey0 - 1, 7)):
+            pair(ax0 + (0 if i % 2 == 0 else 2), y)
+            n += 1
+    c.spine_pairs = n
+    if flower:
+        fx = (x0 + x1 + 1) // 2 - 5
+        c.stamp(["..aa..aa..",
+                 ".abbaaccca",
+                 "abbhbbccca",
+                 "abbbbcccca",
+                 ".abbbccca.",
+                 "..abbcca.."], fx, top - 5,
+                {"a": ("pink", 0), "b": ("pink", 5), "c": ("pink", 3), "h": ("pink", 6)})
+    return finish(c, loose=("saguaro",))
 
 
 def cactus(frame):
-    """The v1 obj.cactus design at density 4 (24 x 40 -> 48 x 80): a column, the left arm lower, the
-    right arm higher, a pink flower on top, tan spine pairs."""
+    """The v1 obj.cactus design at density 4 (24 x 40 -> 48 x 80, v1's rows and columns doubled): the
+    column, the left arm lower (top at v1's row 12), the right arm higher (row 8), each with its elbow,
+    a pink flower on top, 15 tan spine pairs. v1's earth mound is not drawn (STYLE 7.3)."""
     del frame
-    return saguaro(48, 80, 8, [(-1, 50, 14, 16, 5), (1, 34, 14, 18, 5)], True, 3)
+    return saguaro(48, 80, (15, 32, 6), [(-1, 4, 9, 25, 44, 51), (1, 38, 43, 17, 36, 43)], True, 3)
 
 
 def cactus_l(frame):
-    """A tall saguaro, 3 arms of different heights (no flower)."""
+    """A tall saguaro drawn the same way: 3 arms of different heights with elbows, no flower."""
     del frame
-    return saguaro(64, 128, 10, [(-1, 74, 18, 26, 6), (1, 54, 18, 30, 6), (1, 92, 15, 12, 5)], False, 4)
+    return saguaro(64, 128, (22, 41, 3), [(-1, 9, 15, 44, 74, 82), (1, 48, 54, 26, 56, 64), (1, 47, 52, 78, 96, 103)], False, 4)
 
 
 def barrel(frame):
@@ -478,30 +579,40 @@ def bones(frame):
 
 
 def tumbleweed(frame):
-    """A tumbleweed: a round lattice of dry curved stems (no solid fill; the sand shows between them),
-    lit on the top left, darker on the bottom right."""
+    """A tumbleweed (round 2, inspection 1 P2-7: the first one read as a coin -- a clean round rim with
+    a pattern inside). A ragged ball of dry twigs: every twig is hand-placed, grows from the root at the
+    bottom and curls round, with cross twigs through the middle and twig ends sticking out past the
+    ball, so the outline is uneven and has no rim; sand shows through the gaps. Lit on the upper left
+    twigs, dark on the lower right."""
     del frame
     W, H = 40, 36
     c = canvas(W, H)
-    rng = random.Random(81)
-    cx, cy, R = 20, 18, 15
-    ball = c.m_ellipse(cx, cy, R + 1, R)
-    for _ in range(16):  # arcs: pieces of circles crossing the ball
-        a0 = rng.uniform(0, 2 * math.pi)
-        r = rng.uniform(6, 14)
-        ox, oy = cx + math.cos(a0) * rng.uniform(0, 8), cy + math.sin(a0) * rng.uniform(0, 7)
-        s0 = rng.uniform(0, 2 * math.pi)
-        pts = [(ox + math.cos(s0 + k * 0.25) * r, oy + math.sin(s0 + k * 0.25) * r * 0.85) for k in range(rng.randint(5, 9))]
-        st = c.m_line(pts, 1.5) & ball
-        c.fill(st, "dry")
-    for a0 in (2.4, 4.0, 5.6):  # 3 long outer stems give the ball its round outline
-        pts = [(cx + math.cos(a0 + k * 0.2) * R, cy + math.sin(a0 + k * 0.2) * (R - 1)) for k in range(9)]
-        c.fill(c.m_line(pts, 1.6) & ball, "dry")
+
+    def curve(p0, p1, p2, n=10):  # a quadratic curve through control point p1
+        return [((1 - t) ** 2 * p0[0] + 2 * t * (1 - t) * p1[0] + t * t * p2[0],
+                 (1 - t) ** 2 * p0[1] + 2 * t * (1 - t) * p1[1] + t * t * p2[1]) for t in (i / n for i in range(n + 1))]
+    root = (20, 33)
+    twigs = [  # (points, width)
+        (curve(root, (5, 31), (5, 16)), 1.7), (curve(root, (35, 31), (35, 17)), 1.7),
+        (curve(root, (9, 20), (14, 6)), 1.6), (curve(root, (31, 20), (26, 6)), 1.6),
+        (curve(root, (17, 18), (21, 4)), 1.6),
+        (curve((8, 24), (17, 12), (31, 11)), 1.4), (curve((8, 14), (19, 22), (33, 23)), 1.4),
+        (curve((12, 8), (20, 11), (29, 8)), 1.4), (curve((6, 21), (3, 26), (10, 31)), 1.4),
+        (curve((30, 29), (37, 26), (33, 19)), 1.4), (curve((13, 27), (20, 24), (28, 28)), 1.3),
+        # twig ends past the ball
+        ([(5, 16), (2, 11)], 1.3), ([(35, 17), (38, 13)], 1.3), ([(14, 6), (11, 2)], 1.3),
+        ([(26, 6), (30, 3)], 1.3), ([(33, 23), (38, 24)], 1.3), ([(21, 4), (22, 1)], 1.3),
+        ([(8, 14), (4, 13)], 1.3), ([(31, 11), (35, 8)], 1.3),
+    ]
+    for pts, wd in twigs:
+        c.fill(c.m_line(pts, wd), "dry")
     k = c.mid("dry")
     for y, x in zip(*np.nonzero(c.mat == k)):
-        d = (x - cx) + (y - cy)
-        c.tone[y, x] = 5 if d < -10 else (4 if d < 0 else (3 if d < 10 else 2))
-    return finish(c, loose=("dry",))
+        d = (x - 20) + (y - 18)
+        c.tone[y, x] = 6 if d < -16 else (5 if d < -6 else (4 if d < 4 else (3 if d < 13 else 2)))
+    despeckle(c, loose=("dry",))
+    c.outline()
+    return c
 
 
 def drygrass(frame):
@@ -597,6 +708,10 @@ def write_props():
         rows = min(int(np.argmax(np.array(i)[..., 3].any(1))) for i in imgs)
         if kind == "cactus":
             rows = 0  # obj.cactus replaces the v1 key: exactly 2 x its size (24 x 40 -> 48 x 80)
+        # round 2 (inspection 1, P3-12): the foot is the bottom row -- drop the empty rows under the
+        # picture (the same number for every frame of a kind)
+        foot = min(int(np.argmax(np.array(i)[::-1, :, 3].any(1))) for i in imgs)
+        imgs = [i.crop((0, 0, i.width, i.height - foot)) for i in imgs]
         for f in range(frames):
             img = crop_top(imgs[f], rows)[0]
             out.append(save(img, os.path.join(OUT, f"desert.prop.v3.{kind}.{f}.png")))

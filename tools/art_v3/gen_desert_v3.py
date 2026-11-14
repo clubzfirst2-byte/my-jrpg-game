@@ -178,6 +178,29 @@ def base_pattern(name, n=256):
     c.mat[pale], c.tone[pale] = kf, 4
     rim = pale & ~np.roll(pale, 1, axis=0)
     c.tone[rim] = 5
+    # round 2 (inspection 1, P2-8): the pale patch is a low smooth rise, not a flat stain: a second lit
+    # row along its upper rim, a shaded row on the sand under its lower rim (2 rows under the middle),
+    # and 2-3 long ripples across it (lit row over a base-tone row). Its own generator, so the rest of
+    # the pattern is drawn as before.
+    prng = random.Random(seed * 7 + 3)
+    rim2 = pale & np.roll(rim, 1, axis=0) & ~rim
+    cols_w = pale.sum(0)
+    c.tone[rim2 & (np.roll(cols_w, 0) > 8)[None, :]] = 5
+    under = ~pale & np.roll(pale, 1, axis=0)
+    c.mat[under], c.tone[under] = kf, 2
+    under2 = ~pale & ~under & np.roll(under, 1, axis=0) & (cols_w > 12)[None, :]
+    c.mat[under2], c.tone[under2] = kf, 2
+    ys, xs = np.nonzero(pale)
+    if len(ys):
+        for yr in range(int(ys.min()) + 5, int(ys.max()) - 2, prng.randint(5, 7)):
+            row = np.nonzero(pale[yr % n])[0]
+            if len(row) < 14:
+                continue
+            x = int(row.min()) + prng.randint(3, 6)
+            while x < int(row.max()) - 8:
+                ln = prng.randint(9, 16)
+                ripple(c, x, yr, ln, 0.0, prng.uniform(0.6, 1.4), lit=5, shade=3, mask=pale)
+                x += ln + prng.randint(4, 8)
     for i in range(rng.randint(3, 4)):
         r = rng.uniform(18, 30)
         m = G.blob(n, rng.uniform(0, n), rng.uniform(0, n), r, r * rng.uniform(0.5, 0.8), seed + i)
@@ -246,94 +269,194 @@ def write_ground():
     return out
 
 
-# ------------------------------------------------------------------ flow shapes (long ripple crests)
+# ------------------------------------------------------------------ flow shapes (round 2: dunes)
+#
+# Round 2 (inspection 1, P1-1): the flow layer is drawn as FACES AND CRESTS, not as scattered short
+# lines. A flow patch (flow_field > 0.5; the corner scheme, keys, mirrors and variants are unchanged)
+# is a sheet of wind-blown sand that ends, on its SOUTH border, in a dune:
+#     a slip face in shadow along the border, the crest line over it, the sunlit face over the crest
+#     (two flat tones). The dune is as high as the border faces south: it tapers to nothing where the
+#     border turns to run north-south (the horns of the crescent).
+# The rest of the patch carries long parallel wind ripples (a lit row over a shaded row) that cross
+# the tile's west / east sides at fixed rows, so they run on from tile to tile; a full (1111) tile may
+# hold a small crescent dune of its own. The light is from the TOP only in this layer (a shape may be
+# drawn mirrored left-right by flow_key, so nothing here depends on left / right).
+# The pictures stay GREY (the game multiplies them by DESERT_FLOW_TINT[kind]); they now hold 7 greys.
 
 SSET = "desert."
+# grey levels (tone index 0-6 of the "shape" material)
+T_CORE, T_SHADE, T_RLO, T_FACE2, T_RHI, T_FACE, T_CREST = range(7)
+GREYS = (128, 150, 208, 236, 250, 246, 255)
+RIPPLE_ROWS = (7, 19, 28, 41, 52)  # the rows where a ripple crosses a west / east side (every tile)
+SHADOW_W, CREST_W, FACE_W, FACE2_W = 12.0, 2.0, 8.0, 20.0  # texels at full height
+
+
+def desert_field(bits, variant):
+    """flow_field for the desert set. The straight sets take the step that gives the FIELD the wanted
+    width (gen_ground_v3.straight_want): the dune is drawn exactly to the field's border, so the drawn
+    width is the field's (the plains measure a scatter of blades instead, _middle_step)."""
+    if bits in G.STRAIGHT:
+        F0 = G.flow_field(bits, variant, raw=True)
+        bump = G._straight_bump(bits)
+        return F0 + G._step_for(F0, bump, bits, G.straight_want(variant)) * bump
+    return G.flow_field(bits, variant)
+
+
+def _side_row(state):
+    """The row where the patch border crosses a west / east side whose upper corner is in the patch,
+    for the side's state (0 / 1): from the side's own profile (the corners' blend, the side's push, the
+    shared wobble), so both tiles sharing the side get the same row."""
+    v = (np.arange(64) + 0.5) / 64
+    shared = G._tile_noise(901)
+    shared = (shared + shared[:, ::-1]) / 2
+    prof = (1 - v) + (0.26 if state else -0.26) * np.sin(np.pi * v) ** 2 * (1 - 0.5 / 64) + 0.08 * shared[:, 0]
+    return int(np.nonzero(prof <= 0.5)[0][0])
+
+
+def _band(c, k, x, foot, sc, taken, cut=None):
+    """One column of a dune, upward from the foot row (the first row under the slip face): the slip
+    face in shadow (its upper half darker), the crest line, the lit face in 2 tones. sc 0..1 = height."""
+    sw = int(round(SHADOW_W * sc))
+    if sw < 2:
+        return
+    cw = 2 if sc > 0.3 else 1
+    fw, f2 = int(round(FACE_W * sc)), int(round(FACE2_W * sc))
+    core = max(2, int(round(sw * 0.5)))
+    rows = [T_SHADE] * (sw - core) + [T_CORE] * core + [T_CREST] * cw + [T_FACE] * fw + [T_FACE2] * (f2 - fw)
+    for j, tone in enumerate(rows):
+        y = foot - 1 - j
+        if 0 <= y < 64:
+            c.mat[y, x], c.tone[y, x] = k, tone
+    taken[max(0, foot - len(rows) - 5):min(64, foot + 3), max(0, x - 2):x + 3] = True
+
+
+def _put(c, k, sel, tone):
+    c.mat[sel] = k
+    c.tone[sel] = tone
+
+
+def _crescent(c, k, cx, cy, half, sag, taken):
+    """A small crescent dune inside a full tile (v2's dune at this density): a wide flat arch, the
+    crest highest left of the middle, the two horns `sag` lower and the right horn longer; the slip
+    face under the crest, the lit face (2 tones) over it."""
+    for x in range(64):
+        t = (x + 0.5 - cx) / (half if x + 0.5 < cx else half * 1.25)
+        if abs(t) >= 1:
+            continue
+        h = (1 - t * t) ** 0.8
+        yc = int(round(cy + sag * t * t))
+        sw, fw, f2 = int(round(6 * h)), int(round(4 * h)), int(round(9 * h))
+        if sw < 2:
+            continue
+        core = max(2, int(round(sw * 0.5)))
+        rows = [T_SHADE] * (sw - core) + [T_CORE] * core + [T_CREST] * (2 if h > 0.35 else 1) + [T_FACE] * fw + [T_FACE2] * (f2 - fw)
+        for j, tone in enumerate(rows):
+            y = yc + sw - 1 - j
+            c.mat[y, x], c.tone[y, x] = k, tone
+        taken[max(0, yc - f2 - 7):yc + sw + 4, max(0, x - 3):x + 4] = True
 
 
 def flow_shape(sset, bits, variant, F=None):
-    """One desert flow SHAPE tile: the plains' placement (stratified over the tile and 5 rows below it,
-    inside flow_field's patch, the soft rim, rows / columns evened out, small clumps away from the edge
-    removed) with long wavy RIPPLE CRESTS: a tip row (255, the crest) over a body row (214, the
-    trough), 7-14 long, 2 rows, one flat grey 255 (so the tint is the colour), waving with the patch's own phase (not the plains winter's straight streaks)."""
-    c = Canvas(64, 64, {"shape": [(0, 0, 0)] * 4 + [(G.SHAPE_BODY,) * 3, (234,) * 3, (G.SHAPE_TIP,) * 3]})
-    seed = G.hsh(int(bits, 2), variant, 17) & 0xFFFFFF
-    rng = random.Random(seed)
-    if F is None:
-        F = G.flow_field(bits, variant, sset=sset)
+    """One desert flow SHAPE tile (grey on transparent), see the note above."""
+    c = Canvas(64, 64, {"shape": [(g, g, g) for g in GREYS]})
     k = c.mid("shape")
-    BODY, TIP = 4, 6
-    soft = F > 0.38
-    if bits in G.STRAIGHT:
-        core = F > 0.5
-        near = core.copy()
-        for _ in range(2):
-            g = near.copy()
-            g[1:] |= near[:-1]
-            g[:-1] |= near[1:]
-            g[:, 1:] |= near[:, :-1]
-            g[:, :-1] |= near[:, 1:]
-            near = g
-        soft = soft & near
-
-    def inside(x, y):
-        xi, yi = min(63, max(0, int(x))), min(63, max(0, int(y)))
-        return F[yi, xi] > 0.5 or (soft[yi, xi] and rng.random() < 0.35)
-    N = 52
-    perm = list(range(N))
-    rng.shuffle(perm)
-    pts = [((perm[i] + rng.random()) / N * 67 - 2.5, (i + rng.random()) / N * 69) for i in range(N)]
-    ph = rng.uniform(0, 6.28)
-    for (x, y) in pts:
-        if not inside(x, min(y, 63.0)):
-            continue
-        ln = rng.randint(7, 14)
-        for i in range(ln):
-            X = int(x) + i
-            Y = int(round(y + 0.9 * math.sin(ph + X * 0.33)))
-            for j, t in ((0, TIP), (1, TIP)):  # one flat grey per crest (the forest's round 2 rule: no inner step)
-                if 0 <= X < 64 and 0 <= Y + j < 64:
-                    c.mat[Y + j, X] = k
-                    c.tone[Y + j, X] = t
-    ins = F > 0.5
-    G.GROW_H[0] = True
-    G._balance(c, ins, k, TIP, rng, 0.12)
-    G._drop_small(c, 2)
-    G._fill_thin(c, ins, k, TIP, rng)
-    G._drop_small(c, 3)
+    rng = random.Random(G.hsh(int(bits, 2), variant, 23) & 0xFFFFFF)
+    if F is None:
+        F = desert_field(bits, variant)
+    full = bits == "1111"
+    taken = np.zeros((64, 64), bool)  # where no ripple may be drawn
+    FULL_H = SHADOW_W + CREST_W + FACE2_W + 2
+    tl, tr, br, bl = (ch == "1" for ch in bits)
+    west, east = tl and not bl, tr and not br  # sides the border crosses facing south: a ridge crosses them
+    if west or east:
+        cs = G.crossed(bits)
+        if len(cs) == 4:
+            st = {sd: (variant >> i) & 1 for i, sd in enumerate(G.SIDES)}
+            inner = 0
+        else:
+            st = {cs[0]: variant & 1, cs[1]: (variant >> 1) & 1}
+            inner = variant >> 2
+        if west and east:  # 1100: the ridge runs through, from the west side's row to the east side's
+            y0, y1 = _side_row(st["W"]), _side_row(st["E"])
+            ins = F > 0.5
+            low = np.array([np.nonzero(ins[:, x])[0].max() + 1 if ins[:, x].any() else 0 for x in range(64)], float)
+            low = np.convolve(np.pad(low, 10, mode="edge"), np.ones(21) / 21, "valid")  # the field's own border, smoothed
+            s0, s1 = min(1.0, (y0 - 1) / FULL_H), min(1.0, (y1 - 1) / FULL_H)
+            for x in range(64):
+                t = x / 63.0
+                e = (1 - math.cos(math.pi * t)) / 2
+                pin = y0 + (y1 - y0) * e
+                wgt = 0.7 * math.sin(math.pi * t)  # toward the field's border in the middle, the sides' rows at the sides
+                foot = int(round(pin + (low[x] - pin) * wgt))
+                sc = min(s0 + (s1 - s0) * e + 0.18 * math.sin(math.pi * t), 1.0, (foot - 1) / FULL_H)
+                if inner == 2:  # the ridge sinks (a saddle, or to nothing: two dunes meeting) and rises again
+                    gap = 24 + (variant & 3) * 5
+                    if variant & 1:  # a saddle
+                        g = float(np.clip((abs(x + 0.5 - gap) - 2.0) / 20.0, 0, 1))
+                        sc *= 0.42 + 0.58 * g * g * (3 - 2 * g)
+                    else:  # two round ends (as the caps') with 4 texels of sand between them
+                        tt = x / (gap - 2.0) if x < gap else (63 - x) / (61.0 - gap)
+                        sc *= (1 - min(1.0, tt) ** 2) ** 0.8
+                _band(c, k, x, foot, sc, taken)
+        else:  # the ridge comes in from the west side and ends in this tile: a horn bending south
+            y0 = _side_row(st["W"])
+            ln = (50, 58, 44)[inner % 3]
+            drop = (7.0, 10.0, 5.0)[inner % 3]
+            sc0 = min(1.0, (y0 - 1) / FULL_H)
+            for x in range(ln):
+                t = x / (ln - 1.0)
+                foot = int(round(y0 + drop * t * t))
+                _band(c, k, x, foot, sc0 * (1 - t * t) ** 0.8, taken)  # a round end, as the crescents'
+    elif full and variant == 3:
+        _crescent(c, k, 28.0, 27.0, 23.0, 8.0, taken)
+    # the ripples: rows fixed on the west / east sides, each waving its own way inside the tile
+    ok = (F > 0.62) & ~taken
+    for row in RIPPLE_ROWS:
+        a1, a2 = rng.uniform(-2.6, 2.6), rng.uniform(-1.4, 1.4)
+        style = rng.random()
+        gaps = []
+        if style < 0.3:  # only the two ends that join the neighbours
+            gaps.append((rng.randint(9, 14), rng.randint(49, 54)))
+        else:
+            for _ in range(rng.randint(1, 2)):
+                g0 = rng.randint(9, 46)
+                gaps.append((g0, g0 + rng.randint(5, 11)))
+        cols = []
+        for x in range(64):
+            if any(g0 <= x < g1 for g0, g1 in gaps):
+                continue
+            tt = x / 63.0
+            y = int(round(row + a1 * math.sin(math.pi * tt) + a2 * math.sin(2 * math.pi * tt)))
+            if 0 <= y < 63 and ok[y, x] and ok[y + 1, x]:
+                cols.append((x, y))
+        # keep runs of 5 or more columns (no crumbs where the border or a dune cuts a ripple)
+        run = []
+        for i, (x, y) in enumerate(cols + [(999, 0)]):
+            if run and x != run[-1][0] + 1:
+                if len(run) >= 5 or run[0][0] == 0 or run[-1][0] == 63:
+                    for (p, q) in run:
+                        c.mat[q, p], c.tone[q, p] = k, T_RHI
+                        c.mat[q + 1, p], c.tone[q + 1, p] = k, T_RLO
+                run = []
+            run.append((x, y))
     return c
 
 
-def _with_desert_shapes(fn):
-    """gen_ground_v3's straight-set widths (_middle_step) measure the DRAWN shape: use this module's
-    flow_shape for the desert set (cached under its own set name)."""
-    old = G.flow_shape
-
-    def pick(sset, bits, variant, F=None):
-        return (flow_shape if sset == SSET else old)(sset, bits, variant, F)
-    G.flow_shape = pick
-    try:
-        return fn()
-    finally:
-        G.flow_shape = old
-
-
 def write_flow():
-    def go():
-        out = []
-        for bits in G.STORED:
-            for v in range(G.n_flow_variants(bits)):
-                sh = flow_shape(SSET, bits, v, F=G.flow_field(bits, v, sset=SSET))
-                G._drop_small(sh, 6)  # no 4-6 texel scraps away from the edge (the forest's round 3 rule)
-                out.append(save(sh, os.path.join(OUT, f"desert.sandflow.v3.{bits}.{v}.png")))
-        return out
-    return _with_desert_shapes(go)
+    out = []
+    for bits in G.STORED:
+        for v in range(G.n_flow_variants(bits)):
+            sh = flow_shape(SSET, bits, v)
+            G._drop_small(sh, 6)  # no scraps of 1-6 texels away from the edge
+            out.append(save(sh, os.path.join(OUT, f"desert.sandflow.v3.{bits}.{v}.png")))
+    return out
 
 
 def flow_tints():
-    """DESERT_FLOW_TINT[kind]: d the dune's shaded lee (redder, darker), l the sunlit windward face
-    (lighter, toward yellow). See DESERT.md for the measured colour differences."""
-    return {"d": "#a24e3c", "l": "#b47236"}
+    """DESERT_FLOW_TINT[kind] (the colour of grey 255, the crest): l a pale high dune, d a low red
+    dune. Chosen by eye on the device views; DESERT.md 4 lists the neighbour-step shares at 10 / 12 /
+    14 / 15."""
+    return {"d": "#c46a46", "l": "#c88454"}
 
 
 def ground_tile(tx, ty, load=None):
@@ -424,16 +547,20 @@ def edge_overlay(mask, variant):
     c.mat[:] = remap[bm]
     c.tone[:] = bt
     c.mat[~inside] = 0
-    kf = c.mid("fine")
+    kf, ks = c.mid("fine"), c.mid("sand")
     d = _dist(~inside, 3)
     for y in range(64):
         for x in range(64):
-            if not inside[y, x] or d[y, x] > 2:
+            if not inside[y, x] or d[y, x] > 3:
                 continue
             gx, gy = T.gradient(mask, (x + 0.5) / 2 - 0.5, (y + 0.5) / 2 - 0.5)
             lit = (gx + gy) > 0.05
-            c.mat[y, x] = kf
-            c.tone[y, x] = (5 if d[y, x] == 1 else 4) if lit else (1 if d[y, x] == 1 else 2)
+            if lit:  # round 2: the bright dry band of v2's shore (sand tones 5 / 4), 3 texels
+                c.mat[y, x] = ks
+                c.tone[y, x] = 5 if d[y, x] == 1 else 4
+            elif d[y, x] <= 2:
+                c.mat[y, x] = kf
+                c.tone[y, x] = 1 if d[y, x] == 1 else 2
     do = _dist(inside, 2)
     rng = random.Random(mask * 37 + variant * 11 + 5)
     for y in range(3, 60):
