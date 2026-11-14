@@ -148,4 +148,4 @@ autumn (only the tint changes); winter loads its own set.
   (`tools/npc_release/npc_common.py`, read only) and written by `tools/art_v3/gen_npc_v3_pm.py`. Made this way:
   guard, child, woman, princess, smith on this branch; cook, elder, merchant, traveller on gfx/v3-npc-b.
   Keys, file count, `left` rule and anchor are unchanged (princess and smith: no `left` files). Village budget
-  8.7 MB (1 MB = 1,000,000 bytes, 10% packing waste included); now 8.49 MB for the 9 people on this branch.
+  8.7 MB (1 MB = 1,000,000 bytes, 10% packing waste included); now 8.47 MB for the 9 people on this branch.
