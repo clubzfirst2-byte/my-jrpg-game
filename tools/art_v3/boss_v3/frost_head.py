@@ -126,3 +126,96 @@ CORE = """
 6|VYWV
 7|VV
 """
+
+# the face with the head brought down toward the viewer (the slam, the charge): seen more from above,
+# the brow is broad and high, the muzzle is short (it points at the ground), and only the top of the
+# nose pad shows. 34 rows against the 52 of the face at rest; the jaw is hidden behind the muzzle.
+FACE_DOWN = """
+9|aaaaaaaaaaaaaaaaa
+7|aabdttffuuffffddrrpaa
+5|aabdttfffffuugfffdddrrpaa
+4|abddtffffffuugfffffdddrrppa
+3|apdttffffffuugffffffdddrrrpba
+3|apdttfffffffuufffffddddrrppba
+3|abdtgffffffuugfffffdddrrrppba
+3|apdtggfffffuuffffffddddrrppba
+3|apddtfffffuugffffffdddrrrppba
+3|abdttffffuuuffffddfdddrrpppba
+3|abdtfffffuufffffdddddrrrppbba
+3|apddttffffuuffffddddrrrrppbba
+3|abdtffffffuugfffdddddrrrppbba
+2|aapdttfffffuuffffdddrrrrpppbbaa
+1|aabbbpppdtffffuuffffddrpppbbiibaa
+0|aabiiiiibbdtfffuuffffddrbbiiiiiibaa
+0|abiaaaaaaaibdtfffuuffdrbiaaaaaaaiba
+0|abbiaaaaaaaibdtffuufdrbiaaaaaaaibba
+1|apbiiiiiiibbdtffuufdrbbiiiiiiibpa
+1|apdtbbbbbpddtffuuffdrrpbbbbbbppba
+2|apdttddpdttfffuufffddrrpppprpba
+3|apdtttffffffuufffffddrrrrppba
+4|abdttfffffuugfffddddrrrppba
+4|apdtffffffuuggfffddddrrppba
+5|abdtffffuuuggffdddrrrppba
+5|abdtfffuuuugfffdddrrppbba
+5|apdtffuuuuufffffddrrrppba
+5|abdtffaaaaaaaaaaaaadrppba
+5|abdtfakmnnmkkkkkiiiiarpba
+5|abdtakmmmkkkkkkkkiiiiapba
+6|abdakkkaakkkkaaiiiiapba
+6|abdaiikkkkkkkiiiiiiabba
+7|abaaaaaaaaaaaaaaaaaba
+9|aaaaaaaaaaaaaaaaa
+"""
+
+# the face with the head thrown back (hurt, the roar of the ring, the fall): seen from below, the
+# forehead recedes, the eyes sit high, the muzzle is short and the nose pad is wide with both nostrils
+# open toward the viewer. The lower jaw hangs under it.
+FACE_UP = """
+9|aaaaaaaaaaaaaaaaa
+6|aabddtfffuuffffdddrrpaa
+4|aabdttffffuugfffffddrrrppaa
+3|apddtfffffuugffffffdddrrrppba
+3|abdttffffffuuffffdddddrrrppba
+2|aapdtfffffuugfffffddddrrrpppbaa
+1|aabbbpppdtffffuuffffddrpppbbiibaa
+0|aabiiiiibbdtfffuuffffddrbbiiiiiibaa
+0|abiaaaaaaaibdtfffuuffdrbiaaaaaaaiba
+0|abiaaaaaaaaibdtffuufdrbiaaaaaaaaiba
+0|apbiiaaaaaaaibdffuufdbiaaaaaaaiibpa
+1|apbbiiiiiiibbdffuufdrbbiiiiiiibpa
+1|apdtbbbbbpddtffuuffdrrpbbbbbbppba
+2|apdttdddttfffuufffddrrrpppprpba
+3|apdttfffffffuufffffdddrrrppba
+3|abdtfffffffuuugffffddddrrppba
+4|abdttfffffuuuuffffdddrrppba
+4|apdtffffuuuuugfffddddrrppba
+4|abdtfffuuuuuufffffdddrrrpba
+4|abdtaaaaaaaaaaaaaaaaaaarpba
+4|abdakmmnnmmkkkkkkkkiiiiiaba
+4|abakmmkaaaakkkkkaaaakiiiaba
+4|abakmkaaaaakkkaaaaakiiiiaba
+4|abakkkiaaaikkkiaaaikiiiiaba
+5|abaikkkiiikkkkiiikiiiiaba
+5|aabaaaaaaaaaaaaaaaaaaabaa
+6|abddttffddpaprrrrppbbba
+7|abbdttfddpapprrrpbbba
+"""
+
+# the eyes narrowed to slits (the slam's blow)
+EYE_NARROW = """
+aaaa......
+aY$Waaa...
+.aaaWY$Wa.
+.....aaaa.
+"""
+
+# the open mouth: the dark of the throat (murk), the tongue's ridge in it
+MOUTH = """
+1|aaaaaaaaaaaaaaa
+0|aOOOPPPPPPPOOOOa
+0|aOPPQQQQQQQPPPOa
+0|aOPQRRRSRRQQPPOa
+1|aOPQRRRQQQPPOa
+2|aOPPQQQPPPOa
+3|aaaaaaaaaa
+"""

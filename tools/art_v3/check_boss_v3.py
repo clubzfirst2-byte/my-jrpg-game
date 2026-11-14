@@ -102,6 +102,66 @@ def win_colours(a, s=32, step=16):
     return out
 
 
+def small_holes(a, maxn=6):
+    """Transparent regions (4-connected) enclosed by the figure (not reaching the frame's border) of maxn
+    texels or fewer: the ground showing through a pin hole inside the picture."""
+    tr = a[..., 3] == 0
+    h, w = tr.shape
+    seen = np.zeros((h, w), bool)
+    out = []
+    for y, x in zip(*np.nonzero(tr)):
+        if seen[y, x]:
+            continue
+        st, comp, edge = [(y, x)], 0, False
+        seen[y, x] = True
+        while st:
+            p, q = st.pop()
+            comp += 1
+            if p in (0, h - 1) or q in (0, w - 1):
+                edge = True
+            for r, s in ((p + 1, q), (p - 1, q), (p, q + 1), (p, q - 1)):
+                if 0 <= r < h and 0 <= s < w and tr[r, s] and not seen[r, s]:
+                    seen[r, s] = True
+                    st.append((r, s))
+        if not edge and comp <= maxn:
+            out.append((int(y), int(x), comp))
+    return out
+
+
+def _ed1(a, b):
+    """a and b differ by at most one character (one changed, or one put in / left out)."""
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b)) <= 1
+    if abs(len(a) - len(b)) == 1:
+        s, l = (a, b) if len(a) < len(b) else (b, a)
+        return any(l[:i] + l[i + 1:] == s for i in range(len(l)))
+    return False
+
+
+def map_texts(mod):
+    """The typed maps of a kind: upper-case multi-line strings in the boss_v3 modules it imports."""
+    import types
+    from pixmap import grid
+    out = {}
+    for m in [mod] + [v for v in vars(mod).values() if isinstance(v, types.ModuleType)]:
+        f = getattr(m, "__file__", "") or ""
+        if os.path.dirname(os.path.abspath(f)) != os.path.join(HERE, "boss_v3") or m.__name__ in ("pixmap", "bossanim", "palette"):
+            continue
+        for n, v in vars(m).items():
+            if n.isupper() and isinstance(v, str) and "\n" in v:
+                out[n] = [r.strip(".") for r in grid(v)]
+    return out
+
+
+def periodic_rows(g):
+    """Share of rows (from the 4th) equal to, or one character from, the row 2 or 3 above (the blanks
+    before and after a row not counted): rows made by swapping one character in a short cycle."""
+    if len(g) < 4:
+        return 0.0
+    hit = sum(1 for i in range(3, len(g)) if _ed1(g[i], g[i - 2]) or _ed1(g[i], g[i - 3]))
+    return hit / (len(g) - 3)
+
+
 def block22(a):
     """Share of aligned 2x2 blocks (all opaque) that are not one colour."""
     h, w = a.shape[:2]
@@ -192,6 +252,9 @@ def main():
           " right column:", len(tot["right"]), tot["right"][:4])
     print("lowest row differs from v2 x 2 (name, v3, v2x2+1):", tot["bottom"])
     print("fragments (frames with separate pieces under 12 texels):", tot["frag"])
+    hol = {n: small_holes(a) for n, a in imgs.items()}
+    print("small transparent holes inside the figure (6 texels or fewer): total", sum(len(v) for v in hol.values()),
+          " frames with any:", {n: len(v) for n, v in hol.items() if v})
     cs_n = {n: len(components(imgs[n][..., 3] == 255)) for n in names}
     print("frames with more than 1 separate piece (orbs, chips are meant):", {n: c for n, c in cs_n.items() if c > 1})
     # identical frames
@@ -267,6 +330,20 @@ def main():
             return tuple(code[y, xs.min():xs.max() + 1]) if len(xs) else ()
         rep[k] = round(100 * sum(1 for y in range(1, p.h) if row(y) == row(y - 1)) / (p.h - 1))
     print("part maps, rows equal to the row above, blanks before and after not counted (%):", dict(sorted(rep.items(), key=lambda t: -t[1])))
+    # the typed maps: rows one character from the row 2 or 3 above (maps of 12 rows or more)
+    per_rows = {n: (len(g), periodic_rows(g)) for n, g in map_texts(mod).items() if len(g) >= 12}
+    if per_rows:
+        wsum = sum(L for L, _ in per_rows.values() if L >= 18)
+        wmean = sum(L * r for L, r in per_rows.values() if L >= 18) / max(1, wsum)
+        print(f"part maps, rows one character from the row 2 or 3 above: row-weighted mean (maps of 18+ rows) {wmean:.2f};"
+              " per map (%):", dict(sorted(((n, round(100 * r)) for n, (L, r) in per_rows.items()), key=lambda t: -t[1])))
+    # the fallen frames without the parts laid on top of them (drops, chips, rime): colours in 16 x 16 windows
+    base = getattr(mod, "BASE_ONLY", None)
+    if base:
+        for key, fn in base.items():
+            c16 = win_colours(fn().rgba(), 16, 8)
+            print(f"{key} without the parts laid on top: 16x16 window colours min {min(c16)} median {np.median(c16):.0f}"
+                  f" ({len(c16)} windows, {sum(1 for c in c16 if c < 6)} under 6)")
     raw = sum(a.shape[0] * a.shape[1] * 4 for n, a in imgs.items() if n in ns)
     trim = 0
     for n in ns:
