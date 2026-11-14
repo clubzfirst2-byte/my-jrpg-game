@@ -312,7 +312,8 @@ LEG = """
 2|ooo...........ooo..........ooo
 """
 
-# a thin dry root winding down the outside of the front leg (rows 88..147, the leg's origin column)
+# a thin dry root winding down the outside of the front leg (rows 88..147, the leg's origin column): it
+# swells into a knot, ends, and comes out from under the bark again three rows lower
 VINE = """
 31|ooo
 29|outpo
@@ -335,45 +336,80 @@ VINE = """
 17|oupprpo
 16|outprrpo
 16|ouutrpo
-15|outtrpo
-14|outtrrpo
-14|outrrpo
-13|ouutrpo
-13|outtrpo
-13|outrrpo
-12|outtrppo
+15|outttrpo
+14|ouuttrrpo
+13|outttrrppo
+13|ouutprrrpo
+13|outtrrrppo
+13|ouuttrrpo
+12|outtrrppo
 12|ouutrpo
-12|outrrpo
-12|outtrpo
-11|ouutrrpo
-11|outtrpo
-11|outrppo
-11|outtrpo
-11|ouurrpo
-10|outtrrpo
-10|outrrpo
+12|outrpo
+12|oupo
+12|oo
+.
+.
+11|oo
+11|oupo
+10|outrpo
 10|ouutrpo
+10|outtrppo
+10|ouutrrpo
 10|outtrpo
-10|outrppo
+9|ouuttrpo
 9|outtrrpo
-9|ouutrpo
+9|ouutrppo
 9|outrrpo
 9|outtrpo
-9|ouutppo
-8|outtrrpo
-8|outrrpo
-8|ouutrpo
+8|ouuttrpo
+8|outtrrppo
+8|ouutrrpo
 8|outtrpo
 8|outrppo
+7|ouuttrpo
 7|outtrrpo
 7|ouutrpo
-7|outrrpo
+7|outrrppo
 7|outtrpo
-7|ouurppo
-7|outtrpo
-6|outrrppo
+7|ouurpo
+6|outtrppo
 6|oottrpo
 7|ooooo
+"""
+
+# a wet dark root down the inside of the front leg's lower half (rows 118..148, the leg's origin column)
+VINE2 = """
+36|hh
+35|hmih
+35|hmkih
+34|hmkkih
+34|hmmkiih
+33|hmkkkih
+33|hmmkkiih
+32|hmkkikih
+32|hmmkkkih
+31|hmkkkiih
+31|hmmkikkih
+31|hmkkkkih
+30|hmmkkkiih
+30|hmkkikkih
+30|hmmkkkih
+29|hmkkkkiih
+29|hmmkikkih
+29|hmkkkkih
+28|hmmkkkiih
+28|hmkkkikih
+28|hmmkkkih
+27|hmkkikiih
+27|hmmkkkkih
+27|hmkkkiih
+26|hmmkikkih
+26|hmkkkkih
+26|hmmkkiih
+25|hmkkkih
+25|hmkiih
+26|hmih
+26|hh
 """
 
 # the front leg swung out to the side (rearing, half way), typed in COLUMNS from the toes (column 8)
@@ -540,12 +576,12 @@ HIND = """
 3|hmlllkkkkkkkijjjiih
 3|hmmllkkkkkkkkjjjiih
 2|hmmlllkkkkkkkkjjjiih
-2|hmmmllkkkkkkkkjjjiih
-2|hmmlllkkiiikkkjjjiih
-2|hmlllkkikkkikkjjjiih
-2|hmlllkkikmkikkjjjiih
-2|hmmllkkikkkikkjjjiih
-2|hmmlllkkiiikkkjjjiih
+1|hmmmmllkkkkkkkkjjjiih
+0|hmmmmlllkkiiikkkjjjiih
+0|hmmmlllkkikkkikkjjjiiih
+0|hmmllllkkikmkikkjjjiiih
+0|hmmmlllkkikkkikkjjjiih
+1|hmmmlllkkiiikkkjjjiih
 2|hmlllkkkkkkkkkjjjiih
 2|hmlllkkkkkkkikjjjiih
 2|hmmllkkkkkkikkjjjiih
@@ -981,43 +1017,43 @@ CRYSTAL2 = """
 # a split rib bowed outward (HALF: the left one; rows 42..80, origin column 72)
 RIB2 = """
 12|oooo
-11|ouurpo
+11|outrpo
 10|ouurpo
-10|ouurpo
-9|ouurpo
-8|ouurpo
-7|ouurpo
-7|ouurpo
-6|ouurpo
-5|ouurpo
+10|outtpo
+9|ottrpo
+8|ouutpo
+7|outrpo
+7|ouutrpo
+6|outtrpo
+5|ottrpo
 4|ouurpo
-4|ouutpo
+4|outtpo
+3|outrppo
+2|ouutrpo
+1|outtpo
+1|ottrpo
+0|ouurppo
+0|outtrpo
+0|oupprpo
+1|outprpo
+1|ouutpo
+1|ottrpo
+2|outrpo
+2|ouurpo
+2|outtrpo
+3|ottrppo
 3|ouutpo
-2|ouurpo
-1|ouurpo
-1|ouurpo
-0|ouurpo
-0|ouurpo
-0|ouurpo
-1|ouurpo
-1|ouurpo
-1|ouurpo
-2|ouurpo
-2|ouurpo
-2|ouurpo
-3|ouurpo
-3|ouurpo
-3|ouurpo
+3|outrpo
 4|ouurpo
-4|ouutpo
-4|ouurpo
-5|ouurpo
-5|ouurpo
+4|outtpo
+4|ottrpo
+5|ouutrpo
+5|outrppo
 6|ouurpo
-6|ouurpo
-6|ouurpo
-7|ouurpo
-7|ouurpo
+6|outtpo
+6|ottrpo
+7|ouutpo
+7|outrpo
 8|oooo
 """
 
@@ -1245,13 +1281,27 @@ MELT = """
 22|(O74)
 """
 
-HALF = {"VINE", "SPK_1", "SPK_2", "SPK_3", "SHOULDER", "LEG", "HIND", "HEAD", "JAW", "MOUTH", "TUSK", "RIB2",
+# folds of light on the mound of murk (the purification, frame 4)
+FOLD_A = """
+1|UUUTTT
+0|UTTTSSSSRO
+0|TSSSRRRPPO
+2|PPPPOO
+"""
+FOLD_B = """
+0|OUUT
+0|OTTSSP
+1|OSRRPPO
+2|OPPO
+"""
+
+HALF = {"VINE", "VINE2", "SPK_1", "SPK_2", "SPK_3", "SHOULDER", "LEG", "HIND", "HEAD", "JAW", "MOUTH", "TUSK", "RIB2",
         "POOL_A", "POOL_B", "MELT"}
 COLS = {"SHOULDER", "LEG_OUT"}
 # top-left in the frame, rest pose (HALF maps: the left one)
 PLACE = {
     "SPK_C": (87, 2), "SPK_1": (66, 5), "SPK_2": (50, 12), "SPK_3": (32, 24), "SHOULDER": (16, 47),
-    "LEG": (5, 80), "VINE": (5, 88), "HIND": (55, 73), "HEAD": (62, 78), "NECK": (74, 92), "JAW": (83, 129), "MOUTH": (85, 124),
+    "LEG": (5, 80), "VINE": (5, 88), "VINE2": (5, 118), "HIND": (55, 73), "HEAD": (62, 78), "NECK": (74, 92), "JAW": (83, 129), "MOUTH": (85, 124),
     "TUSK": (43, 101), "BEARD": (81, 134), "EYE_OPEN": (82, 102), "EYE_SHUT": (82, 104),
     "SOCKET": (79, 47), "CRYSTAL": (87, 52), "RIBS": (82, 45), "SOCKET2": (75, 43), "CRYSTAL2": (85, 50),
     "RIB2": (72, 42), "CRACK_A": (58, 52), "CRACK_B": (122, 48), "POOL_A": (0, 150), "POOL_B": (0, 149), "MELT": (0, 107),

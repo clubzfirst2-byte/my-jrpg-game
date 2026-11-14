@@ -32,10 +32,10 @@ for _n in B.ORDER:
     P[_n + "~"] = P[_n].mirror()
 for _n in R.PLACE:
     P[_n] = part(getattr(R, _n), LEG, _n, cols=_n in R.COLS)
-for _n in ("FUNGUS_L", "FUNGUS_M", "FUNGUS_S", "ORB", "CHIP_A", "CHIP_B", "LEG_OUT", "LEG_UP", "KNOT_A", "SCAR_A", "SCAR_B"):
+for _n in ("FUNGUS_L", "FUNGUS_M", "FUNGUS_S", "ORB", "CHIP_A", "CHIP_B", "LEG_OUT", "LEG_UP", "KNOT_A", "SCAR_A", "SCAR_B", "FOLD_A", "FOLD_B"):
     if hasattr(R, _n):
         P[_n] = part(getattr(R, _n), LEG, _n, cols=_n in R.COLS)
-RELIGHT = {"LEG", "VINE", "HIND", "SPK_1", "SPK_2", "SPK_3", "RIB2"}  # upright limbs typed in rows
+RELIGHT = {"LEG", "VINE", "VINE2", "HIND", "SPK_1", "SPK_2", "SPK_3", "RIB2"}  # upright limbs typed in rows
 for _n in list(P):
     if _n in R.HALF or _n in ("LEG_OUT", "LEG_UP"):
         P[_n + "~"] = P[_n].mirror(relight=_n in RELIGHT)
@@ -104,6 +104,8 @@ def draw(p):
     # hind legs: they stand on the ground (seen between the front legs)
     if c < 3 and not p.melt:
         _both(f, parts, "HIND", *at("HIND"))
+        hx0, hy0 = at("HIND")
+        f.put(P["KNOT_A"], 192 - hx0 - 14, hy0 + 22)  # the right hind leg's own knot, higher than the knee's
     # front legs (behind the body unless they are raised)
     def front_legs():
         for s, lf in ((-1, p.legs[0]), (1, p.legs[1])):
@@ -128,18 +130,22 @@ def draw(p):
                     f.put(v, x, y + 8, **kw)
                 else:
                     f.put(parts["VINE~"], 192 - x - v.w, y + 8, **kw)
+                v = parts["VINE2"]  # and the wet root down the inside of its lower half
+                if s < 0:
+                    f.put(v, x, y + 38, **kw)
+                else:
+                    f.put(parts["VINE2~"], 192 - x - v.w, y + 38, **kw)
     if p.raise_ < 0.3:
         front_legs()
     # back spikes: they rise (bristle) and move apart (fan) as whole pictures
     sk = int(round(p.spikes))
+    rise = max(by - sk, 1 - PLACE["SPK_C"][1])  # the middle spike's tip stops at row 1; the others keep their step below it
     for i, n in ((3, "SPK_3"), (2, "SPK_2"), (1, "SPK_1")):
         fan = min(int(round(p.fan * i * 0.4)), 6)  # the outer spike stays rooted in the back
-        x, y = at(n, bx - fan, by - sk)
-        y = max(y, 1)  # a spike never leaves the frame: it sinks into the back instead (v2 shortened it)
+        x, y = at(n, bx - fan, rise)
         f.put(parts[n], x, y, **kw)
         f.put(parts[n + "~"], 2 * cx - x - parts[n].w, y, **kw)
-    x, y = at("SPK_C", bx, by - sk)
-    f.put(parts["SPK_C"], x, max(y, 1), **kw)
+    f.put(parts["SPK_C"], *at("SPK_C", bx, rise), **kw)
     # the body
     for n in B.ORDER:
         _both(f, parts, n, *at(n, bx, by), cx=cx, **kw)
@@ -213,6 +219,13 @@ def mound():
     _both(f, P, "TUSK", 49, 119, clip_y=G - 6)
     _both(f, P, "MELT", *PLACE["MELT"])
     f.put(P["CRYSTAL2_DIM"], 85, 125, clip_y=145)
+    for n, x, y in (("FOLD_A", 40, 136), ("FOLD_B", 62, 128), ("FOLD_A", 70, 142), ("FOLD_B", 30, 144), ("FOLD_B", 112, 126),
+                    ("FOLD_A", 124, 134), ("FOLD_B", 146, 140), ("FOLD_A", 104, 143), ("FUNGUS_S", 54, 138), ("FUNGUS_M", 132, 142),
+                    ("CHIP_B", 86, 146), ("FOLD_B", 152, 146), ("CHIP_B", 44, 146), ("FOLD_B", 60, 122), ("FOLD_A", 90, 121),
+                    ("FOLD_B", 124, 122), ("FOLD_B", 84, 132), ("FOLD_A", 114, 130), ("FOLD_B", 66, 137), ("FOLD_B", 116, 139),
+                    ("FOLD_B", 148, 136), ("FOLD_A", 56, 147), ("FOLD_B", 118, 147), ("FUNGUS_S", 98, 126), ("CHIP_B", 158, 139),
+                    ("FOLD_B", 100, 134), ("CHIP_B", 72, 130)):
+        f.put(P[n], x, y)
     _both(f, P, "POOL_B", *PLACE["POOL_B"])
     return f
 
