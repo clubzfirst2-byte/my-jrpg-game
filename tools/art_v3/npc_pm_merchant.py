@@ -30,11 +30,12 @@ RAMPS = {  # v1's ramps (tools/npc_release/merchant.py RAMPS + tools/art_proto/p
 }
 INKS = {"#": "#2a2230", "y": "#24202a", "=": "#9a4a42", "~": "#f0a08c", "*": "#f4fbff"}
 EYE_INKS = {INKS["#"]}
-IRIS_INKS = set()  # his eyes are closed in a smile in every frame (v1 has no open eye): no iris anywhere
+IRIS_INKS = EYE_INKS  # his eyes are closed in a smile in every frame (v1 has no open eye): the check counts
+# the closed eyes' lines instead of irises: front 2, side 1, back 0, also on the "blink" frame
 
 
 def IRIS_WANT(view, blink, want):
-    return 0
+    return 0 if view == "up" else (2 if view == "down" else 1)
 
 
 LEG = legend([("012345", "hair"), ("abcdef", "skin"), ("ABCDEF", "vest"), ("GHIJKL", "shirt"),
@@ -56,10 +57,10 @@ HEAD_FRONT = half("""
 ..........3344444444433331111333
 ..........344444333311eeffffeeee
 ..........34444433311eeeffffeeee
-..........344443deffffffffffeeee
-..........344443deffffffffffeeee
-..........344433deeffffffffeeeee
-..........344433deeeeeeeeeeeeeee
+..........344443deefffffffffeeee
+..........344443dfffffffffffeeee
+..........344433deefffffffeeeeee
+..........344433deeeeyyyeeeeeeee
 ..........3443eeeeeyyyyyyeeeeeee
 ..........3443eeeeyyyyyyyyeeeeee
 .........cdd43eekkkkkkkkkkkkeeee
@@ -71,9 +72,9 @@ HEAD_FRONT = half("""
 .........cdeeeeejjeeeeeeeejjeeff
 ..........deeeeejjeeeeeeeejjeeff
 ..........deeeeejjjjjjjjjjjjeeff
-..........deeeeejjjjjjjjjjjjeeff
+..........deeee~~jjjjjjjjjjjeeff
 ..........ddee~~~~eeeeeeeeeeeddd
-..........ddee~~~~eeeeeeeeeeeeee
+..........ddeee~~~~eeeeeeeeeeeee
 ..........ddeeeeeeee444444444333
 ..........ddeeeeee33444444443331
 ..........cdeeee1333ee=fffffffff
@@ -103,19 +104,19 @@ HEAD_BACK = half("""
 ..........3445434454434454344544
 ..........3445434454434454344544
 ..........3445434454434454344544
-..........3443334443334433344433
-..........3443334443334433344433
-........cd3443334443334433344433
-........cd3443334443334433344433
-........cd3333343333343333433333
-........cd3333343333343333433333
-........cd3333333333333333333333
-........cd3333333333333333333333
-..........dd33333333333333333333
-..........dd33333333333333333333
-..........cddd333333333333333333
-...........cdd333333333333333333
-............cddddd11111111111111
+..........3443334433334433344333
+..........3443334433334433344333
+........cd3343333433333433334333
+........cd3343333433333433334333
+........cd3433334333343333433433
+........cd3433334333343333433433
+........cd3343333433333433334333
+........cd3343333433333433334333
+..........dd34333433343334333433
+..........dd34333433343334333433
+..........cddd333433343334333433
+...........cdd33dd3333dd3333dd33
+............cddddd11dd1111dd1111
 ............cddddddddddddddddddd
 ..............ddeeddddeedddddddd
 ..............ddeeddddeedddddddd
@@ -216,31 +217,31 @@ BODY_BACK = half("""
 ...........CDEEEEEEEDDDDDDDDDDDD
 ..........BCDEEEEEEDDDDDDDDDDDDD
 .........BCDEEEEEDDDDDDDDDDDDDDD
-........BCDEEEEDDDDDEEEEEEEEDDDD
-........BCDEEEEDDDDDEEEEEEEEDDDD
-........BCDEEEDDDDDDEEEEEEEDDDCB
-........BCDEEEDDDDDDEEEEEEDDDDCB
-........BCDEEEDDDDDDDEEEEDDDDDCB
-........BCDEEEDDDDDDDDEEDDDDDDCB
-........BCDEEEDDDDDDCCCCCCDDDDCB
-........BCDEEEDDDDDDDCCCCCCDDDCB
-........BCDEEEDDDDDDDDDDDDDDDDCB
-........BCDEEEDDDDDDDDDDDDDDDDCB
-......BCDDEEEDDDDDDDDDDDDDDDDDCB
-......BCDDEEEDDDDDDDDDDDDDDDDDCB
-......BCDDEEEDDDDDDDDDDDDDDDDDCB
-......BCDDEEEDDDDDDDDDDDDDDDDDCB
-......BCDDEEEDDDDDDDDDECDDDDDDCB
-......BCDDEEEDDDDDDDDDECDDDDDDCB
-......BCDDEEEDDDDDDDDDECDDDDDDCB
-......BCDDEEEDDDDDDDDDECDDDDDDCB
-......BCDDEEEDDDDDDDDDECDDECDDCB
-......BCDDEEEDDDDDDDDDECDDECDDCB
-......BCDDEEEDDDDDDDDDECDDECDDCB
-......BCDDEEEDDDDDDDDDECDDECDDCB
-......BCDDEEEDDDDDDDDDECDDECDDCB
-......BCDDEEEDDDDDDDDDECDDECDDCB
-......BCDDEEEDDDDDDDDDECDDECDDCB
+........BCDEEEEDDDDDCCEEEEEEDDDD
+........BCDEEEEDDDDDCCEEEEEEDDDD
+........BCDEEEDDDDDDCCEEEEEDDDBB
+........BCDEEEDDDDDDCCEEEEDDDDBB
+........BCDEEEDDDDDDCCEEEDDDDDBB
+........BCDEEEDDDDDDCCEEDDDDDDBB
+........BCDEEEDDDDDDCCCCCCDDDDBB
+........BCDEEEDDDDDDCCCCCCCDDDBB
+........BCDEEEDDDDDDCCCCCCCCEEBB
+........BCDEEEDDDDDDCCCCCCCDEEBB
+......BCDDEEEDDDDDDDCCCCCCDDEEBB
+......BCDDEEEDDDDDDDCCCCCDDDEEBB
+......BCDDEEEDDDDDDDCCCCDDDDEEBB
+......BCDDEEEDDDDDDDCCCCDDDDEEBB
+......BCDDEEEDDDDDDDCCECDDDDEEBB
+......BCDDEEEDDDDDDDCCECDDDDEEBB
+......BCDDEEEDDDDDDDCCECDDDDEEBB
+......BCDDEEEDDDDDDDCCECDDDDEEBB
+......BCDDEEEDDDDDDDCCECDDECEEBB
+......BCDDEEEDDDDDDDCCECDDECEEBB
+......BCDDEEEDDDDDDDCCECDDECEEBB
+......BCDDEEEDDDDDDDCCECDDECEEBB
+......BCDDEEEDDDDDDDCCECDDECEEBB
+......BCDDEEEDDDDDDDCCECDDECEEBB
+......BCDDEEEDDDDDDDCCECDDECEEBB
 ......BCCCCCCCCCCCCCCCCCCCCCCCCB
 ......noppppppppqqqqpppppppppppp
 ......nopppppppppppppppppppppppp
@@ -401,7 +402,7 @@ PURSE = grid("""
 oopqqqqnn
 opqqqqqqnn
 pqkkjjqqon
-pqkjjhqqon
+pqkjjjqqon
 pqqqqqqqon
 pqqqqqqqon
 pqqqqqqpon
@@ -412,16 +413,16 @@ pqqqqqqpon
 
 # the pen behind his right ear: from the front only its end shows past the hair; from the side it lies on it
 PEN_FRONT = grid("""
-&&........
-&&&.......
-.^^^......
-..^^^.....
-...^^^....
-....^^^...
-.....$$$..
-......$$$.
-.......!!!
-........!!
+&&
+&&&
+.&&&
+..&&^
+...^^^
+4|^^^
+5|$$$
+6|$$$
+7|!!!
+8|!!
 """, 10)
 
 PEN_SIDE = grid("""
