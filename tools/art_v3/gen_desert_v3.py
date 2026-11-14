@@ -13,10 +13,11 @@ formulas, its own drawing:
      mottles of ripples everywhere, marks at uneven spacing (ripple pairs, pebble clusters of 2-3
      pebbles 3-4 x 3, small wind hollows, dry grass tufts), 2-3 pale wind-smoothed patches. No 1-texel dots.
   2. the flow: the same corner (Wang) scheme and the same key rule (gen_ground_v3.flow_key). Its own
-     SHAPE set (grey, body 214 / tip 255):
+     SHAPE set (grey, 7 levels: GREYS):
        desert.sandflow.v3.<bits>.<v>.png
-     long wavy ripple crests 2 rows thick, ONE flat grey (255) per crest, the game multiplies them by
-     DESERT_FLOW_TINT[kind] (d = the shaded lee of a dune, l = the sunlit windward face).
+     round 2: dunes on the south border of each patch (lit face, crest, slip face in shadow), long
+     parallel ripples over the rest, a crescent in one full-tile variant; the game multiplies them by
+     DESERT_FLOW_TINT[kind] (d = a low red dune, l = a pale high dune). See "flow shapes" below.
   3. transitions: the v2 dual-grid rule (desert sand is "dsand" in the v2 priority: above ruin and
      path, below the island sand and every grass):
        desert.sand.v3.edge.<mask>.<v>.png           (mask 1-14, v 0-3; masks 6 / 9: 0-1)

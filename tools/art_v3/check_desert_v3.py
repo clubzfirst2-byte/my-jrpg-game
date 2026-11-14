@@ -5,7 +5,7 @@
   lone        opaque texels whose 4 neighbours are transparent (or outside)
   isolated    opaque texels whose 4 opaque neighbours are all of other colours (mech.py's rule), % of
               texels with 4 opaque neighbours
-  palette     base / edge colours outside the desert ramps; flow shapes outside the grey 255
+  palette     base / edge colours outside the desert ramps; flow shapes outside gen_desert_v3.GREYS (7 greys)
   holes       transparent pieces not touching the tile's edge (edges, flow); islands = opaque pieces of
               an edge overlay not touching the tile's edge
   tiny        flow: opaque pieces of 1-6 texels not touching the tile's edge
@@ -95,7 +95,7 @@ def main():
             if kind in ("base", "edge"):
                 out_pal += len(cols - ramp_cols)
             if kind == "flow":
-                out_pal += len(cols - {(255, 255, 255)})
+                out_pal += len(cols - {(g, g, g) for g in D.GREYS})  # round 2: the shapes hold gen_desert_v3.GREYS
                 tiny += sum(1 for (m, e) in pieces(op) if m <= 6 and not e)
             if kind in ("edge", "flow"):
                 holes += sum(1 for (m, e) in pieces(~op) if not e)
@@ -170,6 +170,31 @@ def main():
                 a0 = load(fs[0])
                 diffs = [int((load(f) != a0).any(-1).sum()) for f in fs[1:]]
                 print(f"sway  {g.split('.v3.')[1]}: frames {len(fs)}, texels differing from frame 0 {diffs}")
+    # round 2: the share of neighbour pairs (left-right and up-down, inside a tile) whose brightness
+    # differs by more than 10 / 12 / 14 / 15, on 100 x 100 world tiles drawn as the game does
+    # (gen_desert_v3.ground_tile; no map: every tile is desert sand). Groups: tiles with no flow, the
+    # full (1111) tiles of each kind, and every flow tile of each kind (the dune tiles too).
+    import functools
+    import gen_ground_v3 as G
+    cache = functools.lru_cache(maxsize=None)(lambda p: Image.open(p).convert("RGBA"))
+    groups = {"none": [], "d full": [], "l full": [], "d all": [], "l all": []}
+    for ty in range(100):
+        for tx in range(100):
+            l = luma(np.array(D.ground_tile(tx, ty, load=cache))[..., :3].astype(float))
+            fk = G.flow_key(tx, ty)
+            if fk is None:
+                groups["none"].append(l)
+            else:
+                groups[fk[0] + " all"].append(l)
+                if fk[1] == "1111":
+                    groups[fk[0] + " full"].append(l)
+    print("steps tiles", {k: len(v) for k, v in groups.items()}, "tints", D.flow_tints())
+    for th in (10, 12, 14, 15):
+        row = f"steps |dL| > {th}:"
+        for k, ls in groups.items():
+            v = np.mean([((np.abs(l[:, 1:] - l[:, :-1]) > th).sum() + (np.abs(l[1:] - l[:-1]) > th).sum()) / (2 * 64 * 63) for l in ls])
+            row += f"  {k} {100 * v:.1f}%"
+        print(row)
     # memory
     tile = 64 * 64 * 4
     ground = (len(files["base"]) + len(files["edge"]) + len(files["flow"])) * tile

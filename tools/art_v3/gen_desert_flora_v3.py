@@ -4,17 +4,19 @@ is scaled); the v1 cactus is only the reference for the design of `cactus` (colu
 right arm higher, a pink flower on top, tan spines).
 
 Files (src/art-release-v3/terrain/), anchor the bottom centre, no ground or ground shadow baked in:
-  desert.tree.v3.<kind>.<f>.png
-      palm_l  128 x 224  a date palm (oasis): a curved ringed trunk, 13 arching feathered fronds,
-                         2 hanging date clusters; sway f 0-2 (the frond tips move, the trunk stays)
-      palm_s   80 x 144  a young date palm (shorter trunk, 9 fronds, no dates); sway f 0-2
-      snag     96 x 128  a dead acacia: a twisted grey trunk forking into bare branches; f 0
-  desert.prop.v3.<kind>.<f>.png
+  desert.tree.v3.<kind>.<f>.png   (sizes as written: the empty rows above the picture are cropped)
+      palm_l  144 x 201  a date palm (oasis): a curved ringed trunk leaning right, 13 arching feathered
+                         fronds, 2 hanging date clusters; sway f 0-2 (the frond tips move, the trunk stays)
+      palm_s   96 x 118  the palms' second shape: leans left, a stronger bend, 10 longer fronds that
+                         hang lower, no dates; sway f 0-2
+      snag     96 x 127  a dead acacia: a twisted grey trunk forking into bare branches, cracks, bark
+                         plates, a hollow, broken stubs; f 0
+  desert.prop.v3.<kind>.<f>.png   (the foot is the bottom row: empty rows above and below are cropped)
       cactus 48 x 80 (the v1 obj.cactus design at density 4; also written as obj.cactus.png, the key
-      the game draws today), cactus_l 64 x 128 (a tall saguaro, 3 arms), barrel 40 x 40, pear 64 x 56
-      (prickly pear pads, red fruit), agave 56 x 44, rock_l 64 x 48 and rock_s 40 x 28 (layered red
-      sandstone), bones 56 x 32 (a horned skull and a rib), tumbleweed 40 x 36, drygrass 40 x 32
-      (f 0-1, sway), sage 56 x 40 (a grey-green desert shrub), pebbles 40 x 20
+      the game draws today), cactus_l 64 x 126 (a tall saguaro, 3 arms), barrel 40 x 34, pear 64 x 47
+      (prickly pear pads, red fruit), agave 56 x 40, rock_l 64 x 39 and rock_s 40 x 23 (layered red
+      sandstone), bones 56 x 27 (a horned skull and a rib), tumbleweed 40 x 35, drygrass 40 x 29
+      (f 0-1, sway), sage 56 x 35 (a grey-green desert shrub), pebbles 40 x 13
 Run: python3 tools/art_v3/gen_desert_v3.py trees|props|all
 """
 
