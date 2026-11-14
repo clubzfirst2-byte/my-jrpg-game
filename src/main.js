@@ -1130,6 +1130,21 @@ async function boot() {
     /** NPC batch 1: the villagers' sprites (frame key, size, draw order) and their state. */
     npcSprites: () => view.npcs.debug(),
     npcState: () => state.npcs.map((n) => ({ id: n.id, facing: n.facing, moving: n.moving, x: n.x, y: n.y })),
+    /**
+     * Graphics v3 (tests): what the view draws for a villager in a given pose — the sprite as npcSprites
+     * gives it (frame key, game size, feet, anchor, density, mirrored), with the feet relative to the
+     * villager's place, or null when it has no sprite (its art not loaded). The villager's state is put back.
+     */
+    npcShown: (/** @type {string} */ id, /** @type {{ facing: string, moving: boolean, walkTime?: number, time?: number }} */ pose) => {
+      const n = state.npcs.find((x) => x.id === id);
+      if (!n) return null;
+      const keep = { facing: n.facing, moving: n.moving, walkTime: n.walkTime };
+      Object.assign(n, { facing: pose.facing, moving: pose.moving, walkTime: pose.walkTime ?? 0 });
+      view.npcs.update(state, 1, { x: n.x, y: n.y }, pose.time ?? 0);
+      const s = view.npcs.debug().find((x) => x.id === id) ?? null;
+      Object.assign(n, keep);
+      return s && { ...s, dx: s.x - Math.round(n.x), dy: s.y - Math.round(n.y - n.z), body: { halfWidth: n.halfWidth, height: n.height, reach: n.reach, solid: npcSolid(n) } };
+    },
     /** Test helper: an extra villager, for a look on screen only; it is not saved and the village
      *  data is unchanged (the woman and the smith are in the village since v1.0). */
     addNpc: (/** @type {string} */ id, /** @type {number} */ tx, /** @type {number} */ ty) => {

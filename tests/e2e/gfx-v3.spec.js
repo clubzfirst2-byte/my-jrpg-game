@@ -119,7 +119,8 @@ for (const screen of [PRO, SE]) {
     expect(await api(page, 'textureDensity', 'hero.idle.down.0')).toBe(4);
     // (the enemies' v3 frames: a bundle per kind, loaded with the regions where it spawns — the island: beasts, archers)
     await expect.poll(() => api(page, 'textureDensity', 'enemy.beast.idle.0')).toBe(4);
-    expect(await api(page, 'textureDensity', 'npc.woman.idle.down.0')).toBe(4);
+    // (the villagers' v3 frames: a bundle per person, held near the plains region — not on the island; npcV3.js)
+    expect(await api(page, 'textureDensity', 'npc.woman.idle.down.0')).toBe(null);
     expect(await api(page, 'textureDensity', 'hero.walk.right.0')).toBe(4);
     expect(await api(page, 'textureDensity', 'hero.climb.right.0')).toBe(null);
     expect(await api(page, 'textureDensity', 'v1.hero.climb.right.0')).toBe(2);
@@ -137,6 +138,7 @@ for (const screen of [PRO, SE]) {
     expect(await api(page, 'textureDensity', 'plains.grassflow.v3.1111.0')).toBe(4);
     expect(await api(page, 'textureDensity', 'plains.tree.v3.oak_l.0')).toBe(4);
     expect(await api(page, 'textureDensity', 'obj.v3.house_stone')).toBe(4);
+    await expect.poll(() => api(page, 'textureDensity', 'npc.woman.idle.down.0'), { timeout: 15_000 }).toBe(4);
 
     // hero and enemies around him are not under the HUD or the buttons; taps ≥ 44 px, text ≥ 12 px
     const p = await api(page, 'player');
@@ -813,4 +815,175 @@ test('?v3=1 ?map=forestedge: walking from the plains into the forest, no plains 
   expect(both).toBe(0);
   expect(errors).toEqual([]);
   await context.close();
+});
+
+// Graphics v3: the villagers (docs/art-release-v3/NAMES.md 6, STYLE.md 10.2, npcV3.js)
+
+const NPC_PEOPLE = ['child', 'cook', 'elder', 'guard', 'merchant', 'princess', 'smith', 'traveller', 'woman'];
+const NPC_MIRROR_LEFT = ['princess', 'smith'];
+const VILLAGE_AT = [28, 89];
+const npcBundles = async (page) => (await api(page, 'stream')).bundleNames.filter((n) => n.startsWith('v3:npc:')).sort();
+const allNpcBundles = NPC_PEOPLE.map((w) => `v3:npc:${w}`);
+
+/** Every pose of the 9 people as the view draws it (the princess: an extra villager with her art, by the well). */
+async function npcPoses(page) {
+  await api(page, 'addNpc', 'princess', VILLAGE_AT[0] + 2, VILLAGE_AT[1] + 1);
+  await page.waitForTimeout(300);
+  /** @type {Record<string, any>} */
+  const out = {};
+  for (const who of NPC_PEOPLE) {
+    for (const facing of ['down', 'right', 'up', 'left']) {
+      for (let f = 0; f < 4; f++) {
+        const s = await api(page, 'npcShown', who, { facing, moving: false, time: 100 + (f + 0.5) / 3 });
+        out[`${who} idle ${facing} t${f}`] = s;
+      }
+      for (let f = 0; f < 6; f++) {
+        const s = await api(page, 'npcShown', who, { facing, moving: true, walkTime: (f + 0.5) / 8 });
+        out[`${who} walk ${facing} ${f}`] = s;
+      }
+    }
+  }
+  return out;
+}
+
+test('?v3=1: the 9 villagers — every idle and walk frame from the v3 art; the princess and the smith left = right mirrored, the other 7 their own left frames; feet, size, anchor and body where ?v3=0 has them', async ({ browser }) => {
+  test.setTimeout(180_000);
+  /** @type {Record<string, Record<string, any>>} */
+  const byMode = {};
+  for (const q of ['&v3=0', '&v3=1']) {
+    const { context, page, errors } = await open(browser, PRO, q);
+    await api(page, 'teleport', ...VILLAGE_AT);
+    if (q === '&v3=1') await expect.poll(() => npcBundles(page), { timeout: 30_000 }).toEqual(allNpcBundles);
+    else {
+      await page.waitForTimeout(1500);
+      expect(await npcBundles(page)).toEqual([]);
+    }
+    byMode[q] = await npcPoses(page);
+    expect(errors).toEqual([]);
+    await context.close();
+  }
+  const v0 = byMode['&v3=0'];
+  const v1 = byMode['&v3=1'];
+  expect(Object.keys(v1).length).toBe(9 * 4 * 10);
+  const seen = new Set();
+  for (const [pose, s] of Object.entries(v1)) {
+    const [who, action, facing] = pose.split(' ');
+    expect(s, pose).toBeTruthy();
+    // the v3 frame of that person, action and direction (never the placeholder, never the approved art)
+    expect(s.key, pose).toMatch(new RegExp(`^npc\\.${who}\\.${action}\\.${facing}\\.\\d$`));
+    expect(s.density, pose).toBe(4);
+    seen.add(s.key);
+    // NAMES.md 6: the princess's and the smith's left = their right frame mirrored; everyone else's is stored
+    const mirror = facing === 'left' && NPC_MIRROR_LEFT.includes(who);
+    expect(s.mirrored, pose).toBe(mirror);
+    const right = v1[pose.replace(' left ', ' right ')];
+    if (facing === 'left') {
+      expect(right.key, pose).toBe(s.key.replace('.left.', '.right.'));
+      // (a mirrored left frame is the right frame's place on the atlas; a stored one has its own)
+      expect(JSON.stringify(s.frame) === JSON.stringify(right.frame), pose).toBe(mirror);
+    }
+    // the same frame key, game size, feet, anchor and body as ?v3=0
+    const a = v0[pose];
+    expect(a, pose).toBeTruthy();
+    expect(a.density, pose).toBe(2);
+    expect(a.mirrored, pose).toBe(false);
+    expect({ key: s.key, w: s.w, h: s.h, dx: s.dx, dy: s.dy, anchor: s.anchor, zIndex: s.zIndex, alpha: s.alpha, body: s.body }, pose).toEqual({ key: a.key, w: a.w, h: a.h, dx: a.dx, dy: a.dy, anchor: a.anchor, zIndex: a.zIndex, alpha: a.alpha, body: a.body });
+    expect([s.w, s.h, s.dx, s.dy, ...s.anchor], pose).toEqual([16, 28, 0, 0, 0.5, 1]);
+  }
+  // every frame of every person was drawn: 9 × 4 directions × (idle 4 + walk 6)
+  expect(seen.size).toBe(360);
+});
+
+test('?v3=1: the villager bundles — none on the island, all 9 near the plains (8.7 MB), let go in the forest, only the princess\'s where she stands elsewhere; art under 35 MB', async ({ browser }, testInfo) => {
+  test.setTimeout(180_000);
+  for (const screen of [PRO, SE]) {
+    const { context, page, errors } = await open(browser, screen, '&v3=1');
+    // the island: no villager bundle; the princess on the beach is the only villager there and off screen
+    expect((await api(page, 'v3')).npcs.people).toEqual(NPC_PEOPLE);
+    expect(await api(page, 'textureDensity', 'npc.elder.idle.down.0')).toBe(null);
+    // the village: all 9, each person's frames at density 4, the mirrored left keys answered too
+    await api(page, 'teleport', ...VILLAGE_AT);
+    await expect.poll(() => npcBundles(page), { timeout: 30_000 }).toEqual(allNpcBundles);
+    for (const who of NPC_PEOPLE) for (const k of [`npc.${who}.idle.down.0`, `npc.${who}.walk.left.5`, `npc.${who}.walk.right.5`]) expect(await api(page, 'textureDensity', k), k).toBe(4);
+    await page.waitForTimeout(600);
+    const sprites = await api(page, 'npcSprites');
+    expect(sprites.length).toBeGreaterThanOrEqual(5);
+    for (const s of sprites) {
+      expect(s.density, s.key).toBe(4);
+      expect([s.w, s.h], s.key).toEqual([16, 28]);
+      expect(s.key).toMatch(/^npc\.[a-z]+\.(idle|walk)\./);
+    }
+    const mem = await api(page, 'v3');
+    const npcBytes = Object.values(mem.npcs.bytes).reduce((a, b) => a + b, 0);
+    expect(npcBytes).toBeLessThanOrEqual(8.7e6); // STYLE.md 10.2 (1 MB = 1,000,000 bytes)
+    expect(mem.gpu.atlas).toBeLessThanOrEqual(35e6); // the art's textures (decision 2026-11-13)
+    expect(mem.cpu.total).toBe(0);
+    await page.screenshot({ path: testInfo.outputPath(`village-${screen.name}.png`) });
+    // the forest (its own column): the villagers' art is let go
+    await api(page, 'teleport', ...FOREST_AT);
+    await expect.poll(() => npcBundles(page), { timeout: 30_000 }).toEqual([]);
+    expect(await api(page, 'npcSprites')).toEqual([]);
+    // a villager with the princess's art standing there: only her bundle, drawn from it
+    await api(page, 'addNpc', 'princess', FOREST_AT[0] + 2, FOREST_AT[1]);
+    await expect.poll(() => npcBundles(page), { timeout: 30_000 }).toEqual(['v3:npc:princess']);
+    await expect.poll(async () => (await api(page, 'npcSprites')).find((s) => s.id === 'princess')?.density, { timeout: 10_000 }).toBe(4);
+    expect(errors).toEqual([]);
+    await context.close();
+  }
+});
+
+test('?v3=1: indoors — the merchant behind the shop counter is drawn from the v3 art at his place; the shop opens', async ({ browser }, testInfo) => {
+  const { context, page, errors } = await open(browser, PRO, '&v3=1');
+  await api(page, 'teleport', 16, 87);
+  await expect.poll(() => npcBundles(page), { timeout: 30_000 }).toEqual(allNpcBundles);
+  const hold = async (done) => {
+    await page.keyboard.down('ArrowUp');
+    try {
+      await expect.poll(done, { timeout: 12_000, intervals: [50] }).toBe(true);
+    } finally {
+      await page.keyboard.up('ArrowUp');
+    }
+  };
+  await hold(async () => (await api(page, 'area')) === 'shop');
+  await hold(async () => (await api(page, 'nearby')) === 'talk');
+  await page.waitForTimeout(300);
+  const s = (await api(page, 'npcSprites')).find((x) => x.id === 'merchant');
+  const n = (await api(page, 'npcState')).find((x) => x.id === 'merchant');
+  expect(s.key).toMatch(/^npc\.merchant\.idle\.down\.\d$/);
+  expect(s.density).toBe(4);
+  expect([s.w, s.h, s.x, s.y, ...s.anchor]).toEqual([16, 28, Math.round(n.x), Math.round(n.y), 0.5, 1]);
+  expect(await npcBundles(page)).toEqual(allNpcBundles);
+  await page.screenshot({ path: testInfo.outputPath('shop.png') });
+  await page.keyboard.press('j');
+  await expect.poll(async () => (await api(page, 'dialogue'))?.speaker).toBe('雑貨屋');
+  for (let k = 0; k < 6 && !(await api(page, 'dialogue'))?.choices; k++) await page.click('#dialogue');
+  await page.click('#dialogue-choice-0');
+  await expect(page.locator('#shop-menu')).toBeVisible();
+  expect(errors).toEqual([]);
+  await context.close();
+});
+
+test('?v3=0 and the default: the villagers as before — no villager bundles, the approved frames (density 2), stored left frames, nothing mirrored', async ({ browser }) => {
+  for (const q of ['', '&v3=0']) {
+    const { context, page, errors, requests } = await open(browser, PRO, q);
+    await api(page, 'teleport', ...VILLAGE_AT);
+    await page.waitForTimeout(1500);
+    expect(await npcBundles(page)).toEqual([]);
+    const v3 = await api(page, 'v3');
+    expect(v3.npcs.people).toEqual([]);
+    expect(v3.npcs.wanted).toEqual([]);
+    for (const who of NPC_PEOPLE) for (const k of [`npc.${who}.idle.down.0`, `npc.${who}.walk.left.5`]) expect(await api(page, 'textureDensity', k), k).toBe(2);
+    const smith = await api(page, 'npcShown', 'smith', { facing: 'left', moving: true, walkTime: 0.3 });
+    const right = await api(page, 'npcShown', 'smith', { facing: 'right', moving: true, walkTime: 0.3 });
+    expect(smith.key).toBe('npc.smith.walk.left.2');
+    expect(smith.mirrored).toBe(false);
+    expect(smith.density).toBe(2);
+    expect(JSON.stringify(smith.frame)).not.toBe(JSON.stringify(right.frame));
+    const sprites = await api(page, 'npcSprites');
+    expect(sprites.length).toBeGreaterThanOrEqual(5);
+    for (const s of sprites) expect([s.density, s.mirrored, s.w, s.h], s.key).toEqual([2, false, 16, 28]);
+    expect(requests.filter((u) => u.includes('release-v3-'))).toEqual([]);
+    expect(errors).toEqual([]);
+    await context.close();
+  }
 });

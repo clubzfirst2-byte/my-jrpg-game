@@ -90,7 +90,8 @@ export class NpcView {
 
   /** What is on screen: each villager's frame, size in game px and draw order. */
   debug() {
-    // (graphics v3: density = the drawn texture's art px per game px; mirrored = a left frame drawn from its right frame)
-    return [...this.sprites].map(([id, s]) => ({ id, key: this.keys.get(id), w: s.texture.width, h: s.texture.height, zIndex: s.zIndex, x: s.x, y: s.y, alpha: s.alpha, anchor: [s.anchor.x, s.anchor.y], density: s.texture.source.resolution, mirrored: s.scale.x < 0 }));
+    // (graphics v3: density = the drawn texture's art px per game px; mirrored = a left frame drawn from its right frame;
+    // frame = the texture's place on its atlas, game px)
+    return [...this.sprites].map(([id, s]) => ({ id, key: this.keys.get(id), w: s.texture.width, h: s.texture.height, zIndex: s.zIndex, x: s.x, y: s.y, alpha: s.alpha, anchor: [s.anchor.x, s.anchor.y], density: s.texture.source.resolution, mirrored: s.scale.x < 0, frame: [s.texture.frame.x, s.texture.frame.y, s.texture.frame.width, s.texture.frame.height] }));
   }
 }
