@@ -146,6 +146,7 @@ export function stepSwitches(state) {
       state.progress.gates.push(link);
       state.saveRequested = true;
       state.events.push({ type: 'gateOpen', tick: state.tick, id: link });
+      markChapter(state, link);
     }
   }
 }
@@ -164,4 +165,17 @@ export function unlightSconce(state, o) {
   o.lit = false;
   state.env.version++;
   state.events.push({ type: 'sconceOut', tick: state.tick });
+}
+
+/**
+ * Volume phase 1: the last trial of a chapter (a region's `chapter.gate`, opened by switches: vanes,
+ * plates, sensors...) sets the chapter's flag.
+ * Also run on load (features.js applyProgress): a save with the gate open has the flag.
+ * @param {any} state @param {string} link
+ */
+export function markChapter(state, link) {
+  const ch = (state.regions ?? []).find((/** @type {any} */ r) => r.chapter?.gate === link)?.chapter;
+  if (!ch || state.progress.flags[ch.flag]) return;
+  state.progress.flags[ch.flag] = true;
+  state.events.push({ type: 'chapterDone', tick: state.tick, id: ch.id });
 }

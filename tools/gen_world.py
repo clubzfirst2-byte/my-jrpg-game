@@ -926,7 +926,11 @@ T_.sg(109, y0 + 7, '.'); T_.obj('brazier', 101, y0 + 7)
 T_.sg(99, y0 + 10, '.'); T_.obj('brazier', 107, y0 + 10)
 T_.pillar_gate('trial_winds', '二つ風の試練', (82, 20), y0)
 T_.extra = {'climate': 'temperate', 'bundle': 'region:plains', 'col': 2, 'art': 'plains', 'parent': 'plains', 'westMargin': T_MARGIN,
-            'winds': T_WINDS + T_ROOM_WINDS, 'updrafts': T_UPDRAFTS + T_ROOM_UPDRAFTS}
+            'winds': T_WINDS + T_ROOM_WINDS, 'updrafts': T_UPDRAFTS + T_ROOM_UPDRAFTS,
+            # The chapter's end: 二つ風の試練 on the high terrace (reached only through the air: K1 or a
+            # vine bridge, then L1 or a vine bridge, then U1). Solving it sets the flag. Nothing reads the
+            # flag yet: what it opens in the main story is for the people who decide the story.
+            'chapter': {'id': 'terrace', 'gate': 'trial_winds', 'flag': 'chapter_terrace'}}
 # The pass: east from under the plains' windmill hill (rows 30-32), and back.
 PASS_PT = range(30, 33)
 _trees_before = sum(row.count('T') for row in P.g)
@@ -981,7 +985,7 @@ out = """// @ts-check
 // stacks the regions under the island and offsets them).
 
 /** @typedef {{ id: string, tx: number, ty: number, facing: 'up' | 'down' | 'left' | 'right', to: { region: string, tx: number, ty: number }, if?: import('../features.js').FlagCondition[] }} PassDef */
-/** @typedef {import('../tilemap.js').IslandDef & { id: string, name: string, climate: 'temperate' | 'dry' | 'cold', bundle: string, col?: number, art?: string, parent?: string, westMargin?: number, passes?: PassDef[], finalBoss?: import('../../entities/finalBoss.js').FinalBossDef }} RegionDef */
+/** @typedef {import('../tilemap.js').IslandDef & { id: string, name: string, climate: 'temperate' | 'dry' | 'cold', bundle: string, col?: number, art?: string, parent?: string, westMargin?: number, chapter?: import('../world.js').ChapterDef, passes?: PassDef[], finalBoss?: import('../../entities/finalBoss.js').FinalBossDef }} RegionDef */
 
 /** @type {RegionDef[]} */
 export const REGIONS = %s;

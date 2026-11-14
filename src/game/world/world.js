@@ -8,7 +8,12 @@ import { ISLAND } from './maps/island.js';
 import { REGIONS } from './maps/regions.js';
 
 /**
- * @typedef {{ id: string, name: string, tx: number, ty: number, tw: number, th: number, climate: 'temperate' | 'dry' | 'cold', bundle: string | null, art?: string, parent?: string }} RegionInfo
+ * @typedef {{ id: string, name: string, tx: number, ty: number, tw: number, th: number, climate: 'temperate' | 'dry' | 'cold', bundle: string | null, art?: string, parent?: string, chapter?: ChapterDef }} RegionInfo
+ */
+/**
+ * Volume phase 1: a chapter that is gone through, not round. Opening its last trial (`gate`) sets
+ * `flag` (switches.js). What the flag opens in the main story is decided elsewhere.
+ * @typedef {{ id: string, gate: string, flag: string }} ChapterDef
  */
 
 /** Columns start on chunk boundaries (32 tiles). */
@@ -89,7 +94,7 @@ export function stitchWorld(island, regions) {
     for (const w of r.warps ?? []) def.warps.push({ ...w, tx: w.tx + ox, ty: w.ty + oy, toTx: w.toTx + ox, toTy: w.toTy + oy });
     // The region (its climate and art bundle) includes its strip of rooms.
     // Volume phase 1: an 奥地 (`parent`) is dressed in its parent region's art (`art`) until its own is drawn.
-    def.regions.push({ id: r.id, name: r.name, tx: ox, ty: oy, tw: r.ground[0].length, th: r.ground.length, climate: r.climate, bundle: r.bundle, ...(r.art ? { art: r.art } : {}), ...(r.parent ? { parent: r.parent } : {}) });
+    def.regions.push({ id: r.id, name: r.name, tx: ox, ty: oy, tw: r.ground[0].length, th: r.ground.length, climate: r.climate, bundle: r.bundle, ...(r.art ? { art: r.art } : {}), ...(r.parent ? { parent: r.parent } : {}), ...(r.chapter ? { chapter: r.chapter } : {}) });
   }
   // P10.3: passes between the columns (each end is given in its own region's coordinates).
   // v1.0 (C5/C6): the island has one too (the beach ring to the source's antechamber), and a pass

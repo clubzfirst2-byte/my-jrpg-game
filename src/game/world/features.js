@@ -225,6 +225,8 @@ export function applyProgress(state, saved) {
   pr.quests = { ...pr.quests };
   pr.bosses = [...pr.bosses];
   pr.surveyed = [...(pr.surveyed ?? [])];
+  // Volume phase 1: a chapter whose last trial is open is done (the flag is only ever added).
+  for (const r of state.regions ?? []) if (r.chapter && pr.gates.includes(r.chapter.gate)) pr.flags[r.chapter.flag] = true;
   pr.inv = normalizeInventory(saved.inv);
   pr.picked = { ...(saved.picked ?? {}) };
   state.progress = pr;

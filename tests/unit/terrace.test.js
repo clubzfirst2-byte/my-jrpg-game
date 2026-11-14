@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { stepGame } from '../../src/game/state.js';
 import { WORLD, regionAt } from '../../src/game/world/world.js';
-import { areaAt } from '../../src/game/world/features.js';
+import { areaAt, applyProgress, emptyProgress } from '../../src/game/world/features.js';
 import { COMBAT } from '../../src/game/entities/playerCombat.js';
 import { Ground } from '../../src/game/world/tilemap.js';
 import { windReaches, laneWindAt, updraftAt, WIND } from '../../src/game/env/wind.js';
@@ -331,5 +331,106 @@ describe('二つ風の試練: both vanes at once', () => {
     shoot(s);
     run(s, none, 30);
     expect(opened(s, t)).toBe(false);
+  });
+});
+
+// The terrace is the first chapter that is gone through, not round (plan_10h.md S1): its end is
+// 二つ風の試練 on the high terrace, and opening it sets the flag chapter_terrace. Nothing in the
+// main story reads the flag yet (what it opens is decided by the people who decide the story).
+describe('風切りの段丘 as a chapter: its end cannot be reached without going through it', () => {
+  const W = WORLD.ground[0].length;
+  const s0 = terraceState();
+  const map = s0.map;
+  const passable = (i) => map.ground[i] !== Ground.DARK && map.ground[i] !== Ground.PIT && (!map.solid[i] || ['tree', 'bramble'].includes(s0.env.objectAt.get(i)?.type));
+  const climbable = (i) => map.ground[i] !== Ground.RUIN && map.ground[i] !== Ground.WALL;
+  /** Tiles reached from where the pass arrives: walking, jumping up a level, climbing earth, dropping, and the given air routes (no doorways). */
+  const reach = (routeIds) => {
+    const jumps = new Map();
+    for (const r of AIR_ROUTES.filter((x) => routeIds.includes(x.id))) {
+      const a = T(r.from[0], r.from[1]);
+      const b = T(Math.round((r.to.x0 + r.to.x1) / 2), Math.round((r.to.y0 + r.to.y1) / 2));
+      jumps.set(a.ty * W + a.tx, [...(jumps.get(a.ty * W + a.tx) ?? []), b.ty * W + b.tx]);
+    }
+    const pass = WORLD.warps.find((w) => w.id === 'pass-terrace');
+    const start = pass.toTy * W + pass.toTx;
+    const seen = new Set([start]);
+    const q = [start];
+    while (q.length) {
+      const i = q.pop();
+      for (const j of [i - 1, i + 1, i - W, i + W, ...(jumps.get(i) ?? [])]) {
+        if (seen.has(j) || !passable(j)) continue;
+        const air = jumps.get(i)?.includes(j);
+        if (!air && map.elev[j] - map.elev[i] > 16 && !climbable(j)) continue;
+        if (!air && Math.abs((j % W) - (i % W)) > 1) continue;
+        seen.add(j);
+        q.push(j);
+      }
+    }
+    return seen;
+  };
+  const door = WORLD.warps.find((w) => w.id === 'trial_winds-in'); // the doorway at the pillar
+  const end = door.ty * W + door.tx;
+  const ALL = ['K1-east', 'K3-east', 'U1-high'];
+
+  it('the region marks its chapter: 二つ風の試練 is the last trial, chapter_terrace the flag (the only chapter so far)', () => {
+    expect(WORLD.regions.find((r) => r.id === 'terrace').chapter).toEqual({ id: 'terrace', gate: 'trial_winds', flag: 'chapter_terrace' });
+    expect(WORLD.regions.filter((r) => r.chapter).map((r) => r.id)).toEqual(['terrace']);
+  });
+
+  it('from the pass, the way up to the gate of 二つ風の試練 is the first glide, the wind lane and the updraft, in that order', () => {
+    expect(reach(ALL).has(end)).toBe(true);
+    for (const leftOut of ALL) expect(reach(ALL.filter((x) => x !== leftOut)).has(end), `without ${leftOut}`).toBe(false);
+    expect(reach([]).has(end)).toBe(false);
+  });
+
+  it('the only way into the terrace is its pass (no other doorway or pass lands in it)', () => {
+    const r = WORLD.regions.find((x) => x.id === 'terrace');
+    const into = WORLD.warps.filter((w) => regionAt(WORLD.regions, w.toTx, w.toTy)?.id === 'terrace' && regionAt(WORLD.regions, w.tx, w.ty)?.id !== 'terrace');
+    expect(into.map((w) => w.id)).toEqual(['pass-terrace']);
+    expect(r.tx).toBe(256);
+  });
+
+  it('opening 二つ風の試練 sets chapter_terrace (once, with an event); the other two trials do not', () => {
+    const v = room('trial_vane');
+    v.s.progress.gates.push('trial_rise'); // (as if 吹き上げの試練 were done too)
+    place(v.s, v.at(101, 7), 'left');
+    for (let k = 0; k < 3; k++) swing(v.s);
+    place(v.s, v.at(106, 8), 'up');
+    swing(v.s);
+    run(v.s, none, 30);
+    expect(opened(v.s, 'trial_vane')).toBe(true);
+    expect(v.s.progress.flags.chapter_terrace).toBeUndefined();
+
+    const { s, at } = room('trial_winds');
+    const seen = [];
+    const step = (input, n) => {
+      for (let k = 0; k < n; k++) {
+        stepGame(s, input);
+        for (const e of s.events) if (e.type === 'chapterDone' && !seen.includes(e)) seen.push(e);
+      }
+    };
+    place(s, at(103, 7), 'up');
+    step({ ...none, attack: true }, 1);
+    step(none, 40);
+    for (const stand of [107, 106]) {
+      place(s, at(stand, 9), 'left');
+      for (let k = 0; k < 3; k++) {
+        step({ ...none, attack: true }, 1);
+        step(none, 40);
+      }
+    }
+    step(none, 60);
+    expect(opened(s, 'trial_winds')).toBe(true);
+    expect(s.progress.flags.chapter_terrace).toBe(true);
+    expect(seen.map((e) => e.id)).toEqual(['terrace']);
+  });
+
+  it('a save with 二つ風の試練 open has the flag when loaded; one without it does not', () => {
+    const a = terraceState();
+    applyProgress(a, { ...emptyProgress(), gates: ['trial_light', 'trial_winds'], flags: { princess_met: true } });
+    expect(a.progress.flags).toEqual({ princess_met: true, chapter_terrace: true });
+    const b = terraceState();
+    applyProgress(b, { ...emptyProgress(), gates: ['trial_light', 'trial_vane'], flags: { princess_met: true } });
+    expect(b.progress.flags).toEqual({ princess_met: true });
   });
 });
