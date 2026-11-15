@@ -1,4 +1,5 @@
-"""Reference numbers for the v3 bosses (no pass / fail here: the independent inspection decides).
+"""Reference numbers for the v3 bosses (no pass / fail here: the independent inspection decides), and one
+condition for every boss: no small transparent holes inside the figure (exit code 1 when there are).
 Run after gen_boss_v3.py: python3 tools/art_v3/check_boss_v3.py [kind]
 """
 
@@ -253,8 +254,10 @@ def main():
     print("lowest row differs from v2 x 2 (name, v3, v2x2+1):", tot["bottom"])
     print("fragments (frames with separate pieces under 12 texels):", tot["frag"])
     hol = {n: small_holes(a) for n, a in imgs.items()}
-    print("small transparent holes inside the figure (6 texels or fewer): total", sum(len(v) for v in hol.values()),
+    n_holes = sum(len(v) for v in hol.values())
+    print("small transparent holes inside the figure (6 texels or fewer): total", n_holes,
           " frames with any:", {n: len(v) for n, v in hol.items() if v})
+    print("CONDITION (every boss): small transparent holes == 0 ->", "met" if n_holes == 0 else "NOT MET")
     cs_n = {n: len(components(imgs[n][..., 3] == 255)) for n in names}
     print("frames with more than 1 separate piece (orbs, chips are meant):", {n: c for n, c in cs_n.items() if c > 1})
     # identical frames
@@ -353,6 +356,8 @@ def main():
     print(f"memory: {len(ns)} frames (the minimal pair shares idle.0 / move.0): full frames {raw / 1e6:.3f} MB, +10% {raw * 1.1 / 1e6:.3f} MB;"
           f" trimmed to the opaque box {trim / 1e6:.3f} MB, +10% {trim * 1.1 / 1e6:.3f} MB")
     print(f"png bytes: {sum(os.path.getsize(f) for f in files) / 1e3:.1f} KB")
+    if n_holes:
+        sys.exit(1)  # the one condition this script applies: no pin holes (the rest are reference numbers)
 
 
 if __name__ == "__main__":

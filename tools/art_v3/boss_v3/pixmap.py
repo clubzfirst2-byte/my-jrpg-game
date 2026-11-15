@@ -207,3 +207,41 @@ class Frame:
                     img[s, :3] = r[t]
                     img[s, 3] = 255
         return img
+
+
+class GapFrame(Frame):
+    """A frame of this boss. One more rule after the parts are placed: a pocket of 6 texels or fewer that
+    the figure closes in on every side (two parts meeting with a pin gap between them) is a deep gap,
+    not a hole to the ground: it takes tone 0 of the material around it. The pockets this fills are
+    counted in self.pockets. Used by the bosses (boss_frost, boss_root)."""
+
+    def finish(self):
+        h, w = self.mat.shape
+        tr = self.mat < 0
+        seen = np.zeros((h, w), bool)
+        n = 0
+        for y, x in zip(*np.nonzero(tr)):
+            if seen[y, x]:
+                continue
+            st, comp, edge = [(y, x)], [], False
+            seen[y, x] = True
+            while st:
+                a, b = st.pop()
+                comp.append((a, b))
+                if a in (0, h - 1) or b in (0, w - 1):
+                    edge = True
+                for r, c in ((a + 1, b), (a - 1, b), (a, b + 1), (a, b - 1)):
+                    if 0 <= r < h and 0 <= c < w and tr[r, c] and not seen[r, c]:
+                        seen[r, c] = True
+                        st.append((r, c))
+            if edge or len(comp) > 6:
+                continue
+            n += 1
+            for a, b in comp:
+                around = [int(self.mat[r, c]) for r, c in ((a + 1, b), (a - 1, b), (a, b + 1), (a, b - 1))
+                          if 0 <= r < h and 0 <= c < w and self.mat[r, c] >= 0]
+                self.mat[a, b] = max(set(around), key=around.count)
+                self.tone[a, b] = 0
+                self.edge[a, b] = False
+        self.pockets = n
+        return super().finish()
