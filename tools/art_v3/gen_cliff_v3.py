@@ -1,21 +1,22 @@
 """v3 steps and cliffs (STYLE.md 6 "まだ": the step rims, step shadows and cliff faces), drawn by hand
-at density 4 (no v2 picture is scaled). Round 1: the DESERT (DESERT.md 7).
+at density 4 (no v2 picture is scaled). DESERT.md 7 (round 1, the desert), 8 (round 4: earth faces,
+plains / forest rims; round 5: the edge-typed faces, the forest's tops, the winter earth faces).
 
-The engine's rules are v2's, unchanged (docs/art-release-v2/terrain/NAMES.md 2b and 4):
-  * cliff faces: `face.<mat>.<top|mid><-base?>.<4|8><.v1?>` stacked down the south side of a raised cell
-    in bands of 8 / 4 game px (gameView.addFace); the variant from the cell's hash (terrainArt.faceVariant:
-    plateau materials sand / desert / path have "" and ".v1"). The same KEYS as today at density 4:
-    64 x 32 (.8) and 64 x 16 (.4).
-  * step rims: `<prefix>.v3.step.<mask>.<v>` over a raised cell's surface (mask = 1 lowerNorth +
-    2 lowerEast + 4 lowerWest, v = hash(tx + 5, ty + 9) % 2), the shadow `<prefix>.v3.step.shade.<v>` on
-    the lower cell east of it (v = hash(tx + 6, ty + 9) % 2), the inner corners
-    `<prefix>.v3.step.inner.<ne|nw>`. 64 x 64, anchor top-left. (".v3." as the v3 ground keys: the
-    same scheme as v2's `<prefix>.step.*`.)
-Joins: every wave here has a period of 64 texels along the side (the tile's width), and a variant only
-adds a bump that is 0 at the tile's two ends, so a rim / face joins its neighbours whatever their
-variants (v2's rule: the same outermost columns). Face bands: the first and last 3 rows of a band are
-plain rock, so bands stack in any order.
-Run: python3 tools/art_v3/gen_cliff_v3.py [desert]
+Rims (v2's rules, unchanged: docs/art-release-v2/terrain/NAMES.md 2b): `<prefix>.v3.step.<mask>.<v>`
+over a raised cell's surface (mask = 1 lowerNorth + 2 lowerEast + 4 lowerWest, v = hash(tx + 5, ty + 9)
+% 2), the shadow `<prefix>.v3.step.shade.<v>` on the lower cell east of it (v = hash(tx + 6, ty + 9) % 2),
+the inner corners `<prefix>.v3.step.inner.<ne|nw>`; 64 x 64, anchor top-left. Their waves have a period of
+64 along the side and a variant only adds a bump that is 0 at the tile's ends.
+Faces: bands of 8 / 4 game px stacked down the south side of a raised cell (gameView.addFace), 64 x 32 /
+64 x 16, the v1 / v2 key names `face.<desert|earth>.<top|mid><-base?>.<8|4>` with
+  * ""  / ".v1" / ".v2": the set for the rule decided on 2026-11-14 (band k takes (hash(tx, ty) + k) % 3)
+  * ".e<L><R>" (L, R 0-2): the round-5 edge-typed set (NAMES.md 5, DESERT.md 8.7): a band's left / right
+    end has one of 3 edge types (layer heights and thicknesses), chosen by the engine per tile end, so the
+    ends of a row of tiles are not all the same (no "chain" of narrow waists every 64 texels)
+  seasons: summer (no prefix), "autumn." for the tops (top, top-base), "winter." for every part (snow
+  caps on the ledges); the forest's tops `<season.>face.earth.forest.<top|top-base>.<8|4><suffix>`
+  (a moss lip). The first / last rows of a band have no ledge edge, so bands stack in any order.
+Run: python3 tools/art_v3/gen_cliff_v3.py [desert|earth|all]
 """
 
 import math
@@ -57,36 +58,82 @@ def face_canvas(h):
     return Canvas(64, 4 * h, {"rock": lift_ramp(MATERIALS["desert"]["rock"]), "sand": r["sand"], "fine": r["fine"]})
 
 
-FACE_VARIANTS = 3  # round 4: 3 variants for every face material (".v1", ".v2"); see DESERT.md 9 (engine)
+FACE_VARIANTS = 3  # the plain / ".v1" / ".v2" set (the rule decided 2026-11-14: band k takes (hash + k) % 3)
+EDGE_TYPES = 3  # round 5 (inspection 2, P1-A): the edge-typed set ".e<L><R>" (DESERT.md 8.7)
+
+# Round 5: a face picture is described by a spec (L, R, mid): L, R the edge types (0-2) of its left /
+# right end, mid its own movement in the middle of the tile. Every profile (the layer edges, the lip,
+# the foot, the laminations) runs from the left type's value at x = 0 to the right type's at x = 63
+# (smoothstep), plus a wave every picture shares and the middle's bump. The values at a tile's end
+# depend only on that end's type, so a tile joins any neighbour that has the same type on the shared
+# end; with 3 types the ends of a row are not all the same any more (no node every 64 texels: the
+# "chain" of P1-A). The plain / .v1 / .v2 set (kept for the rule (hash + k) % 3) is (1, 1, -1 / 0 / 1)
+# with a small middle movement.
+ENDS = {  # per profile: the offset (rows) of each edge type
+    "ya": (-3.0, 0.0, 2.5), "yb": (3.0, 0.0, -2.0), "yc": (-2.0, 0.0, 2.0), "lam": (-2.0, 0.0, 2.0),
+    "lip": (-1.5, 0.0, 1.5), "foot": (-2.0, 0.0, 2.0),
+}
 
 
-def band_body(c, k, H, part, variant, seed, style):
-    """The body of one face band (round 4, inspection P1-4: no lattice when bands stack):
-      * the base tone, with 1-2 faint seams (one row a tone darker) across the whole tile on waves that
-        every part and variant shares (the ends meet any neighbour tile; no pinch at the tile's ends)
-      * lenses: 1-3 layers that thicken and thin out INSIDE the tile (x 4..60), each part / variant its
-        own places and sizes (sandstone: a lighter lens, lit top row, shaded underside; soil: packed
-        darker soil, its top row a little lighter); a lens never reaches the band's top / bottom 2 rows
-      * joints: 1-2 per band, partial height, own columns per part / variant
-      * weathering: pits (3 x 2: dark top, shaded row, a lit lip under) and, on sandstone, dark streaks
-        (2 wide) running down from a lens
-    style "sandstone" (desert) / "soil" (earth)."""
-    rng = random.Random(seed)
+def smooth(x):
+    t = x / 63.0
+    return t * t * (3 - 2 * t)
+
+
+def prof(x, base, key, seed, spec, amp=1.5, mid_scale=1.0):
+    """base + the ends' offsets (left type -> right type) + a shared wave (0 at both ends' values is not
+    needed: the wave has a period of 64, so x = 63 and the next tile's x = 0 are neighbours on it) + the
+    middle bump (0 at both ends)."""
+    L, R, mid = spec
+    e = ENDS[key]
+    s = smooth(x)
+    v = base + e[L] * (1 - s) + e[R] * s + amp * wave(x, seed, (1.0, 0.6))
+    return v + mid * mid_scale * math.sin(math.pi * x / 63.0) ** 2
+
+
+def spec_seed(spec):
+    L, R, mid = spec
+    return L * 7 + R * 3 + int(round(mid * 10)) * 31
+
+
+def specs():
+    """(suffix, spec) of every picture of a part: the compat set and the 9 edge-typed ones."""
+    out = [("", (1, 1, -1.2)), (".v1", (1, 1, 0.0)), (".v2", (1, 1, 1.2))]
+    for L in range(EDGE_TYPES):
+        for R in range(EDGE_TYPES):
+            mid = ((L * 3 + R) % 5 - 2) * 1.3  # -2.6 .. 2.6 by the pair
+            out.append((f".e{L}{R}", (L, R, mid)))
+    return out
+
+
+def band_body(c, H, part, spec, seed, style, pebbles=False):
+    """The body of one face band (64 x H): layers whose edges follow prof() (sandstone: a lighter hard
+    layer, lit top row, shaded rows under; soil: a darker packed layer, its top row in shadow), an 8-px
+    band's thin dark seam, bedding laminations (shared waves, broken by the spec), a lens in about half
+    of the pictures (inside the tile, never at its ends), partial joints, pits, streaks (sandstone),
+    pebbles (soil, 0-2, one tone darker than round 4, at varying heights)."""
+    rng = random.Random(seed * 13 + spec_seed(spec))
     big = H > 16
-    # round 4c: strata across the whole tile. A middle layer between two edges on waves every part and
-    # variant shares (the ends meet any neighbour tile); each part / variant moves the two edges by its
-    # own bumps in the middle of the tile (0 at the ends), independently, so the layer is thicker,
-    # thinner, higher or lower from band to band. Sandstone: the layer a tone lighter (a lit top row,
-    # a shaded row under it); soil: a tone darker (packed soil, its top row in shadow). An 8-px band also
-    # has a thin dark seam lower down. Then 1-2 small lenses of the other kind inside the tile.
     pi = {"top": 1, "mid": 2, "top-base": 3, "mid-base": 4}[part]
-    ba = (0.0, 5.0, -4.0)[variant] + (0.8, -0.8, 1.2, -1.2)[pi - 1]
-    bb = (0.0, -3.0, 5.0)[variant] + (-0.6, 0.9, -1.0, 0.7)[pi - 1]
+    pm = (0.8, -0.8, 1.2, -1.2)[pi - 1]
+    sp = (spec[0], spec[1], spec[2] + pm)
     y_a, y_b = (9, 18) if big else (5, 10)
     lay_t = 4 if style == "sandstone" else 2
+    for li, y0 in enumerate((4, 13, 22, 29) if big else (3, 12)):  # laminations first (the layer covers them)
+        gaps = []
+        for _ in range(rng.randint(1, 3)):
+            g0 = rng.randint(4, 52)
+            gaps.append((g0, min(60, g0 + rng.randint(4, 12))))
+        lt = 2 if li % 2 == 0 else 4
+        for x in range(64):
+            if any(g0 <= x < g1 for g0, g1 in gaps):
+                continue
+            y = int(round(prof(x, y0, "lam", 97 + li, sp, 1.0, 0.3)))
+            if 2 <= y < H - 2:
+                c.tone[y, x] = lt
     for x in range(64):
-        ya = int(round(y_a + 1.6 * wave(x, 91, (1.0, 0.6), 1, ba)))
-        yb = int(round(y_b + 1.8 * wave(x, 92, (1.0, 0.5), 1, bb)))
+        ya = int(round(prof(x, y_a, "ya", 91, sp, 1.6, 1.0)))
+        yb = int(round(prof(x, y_b, "yb", 92, sp, 1.8, -0.8)))
         ya = max(2, min(H - 8 if big else H - 6, ya))
         yb = min(H - 6 if big else H - 3, max(ya + 2, yb))
         for y in range(ya, yb):
@@ -96,26 +143,12 @@ def band_body(c, k, H, part, variant, seed, style):
         if style == "sandstone" and yb + 1 < H - 2:
             c.tone[yb + 1, x] = 2
         if big:
-            yc = int(round(26 + 1.2 * wave(x, 93, (1.0, 0.6), 1, -ba * 0.5)))
+            yc = int(round(prof(x, 26, "yc", 93, sp, 1.2, -0.5)))
             yc = min(H - 4, max(yb + 3, yc))
             c.tone[yc, x] = 2
-    # thin bedding laminations in the plain rock / soil: 1-row lines on shared waves, alternately a tone
-    # darker and a tone lighter, broken in 1-3 places of each part / variant's own
-    for li, y0 in enumerate((4, 13, 22, 29) if big else (3, 12)):
-        gaps = []
-        for _ in range(rng.randint(1, 3)):  # (inside x 4..60: the tile's ends stay the same for every variant)
-            g0 = rng.randint(4, 52)
-            gaps.append((g0, min(60, g0 + rng.randint(4, 12))))
-        lt = 2 if li % 2 == 0 else 4
-        for x in range(64):
-            if any(g0 <= x < g1 for g0, g1 in gaps):
-                continue
-            y = int(round(y0 + 1.0 * wave(x, 97 + li, (1.0, 0.6), 1, (ba - bb) * 0.3)))
-            if 2 <= y < H - 2 and c.tone[y, x] == 3:
-                c.tone[y, x] = lt
-    for i in range(rng.randint(1, 2) if big else 1):  # small lenses of the other kind
+    if rng.random() < 0.5:  # a lens in about half of the pictures (inside the tile)
         ln = rng.randint(14, 30)
-        x0 = rng.randint(4, 60 - ln)
+        x0 = rng.randint(6, 58 - ln)
         th = rng.uniform(3.0, 5.0)
         yc = rng.uniform(3 + th / 2, H - 3 - th / 2)
         kind = -1 if style == "sandstone" else 1
@@ -125,8 +158,7 @@ def band_body(c, k, H, part, variant, seed, style):
                 continue
             for y in range(max(2, int(round(yc - half))), min(H - 3, int(round(yc + half)))):
                 c.tone[y, x] = 3 + kind
-    lenses = []
-    for n_ in range(1 + (rng.random() < 0.6)):  # partial joints
+    for n_ in range(rng.randint(0, 2)):  # partial joints (some pictures none)
         x = rng.randint(6, 56)
         y0 = rng.randint(2, H // 2)
         y1 = rng.randint(min(H - 3, y0 + 5), H - 3)
@@ -135,14 +167,14 @@ def band_body(c, k, H, part, variant, seed, style):
             c.tone[y, xx] = 1
             if c.tone[y, xx + 1] in (2, 3):
                 c.tone[y, xx + 1] = c.tone[y, xx + 1] + 1
-    for _ in range(rng.randint(3, 6) if big else rng.randint(1, 3)):  # pits
+    for _ in range(rng.randint(2, 5) if big else rng.randint(0, 2)):  # pits
         x, y = rng.randint(4, 56), rng.randint(3, H - 6)
         for dx in range(3):
             c.tone[y, x + dx] = 1
             c.tone[y + 1, x + dx] = 2
             c.tone[y + 2, x + dx] = min(5, max(int(c.tone[y + 2, x + dx]), 4))
     if style == "sandstone":
-        for _ in range(rng.randint(1, 2)):  # dark streaks down from the layer
+        for _ in range(rng.randint(0, 2)):  # dark streaks down from the layer
             x = rng.randint(6, 54)
             ys = np.nonzero(c.tone[:, x] == 1)[0]
             y0 = int(ys[0]) if len(ys) else H // 2
@@ -150,31 +182,35 @@ def band_body(c, k, H, part, variant, seed, style):
                 for dx in (0, 1):
                     if c.tone[y, x + dx] >= 3:
                         c.tone[y, x + dx] = 2
+    if pebbles:  # round 5 (P2): 0-2 stones, one tone darker, at varying heights (some pictures none)
+        kp = c.mid("pebble")
+        ke = c.mat[H // 2, 32]
+        for _ in range(rng.choice((0, 0, 1, 1, 2))):
+            x, y = rng.randint(5, 54), rng.randint(3, H - 7)
+            for dy, (a, b, t) in enumerate(((1, 3, 4), (0, 4, 2), (0, 4, 1))):
+                for dx in range(a, b):
+                    c.mat[y + dy, x + dx], c.tone[y + dy, x + dx] = kp, (3 if (dy == 1 and dx == 0) else t)
+            for dx in range(1, 5):
+                if c.mat[y + 3, x + dx] == ke:
+                    c.tone[y + 3, x + dx] = 1
+    return sp
 
 
-JOINTS = {0: (21, 47), 1: (14, 38)}  # round 3: 2 vertical joints per tile, by variant (never at the ends)
-
-
-def face(mat, part, h, variant):
-    """One face band (64 x 4h) of a sandstone mesa: blocks between vertical joints (the joint a dark
-    column, the block left of it ends in a shaded column, the block right of it starts with a lit
-    column: light from the left; the joints run from the band's top to its bottom, so stacked bands
-    give continuous joints), one wavy ledge in an 8-px band (a shaded seam under a lit row, its height
-    per part / variant), short fractures and cracks, a sand lip with drips on a top band, a sand pile
-    at the foot of a base band. The first / last rows of a band hold only the blocks, so bands stack."""
+def face(mat, part, h, spec):
+    """One sandstone face band (64 x 4h): band_body, a sand lip with drips on a top band, a sand pile at
+    the foot of a base band (both following prof(): their ends by the edge types)."""
     H = 4 * h
     top, base = part.startswith("top"), part.endswith("base")
     c = face_canvas(h)
     pi = {"top": 1, "mid": 2, "top-base": 3, "mid-base": 4}[part]
-    seed = MATERIALS[mat]["seed"] * 1000 + pi * 10 + h + 5 * variant
-    rng = random.Random(seed + 1)
+    seed = MATERIALS[mat]["seed"] * 1000 + pi * 10 + h
+    rng = random.Random(seed + 1 + spec_seed(spec))
     kr, kf = c.mid("rock"), c.mid("fine")
     c.mat[:, :], c.tone[:, :] = kr, 3
-    band_body(c, kr, H, part, variant, seed, "sandstone")
-    bump = (1.0, -1.4, 1.8, -1.0)[pi - 1] + (0.0, 2.6, -2.6)[variant]
-    if top:  # the sand lip: 5-8 rows of the plateau's sand, lit top rows, a shadow under it on the rock
+    sp = band_body(c, H, part, spec, seed, "sandstone")
+    if top:
         for x in range(64):
-            L = int(round(8 + 1.4 * wave(x, 31, (1.0, 0.6), 1, bump * 0.7)))
+            L = int(round(prof(x, 8, "lip", 31, sp, 1.4, 0.7)))
             L = max(7, min(10, L))
             for y in range(L):
                 c.mat[y, x] = kf
@@ -183,16 +219,16 @@ def face(mat, part, h, variant):
             c.mat[L + 1, x], c.tone[L + 1, x] = kr, 1
             if c.tone[L + 2, x] == 3:
                 c.tone[L + 2, x] = 2
-        for _ in range(rng.randint(2, 3)):  # drips: sand run down the rock, 2 wide, 3-7 long
+        for _ in range(rng.randint(1, 3)):
             x = rng.randint(4, 57)
             y0 = int(np.argmax(c.mat[:, x] == kr))
             for k in range(rng.randint(4, 9)):
                 if y0 + k < H - 3:
                     for dx in (0, 1):
                         c.mat[y0 + k, x + dx], c.tone[y0 + k, x + dx] = kf, (4 if dx == 0 else 3)
-    if base:  # the foot: the rock darkens in its last rows, a sand pile against it (lit top)
+    if base:
         for x in range(64):
-            S = int(round(5 + 1.8 * wave(x, 53, (1.0, 0.7), 1, bump)))
+            S = int(round(prof(x, 5, "foot", 53, sp, 1.8, 1.0)))
             S = max(3, min(9, S))
             for y in range(H - S, H):
                 c.mat[y, x], c.tone[y, x] = kf, (5 if y == H - S else (4 if y < H - S + 3 else 3))
@@ -206,9 +242,8 @@ def write_faces(mat="desert"):
     out = []
     for part in ("top", "mid", "top-base", "mid-base"):
         for h in (8, 4):
-            for v in range(FACE_VARIANTS):
-                name = f"face.{mat}.{part}.{h}{('', '.v1', '.v2')[v]}.png"
-                out.append(save(face(mat, part, h, v), os.path.join(OUT, name)))
+            for suf, spec in specs():
+                out.append(save(face(mat, part, h, spec), os.path.join(OUT, f"face.{mat}.{part}.{h}{suf}.png")))
     return out
 
 
@@ -321,55 +356,97 @@ def lip_ramp(season):
     return GR.ramps_for(season)["grass"]
 
 
-def earth_canvas(h, season):
+SNOW = ["#3a4866", "#7a8cae", "#99abc7", "#b8c8e0", "#cadbe9", "#dce6f2", "#f8fbff"]  # v2 "snow"
+LEAF_AUT = ["#4a1e0e", "#7a2e14", "#9a4018", "#b85a20", "#d07a28", "#e09a38", "#f0c060"]
+
+
+def earth_canvas(h, season, lip="plains"):
+    lr = lip_ramp(season) if lip == "plains" else FO.ramps_for(season)["moss"]
     return Canvas(64, 4 * h, {"earth": lift_ramp(EARTH), "pebble": lift_ramp(PEBBLE), "root": lift_ramp(ROOT_R),
-                              "lip": lip_ramp(season)})
+                              "lip": lr, "snow": lift_ramp(SNOW), "leaf": lift_ramp(LEAF_AUT)})
 
 
-def earth_face(season, part, h, variant):
-    """One earth face band (64 x 4h) under a grass-topped cell: soil lumps split by wavering cracks
-    (a dark crack, the lump under / right of it lit along it: light from the top left), a few stones
-    set in the soil (4 x 3, lit top), on .v2 roots hanging from the lip; a top band has the season's lip
-    (grass: 6-9 rows, blade tips hanging 0-3 texels below its edge; autumn grass; winter: a rounded
-    snow lip) and its shadow on the soil; a base band darkens in its last rows. The waves of the lip and
-    the foot share one seed for every part / variant / season (they differ by bumps that are 0 at the
-    tile ends), the cracks keep 3 texels from the tile's sides and 2 rows from the band's top / bottom."""
+def earth_face(season, part, h, spec, lip="plains"):
+    """One earth face band (64 x 4h) under a grass-topped (lip "plains") or moss-topped (lip "forest",
+    round 5, P1-B: face.earth.forest.top*) cell: band_body (soil), roots on some top bands; a top band
+    has the season's lip:
+      plains  grass 9-13 rows with blade tips hanging 0-5 texels (autumn grass; winter a rounded snow lip)
+      forest  moss 8-11 rows with rounded cushion bumps hanging 1-3 texels (the forest floor's moss
+              ramp); autumn a few fallen leaves on it; winter a rounded snow lip
+    a base band darkens in its last rows. Winter (round 5, P3): small snow caps on the ledges (the tops
+    of the packed layer), 0-2 per band, 2 rows (6 over 5), 8-16 wide."""
     H = 4 * h
     top, base = part.startswith("top"), part.endswith("base")
-    c = earth_canvas(h, season)
+    c = earth_canvas(h, season, lip)
     pi = {"top": 1, "mid": 2, "top-base": 3, "mid-base": 4}[part]
-    seed = 5000 + pi * 10 + h + 5 * variant
-    rng = random.Random(seed)
-    ke, kp, kr, kl = c.mid("earth"), c.mid("pebble"), c.mid("root"), c.mid("lip")
+    seed = 5000 + pi * 10 + h
+    rng = random.Random(seed + spec_seed(spec) + (7 if lip == "forest" else 0))
+    ke, kr, kl = c.mid("earth"), c.mid("root"), c.mid("lip")
     c.mat[:, :], c.tone[:, :] = ke, 3
-    bump = (1.0, -1.0, 1.6, -1.6)[pi - 1] + (0.0, 2.0, -2.0)[variant]
-    band_body(c, ke, H, part, variant, seed, "soil")
-    n_st = (1, 2, 1)[variant]  # round 4: mid bands too (the engine proposal gives stacked bands other variants)
-    for _ in range(n_st):  # stones set in the soil
-        x, y = rng.randint(5, 54), rng.randint(4, H - 7)
-        for dy, (a, b, t) in enumerate(((1, 3, 5), (0, 4, 3), (0, 4, 2))):
-            for dx in range(a, b):
-                c.mat[y + dy, x + dx], c.tone[y + dy, x + dx] = kp, (4 if (dy == 1 and dx == 0) else t)
-        for dx in range(1, 5):
-            if c.mat[y + 3, x + dx] == ke:
-                c.tone[y + 3, x + dx] = 1
+    sp = band_body(c, H, part, spec, seed, "soil", pebbles=True)
+    winter = season == "winter"
+    if winter:  # snow caps on the ledges: 0-2 per band, following the ledge, 3 rows (6, 6, 5), rounded ends
+        ks = c.mid("snow")
+        for _ in range(rng.choice((0, 1, 1, 2)) if H > 16 else rng.choice((0, 0, 1))):
+            x0 = rng.randint(3, 44)
+            w = rng.randint(8, 16)
+            xm = x0 + w // 2
+            ys = [y for y in range(5, H - 3) if c.tone[y, xm] == 1 and c.mat[y, xm] == ke]
+            if not ys:
+                continue
+            cap = {}
+            for direction in (1, -1):  # walk left and right from the middle along the ledge
+                y = ys[0]
+                x = xm if direction == 1 else xm - 1
+                while x0 <= x < min(61, x0 + w):
+                    near = [yy for yy in (y, y - 1, y + 1) if 4 <= yy < H - 2 and c.tone[yy, x] == 1 and c.mat[yy, x] == ke]
+                    if not near:
+                        break
+                    y = near[0]
+                    cap[x] = y
+                    x += direction
+            if len(cap) < 6:
+                continue
+            xs = sorted(cap)
+            for x in xs:
+                y = cap[x]
+                end = x in (xs[0], xs[-1])
+                for dy, t in ((-3, 6), (-2, 6), (-1, 5)):
+                    if end and dy == -3:
+                        continue  # rounded ends
+                    c.mat[y + dy, x], c.tone[y + dy, x] = ks, t
     if top:
-        winter = season == "winter"
         for x in range(64):
-            L = int(round((10 if winter else 11) + 1.5 * wave(x, 61, (1.0, 0.6), 1, bump * 0.6)))
-            L = max(9, min(13, L)) if H > 16 else max(7, min(9, L - 3))  # (a 4-px band: a thinner lip)
-            hang = 0 if winter else (GR.hsh(x, 3, 71) % 6 if GR.hsh(x // 2, 1, 72) % 3 else 0)
-            hang = min(hang, H - 3 - L)
-            for y in range(L + hang):
-                c.mat[y, x] = kl
-                if winter:
-                    c.tone[y, x] = 6 if y < 2 else (5 if y < L - 2 else (4 if y < L - 1 else 2))
-                else:
-                    c.tone[y, x] = 5 if y < 2 else (4 if y < 5 else (3 if y < L - 2 else 2))
-            for y in range(L + hang, min(H - 2, L + hang + 2)):
+            if lip == "forest" and not winter:
+                L = int(round(prof(x, 9, "lip", 63, sp, 1.2, 0.5)))
+                L = max(8, min(11, L)) if H > 16 else max(6, min(8, L - 3))
+                bump = int(round(2 + 1.5 * math.sin(2 * math.pi * x / 9.14 + 0.7)))  # cushions every ~9 texels
+                hang = min(max(0, bump), H - 3 - L)
+                for y in range(L + hang):
+                    c.mat[y, x] = kl
+                    c.tone[y, x] = 5 if y < 2 else (4 if y < 4 else (3 if y < L + hang - 2 else 2))
+            else:
+                L = int(round(prof(x, 10 if winter else 11, "lip", 61, sp, 1.5, 0.6)))
+                L = max(9, min(13, L)) if H > 16 else max(7, min(9, L - 3))
+                hang = 0 if winter else (GR.hsh(x, 3, 71) % 6 if GR.hsh(x // 2, 1, 72) % 3 else 0)
+                hang = min(hang, H - 3 - L)
+                for y in range(L + hang):
+                    c.mat[y, x] = kl
+                    if winter:
+                        c.tone[y, x] = 6 if y < 2 else (5 if y < L - 2 else (4 if y < L - 1 else 2))
+                    else:
+                        c.tone[y, x] = 5 if y < 2 else (4 if y < 5 else (3 if y < L - 2 else 2))
+            y_end = int(np.argmax(c.mat[:, x] != kl))
+            for y in range(y_end, min(H - 2, y_end + 2)):
                 if c.mat[y, x] == ke:
-                    c.tone[y, x] = 1 if y == L + hang else 2
-        if variant == 2:  # roots hanging from the lip: 2 wide, 7-14 long, wavering
+                    c.tone[y, x] = 1 if y == y_end else 2
+        if lip == "forest" and season == "autumn":  # fallen leaves on the moss lip (3 x 2, 3-5)
+            for _ in range(rng.randint(1, 3)):
+                x, y = rng.randint(3, 58), rng.randint(1, 6)
+                for dx in range(3):
+                    for dy in range(2):
+                        c.mat[y + dy, x + dx], c.tone[y + dy, x + dx] = c.mid("leaf"), (4 if dy == 0 else 2)
+        if spec[2] > 1.0 and lip == "plains":  # roots hanging from the lip on some top bands
             for x in (rng.randint(8, 24), rng.randint(36, 54)):
                 y0 = int(np.argmax(c.mat[:, x] != kl))
                 room = H - y0 - 3
@@ -377,9 +454,9 @@ def earth_face(season, part, h, variant):
                     xx = x + int(round(1.2 * math.sin(k * 0.45)))
                     c.mat[y0 + k, xx], c.tone[y0 + k, xx] = kr, 3
                     c.mat[y0 + k, xx + 1], c.tone[y0 + k, xx + 1] = kr, 1
-    if base:  # the foot: the soil darkens in its last 4 rows (wavy)
+    if base:
         for x in range(64):
-            S = int(round(4 + 1.2 * wave(x, 67, (1.0, 0.6), 1, bump * 0.5)))
+            S = int(round(prof(x, 4, "foot", 67, sp, 1.2, 0.5)))
             for y in range(H - max(2, min(6, S)), H):
                 if c.mat[y, x] == ke:
                     c.tone[y, x] = min(int(c.tone[y, x]), 2 if y < H - 2 else 1)
@@ -387,15 +464,19 @@ def earth_face(season, part, h, variant):
 
 
 def write_earth_faces():
+    """face.earth.* (all parts; summer and, round 5, winter for every part: the snow caps), the autumn
+    lips (top, top-base), and the forest's tops face.earth.forest.top* (3 seasons)."""
     out = []
     for season in SEASONS:
         for part in ("top", "mid", "top-base", "mid-base"):
-            if season != "summer" and not part.startswith("top"):
-                continue  # (v2: only the lips have season files)
+            if season == "autumn" and not part.startswith("top"):
+                continue  # (autumn: only the lips have season files, as v2)
             for h in (8, 4):
-                for v in (0, 1, 2):
-                    name = f"{SPRE[season]}face.earth.{part}.{h}{('', '.v1', '.v2')[v]}.png"
-                    out.append(save(earth_face(season, part, h, v), os.path.join(OUT, name)))
+                for suf, spec in specs():
+                    out.append(save(earth_face(season, part, h, spec), os.path.join(OUT, f"{SPRE[season]}face.earth.{part}.{h}{suf}.png")))
+                    if part.startswith("top"):
+                        out.append(save(earth_face(season, part, h, spec, "forest"),
+                                        os.path.join(OUT, f"{SPRE[season]}face.earth.forest.{part}.{h}{suf}.png")))
     return out
 
 
@@ -434,12 +515,21 @@ def g_draw_side(c, side, variant, T, limit=None):
             elif side == "E":
                 c.tone[y, x] = T["east"][0] if kk == d else T["east"][1]
             else:
-                c.tone[y, x] = T["lit"][0] if kk == d else T["lit"][1]
+                c.tone[y, x] = T["lit"][0] if kk < d + T.get("lit_w", 1) else T["lit"][1]
+
+
+def g_tones(ground, season, ramp):
+    """rim_tones, and (round 5, inspection 2 P3) the autumn forest: its dark edge (37) is as dark as the
+    floor's darkest colour (38), so its lit line is 2 texels of the brightest tone (it reads by the light)."""
+    T = rim_tones(ramp)
+    if ground == "moss" and season == "autumn":
+        T["lit_w"] = 2
+    return T
 
 
 def g_step(ground, season, mask, variant):
     c = g_rim_canvas(ground, season)
-    T = rim_tones(c.ramps["g"])
+    T = g_tones(ground, season, c.ramps["g"])
     for bit, side in ((1, "N"), (2, "E"), (4, "W")):
         if mask & bit:
             g_draw_side(c, side, variant, T)
@@ -448,7 +538,7 @@ def g_step(ground, season, mask, variant):
 
 def g_inner(ground, season, corner):
     c = g_rim_canvas(ground, season)
-    T = rim_tones(c.ramps["g"])
+    T = g_tones(ground, season, c.ramps["g"])
     dn, rn = rim_profile("N", 63 if corner == "ne" else 0, 0)
     side = "E" if corner == "ne" else "W"
     ds, rs = rim_profile(side, 0, 0)

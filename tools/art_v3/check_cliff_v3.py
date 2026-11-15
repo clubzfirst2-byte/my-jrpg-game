@@ -4,7 +4,10 @@ For each face material (desert, earth in the 3 seasons) a wall of 14 tiles (x 10
 1, 2 and 3 levels high (16 / 32 / 48 game px: bands of 8 px, gameView.addFace), the variant chosen by
   rule "now"       the game today: one variant per cell, hash(tx, ty) % n (terrainArt.faceVariant;
                    desert n = 2 today, earth n = 3)
-  rule "per-band"  the proposal (DESERT.md 9): band k of the cell takes (hash(tx, ty) + k) % 3
+  rule "per-band"  the rule decided 2026-11-14: band k of the cell takes (hash(tx, ty) + k) % 3
+  rule "edge"      the round-5 proposal (DESERT.md 8.7): the band whose top is at world y (game px) takes
+                   ".e<L><R>", L = hsh(tx, y, 71) % 3, R = hsh(tx + 1, y, 71) % 3 (neighbours agree on
+                   their shared end)
 and measured on the mid bands:
   same       the share of texels equal between vertically neighbouring mid bands of one cell (mean)
   dominant   the share of the commonest colour in a mid band (max over its variants)
@@ -36,15 +39,14 @@ def ld(p):
 
 
 def key_file(mat, season, key):
-    for k in ([f"{season}.{key}"] if season != "summer" else []) + [key]:
-        p = os.path.join(V3T, f"face.{mat}.{k}.png" if not k.startswith(("autumn.", "winter.")) else
-                         f"{k.split('.', 1)[0]}.face.{mat}.{k.split('.', 1)[1]}.png")
+    for pre in ([f"{season}."] if season != "summer" else []) + [""]:
+        p = os.path.join(V3T, f"{pre}face.{mat}.{key}.png")
         if os.path.exists(p):
             return p
-    raise FileNotFoundError(key)
+    raise FileNotFoundError(f"{mat} {season} {key}")
 
 
-def wall(mat, season, levels, rule, now_n):
+def wall(mat, season, levels, rule, now_n, forest=False):
     bands = levels * 2
     W = 14
     im = Image.new("RGBA", (W * 64, bands * 32), (0, 0, 0, 0))
@@ -55,8 +57,14 @@ def wall(mat, season, levels, rule, now_n):
         col = []
         for b in range(bands):
             part = ("top" if b == 0 else "mid") + ("-base" if b == bands - 1 else "")
-            v = h0 % now_n if rule == "now" else (h0 + b) % 3
-            p = key_file(mat, season, f"{part}.8{VAR[v]}")
+            if rule == "edge":
+                import gen_ground_v3 as G3
+                ytop = (ty + 1) * 16 - levels * 16 + 8 * b
+                suf = f".e{G3.hsh(tx, ytop, 71) % 3}{G3.hsh(tx + 1, ytop, 71) % 3}"
+            else:
+                suf = VAR[h0 % now_n if rule == "now" else (h0 + b) % 3]
+            m2 = "earth.forest" if (forest and part.startswith("top")) else mat
+            p = key_file(m2, season, f"{part}.8{suf}")
             t = ld(p)
             im.alpha_composite(t, (i * 64, b * 32))
             col.append((part, np.array(t)))
@@ -85,7 +93,7 @@ def measure(im, stacks):
 
 def dominant(mat, season):
     out = 0.0
-    for v in VAR:
+    for v in list(VAR) + [f".e{l}{r}" for l in range(3) for r in range(3)]:
         a = np.array(ld(key_file(mat, season, f"mid.8{v}"))).astype(np.int64)
         k = (a[..., 0] << 16) | (a[..., 1] << 8) | a[..., 2]
         out = max(out, np.unique(k, return_counts=True)[1].max() / k.size)
@@ -94,13 +102,16 @@ def dominant(mat, season):
 
 def main(out):
     os.makedirs(out, exist_ok=True)
-    for mat, season, now_n in (("desert", "summer", 2), ("earth", "summer", 3), ("earth", "autumn", 3), ("earth", "winter", 3)):
-        print(f"{mat} {season}: dominant colour in a mid.8 band (max over variants) {100 * dominant(mat, season):.1f}%")
-        for rule in ("now", "per-band"):
+    for mat, season, now_n, forest in (("desert", "summer", 2, False), ("earth", "summer", 3, False), ("earth", "autumn", 3, False),
+                                       ("earth", "winter", 3, False), ("earth", "summer", 3, True), ("earth", "autumn", 3, True),
+                                       ("earth", "winter", 3, True)):
+        name = mat + ("_forest" if forest else "")
+        print(f"{name} {season}: dominant colour in a mid.8 band (max over variants) {100 * dominant(mat, season):.1f}%")
+        for rule in ("now", "per-band", "edge"):
             for levels in (1, 2, 3):
-                im, st = wall(mat, season, levels, rule, now_n)
+                im, st = wall(mat, season, levels, rule, now_n, forest)
                 s, steps = measure(im, st)
-                tag = f"wall_{mat}{'' if season == 'summer' else '_' + season}_{rule}_{levels}levels"
+                tag = f"wall_{name}{'' if season == 'summer' else '_' + season}_{rule}_{levels}levels"
                 if season == "summer" or levels == 3:
                     im.resize((im.width * 2, im.height * 2), Image.NEAREST).save(os.path.join(out, tag + "_k2.png"))
                     im.save(os.path.join(out, tag + "_k1.png"))

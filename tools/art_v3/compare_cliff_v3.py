@@ -127,7 +127,8 @@ def scene(ver, ground="desert", season="summer"):
                 seg = 8 if rem >= 8 else 4
                 last = rem - seg <= 0
                 key = f"face.{fmat}.{'top' if first else 'mid'}{'-base' if last else ''}.{seg}"
-                cands = [sp + key + var, sp + key, key + var, key] if fmat == "earth" else [key + var, key]
+                fk = key.replace("face.earth.", "face.earth.forest.") if (ground == "forest" and first and ver == "v3") else key
+                cands = [sp + fk + var, sp + fk, sp + key + var, sp + key, key + var, key] if fmat == "earth" else [key + var, key]
                 p = next(os.path.join(folder, k_ + ".png") for k_ in cands if os.path.exists(os.path.join(folder, k_ + ".png")))
                 im.alpha_composite(ld(p), (X, y * d))
                 y += seg
@@ -179,18 +180,21 @@ def v2_file_s(key, season):
 
 
 def parts(path):
-    names = [f"face.desert.{p}.{h}{v}" for p in ("top", "mid", "top-base", "mid-base") for h in (8, 4) for v in ("", ".v1")]
+    """The v3 desert faces (round 5: per part the 12 pictures of the 8-px band: "", .v1, .v2, .e00 .. .e22),
+    then the rims, shadows and inner corners, 4x."""
+    sufs = ["", ".v1", ".v2"] + [f".e{l}{r}" for l in range(3) for r in range(3)]
+    names = [f"face.desert.{p}.8{v}" for p in ("top", "mid", "top-base", "mid-base") for v in sufs]
     cells = [ld(os.path.join(V3T, n + ".png")) for n in names]
     steps = [ld(os.path.join(V3T, f"desert.sand.v3.step.{m}.{v}.png")) for m in range(1, 8) for v in (0, 1)] + \
         [ld(os.path.join(V3T, f"desert.sand.v3.step.{k}.png")) for k in ("shade.0", "shade.1", "inner.ne", "inner.nw")]
-    k = 4
-    Wd = 8 * (64 * k + 8)
-    out = Image.new("RGBA", (Wd, 2 * (32 * k + 8) + 3 * (64 * k + 8)), (40, 44, 70, 255))
+    k = 3
+    per = 12
+    out = Image.new("RGBA", (per * (64 * k + 6), 4 * (32 * k + 6) + 2 * (64 * k + 6)), (40, 44, 70, 255))
     for i, c in enumerate(cells):
-        out.alpha_composite(c.resize((c.width * k, c.height * k), Image.NEAREST), ((i % 8) * (64 * k + 8), (i // 8) * (32 * k + 8)))
-    y0 = 2 * (32 * k + 8)
+        out.alpha_composite(c.resize((c.width * k, c.height * k), Image.NEAREST), ((i % per) * (64 * k + 6), (i // per) * (32 * k + 6)))
+    y0 = 4 * (32 * k + 6)
     for i, c in enumerate(steps):
-        out.alpha_composite(c.resize((64 * k, 64 * k), Image.NEAREST), ((i % 8) * (64 * k + 8), y0 + (i // 8) * (64 * k + 8)))
+        out.alpha_composite(c.resize((64 * k, 64 * k), Image.NEAREST), ((i % per) * (64 * k + 6), y0 + (i // per) * (64 * k + 6)))
     out.save(path, optimize=True)
 
 

@@ -158,3 +158,20 @@ autumn (only the tint changes); winter loads its own set.
   `flowers_yellow` (f 0–1, sway), `bush_berry`, `bush`, `shrub`, `stump`, `rock_s`, `rock_m`,
   `pebbles`, `log`, `mushrooms`, `clover` (f 0).
 - Anchor: the bottom centre (the foot on the bottom row).
+
+## 5. Cliff faces and step rims (v3; DESERT.md 7-8)
+
+- **Rims** (unchanged from v2, NAMES v2 2b): `<prefix>.v3.step.<mask>.<v>`, `<prefix>.v3.step.shade.<v>`,
+  `<prefix>.v3.step.inner.<ne|nw>` for `desert.sand`, `<s.>plains.grass`, `<s.>forest.grass`; 64 x 64.
+- **Faces**: `face.<desert|earth>.<top|mid><-base>.<8|4><suffix>`, 64 x 32 / 64 x 16, stacked as v2
+  (gameView.addFace). Season files: `autumn.` for the tops (`top`, `top-base`), `winter.` for every part;
+  a part with no season file uses the summer file (`seasonal()`).
+- **Forest tops** (decided by the director, 2026-11-14): on a forest-region cell, the top band
+  (`top`, `top-base`) of an earth face uses `<s.>face.earth.forest.<top|top-base>.<8|4><suffix>`; the
+  mid / base bands use `face.earth.*` as elsewhere.
+- **Suffix, the rule decided on 2026-11-14** (desert and earth only): band k (0 = top) of cell (tx, ty)
+  takes `["", ".v1", ".v2"][(hash(tx, ty) + k) % 3]`.
+- **Suffix, the round-5 proposal (replaces the line above when adopted)**: the band whose top is at world
+  y (game px) takes `.e<L><R>` with `L = hsh(tx, y, 71) % 3`, `R = hsh(tx + 1, y, 71) % 3` (`hsh` of
+  section 0). Neighbouring cells read their shared end with the same formula, so their pictures join;
+  bands at other heights get other pairs. Reference: `check_cliff_v3.wall` (rule "edge").
