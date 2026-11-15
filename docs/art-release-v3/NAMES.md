@@ -169,9 +169,12 @@ autumn (only the tint changes); winter loads its own set.
 - **Forest tops** (decided by the director, 2026-11-14): on a forest-region cell, the top band
   (`top`, `top-base`) of an earth face uses `<s.>face.earth.forest.<top|top-base>.<8|4><suffix>`; the
   mid / base bands use `face.earth.*` as elsewhere.
-- **Suffix, the rule decided on 2026-11-14** (desert and earth only): band k (0 = top) of cell (tx, ty)
-  takes `["", ".v1", ".v2"][(hash(tx, ty) + k) % 3]`.
-- **Suffix, the round-5 proposal (replaces the line above when adopted)**: the band whose top is at world
-  y (game px) takes `.e<L><R>` with `L = hsh(tx, y, 71) % 3`, `R = hsh(tx + 1, y, 71) % 3` (`hsh` of
-  section 0). Neighbouring cells read their shared end with the same formula, so their pictures join;
-  bands at other heights get other pairs. Reference: `check_cliff_v3.wall` (rule "edge").
+- **Suffix: the edge types** (decided by the director, 2026-11-15; DESERT.md 8.7; the earlier rule
+  "(hash(tx, ty) + k) % 3" is withdrawn): the band whose top is at world y (game px) takes `.e<L><R>` with
+  `L = hsh(tx, y, 71) % 3`, `R = hsh(tx + 1, y, 71) % 3` (`hsh` of section 0). Neighbouring cells read
+  their shared end with the same formula, so their pictures join; bands at other heights get other pairs.
+  v3 desert and earth only (v2 stone, ruin, wall keep v2's rule). Reference: `check_cliff_v3.wall` (rule
+  "edge").
+- **Held** (decided 2026-11-15): only the pictures the current map uses: desert `top`, `mid`, `mid-base`;
+  earth `top`, `mid-base`; forest tops `top`; all `.8.e<L><R>`. Not held: `""` / `.v1` / `.v2`, the `.4`
+  bands, `top-base`, earth `mid.8` (the tool still makes them; add them when the map needs them).

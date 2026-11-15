@@ -69,8 +69,10 @@ EDGE_TYPES = 3  # round 5 (inspection 2, P1-A): the edge-typed set ".e<L><R>" (D
 # end; with 3 types the ends of a row are not all the same any more (no node every 64 texels: the
 # "chain" of P1-A). The plain / .v1 / .v2 set (kept for the rule (hash + k) % 3) is (1, 1, -1 / 0 / 1)
 # with a small middle movement.
-ENDS = {  # per profile: the offset (rows) of each edge type
-    "ya": (-3.0, 0.0, 2.5), "yb": (3.0, 0.0, -2.0), "yc": (-2.0, 0.0, 2.0), "lam": (-2.0, 0.0, 2.0),
+ENDS = {  # per profile: the offset (rows) of each edge type (round 6, inspection 3 P2: type 0 makes the
+    # layer thick (about 17 rows), type 2 thin (about 3; where it would be under 3 rows it is not drawn),
+    # so the light layers of stacked bands differ a lot in thickness: no even stripe every 8 px)
+    "ya": (-4.0, 0.0, 3.0), "yb": (4.0, 0.0, -3.0), "yc": (-2.0, 0.0, 2.0), "lam": (-2.0, 0.0, 2.0),
     "lip": (-1.5, 0.0, 1.5), "foot": (-2.0, 0.0, 2.0),
 }
 
@@ -131,11 +133,18 @@ def band_body(c, H, part, spec, seed, style, pebbles=False):
             y = int(round(prof(x, y0, "lam", 97 + li, sp, 1.0, 0.3)))
             if 2 <= y < H - 2:
                 c.tone[y, x] = lt
+    ledges = {}
     for x in range(64):
         ya = int(round(prof(x, y_a, "ya", 91, sp, 1.6, 1.0)))
         yb = int(round(prof(x, y_b, "yb", 92, sp, 1.8, -0.8)))
         ya = max(2, min(H - 8 if big else H - 6, ya))
-        yb = min(H - 6 if big else H - 3, max(ya + 2, yb))
+        yb = min(H - 6 if big else H - 3, yb)
+        if yb - ya < 3:  # the layer has thinned out here (edge type 2): not drawn
+            if big:
+                yc = int(round(prof(x, 26, "yc", 93, sp, 1.2, -0.5)))
+                c.tone[min(H - 4, max(4, yc)), x] = 2
+            continue
+        ledges[x] = yb
         for y in range(ya, yb):
             c.tone[y, x] = lay_t
         c.tone[ya, x] = (lay_t + 1) if style == "sandstone" else 1
@@ -193,7 +202,7 @@ def band_body(c, H, part, spec, seed, style, pebbles=False):
             for dx in range(1, 5):
                 if c.mat[y + 3, x + dx] == ke:
                     c.tone[y + 3, x + dx] = 1
-    return sp
+    return sp, ledges
 
 
 def face(mat, part, h, spec):
@@ -207,7 +216,7 @@ def face(mat, part, h, spec):
     rng = random.Random(seed + 1 + spec_seed(spec))
     kr, kf = c.mid("rock"), c.mid("fine")
     c.mat[:, :], c.tone[:, :] = kr, 3
-    sp = band_body(c, H, part, spec, seed, "sandstone")
+    sp, _ = band_body(c, H, part, spec, seed, "sandstone")
     if top:
         for x in range(64):
             L = int(round(prof(x, 8, "lip", 31, sp, 1.4, 0.7)))
@@ -383,38 +392,41 @@ def earth_face(season, part, h, spec, lip="plains"):
     rng = random.Random(seed + spec_seed(spec) + (7 if lip == "forest" else 0))
     ke, kr, kl = c.mid("earth"), c.mid("root"), c.mid("lip")
     c.mat[:, :], c.tone[:, :] = ke, 3
-    sp = band_body(c, H, part, spec, seed, "soil", pebbles=True)
+    sp, ledges = band_body(c, H, part, spec, seed, "soil", pebbles=True)
     winter = season == "winter"
-    if winter:  # snow caps on the ledges: 0-2 per band, following the ledge, 3 rows (6, 6, 5), rounded ends
+    if winter:  # round 6 (inspection 3 P2): snow sitting ON a ledge (the top of the soil under the packed
+        # layer): 2 rows of snow (6 over 5, the right end 4: its shaded side) and the ledge's underside in
+        # shadow right under it (soil 1); 3 rows (6, 6, 5; the ends and the right end shaded), 0-2 caps per
+        # band, 8-18 wide, only where the ledge is drawn
         ks = c.mid("snow")
         for _ in range(rng.choice((0, 1, 1, 2)) if H > 16 else rng.choice((0, 0, 1))):
             x0 = rng.randint(3, 44)
-            w = rng.randint(8, 16)
-            xm = x0 + w // 2
-            ys = [y for y in range(5, H - 3) if c.tone[y, xm] == 1 and c.mat[y, xm] == ke]
-            if not ys:
+            xs = [x for x in range(x0, min(61, x0 + rng.randint(8, 18))) if x in ledges]
+            run = []
+            for x in xs:  # the longest run of neighbouring columns
+                if run and x != run[-1][-1] + 1:
+                    run.append([x])
+                elif run:
+                    run[-1].append(x)
+                else:
+                    run.append([x])
+            run = max(run, key=len) if run else []
+            if len(run) < 6:
                 continue
-            cap = {}
-            for direction in (1, -1):  # walk left and right from the middle along the ledge
-                y = ys[0]
-                x = xm if direction == 1 else xm - 1
-                while x0 <= x < min(61, x0 + w):
-                    near = [yy for yy in (y, y - 1, y + 1) if 4 <= yy < H - 2 and c.tone[yy, x] == 1 and c.mat[yy, x] == ke]
-                    if not near:
-                        break
-                    y = near[0]
-                    cap[x] = y
-                    x += direction
-            if len(cap) < 6:
-                continue
-            xs = sorted(cap)
-            for x in xs:
-                y = cap[x]
-                end = x in (xs[0], xs[-1])
-                for dy, t in ((-3, 6), (-2, 6), (-1, 5)):
-                    if end and dy == -3:
-                        continue  # rounded ends
-                    c.mat[y + dy, x], c.tone[y + dy, x] = ks, t
+            for x in run:
+                y = ledges[x]
+                if y - 2 < 3 or y + 1 >= H - 2:
+                    continue
+                end = x in (run[0], run[-1])
+                if y - 3 < 3:
+                    continue
+                if not end:
+                    c.mat[y - 3, x], c.tone[y - 3, x] = ks, 6  # rounded ends: the top row not at the ends
+                c.mat[y - 2, x], c.tone[y - 2, x] = ks, (5 if end else 6)
+                c.mat[y - 1, x], c.tone[y - 1, x] = ks, (4 if (end or x > run[-1] - 3) else 5)
+                c.mat[y, x], c.tone[y, x] = ke, 1
+                if c.mat[y + 1, x] == ke:
+                    c.tone[y + 1, x] = 2
     if top:
         for x in range(64):
             if lip == "forest" and not winter:
@@ -441,11 +453,14 @@ def earth_face(season, part, h, spec, lip="plains"):
                 if c.mat[y, x] == ke:
                     c.tone[y, x] = 1 if y == y_end else 2
         if lip == "forest" and season == "autumn":  # fallen leaves on the moss lip (3 x 2, 3-5)
-            for _ in range(rng.randint(1, 3)):
-                x, y = rng.randint(3, 58), rng.randint(1, 6)
-                for dx in range(3):
-                    for dy in range(2):
-                        c.mat[y + dy, x + dx], c.tone[y + dy, x + dx] = c.mid("leaf"), (4 if dy == 0 else 2)
+            for _ in range(rng.randint(1, 3)):  # round 6 (P3): heights 1-8, some in pairs (no row of leaves)
+                x, y = rng.randint(3, 56), rng.randint(1, 8 if H > 16 else 5)
+                for (ox, oy) in ([(0, 0)] if rng.random() < 0.6 else [(0, 0), (3, rng.choice((-1, 1)))]):
+                    for dx in range(3):
+                        for dy in range(2):
+                            X, Y = x + ox + dx, y + oy + dy
+                            if 0 <= Y < H and X < 64:
+                                c.mat[Y, X], c.tone[Y, X] = c.mid("leaf"), (4 if dy == 0 else 2)
         if spec[2] > 1.0 and lip == "plains":  # roots hanging from the lip on some top bands
             for x in (rng.randint(8, 24), rng.randint(36, 54)):
                 y0 = int(np.argmax(c.mat[:, x] != kl))
