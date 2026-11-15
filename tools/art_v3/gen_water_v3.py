@@ -276,8 +276,11 @@ def foam_overlay(mask, frame):
     5 texels): a broken white shore line, foam (shallow 5), the white wave front, the wet line (shallow 4);
     on frame 3 the front breaks into lace. The white breaks are hand-drawn rows along the shore (SHORE_W,
     FRONT_W, LACE_W), fixed in place: the white moves only out and back. On masks 6 / 9 (two shores) only
-    one shore laps (the other keeps frame 0). No speck under 6 texels away from the tile's border."""
+    one shore laps (the other keeps frame 0), and the land is the part both their land variants share. No speck
+    under 6 texels away from the tile's border."""
     F, inside = G.edge_inside(mask, 0)
+    if mask in (6, 9):  # (round 3) these masks' land edge has 2 variants (groundV2.edgeVariantOf): the foam's
+        inside = inside & G.edge_inside(mask, 1)[1]  # land is what both call land, so either one's water has foam
     c = canvas()
     k = c.mid("shallow")
     if mask in (6, 9):  # two land pieces: each its own distance (one laps, the other keeps frame 0)
