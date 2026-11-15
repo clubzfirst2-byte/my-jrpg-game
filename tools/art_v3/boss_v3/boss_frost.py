@@ -11,10 +11,13 @@ import math
 import os
 import sys
 
+import numpy as np
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import frost_antlers as A  # noqa: E402
 import frost_body as B  # noqa: E402
+import frost_fall as FL  # noqa: E402
 import frost_head as HD  # noqa: E402
 from bossanim import actions, boss_actions  # noqa: E402
 from pixmap import Frame, Legend, part  # noqa: E402
@@ -45,7 +48,7 @@ LEG = Legend(GROUPS)
 
 P = {}
 COLS = set()
-for _m in (HD, B, A):
+for _m in (HD, B, A, FL):
     for _n in dir(_m):
         _v = getattr(_m, _n)
         if _n.isupper() and isinstance(_v, str) and "\n" in _v:
@@ -54,12 +57,53 @@ for _n in A.COLS | {"DOWN_BEAM", "SLAM_BEAM"}:
     P[_n + "~"] = P[_n].mirror(band=False)
 for _n in ("UP_T1", "UP_T2", "UP_T3", "LEAN_T", "PRONG", "FLAT_T", "FLEG", "HIND"):
     P[_n + "~"] = P[_n].mirror(relight=True)
-for _n in ("SHOULDER", "EAR", "RIME_A", "BREAK", "FOREARM"):
+for _n in ("SHOULDER", "EAR", "RIME_A", "BREAK", "FOREARM", "REMAINS", "LOBE_A", "LOBE_B"):
     P[_n + "~"] = P[_n].mirror()
 for _n in ("EYE_OPEN", "EYE_SHUT", "EYE_NARROW"):
     P[_n + "~"] = P[_n].mirror(darker=False, band=False)
 for _n in ("CL_A", "CL_B", "CL_C", "CM_A", "CM_B", "CM_C", "CM_D", "CD_A", "CD_B", "CD_C", "CD_D"):
     P[_n + "~"] = P[_n].mirror(darker=False, band=False)
+class FrostFrame(Frame):
+    """A frame of this boss. One more rule after the parts are placed: a pocket of 6 texels or fewer that
+    the figure closes in on every side (two parts meeting with a pin gap between them) is a deep gap,
+    not a hole to the ground: it takes tone 0 of the material around it. The pockets this fills are
+    counted per frame in POCKETS (the report lists them)."""
+
+    def finish(self):
+        h, w = self.mat.shape
+        tr = self.mat < 0
+        seen = np.zeros((h, w), bool)
+        n = 0
+        for y, x in zip(*np.nonzero(tr)):
+            if seen[y, x]:
+                continue
+            st, comp, edge = [(y, x)], [], False
+            seen[y, x] = True
+            while st:
+                a, b = st.pop()
+                comp.append((a, b))
+                if a in (0, h - 1) or b in (0, w - 1):
+                    edge = True
+                for r, c in ((a + 1, b), (a - 1, b), (a, b + 1), (a, b - 1)):
+                    if 0 <= r < h and 0 <= c < w and tr[r, c] and not seen[r, c]:
+                        seen[r, c] = True
+                        st.append((r, c))
+            if edge or len(comp) > 6:
+                continue
+            n += 1
+            for a, b in comp:
+                around = [int(self.mat[r, c]) for r, c in ((a + 1, b), (a - 1, b), (a, b + 1), (a, b - 1))
+                          if 0 <= r < h and 0 <= c < w and self.mat[r, c] >= 0]
+                self.mat[a, b] = max(set(around), key=around.count)
+                self.tone[a, b] = 0
+                self.edge[a, b] = False
+        self.pockets = n
+        return super().finish()
+
+
+Frame = FrostFrame  # noqa: F811  (every frame of this module)
+
+P["CORE_DIM"] = P["CORE"].swap({}, tones=(0, 1, 1, 1, 1, 1, 3))  # the core gone dark
 
 
 def both(f, name, x, y, cx=CX, **kw):
@@ -94,6 +138,7 @@ BROKEN = {
     "UP": ({"UP_T3"}, [(16, 22), (46, 3)]),
     "MID": ({"UP_T3"}, [(12, 52)]),
     "LOW": ({"UP_T3"}, [(12, 80)]),
+    "HIGH": ({"UP_T3"}, [(42, 26)]),
     "FLAT": (set(), [(14, 46)]),
     "THRUST": (set(), [(6, 74)]),
 }
@@ -126,16 +171,16 @@ def head(f, ox=0, oy=0, state="UP", face="FACE", eyes="EYE_OPEN", jaw=0, core="C
     f.put(P[core], 88 + ox, 37 + oy)
 
 
-def body(f, dy=0, bx=0, rear=0, legs=(0, 0, 0, 0), spread=0, phase2=False, clip=None):
+def body(f, dy=0, bx=0, rear=0, legs=(0, 0, 0, 0), spread=0, phase2=False, clip=None, feet=True):
     """The legs stay on the ground; the shoulders, chest and mane move by (bx, dy - rear)."""
     by = dy - rear
-    for s, lift in ((-1, legs[1]), (1, legs[2])):
+    for s, lift in ((-1, legs[1]), (1, legs[2])) if feet else ():
         x, y = 60 + int(round(bx * 0.3)), 136 - 2 * int(math.floor(lift + 0.5))
         if s < 0:
             f.put(P["HIND"], x, y)
         else:
             f.put(P["HIND~"], 2 * (CX + int(round(bx * 0.3))) - x - P["HIND"].w, y)
-    for s, lift in ((-1, legs[0]), (1, legs[3])):
+    for s, lift in ((-1, legs[0]), (1, legs[3])) if feet else ():
         x, y = 44 - spread + bx // 2, 133 - 2 * int(math.floor(lift + 0.5))
         c2 = CX + bx // 2
         if rear:
@@ -257,9 +302,9 @@ def keys():
         "idle": [{}, dict(dy=2), dict(dy=2, head=2), dict(head=2, mouth=2)],
         "move": [dict(legs=(4, 0, 3, 0), shift=-4), dict(legs=(1, 1, 1, 1), dy=-2, head=-2, rot=-2),
                  dict(legs=(0, 3, 0, 4), shift=4), dict(legs=(1, 1, 1, 1), dy=-1, head=2, rot=2)],
-        "windup_slam": (dict(head=14, rot=28, fore=0.85, dy=2), dict(head=28, rot=56, fore=0.68, dy=4)),
-        "attack_slam": (dict(head=32, rot=70, fore=0.6, dy=6, chips=True), dict(head=20, rot=40, fore=0.8, dy=4, mouth=2),
-                        dict(head=40, rot=96, fore=0.5, dy=8, chips=True, mouth=4)),
+        "windup_slam": (dict(head=14, rot=28, fore=0.85, dy=3), dict(head=28, rot=56, fore=0.68, dy=7)),
+        "attack_slam": (dict(head=32, rot=70, fore=0.6, dy=12, chips=True), dict(head=20, rot=40, fore=0.8, dy=6, mouth=2),
+                        dict(head=40, rot=96, fore=0.5, dy=20, chips=True, mouth=4)),
         "windup_ring": (dict(rear=8, head=-2, rot=-4, fore=0.75, mouth=2, shards=4, shard_r=0.2, shard_s=1.0),
                         dict(rear=16, head=-2, rot=-6, fore=0.65, mouth=4, shards=6, shard_r=0.35, shard_s=1.3)),
         "attack_ring": (dict(head=-2, rot=-8, fore=0.65, mouth=6, dy=2, shards=8, shard_r=1.0, shard_s=1.1, chips=True),
@@ -290,15 +335,45 @@ def frames():
 
 
 def melt_a():
-    return draw(Pose(collapse=2, head=24, rot=60, eyes="shut", phase2=True))
+    """The purification, frame 3: the body sunk to the ground and running into murk. The coat above,
+    lobes of murk slumping over it and running down into the puddle; the head lies low, eyes shut,
+    the broken antlers spread level; the core gone dark."""
+    f = Frame(W, H, LEG, RAMPS)
+    f.put(P["GOO_BACK"], 41, 149)
+    body(f, dy=40, phase2=True, clip=153, feet=False)
+    for n, x, y in (("LOBE_B~", 34, 140), ("LOBE_A", 50, 132), ("LOBE_B", 130, 138), ("LOBE_A~", 104, 134)):
+        f.put(P[n], x, y)
+    head(f, 0, 64, "MID", "FACE_DOWN", "EYE_SHUT", core="CORE_DIM", broken=True)
+    f.put(P["LOBE_C"], 88, 146)
+    f.put(P["POOL"], 21, 164)
+    return f
 
 
 def melt_b():
-    return draw(Pose(collapse=2, head=30, rot=60, eyes="shut", phase2=True, dy=8))
+    """Frame 4: the puddle; a low mound in it with two tufts of the coat going under, the broken
+    antlers lying flat on it, the dark core."""
+    f = Frame(W, H, LEG, RAMPS)
+    f.put(P["POOL"], 21, 164)
+    f.put(P["SLUMP"], 62, 151)
+    antlers(f, "FLAT", 0, 98, CX, broken=True)
+    f.put(P["CORE_DIM"], 88, 133)
+    return f
 
 
 def remains():
-    return draw(Pose(collapse=2, head=36, rot=60, eyes="shut", phase2=True, dy=12))
+    """Frame 5: the heap of coat that is left, the broken antlers standing out of it, the dark core
+    half buried."""
+    f = Frame(W, H, LEG, RAMPS)
+    antlers(f, "HIGH", 0, 96, CX, broken=True)
+    q = P["REMAINS"]
+    f.put(P["REMAINS~"], 163 - q.w + 1, 173 - q.h + 1)
+    f.put(q, 28, 173 - q.h + 1)
+    f.put(P["CORE_DIM"], 88, 140)
+    return f
+
+
+# the purification's frames are drawn without anything laid on top of them (nothing to leave out)
+BASE_ONLY = {"defeat.3": melt_a, "defeat.4": melt_b, "defeat.5": remains}
 
 
 ACTIONS = boss_actions(PATTERNS)
