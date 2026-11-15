@@ -147,9 +147,10 @@ export function forestTreeLook(room, dense, h, h2) {
  */
 export function forestFootProp(h, h2) {
   if (h > 0.34) return null;
+  // (in-game inspection P3: toadstools, the most saturated thing on screen, 1 foot prop in 14, was 1 in 7)
   if (h2 < 0.45) return 'roots';
-  if (h2 < 0.7) return 'fern';
-  if (h2 < 0.85) return 'rock_moss';
+  if (h2 < 0.72) return 'fern';
+  if (h2 < 0.93) return 'rock_moss';
   return 'toadstool';
 }
 
@@ -162,7 +163,7 @@ export function forestFootProp(h, h2) {
 export function forestOpenProp(patch, h, h2, nearTree) {
   const inPatch = patch > 0.55;
   if (h > (inPatch ? 0.125 + 0.25 * (patch - 0.55) : 0.025)) return null;
-  if (nearTree && h2 < 0.3) return 'toadstool';
+  if (nearTree && h2 < 0.12) return 'toadstool'; // (in-game inspection P3: was 0.3)
   return 'fern';
 }
 
@@ -176,6 +177,20 @@ export function rootsOffset(tx, ty) {
   return [(h >>> 8) & 1 ? d : -d, 1 + ((h >>> 9) & 1)];
 }
 
+
+/** In-game inspection P3: no two fallen logs within this many tiles (Chebyshev); the one with the lower h2 stays. */
+export const LOG_SPACING_TILES = 6;
+
+/**
+ * In-game inspection P3: the drawing-only nudge of a forest tree (game px, added to placement.decorOffset), so
+ * small pines on one row of the map do not stand in a straight line: x within ±2, y 0..-3 (still on its tile).
+ * Whether a prop drawn for a tree (the fallen log) is mirrored. @param {number} tx @param {number} ty
+ * @returns {{ dx: number, dy: number, flip: boolean }}
+ */
+export function forestTreeNudge(tx, ty) {
+  const h = hsh(tx, ty, 981);
+  return { dx: (h % 5) - 2, dy: -((h >>> 4) % 4), flip: ((h >>> 8) & 1) === 1 };
+}
 
 // --- the plains pine near the forest (NAMES.md 4, FOREST.md 4) ---
 

@@ -571,13 +571,22 @@ test('?v3=1: the v3 hero — every action at density 4; left = right mirrored ex
     const a = relPlace(v0[key].place);
     const b = relPlace(v1[key].place);
     for (const n of ['glider', 'shield', 'bow', 'slash', 'shadow']) if (a[n] === null || b[n] === null) a[n] = b[n] = null; // (shown at different moments of the action)
+    // in-game inspection P2: under ?v3=1 the sword arc is on the sword's tip — out from the chest (13 game px over the
+    // feet) along the aim: 12 px to the side (left / right), not on the hit box's centre a tile away
+    if (b.slash) {
+      expect(Math.abs(b.slash[0]), key).toBeLessThanOrEqual(12);
+      expect(b.slash[1], key).toBeGreaterThanOrEqual(-13 * b.k - 11);
+      expect(b.slash[1], key).toBeLessThanOrEqual(-13 * b.k + 11);
+      if (/\.(left|right)\./.test(key)) expect(Math.abs(b.slash[0]), key).toBe(12);
+    }
+    a.slash = b.slash = null;
     expect(b, key).toEqual(a);
     compared++;
   }
   expect(compared).toBeGreaterThan(15);
 });
 
-test('?v3=1: climb, swim and glide load when used — the approved frames meanwhile (never a missing hero), density 4 once loaded, let go after; memory', async ({ browser }) => {
+test('?v3=1: climb, swim and glide load when used or near water / a wall — the v3 standing frame meanwhile (never the approved frame, never a missing hero), density 4 once loaded, let go after; memory', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: PRO.width, height: PRO.height }, deviceScaleFactor: PRO.dpr, isMobile: true, hasTouch: true });
   const page = await context.newPage();
   const errors = [];
@@ -593,8 +602,11 @@ test('?v3=1: climb, swim and glide load when used — the approved frames meanwh
   expect(kept).toBeLessThanOrEqual(6.0e6);
   expect((await api(page, 'v3')).hero.move).toBe('out');
   expect(await api(page, 'textureDensity', 'hero.swim.up.0')).toBe(null);
-  // swim: the pond's south shore, swim north
+  // in-game inspection P1: near the pond (within 3 tiles of water) the move bundle comes in before any swim
   await api(page, 'teleport', 33, 11);
+  await expect.poll(async () => (await api(page, 'v3')).hero.move, { timeout: 8000 }).toBe('in');
+  expect((await api(page, 'v3')).hero.moveNear).toBe(true);
+  expect((await api(page, 'v3')).hero.moveLoads).toBe(1);
   await page.waitForTimeout(300);
   await recordHero(page);
   await page.keyboard.down('ArrowUp');
@@ -605,10 +617,10 @@ test('?v3=1: climb, swim and glide load when used — the approved frames meanwh
   const seen = await heroSeen(page);
   const swim = seen.filter((s) => s.key?.startsWith('hero.swim.'));
   expect(swim.length).toBeGreaterThan(0);
-  // every frame of the swim drew a hero frame: the approved one (density 2) until the v3 one (density 4)
+  // every frame of the swim drew its v3 frame (loaded beforehand), never the approved one
   for (const s of swim) {
-    expect(s.drawn === s.key || s.drawn === `v1.${s.key}`, `${s.key} drawn ${s.drawn}`).toBe(true);
-    expect(s.density, s.drawn).toBe(s.drawn.startsWith('v1.') ? 2 : 4);
+    expect(s.drawn, s.key).toBe(s.key);
+    expect(s.density, s.drawn).toBe(4);
     expect(s.place.h, s.drawn).toBe(28);
   }
   expect(swim.at(-1).density).toBe(4);
@@ -624,7 +636,7 @@ test('?v3=1: climb, swim and glide load when used — the approved frames meanwh
   if (h.key?.startsWith('hero.swim.left.')) expect(h.mirrored).toBe(true);
   // out of the water and the keep time over: the move bundle goes, the hero is drawn from the kept bundle
   await api(page, 'setHeroMoveKeep', 300);
-  await api(page, 'teleport', 33, 13);
+  await api(page, 'teleport', 5, 26); // (the start: no water or step within 3 tiles)
   await expect.poll(async () => (await api(page, 'v3')).hero.move, { timeout: 8000 }).toBe('out');
   names = (await api(page, 'stream')).bundleNames;
   expect(names).not.toContain('v3:hero:move');
@@ -636,13 +648,18 @@ test('?v3=1: climb, swim and glide load when used — the approved frames meanwh
   await recordHero(page);
   await api(page, 'setHeroMoveKeep', 20_000);
   await api(page, 'teleport', 14, 22);
+  // (the wall is near: the bundle comes in before the climb; climbing right away, the v3 standing frame until then)
   await page.keyboard.down('ArrowUp');
   await expect.poll(async () => (await api(page, 'player')).climbing, { timeout: 4000 }).toBe(true);
   await expect.poll(async () => (await api(page, 'v3')).hero.move, { timeout: 8000 }).toBe('in');
   await page.keyboard.up('ArrowUp');
   const climb = (await heroSeen(page)).filter((s) => s.key?.startsWith('hero.climb.'));
   expect(climb.length).toBeGreaterThan(0);
-  for (const s of climb) expect(s.drawn === s.key || s.drawn === `v1.${s.key}`, `${s.key} drawn ${s.drawn}`).toBe(true);
+  for (const s of climb) {
+    expect(s.drawn === s.key || /^hero\.idle\.(down|up|left|right)\.0$/.test(s.drawn), `${s.key} drawn ${s.drawn}`).toBe(true);
+    expect(s.drawn.startsWith('v1.'), s.drawn).toBe(false);
+    expect(s.density, s.drawn).toBe(4);
+  }
   expect((await api(page, 'v3')).hero.moveLoads).toBe(2);
   expect((await api(page, 'v3')).cpu.total).toBe(0);
   expect(errors).toEqual([]);

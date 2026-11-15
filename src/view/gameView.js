@@ -43,9 +43,9 @@ import { GroundCache } from './groundCache.js';
 import { V3_OBJECTS_WINTER, V3_VILLAGE_TYPES, V3_WINTER_OBJECTS, v3VillageBundle } from './assets/villageV3.js';
 import { V3_ENEMY_KINDS, kindsByRegion, v3EnemyBundle } from './assets/enemyV3.js';
 import { NPC_V3_MIRROR_LEFT, NPC_V3_REGION, npcV3Bundle, npcV3BundleWho } from './assets/npcV3.js';
-import { HERO_V3_LAZY, HERO_V3_MOVE_BUNDLE, HERO_V3_MOVE_KEEP_MS, heroDrawKey } from './assets/heroV3.js';
+import { HERO_V3_LAZY, HERO_V3_MOVE_BUNDLE, HERO_V3_MOVE_KEEP_MS, heroActionOf, heroDrawKey } from './assets/heroV3.js';
 import { MacroGrid, PROPS, PROP_SWAY, TREE_SWAY, baseKey as v3BaseKey, edgeKey as v3EdgeKey, floraFrames, floraKey, flowCorner, flowKey, flowLook, openProp, plainsTreeLook, seasonPrefix, swayFrame, swayStep, treeFootProp, v3PineBundle, v3PlainsBundles } from './v3Plains.js';
-import { FOREST_PROPS, forestBaseKey, forestEdgeKey, forestFlowLook, forestFootProp, forestOpenProp, forestTreeLook, plainsPineBanned, rootsOffset, v3ForestBundles, winterMaskOf, winterPriority } from './v3Forest.js';
+import { FOREST_PROPS, LOG_SPACING_TILES, forestTreeKind, forestTreeNudge, forestBaseKey, forestEdgeKey, forestFlowLook, forestFootProp, forestOpenProp, forestTreeLook, plainsPineBanned, rootsOffset, v3ForestBundles, winterMaskOf, winterPriority } from './v3Forest.js';
 import { activeBoss } from '../game/entities/bosses.js';
 import { hash01, valueNoise } from './placement.js';
 
@@ -102,6 +102,18 @@ const WALK_CYCLE = [1, 0, 2, 0];
 const WATER_FRAME_SEC = 0.6;
 const EDGE_COLOR = 0x1a1c2c;
 const TREE_FADE_ALPHA = 0.5;
+/** Graphics v3 (in-game inspection P1): how near (tiles) water or a step makes the hero's climb / swim / glide frames load. */
+const HERO_MOVE_NEAR_TILES = 3;
+/** Graphics v3 (in-game inspection P2): the sword arc's place, game px: the chest's height over the feet (base hero), the reach along the aim. */
+const SLASH_CHEST_Y = 13;
+const SLASH_REACH = Object.freeze({ x: 12, y: 11 });
+/** Graphics v3 (in-game inspection P2): the camera leads the hero by his speed × LOOK_AHEAD_S, at most LOOK_AHEAD_MAX game px, eased in LOOK_AHEAD_EASE per s. */
+const LOOK_AHEAD_S = 0.25;
+const LOOK_AHEAD_MAX = Object.freeze({ x: 20, y: 12 });
+const LOOK_AHEAD_EASE = 2.5;
+/** Graphics v3 (in-game inspection P2): a camera jump this far (game px) in one frame is a long move: the screen stays dark until the ground is in (at most JUMP_COVER_MAX_MS). */
+const JUMP_COVER_PX = 160;
+const JUMP_COVER_MAX_MS = 3000;
 const CLIFF_SHADOW_PX = 6;
 const EDGE_PX = 2;
 const GLIDER_SHOULDER_Y = 9;
@@ -129,7 +141,7 @@ export function levelTint(heightPx, release = false) {
   return (v << 16) | (v << 8) | v;
 }
 
-/** @typedef {{ sprite: Sprite, x0: number, x1: number, y0: number, y1: number, key: number }} Occluder */
+/** @typedef {{ sprite: Sprite, x0: number, x1: number, y0: number, y1: number, key: number, behind?: boolean }} Occluder (behind: graphics v3, a tree drawn behind the hero while it hides him) */
 
 export class GameView {
   /**
@@ -203,6 +215,12 @@ export class GameView {
     this.seasonLoaded = null;
     /** @type {Set<string>} */
     this.seasonKeySet = new Set();
+    /** In-game inspection P1: the bundles the chunks around the view need in the season about to start, held while they load (updateSeason). @type {string[] | null} */
+    this.seasonNextWant = null;
+    /** How many times the world was redressed for a season (tests). */
+    this.seasonSwitches = 0;
+    /** Tests: a record per frame of the world drawn (updateChunks), while not null. @type {{ chunks: number, objects: number, season: string | null, pending: number, covered: boolean }[] | null} */
+    this.frameLog = null;
     this.map = state.map;
     this.world = new Container();
     this.world.label = 'world';
@@ -424,6 +442,21 @@ export class GameView {
      * Graphics v3 (heroV3.js): the hero's climb / swim / glide frames, loaded when one of them starts and let
      * go HERO_V3_MOVE_KEEP_MS after the last use. state: 'out' | 'loading' | 'in'.
      */
+    /** Graphics v3 (in-game inspection P2): the camera's lead in the way the hero moves, game px. */
+    this.lookAhead = { x: 0, y: 0 };
+    /** Graphics v3: the camera's origin last frame; when a long move started covering the screen (null: not covered); covers done (tests). */
+    /** @type {{ x: number, y: number } | null} */
+    this.lastOrigin = null;
+    /** @type {number | null} */
+    this.jumpCoverSince = null;
+    this.jumpCovers = 0;
+    /** Graphics v3: the dark cover over the screen after a long move (above the world and its light, under the HTML UI). */
+    this.jumpCover = new Graphics();
+    this.jumpCover.visible = false;
+    this.jumpCover.label = 'jumpCover';
+    app.stage.addChild(this.jumpCover);
+    /** Graphics v3: heroMoveNear's answer for the tile the hero stands on. @type {{ key: number, near: boolean } | null} */
+    this.heroNearAt = null;
     this.heroMove = opts.v3HeroMove ? { state: /** @type {'out' | 'loading' | 'in'} */ ('out'), lastUseMs: -Infinity, keepMs: HERO_V3_MOVE_KEEP_MS, loads: 0, unloads: 0, loadMs: /** @type {number | null} */ (null), fallbackFrames: 0 } : null;
   }
 
@@ -432,10 +465,11 @@ export class GameView {
    * shown, and lets it go a while after the last use (before the frame is set, so no sprite keeps one of
    * its textures). @param {string} action the pose's action @param {number} nowMs real time
    */
-  updateHeroMove(action, nowMs) {
+  updateHeroMove(action, nowMs, near = false) {
     const m = this.heroMove;
     if (!m) return;
-    const using = HERO_V3_LAZY.includes(action);
+    // (in-game inspection P1: also while a wall to climb, water or a high edge is near, so it is in before it is used)
+    const using = HERO_V3_LAZY.includes(action) || near;
     if (using) m.lastUseMs = nowMs;
     if (using && m.state === 'out') {
       m.state = 'loading';
@@ -459,10 +493,39 @@ export class GameView {
     }
   }
 
+  /**
+   * Graphics v3 (in-game inspection P1): whether the hero may soon climb, swim or glide — in the air, or within
+   * HERO_MOVE_NEAR_TILES of water or of a climbable step at least a level higher or lower than his ground.
+   * Worked out once per tile he stands on. @param {import('../game/entities/player.js').Player} p
+   */
+  heroMoveNear(p) {
+    if (!p.grounded || p.climbing || p.swimming || p.gliding) return true;
+    const map = this.map;
+    const ts = map.tileSize;
+    const tx = Math.floor(p.x / ts);
+    const ty = Math.floor(p.y / ts);
+    const key = ty * map.width + tx;
+    if (this.heroNearAt?.key === key) return this.heroNearAt.near;
+    const here = map.elev[key] ?? 0;
+    let near = false;
+    const r = HERO_MOVE_NEAR_TILES;
+    for (let y = ty - r; y <= ty + r && !near; y++) {
+      for (let x = tx - r; x <= tx + r && !near; x++) {
+        if (!inBounds(map, x, y)) continue;
+        const i = y * map.width + x;
+        const g = map.ground[i];
+        if (g === Ground.WATER) near = true;
+        else if (g !== Ground.RUIN && g !== Ground.WALL && map.shape[i] !== Shape.RAMP_N && Math.abs(map.elev[i] - here) >= LEVEL_PX) near = true;
+      }
+    }
+    this.heroNearAt = { key, near };
+    return near;
+  }
+
   /** Graphics v3: the hero's move bundle (tests, ?debug). */
   heroMoveStats() {
     const m = this.heroMove;
-    return m ? { move: m.state, moveLoads: m.loads, moveUnloads: m.unloads, moveLoadMs: m.loadMs, fallbackFrames: m.fallbackFrames } : {};
+    return m ? { move: m.state, moveLoads: m.loads, moveUnloads: m.unloads, moveLoadMs: m.loadMs, fallbackFrames: m.fallbackFrames, moveNear: this.heroNearAt?.near ?? null } : {};
   }
 
   /** The texture name for the current season (P10.2: e.g. "obj.tree" -> "autumn.obj.tree"). @param {string} key */
@@ -517,6 +580,28 @@ export class GameView {
         return;
       }
     }
+    // In-game inspection P1 (?v3=0 too): every bundle the chunks now around the view need in the new season is
+    // loaded first, and held across the rebuild, so the chunks are rebuilt at once in this frame (the old
+    // season's look stays on screen until then). Without it a bundle both seasons use could be let go by
+    // the old chunks and a new-season ground bundle still be loading: a frame or two of an empty world.
+    const keepSeason = this.season;
+    const keepBundle = this.seasonBundle;
+    this.season = want;
+    this.seasonBundle = bundle;
+    /** @type {Set<string>} */
+    const next = new Set();
+    const rebuild = [...this.chunks.values()].map((c) => [c.cx, c.cy]);
+    for (const [cx, cy] of rebuild) for (const b of this.chunkBundles(cx, cy)) next.add(b);
+    this.season = keepSeason;
+    this.seasonBundle = keepBundle;
+    const absent = [...next].filter((b) => !this.assets.isLoaded(b));
+    if (absent.length) {
+      this.seasonNextWant = [...next];
+      for (const b of absent) this.requestBundle(b);
+      return;
+    }
+    this.seasonNextWant = null;
+    for (const b of next) this.assets.retain(b);
     this.v3SeasonWant = null; // (the chunks rebuilt below take it over; updateChunks lets the preload go)
     // graphics v3 (VILLAGE.md 1): the winter look of the things found everywhere (chests, barrels, crates,
     // jars, fires, checkpoints, plates), a bundle the view holds through the winter; not the open chest
@@ -563,6 +648,15 @@ export class GameView {
       }
     }
     this.envVersion = -1;
+    // (the chunks that were there, rebuilt now in the new season; then the hold taken above is let go)
+    for (const [cx, cy] of rebuild) {
+      const bs = this.chunkBundles(cx, cy);
+      if (!bs.every((b) => this.assets.isLoaded(b))) continue;
+      for (const b of bs) this.assets.retain(b);
+      this.chunks.set(this.chunkKey(cx, cy), this.buildChunk(cx, cy));
+    }
+    for (const b of next) this.assets.unload(b);
+    this.seasonSwitches++;
   }
 
   /** @param {number} tx @param {number} ty */
@@ -1797,7 +1891,7 @@ export class GameView {
         this.assets.unload(b); // the chunks hold their own references now
         this.preloaded.delete(b);
       } else if (!this.bundlesLoading.has(b)) {
-        const stillWanted = waiting.has(b) || !!this.v3SeasonWant?.includes(b) || this.v3EnemyLive.has(b) || this.v3NpcLive.has(b) || this.regions.some((r) => r.bundle === b && this.regionNear(r, origin, viewW, viewH));
+        const stillWanted = waiting.has(b) || !!this.v3SeasonWant?.includes(b) || !!this.seasonNextWant?.includes(b) || this.v3EnemyLive.has(b) || this.v3NpcLive.has(b) || this.regions.some((r) => r.bundle === b && this.regionNear(r, origin, viewW, viewH));
         if (!stillWanted) {
           if (b === 'region:plains') this.npcs.clear();
           this.dropBossSprites();
@@ -1893,7 +1987,7 @@ export class GameView {
 
   /** Chunk / bundle numbers for the debug overlay and tests. */
   streamStats() {
-    return { chunks: this.chunks.size, built: this.chunkStats.built, freed: this.chunkStats.freed, pending: this.chunkStats.pending, updates: this.chunkStats.updates, objects: this.objectSprites.size, bundles: this.assets.stats().bundles };
+    return { covered: !!this.jumpCover?.visible, jumpCovers: this.jumpCovers, chunks: this.chunks.size, built: this.chunkStats.built, freed: this.chunkStats.freed, pending: this.chunkStats.pending, updates: this.chunkStats.updates, objects: this.objectSprites.size, bundles: this.assets.stats().bundles };
   }
 
   /**
@@ -2003,14 +2097,37 @@ export class GameView {
     let look = this.v3Looks.get(o);
     if (!look) {
       const room = this.v3TreeRoom(o.tx, o.ty);
-      if (regionAt(this.regions, o.tx, o.ty)?.id === 'forest') look = forestTreeLook(room, this.v3TreeDense(o.tx, o.ty), hash01(o.tx, o.ty, 961), hash01(o.tx, o.ty, 962));
-      else {
+      if (regionAt(this.regions, o.tx, o.ty)?.id === 'forest') {
+        look = forestTreeLook(room, this.v3TreeDense(o.tx, o.ty), hash01(o.tx, o.ty, 961), hash01(o.tx, o.ty, 962));
+        // (in-game inspection P3: a fallen log only where no other log candidate within LOG_SPACING_TILES has a lower h2)
+        if (look.what === 'prop' && this.v3LogCrowded(o)) look = /** @type {any} */ ({ what: 'tree', kind: forestTreeKind(room, false, hash01(o.tx, o.ty, 961)), set: 'forest' });
+      } else {
         this.v3PineBanned ??= plainsPineBanned(this.regions, CHUNK);
         look = plainsTreeLook(room, hash01(o.tx, o.ty, 931), hash01(o.tx, o.ty, 932), !this.v3PineBanned(o.tx, o.ty));
       }
       this.v3Looks.set(o, look);
     }
     return look;
+  }
+
+  /**
+   * Graphics v3 (in-game inspection P3): whether another forest tree within LOG_SPACING_TILES would be drawn as a
+   * fallen log with a lower h2 (then this one stays a tree). Fixed per map. @param {any} o
+   */
+  v3LogCrowded(o) {
+    const mine = hash01(o.tx, o.ty, 962);
+    const r = LOG_SPACING_TILES;
+    for (let ty = o.ty - r; ty <= o.ty + r; ty++) {
+      for (let tx = o.tx - r; tx <= o.tx + r; tx++) {
+        if (tx === o.tx && ty === o.ty) continue;
+        const other = this.v3TreeObjectAt(tx, ty);
+        if (!other || regionAt(this.regions, tx, ty)?.id !== 'forest') continue;
+        const h2 = hash01(tx, ty, 962);
+        if (h2 >= mine) continue;
+        if (forestTreeLook(this.v3TreeRoom(tx, ty), this.v3TreeDense(tx, ty), hash01(tx, ty, 961), h2).what === 'prop') return true;
+      }
+    }
+    return false;
   }
 
   /** Graphics v3 (forest): whether the 8 tiles round a tree all hold trees (deep in the wood). @param {number} tx @param {number} ty */
@@ -2364,8 +2481,11 @@ export class GameView {
     // W2: decorative objects outdoors are drawn a little off-centre, in clusters (placement.decorOffset);
     // only the drawing: collision and saves stay keyed to the tile. dy <= 0, so it still sorts by its tile.
     const [dx, dy] = this.placement && DECOR_TYPES.includes(o.type) && outdoorAt(this.outdoors, o.tx, o.ty) ? decorOffset(o.tx, o.ty) : [0, 0];
-    const x = o.tx * ts + ts / 2 + dx + (o.drawDx ?? 0); // (graphics v3: the well stands across 2 tiles)
-    const feetY = o.ty * ts + ts + dy;
+    // (in-game inspection P3: a v3 forest tree nudged a little more, a fallen log mirrored by its hash)
+    const nudge = this.v3 && o.type === 'tree' && /^(?:\w+\.)?forest\.(?:tree|prop)\.v3\./.test(key) ? forestTreeNudge(o.tx, o.ty) : null;
+    const x = o.tx * ts + ts / 2 + dx + (o.drawDx ?? 0) + (nudge?.dx ?? 0); // (graphics v3: the well stands across 2 tiles)
+    const feetY = o.ty * ts + ts + dy + (nudge?.dy ?? 0);
+    if (nudge?.flip && /forest\.prop\.v3\.log_moss/.test(key)) s.scale.x = -s.scale.x;
     const z = map.elev[o.ty * map.width + o.tx];
     s.position.set(x, feetY - z);
     // The door mat lies flat on the floor: under anyone standing on it.
@@ -2377,7 +2497,7 @@ export class GameView {
     // Trees and houses (v1.0: the release house is 56 game px tall) fade when the player is behind them.
     if (o.type === 'tree' || o.type === 'house' || o.type === 'well') {
       const w = s.width / 2;
-      occluder = { sprite: s, x0: x - w, x1: x + w, y0: feetY - z - s.height, y1: feetY - z, key: feetY };
+      occluder = { sprite: s, x0: x - w, x1: x + w, y0: feetY - z - s.height, y1: feetY - z, key: feetY, behind: this.v3 && o.type === 'tree' };
     }
     // (graphics v3: a v3 plains tree sways, updateSway)
     this.objectSprites.set(o, this.v3 && /^(?:\w+\.)?(?:plains|forest)\.tree\.v3\./.test(key) ? { o, sprite: s, occluder, v3: true, frame: -1 } : { o, sprite: s, occluder });
@@ -2431,12 +2551,18 @@ export class GameView {
     const pose = this.heroAnim.update(p, state, timeSec, dtSec * 1000);
     this.heroPose = pose;
     // (graphics v3: climb / swim / glide come from a bundle loaded on use; meanwhile their approved frames)
-    this.updateHeroMove(pose.action, performance.now());
+    this.updateHeroMove(pose.action, performance.now(), !!this.heroMove && this.heroMoveNear(p));
     const has = this.heroMove ? (/** @type {string} */ k) => heroDrawKey(k, (x) => this.assets.hasTexture(x)) !== null : (/** @type {string} */ k) => this.assets.hasTexture(k);
     const releaseKey = this.heroAnim.textureKey(pose, p.facing, p.moving, has);
     this.heroKey = releaseKey;
-    const drawKey = releaseKey && this.heroMove ? heroDrawKey(releaseKey, (x) => this.assets.hasTexture(x)) : releaseKey;
-    if (this.heroMove && drawKey !== releaseKey) this.heroMove.fallbackFrames++;
+    let drawKey = releaseKey && this.heroMove ? heroDrawKey(releaseKey, (x) => this.assets.hasTexture(x)) : releaseKey;
+    if (this.heroMove && drawKey !== releaseKey) {
+      this.heroMove.fallbackFrames++;
+      // (in-game inspection P1: until the move bundle is in, the v3 standing frame, never the coarse approved frame)
+      const action = releaseKey ? heroActionOf(releaseKey) : null;
+      const idle = `hero.idle.${p.facing}.0`;
+      if (action && HERO_V3_LAZY.includes(action) && this.assets.hasTexture(idle)) drawKey = idle;
+    }
     this.heroDrawn = drawKey;
     // Otherwise the placeholder hero. Swimming: head and shoulders above the water, ripples alternate.
     const heroFrame = drawKey ?? (p.swimming ? `player.swim.${p.facing}.${Math.floor(p.walkTime * (p.moving ? 6 : 2)) % 2}` : `player.walk.${p.facing}.${frame}`);
@@ -2484,10 +2610,32 @@ export class GameView {
     // Entering / leaving an area (cave) switches the camera bounds and cuts to the player.
     const aimY = CAMERA_TARGET_OFFSET_Y * this.heroK;
     // graphics v3: in a boss fight in an arena larger than the view, frame the hero, the boss and its telegraph
-    const aim = (this.v3 && this.fightTarget(state, x, y - z, tex.height)) || { x, y: y - camZ - aimY };
+    const fight = this.v3 ? this.fightTarget(state, x, y - z, tex.height) : null;
+    const aim = fight || { x, y: y - camZ - aimY };
+    // graphics v3 (in-game inspection P2): lead the hero a little in the way he moves (running, in the wood);
+    // eased in and out, small (LOOK_AHEAD_MAX), none in a boss fight's framing. ?v3=0 as before.
+    if (this.v3) {
+      const moving = !fight && p.moving && !p.climbing;
+      const tx = moving ? Math.max(-LOOK_AHEAD_MAX.x, Math.min(LOOK_AHEAD_MAX.x, (p.vx ?? 0) * LOOK_AHEAD_S)) : 0;
+      const ty = moving ? Math.max(-LOOK_AHEAD_MAX.y, Math.min(LOOK_AHEAD_MAX.y, (p.vy ?? 0) * LOOK_AHEAD_S)) : 0;
+      const k = Math.min(1, dtSec * LOOK_AHEAD_EASE);
+      this.lookAhead.x += (tx - this.lookAhead.x) * k;
+      this.lookAhead.y += (ty - this.lookAhead.y) * k;
+      if (Math.abs(this.lookAhead.x) < 0.05) this.lookAhead.x = 0;
+      if (Math.abs(this.lookAhead.y) < 0.05) this.lookAhead.y = 0;
+      aim.x += this.lookAhead.x;
+      aim.y += this.lookAhead.y;
+    }
     if (this.applyBounds(state)) this.camera.snapTo(aim.x, aim.y);
     else this.camera.follow(aim.x, aim.y, dtSec);
     this.applyCamera();
+    // graphics v3 (in-game inspection P2): after a long move, dark until the chunks around the view are built
+    if (this.v3) {
+      const o = this.camera.origin();
+      const last = this.lastOrigin;
+      if (last && Math.hypot(o.x - last.x, o.y - last.y) >= JUMP_COVER_PX) this.jumpCoverSince = performance.now();
+      this.lastOrigin = { x: o.x, y: o.y };
+    }
     if (this.v3) {
       const o = this.camera.origin();
       this.cameraRect = { x: o.x, y: o.y, width: this.camera.viewWidth, height: this.camera.viewHeight };
@@ -2495,6 +2643,20 @@ export class GameView {
     this.updateSeason(state.env.now);
     this.updateSourceBundle(state);
     this.updateChunks(this.camera.origin(), this.app.screen.width / this.camera.zoom, this.app.screen.height / this.camera.zoom);
+    if (this.jumpCoverSince !== null) {
+      const done = this.chunkStats.pending === 0 || performance.now() - this.jumpCoverSince > JUMP_COVER_MAX_MS;
+      if (done) {
+        this.jumpCoverSince = null;
+        this.jumpCovers++;
+      }
+    }
+    this.jumpCover.visible = this.jumpCoverSince !== null;
+    if (this.jumpCover.visible) {
+      this.jumpCover.clear();
+      this.jumpCover.rect(0, 0, this.app.screen.width, this.app.screen.height).fill(0x05070d);
+    }
+    // (tests: what each frame shows of the world — the chunks built, the season they are dressed for)
+    if (this.frameLog) this.frameLog.push({ chunks: this.chunks.size, objects: this.objectSprites.size, season: this.season, pending: this.chunkStats.pending, covered: this.jumpCover.visible });
     if (this.v3) this.updateSway(timeSec); // graphics v3: the plains trees, grass and flowers sway
     this.groundCache?.update(this.camera.zoom * this.app.renderer.resolution); // graphics v3: the ground, drawn again only when needed
     // P10.1: the elder's charm is back on its shelf once the quest is done.
@@ -2611,6 +2773,13 @@ export class GameView {
     this.applyCamera();
   }
 
+  /** Tests (in-game inspection P1): the trees faded now, their draw order against the hero's. */
+  fadedTrees() {
+    const out = [];
+    for (const { o, occluder: t } of this.objectSprites.values()) if (t && t.sprite.alpha < 1) out.push({ tx: o.tx, ty: o.ty, type: o.type, alpha: t.sprite.alpha, zIndex: t.sprite.zIndex, feet: t.key, hero: this.player.zIndex, behindHero: t.sprite.zIndex < this.player.zIndex });
+    return out;
+  }
+
   /**
    * Fades trees in front of the player; shows a silhouette when terrain hides the player.
    * @param {number} sx @param {number} sy @param {number} key @param {import('pixi.js').Texture} tex
@@ -2624,6 +2793,10 @@ export class GameView {
       if (!t) continue;
       const hides = t.key > key && px1 > t.x0 && px0 < t.x1 && py1 > t.y0 && py0 < t.y1;
       t.sprite.alpha = hides ? TREE_FADE_ALPHA : 1;
+      // graphics v3 (in-game inspection P1): a faded tree is drawn behind the hero (above his ground shadow),
+      // so he is never seen through a half-clear tree (a half-grey face; a white ghost at night); its fading
+      // still shows where it stands. ?v3=0 keeps drawing it in front, faded.
+      if (t.behind) t.sprite.zIndex = hides ? key - 0.001 : t.key;
     }
     let occluded = false;
     const ts = this.map.tileSize;
@@ -2780,7 +2953,10 @@ export class GameView {
     const hb = state.hitboxes.find((h) => h.owner === 'player');
     this.slash.visible = !!hb;
     if (hb) {
-      this.slash.position.set(Math.round(hb.x), Math.round(hb.y - p.z - 4));
+      // graphics v3 (in-game inspection P2): the arc on the sword's tip — out from the hero's chest along the aim
+      // (SLASH_REACH), not on the hit box's centre a tile away (below his feet when striking down). ?v3=0 as before.
+      if (this.v3) this.slash.position.set(Math.round(sx + p.aimX * SLASH_REACH.x), Math.round(sy - SLASH_CHEST_Y * this.heroK + p.aimY * SLASH_REACH.y));
+      else this.slash.position.set(Math.round(hb.x), Math.round(hb.y - p.z - 4));
       this.slash.rotation = Math.atan2(p.aimY, p.aimX);
       this.slash.alpha = p.comboIndex === 2 ? 1 : 0.85;
       this.slash.zIndex = py + 0.01;

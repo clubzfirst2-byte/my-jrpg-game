@@ -116,3 +116,42 @@ export function addVillageProps(state) {
   }
   return props.length;
 }
+
+/**
+ * Graphics v3 (in-game inspection P2): a place saved under ?v3=0 (or any start) may lie on a tile a village
+ * prop made solid (the well's ring, a fence, a signpost): the hero would stand inside it. Moves him to the
+ * nearest tile within 6 that is open (not solid, not water, the same height as where he stood), its centre
+ * at his feet. @param {any} state @returns {boolean} whether he was moved
+ */
+export function standClearOfProps(state) {
+  const map = state.map;
+  const p = state.player;
+  const ts = map.tileSize;
+  const W = map.width;
+  const inMap = (/** @type {number} */ x, /** @type {number} */ y) => x >= 0 && y >= 0 && x < W && y < map.height;
+  const hw = p.halfWidth ?? 5;
+  const fy = Math.floor((p.y - 1) / ts);
+  const stuck = [p.x - hw, p.x, p.x + hw].some((x) => {
+    const tx = Math.floor(x / ts);
+    return inMap(tx, fy) && map.solid[fy * W + tx] === 1 && map.objects.some((/** @type {any} */ o) => VILLAGE_PROP_TYPES.includes(o.type) && Math.abs(o.tx - tx) <= 1 && Math.abs(o.ty - fy) <= 1);
+  });
+  if (!stuck) return false;
+  const tx0 = Math.floor(p.x / ts);
+  const here = inMap(tx0, fy) ? map.elev[fy * W + tx0] : 0;
+  const open = (/** @type {number} */ x, /** @type {number} */ y) => {
+    if (!inMap(x, y)) return false;
+    const i = y * W + x;
+    return !map.solid[i] && map.ground[i] !== Ground.WATER && map.elev[i] === here;
+  };
+  for (let r = 1; r <= 6; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r || !open(tx0 + dx, fy + dy)) continue;
+        p.x = p.prevX = (tx0 + dx) * ts + ts / 2;
+        p.y = p.prevY = (fy + dy) * ts + ts - 2;
+        return true;
+      }
+    }
+  }
+  return false;
+}

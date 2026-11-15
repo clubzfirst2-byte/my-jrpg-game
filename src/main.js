@@ -23,7 +23,7 @@ import { V3_ENEMY_KINDS, v3EnemyBundle, v3EnemyKindOf, v3EnemyUnused } from './v
 import { v3PinePartOf, v3PlainsBundleName } from './view/v3Plains.js';
 import { v3ForestBundleName, v3ForestPartOf } from './view/v3Forest.js';
 import { V3_OBJECTS_WINTER, V3_VILLAGE_KEYS, v3VillageBundle, villageSources, winterObjectKeys } from './view/assets/villageV3.js';
-import { addVillageProps } from './game/world/villageProps.js';
+import { addVillageProps, standClearOfProps } from './game/world/villageProps.js';
 import { testHeroFrames } from './debug/testHero.js';
 import { createNpcs, NPC_BODY, npcSolid } from './game/npc/npcs.js';
 import { availableV1Groups, availableV2Groups, availableV3Groups, prototypeFrames, releaseFrames, requestedProtoGroups } from './view/assets/heroPrototype.js';
@@ -518,6 +518,8 @@ async function boot() {
     // Never overwrite a save written by a newer version of the game.
     autosave.enabled = loaded.status !== 'newer';
     void store.requestPersistence();
+    // graphics v3 (in-game inspection P2): a place saved without the village props may be inside one (the well)
+    if (v3 && v3Village) standClearOfProps(state);
     inTitle = false;
     input.clear();
     loop.reset();
@@ -1221,6 +1223,17 @@ async function boot() {
     /** P10.2: jump to the first day of a season (same hour). */
     setSeason: (/** @type {any} */ id) => setWorldTime(state.env, inSeason(state.env.now, id)),
     season: () => ({ ...seasonAt(state.env.now), view: view.season }),
+    /** Tests (in-game inspection P1): start / read a per-frame record of the world drawn (chunks, objects, season). */
+    frameLogStart: () => {
+      view.frameLog = [];
+    },
+    frameLog: () => {
+      const log = view.frameLog ?? [];
+      view.frameLog = null;
+      return { frames: log, seasonSwitches: view.seasonSwitches };
+    },
+    /** Tests (in-game inspection P1): the trees faded in front of the hero, and whether each is drawn behind him. */
+    fadedTrees: () => view.fadedTrees(),
     setHour: (/** @type {number} */ h) => setWorldTime(state.env, Math.floor(state.env.now / CLOCK.dayMs) * CLOCK.dayMs + h * CLOCK.hourMs),
     setWeather: (/** @type {any} */ kind) => {
       state.env.weatherOverride = kind;
