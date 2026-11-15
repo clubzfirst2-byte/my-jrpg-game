@@ -1147,8 +1147,9 @@ async function boot() {
     },
     /** Test helper: an extra villager, for a look on screen only; it is not saved and the village
      *  data is unchanged (the woman and the smith are in the village since v1.0). */
-    addNpc: (/** @type {string} */ id, /** @type {number} */ tx, /** @type {number} */ ty) => {
-      state.npcs.push(...createNpcs(state.map, [{ id, name: id, dialogue: 'elder', look: 1, tx, ty }]));
+    addNpc: (/** @type {string} */ id, /** @type {number} */ tx, /** @type {number} */ ty, /** @type {string | undefined} */ art) => {
+      // (art: another id drawing a person's frames, e.g. a second merchant for a picture of all 9 together)
+      state.npcs.push(...createNpcs(state.map, [{ id, name: id, dialogue: 'elder', look: 1, tx, ty, ...(art ? { art } : {}) }]));
     },
     dialogue: () => dialogueView(state),
     talkTo: (/** @type {string} */ id) => {

@@ -177,3 +177,28 @@ autumn (only the tint changes); winter loads its own set.
   guard 2 for down / right / up / left, dodge 4 and hurt 2 for down / right / up (98 files).
 - jump 2, land 2, glide 4, climb 4, swim 4, down 4 for down / right / up (60 files). All 206 stored frames are done.
 - climb, swim and glide are loaded only when used (decision 2026-11-12, STYLE 10.2).
+
+## 6. Villagers (production order 5)
+
+- `npc.<who>.<idle|walk>.<down|right|up|left>.<n>` in `src/art-release-v3/npc/`: the same 9 people, keys, frame
+  counts and fps as the approved NPCs (`src/art-release/npc`, `src/view/npcAnim.js`: idle 4 at 3 fps, walk 6
+  at 8 fps). 64×112, anchor the bottom row's centre. **340 files** (40 × 7 + 30 × 2).
+- `left` is stored for woman, child, cook, elder, guard, merchant and traveller (v1's left frames are not
+  mirrors of their right frames). **princess and smith have no `left` files: the engine draws their `right`
+  mirrored** (scale.x = −1), as for the hero (decision 2026-11-12).
+- Round 3 (after the second inspection): every frame is redrawn at the texel over the approved v1 frame as
+  underdrawing (`tools/art_v3/npc_redraw.py`; round 2's `npc_v1map.py` is kept, unused), so poses, held
+  things and motion are v1's; no two frames of one person are the same picture. Keys and file count unchanged.
+- Round 4 (decision 2026-11-13): each person's parts are hand-drawn pixel maps at the v3 grid
+  (`tools/art_v3/npc_pm_<who>.py`, framework `npc_pixmap.py`), placed per frame by v1's own pose table
+  (`tools/npc_release/npc_common.py`, read only) and written by `tools/art_v3/gen_npc_v3_pm.py`. Made this way:
+  guard, child, woman, princess, smith on this branch; cook, elder, merchant, traveller on gfx/v3-npc-b.
+  Keys, file count, `left` rule and anchor are unchanged (princess and smith: no `left` files). Village budget
+  8.7 MB (1 MB = 1,000,000 bytes, 10% packing waste included); now 8.47 MB for the 9 people on this branch.
+- Wiring (gfx/v3-engine, ?v3=1 only): the frames are taken from the commits listed in
+  `tools/art_v3/npc_v3_sources.json` (the one record; `node tools/art_v3/import_npc_v3.mjs [--check]`). Now:
+  guard, child, woman, smith, princess from gfx/v3-art 7ea81cf; elder, traveller, cook, merchant from
+  gfx/v3-npc-b e40a6ab. One trimmed bundle per person, `v3:npc:<who>` (`src/view/assets/npcV3.js`), held while a
+  loaded chunk has part of the plains region; elsewhere only while that villager stands on a loaded chunk.
+  princess and smith: `npcFrameKey(..., mirrorLeft)` looks the left frame up by its right frame and the view draws
+  it flipped. Measured in the game: 8.15 MB for the 9 bundles.
