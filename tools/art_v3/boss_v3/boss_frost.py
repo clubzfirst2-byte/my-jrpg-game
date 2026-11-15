@@ -57,7 +57,7 @@ for _n in A.COLS | {"DOWN_BEAM", "SLAM_BEAM"}:
     P[_n + "~"] = P[_n].mirror(band=False)
 for _n in ("UP_T1", "UP_T2", "UP_T3", "LEAN_T", "PRONG", "FLAT_T", "FLEG", "HIND"):
     P[_n + "~"] = P[_n].mirror(relight=True)
-for _n in ("SHOULDER", "EAR", "RIME_A", "BREAK", "FOREARM", "REMAINS", "LOBE_A", "LOBE_B"):
+for _n in ("SHOULDER", "EAR", "RIME_A", "BREAK", "FOREARM", "REMAINS", "SAG_A", "SAG_B"):
     P[_n + "~"] = P[_n].mirror()
 for _n in ("EYE_OPEN", "EYE_SHUT", "EYE_NARROW"):
     P[_n + "~"] = P[_n].mirror(darker=False, band=False)
@@ -160,7 +160,8 @@ FACES = {"FACE": (66, 105), "FACE_DOWN": (68, None), "FACE_UP": (60, 81)}
 def head(f, ox=0, oy=0, state="UP", face="FACE", eyes="EYE_OPEN", jaw=0, core="CORE", broken=False):
     cx = CX + ox
     ey, jy = FACES[face]
-    both(f, "EAR", 61 + ox, 55 + oy, cx=cx)
+    if state != "SLAM":
+        both(f, "EAR", 61 + ox, 55 + oy, cx=cx)
     antlers(f, state, ox, oy, cx, broken)
     if jy is not None and jaw > 0:
         f.put(P["MOUTH"], 88 + ox, jy - 2 + oy)
@@ -171,8 +172,21 @@ def head(f, ox=0, oy=0, state="UP", face="FACE", eyes="EYE_OPEN", jaw=0, core="C
     f.put(P[core], 88 + ox, 37 + oy)
 
 
-def body(f, dy=0, bx=0, rear=0, legs=(0, 0, 0, 0), spread=0, phase2=False, clip=None, feet=True):
-    """The legs stay on the ground; the shoulders, chest and mane move by (bx, dy - rear)."""
+def _cut(f, p, x, y, cut, clip=None):
+    """Place p with its rows above the frame row `cut` left out (cut=None: the whole part)."""
+    if cut is not None:
+        k = cut - y
+        if k >= p.h:
+            return
+        if k > 0:
+            p, y = p.rows(k, p.h), y + k
+    f.put(p, x, y, clip_y=clip)
+
+
+def body(f, dy=0, bx=0, rear=0, legs=(0, 0, 0, 0), spread=0, phase2=False, clip=None, feet=True, low=False):
+    """The legs stay on the ground; the shoulders, chest and mane move by (bx, dy - rear).
+    low: the head is brought low -- the mane and chest above the shoulders' height are left out and the
+    line of the back (BACK) runs across behind the head instead of the hump of the neck (NAPE)."""
     by = dy - rear
     for s, lift in ((-1, legs[1]), (1, legs[2])) if feet else ():
         x, y = 60 + int(round(bx * 0.3)), 136 - 2 * int(math.floor(lift + 0.5))
@@ -199,10 +213,15 @@ def body(f, dy=0, bx=0, rear=0, legs=(0, 0, 0, 0), spread=0, phase2=False, clip=
     if phase2:
         f.put(P["CRACK_A"], 47 + bx, 100 + by)
         f.put(P["CRACK_B"], 134 + bx, 104 + by)
-    f.put(P["CHEST_BASE"], 64 + bx, 60 + by, clip_y=clip)
-    f.put(P["NAPE"], 78 + bx, 57 + by)
+    cut = 92 + by if low else None
+    _cut(f, P["CHEST_BASE"], 64 + bx, 60 + by, cut, clip)
+    if not low:
+        f.put(P["NAPE"], 78 + bx, 57 + by)
     for n, x, y in MANE:
-        f.put(P[n], x + bx, y + by, clip_y=clip)
+        _cut(f, P[n], x + bx, y + by, cut, clip)
+    if low:
+        f.put(P["BACK"], 70 + bx, 83 + by)
+        both(f, "RIME_A", 54 + bx, 85 + by, cx=CX + bx)
 
 
 class Pose:
@@ -260,8 +279,9 @@ def draw(p):
     rear = int(round(p.rear))
     state = attitude(p)
     face = pick_face(p, state)
-    body(f, dy, bx, rear, p.legs, spread=int(round(4 * lunge)), phase2=p.phase2 or c > 0)
     hy = dy + int(round(p.head)) - int(round(rear * 0.6)) + int(round(10 * lunge))
+    body(f, dy, bx, rear, p.legs, spread=int(round(4 * lunge)), phase2=p.phase2 or c > 0,
+         low=face == "FACE_DOWN" and hy - dy >= 18)
     if state == "UP":
         hy = max(hy, -3)  # the tips stay in the frame: the head rises less (the antlers keep their size)
     if state == "HIGH":
@@ -340,8 +360,8 @@ def melt_a():
     the broken antlers spread level; the core gone dark."""
     f = Frame(W, H, LEG, RAMPS)
     f.put(P["GOO_BACK"], 41, 149)
-    body(f, dy=40, phase2=True, clip=153, feet=False)
-    for n, x, y in (("LOBE_B~", 34, 140), ("LOBE_A", 50, 132), ("LOBE_B", 130, 138), ("LOBE_A~", 104, 134)):
+    body(f, dy=40, phase2=True, clip=153, feet=False, low=True)
+    for n, x, y in (("SAG_B~", 33, 139), ("SAG_A", 52, 133), ("SAG_B", 133, 141), ("SAG_A~", 101, 136)):
         f.put(P[n], x, y)
     head(f, 0, 64, "MID", "FACE_DOWN", "EYE_SHUT", core="CORE_DIM", broken=True)
     f.put(P["LOBE_C"], 88, 146)

@@ -535,18 +535,21 @@ CRACK_A = """
 """
 
 CRACK_B = """
-0|VV....VV
-0|VYV..VYV
-1|V$V.V$V
-1|VY$VY$V
-2|V$%$V
-2|VY$V
+5|VV
+4|VYV
+4|V$V
+3|VY$V
 3|V$V
-3|VYV
-2|V$$V
+2|V$YV
+2|VYV
+3|V$V
+3|V$YV
+2|VY%V
 2|V$V
-1|VYV
-1|VV
+1|V$V
+1|VY$V
+0|V$V
+0|VV
 """
 
 # the top of the neck and the withers, a hump of fur behind the head: seen when the head comes down
@@ -575,4 +578,20 @@ NAPE = """
 0|abdbddddrrrrrrrrrrrrrpppbbbbiiiiia
 0|adddddrrrrrrrrrrrrppppbbbbiiiiiia
 0|abddrrrrrrrrrrrrpppppbbbbbiiiiiia
+"""
+
+# the line of the back behind a head brought low (the slam, the charge's strike): it runs across from
+# shoulder to shoulder at their height, lit from the upper left like the shoulders; the mane and the
+# chest above it are not drawn in those frames
+BACK = """
+10|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+5|aaaadtffffgfffddddaadtfffffdddddrrdddrrrrrppbbaaaa
+3|aadtfffgffffffdddddtfffffffdddddddrrrdrrrrrrpppbbaa
+2|adtfffffffddddddtffffgffddddddrrddddrrrrrrrpppbbbba
+1|adtffgffffdddddtfffffffdddddrrrrrrdrrrrrrrrppppbbbbia
+0|adtfffffffddddtfffffddddddrrrrrdddrrrrrppprrrrpppbbbia
+0|abdtfffffdddddtffffdddddrrrrrrdrrrrrrrpppprrrrppppbbbia
+0|abddtffdddddddtffddddrrrrrrrdrrrrrpppprrrrrppppbbbbbiia
+0|abdddtddddrrdddtddddrrrrrdrrrrrppppprrrrppppppbbbbbiiia
+0|abddddddrrrrrdddrrrrrrrrdrrrppppppprrrppppppbbbbbbiiiia
 """
