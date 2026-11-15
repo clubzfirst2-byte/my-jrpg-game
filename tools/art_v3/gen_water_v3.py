@@ -10,12 +10,13 @@ switching together (WATER_FRAME_SEC 0.28 s):
   tile.water.foam.<mask>.<f>                   shore foam over the water (mask = land corners 1-14)
 Joins: every water tile is a torus at its border: the features within 6 texels of the tile's border are
 the same in both variants and every frame's border rows / columns continue the opposite side, so any
-tile joins any other; the variants differ inside (x, y 8..56). The deep edge uses v2's own curve
+tile joins any other; the variants differ only inside that band. The deep edge uses v2's own curve
 (transitions.field, legacy, variant 0) at 2x, the foam the land edges' curve (gen_ground_v3.edge_inside,
-variant 0: a shore's land edge always has v = 0 for masks other than 6 / 9).
+variant 0: a shore's land edge always has v = 0 for masks other than 6 / 9); the foam's width is the real
+distance from those land texels (round 3).
 The loop: each crest goes through a 4-frame life (forming, rising, cresting, breaking) with its own
-phase, sparkles step 2 texels for 2 frames, the foam laps in and out; frame 3 -> 0 is a step like the
-others.
+phase, the swell lines bob at their own phase, glints show on one frame, the foam's white front laps out and
+back (FOAM_REACH); frame 3 -> 0 is a step like the others.
 Run: python3 tools/art_v3/gen_water_v3.py
 """
 
